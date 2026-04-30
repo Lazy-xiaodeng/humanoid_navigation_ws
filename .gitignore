@@ -1,0 +1,11 @@
+# ROS 2 编译生成文件夹
+build/
+install/
+log/
+
+# Python 环境
+*.pyc
+__pycache__/
+
+# 个人或临时生成的文件 (根据你的图片我加上了这些)
+*.pcd

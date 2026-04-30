@@ -1,0 +1,41 @@
+ndt_localizer:
+  ros__parameters:
+    # ========== 地图配置 ==========
+    # PCD 地图路径（新路径）
+    pcd_map_path: "/home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd"
+    
+    # ========== 话题配置 ==========
+    # 输入：Fast-LIO 输出的实时点云（在 body/IMU 坐标系）
+    input_cloud_topic: "/fast_lio/cloud_registered"
+    # 输出：NDT 定位结果
+    output_pose_topic: "/ndt_pose"
+    
+    # ========== 坐标系配置 ==========
+    # PCD 和实时点云都在 body/IMU 坐标系下
+    # NDT 发布 map -> odom 的变换
+    map_frame_id: "map"
+    odom_frame_id: "odom"          # 等同于 camera_init
+    base_frame_id: "base_footprint"
+    camera_init_frame_id: "camera_init"
+    body_frame_id: "body"          # Fast-LIO 的 body/IMU 坐标系
+    
+    # ========== NDT 匹配参数 ==========
+    ndt_resolution: 2.0              # NDT 网格大小（米），PCD 较大，用 2m
+    ndt_iterations: 100              # 最大迭代次数
+    ndt_epsilon: 0.01                # 收敛阈值
+    
+    # ========== 点云处理参数 ==========
+    downsample_voxel_size: 0.3       # 实时点云降采样大小（米）
+    min_points_for_matching: 500     # 最小点数要求
+    
+    # ========== 发布参数 ==========
+    publish_rate: 10.0               # TF 发布频率（Hz）
+    
+    # ========== 初始位姿（可选） ==========
+    use_initial_pose: false
+    initial_pose_x: 0.0
+    initial_pose_y: 0.0
+    initial_pose_z: 0.0
+    initial_roll: 0.0
+    initial_pitch: 0.0
+    initial_yaw: 0.0

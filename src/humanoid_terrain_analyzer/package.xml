@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>humanoid_terrain_analyzer</name>
+  <version>1.0.0</version>
+  <description>
+    高性能地形分析节点（C++ + OpenCL），
+    订阅高程图，发布 TerrainInfo 和虚拟墙点云。
+  </description>
+  <maintainer email="user@todo.todo">User</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- ROS2 运行时依赖 -->
+  <depend>rclcpp</depend>
+  <depend>grid_map_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>humanoid_interfaces</depend>
+  <depend>ament_index_cpp</depend>
+  <depend>geometry_msgs</depend>
+  <depend>tf2_geometry_msgs</depend>
+
+  <!-- 非 ROS 依赖（系统包） -->
+  <depend>eigen3_cmake_module</depend>
+
+  <!-- OpenCL 是系统库，通过 CMake find_package 找到，这里可不加 -->
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

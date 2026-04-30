@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>grid_map_costmap_plugin</name>
+  <version>1.0.0</version>
+  <description>Nav2 costmap layer plugin that reads grid_map traversability data</description>
+  <maintainer email="user@example.com">user</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>nav2_costmap_2d</depend>
+  <depend>pluginlib</depend>
+  <depend>grid_map_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

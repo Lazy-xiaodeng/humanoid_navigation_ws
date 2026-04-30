@@ -1,0 +1,98 @@
+# websocket_config.yaml 
+websocket_server:
+  ros__parameters:
+    # 连接管理
+    server_port: 8765
+    host: "0.0.0.0"
+    max_connections: 50
+    connection_timeout: 300  # 秒
+    
+    # 心跳设置
+    heartbeat_enabled: true
+    heartbeat_interval: 5.0
+    heartbeat_timeout_factor: 3.0
+    
+    # 安全设置
+    security_enable_ssl: false
+    security_cert_file: ""
+    security_key_file: ""
+    security_require_auth: false
+    
+    # 性能设置
+    performance_max_message_size: 1048576
+    performance_buffer_size: 8192
+    performance_compression: false
+    
+    # 日志设置
+    logging_level: "INFO"
+    logging_file_path: "/var/log/websocket_server.log"
+    logging_max_file_size: 10485760
+    logging_backup_count: 5
+
+message_protocol:
+  ros__parameters:
+    version: "1.0"
+    
+    # 支持的消息类型 - 修正的列表格式
+    supported_messages: ["heartbeat", "navigation_goal", "emergency_stop", "velocity_command", "action_command", "point_management", "robot_status", "imu_data", "joint_states"]
+    
+    # 数据格式验证
+    validation_strict_mode: true
+    validation_required_fields_navigation_goal: ["x", "y"]
+    validation_required_fields_action_command: ["action_name"]
+    validation_field_types_x: "float"
+    validation_field_types_y: "float"
+    validation_field_types_action_name: "string"
+
+robot_status_forwarding:
+  ros__parameters:
+    enabled: true
+    # 简化为字符串列表，而不是对象列表
+    topics_names: ["/robot/status", "/sensors/imu/data", "/robot/joint_states"]
+    topics_types: ["std_msgs/String", "std_msgs/String", "std_msgs/String"]
+
+app_command_handling:
+  ros__parameters:
+    navigation_goal_coordinate_frame: "map"
+    navigation_goal_default_orientation_x: 0.0
+    navigation_goal_default_orientation_y: 0.0
+    navigation_goal_default_orientation_z: 0.0
+    navigation_goal_default_orientation_w: 1.0
+    velocity_control_max_linear_velocity: 1.0
+    velocity_control_max_angular_velocity: 1.57
+    velocity_control_deadzone_threshold: 0.05
+    action_mapping_wave_hand: "action_wave"
+    action_mapping_bow: "action_bow"
+    action_mapping_sit_down: "action_sit"
+    action_mapping_stand_up: "action_stand"
+    action_mapping_walk: "action_walk"
+    action_mapping_turn: "action_turn"
+
+point_management:
+  ros__parameters:
+    storage_file: "/opt/robot_points.json"
+    auto_save: true
+    save_interval: 60
+    
+    # 默认点位
+    default_points_home_x: 0.0
+    default_points_home_y: 0.0
+    default_points_home_z: 0.0
+    default_points_home_yaw: 0.0
+    default_points_charging_station_x: 2.5
+    default_points_charging_station_y: 1.0
+    default_points_charging_station_z: 0.0
+    default_points_charging_station_yaw: 0.0
+
+ros_topic_mapping:
+  ros__parameters:
+    # 输入话题（从APP接收）
+    inputs_navigation_goal: "/navigation/goal"
+    inputs_emergency_stop: "/emergency/stop"
+    inputs_cmd_vel: "/control/cmd_vel"
+    inputs_app_commands: "/app/commands"
+    
+    # 输出话题（发送到APP）
+    outputs_robot_status: "/robot/status"
+    outputs_imu_data: "/sensors/imu/data"
+    outputs_joint_states: "/robot/joint_states"

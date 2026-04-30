@@ -1,0 +1,112 @@
+elevation_mapping:
+  ros__parameters:
+    # ===== TF 配置（关键！） =====
+    transform_tolerance: 2.0        # 增大容差到 2.0 秒，容忍 TF 延迟
+    use_sim_time: False             # 确保不是仿真时间
+    # ===== 传感器订阅配置 =====
+    subscribers:
+      pointcloud0:
+        topic_name: "/airy_points_for_elevation"    # 你用来构建地图的过滤后的雷达点云话题。
+        data_type: "pointcloud"
+
+    # ===== 地图发布配置 =====
+    publishers:
+      output:
+        layers: ["elevation", "traversability", "erosion", "smooth", "inpaint", "min_filter"]
+        basic_layers: ["elevation"]
+        fps: 5.0
+    #### 1. 核心坐标系与传感器输入设置（最重要） ########
+    # --- 坐标系 ---
+    map_frame: 'odom'                               # 全局/里程计坐标系。高程图将以这个坐标系为基准构建。
+    base_frame: 'base_footprint'                    # 机器人的基座坐标系。高程图通常会随着这个坐标系移动。
+    corrected_map_frame: 'odom'                     # 修正后的地图坐标系（如果不开漂移补偿，通常跟 map_frame 一致）。
+    
+    # --- 传感器输入（根据你的机器人配置） ---
+    #sensor_frame_id: "body"                         # 激光雷达的 tf 坐标系名称。
+    #sensor_processor/type: "perfect" 
+    #time_tolerance: 1.0                             # 允许的时间容差（秒），增大容忍度
+
+    # --- 融合与追踪（Fast-LIO 相关） ---
+    #robot_pose_cache_size: 500                      # 缓存机器人位姿（TF）的数量，因为点云和TF时间戳可能有轻微错位。
+    track_point_frame_id: 'base_footprint'               # 高程图中心跟随的坐标系。
+
+    #### 2. 地图几何与基础参数 ########
+    resolution: 0.04                                # (你在用的) 地图分辨率(米)。0.04m=4cm，足够用来分辨楼梯和较小的障碍物。
+    map_length: 6.0                                 # (你在用的) 局部地图的边长(米)。6x6米的动态地图，足够覆盖楼梯并节省 GPU 性能。
+    checker_layer: 'elevation'                      # 用于检查单元格有效性的基础图层名称，通常就是高度(elevation)。
+    initialized_variance: 10.0                      # 地图初始化时的默认方差。
+    initial_variance: 1000.0                        # 首次观测到地面时赋予的初始方差。
+    max_variance: 100.0                             # 每个栅格允许的最大方差限度。
+    time_variance: 0.0001                           # 时间流逝导致地图不确定性增加的系数（随时间逐渐降低旧数据的置信度）。
+    outlier_variance: 0.01                          # 如果一个点被判定为离群点，给该栅格增加的不确定性。
+
+    #### 3. 噪声与过滤设置 ########
+    sensor_noise_factor: 0.05                       # 传感器噪声因子，距离越远的点，认为其方差越大(noise ~ factor * range^2)。
+    mahalanobis_thresh: 2.0                         # 马氏距离阈值，超过这个距离的点将被判定为异常值/离群点被过滤掉。
+    min_valid_distance: 0.3                         # 过滤掉距离雷达原点小于 0.1 米的点（防止打到机器人自己身上的点干扰地图）。
+    max_height_range: 10.5                          # 过滤掉传感器上方超过 10.5 米的高空点（相当于关闭了“天花板”建图）。
+
+    #### 4. 漂移补偿参数 (Drift Compensation) ########
+    max_drift: 0.1                                  # 只有感知到的漂移小于 0.1m 时，才执行漂移补偿（防止突然跳变）。
+    drift_compensation_alpha: 0.1                   # 漂移补偿更新的平滑系数。
+    drift_compensation_variance_inlier: 0.1         # 漂移补偿内部的方差内点阈值。
+    traversability_inlier: 0.9                      # 只有可通行度(Traversability)大于 0.9 的平坦地面，才用来做 Z 轴漂移对齐。
+    dilation_size: 3                                # 遍历过滤前的膨胀滤波器大小。
+    wall_num_thresh: 20                             # 墙面点数量阈值：通过忽略低处的噪声，让生成的墙面/台阶边缘更加锐利。
+    min_height_drift_cnt: 100                       # 有效地形栅格数量超过 100 个时，才开始做高度漂移计算。
+    position_noise_thresh: 0.01                     # 位移变化大于 0.01m 时触发更新追踪。
+    orientation_noise_thresh: 0.01                  # 姿态变化大于 0.01rad 时触发更新追踪。
+    position_lowpass_alpha: 0.2                     # 运动检测的低通滤波平滑系数。
+    orientation_lowpass_alpha: 0.2                  # 姿态运动检测的低通滤波平滑系数。
+
+    #### 5. 悬垂物过滤 (拒绝天花板/树枝等悬空物) ########
+    ramped_height_range_a: 0.3                      # 悬空气口过滤参数 A：线性系数。
+    ramped_height_range_b: 1.0                      # 悬空气口过滤参数 B：偏移量。
+    ramped_height_range_c: 0.2                      # 悬空气口过滤参数 C：截距。这三个参数组合计算出一个允许的最大高度斜坡，用来剔除树叶、悬桥等不要的东西。
+
+    #### 6. 运行频率 ########
+    update_variance_fps: 5.0                        # 更新地图方差的频率 (5Hz)。
+    update_pose_fps: 10.0                           # 更新机器底盘 TF 并移动局部地图中心的频率 (10Hz)。
+    time_interval: 0.1                              # 时间层更新的间隔。
+    map_acquire_fps: 5.0                            # 从 GPU 显存抓取并发布原始高程图到 ROS 的频率 (5Hz)。
+    publish_statistics_fps: 1.0                     # 发布性能统计信息的频率 (1Hz)。
+    recordable_fps: 3.0                             # 录制点云数据的帧率设计参考。
+
+    #### 7. 视野与重叠层清理 (Cleanup & Ray tracing) ########
+    max_ray_length: 10.0                            # 光线追踪(Ray tracing)的最大有效距离，用于打通视野里的动态障碍物(走过去的人)。
+    cleanup_step: 0.1                               # 视野清理时从有效性图层中减去的值。
+    cleanup_cos_thresh: 0.1                         # 清理射线角度余弦阈值。
+    overlap_clear_range_xy: 4.0                     # X-Y平面上清除重叠区域(如跨越楼层)的有效半径 (米)。
+    overlap_clear_range_z: 2.0                      # Z平面上清除重叠区域的有效高度。
+
+    #### 8. 功能开关 (Feature Toggles) ########
+    enable_edge_sharpen: true                       # 开启地形边缘锐化（让你台阶看起来更方正）。
+    enable_visibility_cleanup: true                 # 开启视区清理（清理已经走掉的动态行人留下的残影，非常重要）。
+    enable_drift_compensation: true                 # 开启漂移补偿（依赖上面讲到的参数）。
+    enable_overlap_clearance: true                  # 开启重叠层消除功能。
+    enable_pointcloud_publishing: false             # 不关闭，不把高程图反向转化为点云再发出来（省资源）。
+    enable_drift_corrected_TF_publishing: false     # 不把高程图内部纠正后的 Z 轴高度作为 TF 树发出去（会干扰你本来的里程计）。
+    enable_normal_arrow_publishing: false           # 不在 rviz 里画法线箭头（省渲染资源）。
+
+    #### 9. 通行性与安全分析 (Traversability) ########
+    safe_thresh: 0.7                                # 可通行得分(0~1)小于 0.7 的栅格算作不安全区域。
+    safe_min_thresh: 0.4                            # 如果某区域里出现连 0.4 都不到的极端危险点，整个多边形都会被标红。
+    max_unsafe_n: 10                                # 聚类：如果一个区域附近危险点超过这数量，判定为该区域禁行。
+    use_chainer: false                              # 使用 Pytorch GPU 后端计算，而不是 Chainer。
+
+    use_only_above_for_upper_bound: false           # 是否只使用位于机器上方的点作为上边界。
+
+    #### 10. 机器人初始化设置 (Initializer) ########
+    initialize_method: 'linear'                     # 启动时缺失数据的插值方法（nearest', 'linear', 'cubic'）。
+    initialize_frame_id: ['base_footprint']         # 启动时在哪个坐标系周围初始化一张空白平地，这里是底盘。
+    initialize_tf_offset: [0.0]                     # 初始平地的 Z 轴零点偏移。
+    dilation_size_initialize: 2                     # 初始平地生成后向外膨胀扩张的格数。
+    initialize_tf_grid_size: 1.0                    # 初始化时的网格尺寸扩展。
+    use_initializer_at_start: true                  # 启动节点时自动在脚下铺一块平地（不然刚开机脚下全是洞）。
+
+    #### 11. 其它功能 ########
+    masked_replace_service_mask_layer_name: 'mask'  # 涉及地图蒙版编辑服务的参数。
+    save_map_default_topic: 'elevation_map'         # 保存地图时的默认话题名。
+    save_map_storage_id: 'mcap'                     # ROS2 录包的存储格式。
+    service_namespace: '/elevation_mapping_cupy'    # 提供服务的命名空间前缀。
+    plugin_config_file: '/home/ubuntu/humanoid_ws/src/humanoid_elevation_mapping/config/plugin_config.yaml'

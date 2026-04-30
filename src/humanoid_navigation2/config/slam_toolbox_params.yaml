@@ -1,0 +1,79 @@
+# ~/humanoid_ws/src/humanoid_navigation2/config/slam_toolbox_params.yaml
+slam_toolbox:
+  ros__parameters:
+
+    #隐藏参数
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None
+    
+
+    # 基础设置
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_footprint
+    scan_topic: /scan
+    scan_queue_size: 5             # ★ 修改：从50降到5，减少队列积压
+
+    # ★★ 关键修复：禁用里程计积分，完全依赖外部定位(fastlio)
+    use_odometry: false            # 禁用里程计输入，避免与fastlio冲突
+    process_noise_debug: false     # 关闭调试输出，减少处理延迟
+
+    # 定位模式
+    mode: localization
+    
+    # ★ 新增：定位模式专用参数
+    localization_threshold: 0.5    # 定位收敛阈值（默认值）
+    localization_on_map_start: false  # 不在地图开始时定位
+
+    # 分辨率
+    resolution: 0.05
+
+    # ★ 修复1: 使用系统当前时间作为TF时间戳，避免scan时间戳延迟导致TF查询失败
+    restamp_tf: true
+
+    # 里程计配置
+    transform_timeout: 2.0        # ★★ TF查询超时，从1.0增加到2.0s
+    transform_tolerance: 3.0      # ★★ TF时间戳容忍度，从2.0增加到3.0s
+
+    # ★ 修复2: 确保发布map->odom变换
+    publish_map_to_odom_tf: true
+
+    # ★ 修复3: 关闭回环检测（定位模式不需要，且会导致700ms+的延迟）
+    do_loop_closing: false
+    loop_search_maximum_distance: 13.0
+
+    # 性能参数
+    throttle_scans: 1             # 保持1，每帧都处理
+    minimum_travel_distance: 0.01 # ★★★ 修改：从0.05降到0.01，让机器人移动1cm就触发定位更新
+    minimum_travel_heading: 0.01  # ★★★ 修改：从0.05降到0.01，提高角度更新灵敏度（约0.5度）
+    min_laser_range: 0.3
+    max_laser_range: 12.0         # 从20.0降到12.0，减少Ceres计算量
+    
+    # ★ 新增：调试参数，用于诊断定位问题
+    debug_logging: true           # 开启调试日志
+    odom_astar_epsilon: 3.0       # 里程计搜索空间
+    
+    # 定位相关
+    map_start_at_dock: false  # ★ 关闭，由重定位节点提供初始位姿
+  
+    # ★ 新增：定位模式约束配置，防止重定位失败时地图扩展
+    map_file_name: "/home/ubuntu/humanoid_ws/src/humanoid_navigation2/maps/hall"  # ★ 指定posegraph地图路径
+    save_map: false  # ★ 定位模式下禁止保存地图
+    enable_interactive_mode: false  # ★ 关闭交互模式
+
+    # ★ 新增：限制地图扩展，确保定位模式不会重新建图
+    # 在定位模式下，这些参数限制slam_toolbox更新地图边界
+    scan_queue_size: 5
+
+    # ★★ 关键修复：降低process_noise，避免定位跳变
+    process_noise: [0.000001, 0.000001, 0.000001, 0.000001, 0.000001, 0.000001]
+    # [x, y, yaw, vx, vy, vyaw] - 非常小的噪声，信任外部定位
+
+    # ★★ 新增：使用初始位姿而非重新建图
+    map_start_with_all: true  # 启动时加载完整地图
+    
+    # ★ 修复TF时间同步问题
+    process_noise_debug: false  # 关闭调试输出，减少处理延迟

@@ -1,0 +1,118 @@
+# humanoid_locomotion/config/gestures.yaml
+# 上半身动作库定义文件
+
+# 动作库元数据
+metadata:
+  version: "1.0"
+  description: "逐际机器人上半身动作库 (基于官方SDK文档 v3.4.4.15)"
+  author: "Oli EDU"
+
+# 动作定义：key 是内部ID，value 是动作详情
+actions:
+  stand_still:
+    id: 0
+    name: 静止站立
+    type: "upper_body"
+    description: "保持上半身静止，不执行任何动作"
+
+  this_way_please:
+    id: 1
+    name: 指引请这边走
+    type: "upper_body"
+    description: "右手向前指引"
+
+  bow:
+    id: 2
+    name: 鞠躬
+    type: "upper_body"
+    description: "上半身向前鞠躬"
+
+  wave_greet_bye:
+    id: 3
+    name: 挥手（你好/拜拜）
+    type: "upper_body"
+    description: "右手/左手挥手"
+
+  nod:
+    id: 4
+    name: 点头
+    type: "upper_body"
+    description: "头部上下点头"
+
+  shake_head:
+    id: 5
+    name: 摇头
+    type: "upper_body"
+    description: "头部左右摇头"
+
+  curtain_bow:
+    id: 6
+    name: 谢幕
+    type: "upper_body"
+    description: "双手展开后弯腰"
+
+  blow_kisses_multi:
+    id: 7
+    name: 连续飞吻
+    type: "upper_body"
+    description: "连续飞吻动作"
+
+  left_hand_side_heart:
+    id: 8
+    name: 左手比心
+    type: "upper_body"
+    description: "左手比心"
+
+  right_hand_side_heart:
+    id: 9
+    name: 右手比心
+    type: "upper_body"
+    description: "右手比心"
+
+  hand_heart:
+    id: 10
+    name: 双手比心
+    type: "upper_body"
+    description: "双手比心"
+
+  high_five:
+    id: 11
+    name: 与人击掌
+    type: "upper_body"
+    description: "右手/左手击掌"
+
+  clap:
+    id: 12
+    name: 鼓掌
+    type: "upper_body"
+    description: "双手鼓掌"
+
+  # warm_up_dance:
+  #   id: 13
+  #   name: 热场舞
+  #   type: "upper_body"
+  #   description: "上半身热身舞蹈"
+
+  # swag_dance:
+  #   id: 14
+  #   name: 展臂舞
+  #   type: "upper_body"
+  #   description: "上半身舒展舞蹈"
+
+  # idol_dance_1:
+  #   id: 15
+  #   name: 女团舞1
+  #   type: "upper_body"
+  #   description: "女团风格舞蹈动作1"
+
+  # idol_dance_2:
+  #   id: 16
+  #   name: 女团舞2
+  #   type: "upper_body"
+  #   description: "女团风格舞蹈动作2"
+
+  # power_up_dance:
+  #   id: 17
+  #   name: 助力舞
+  #   type: "upper_body"
+  #   description: "充满力量感的舞蹈"

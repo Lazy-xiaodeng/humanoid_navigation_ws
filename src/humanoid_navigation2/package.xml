@@ -1,0 +1,61 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd"schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>humanoid_navigation2</name>
+  <version>0.1.0</version>
+  <description>
+    人形机器人导航编排包：包含 launch、配置、地图、行为树与辅助工具脚本。点云滤波已独立为humanoid_point_cloud_filter 包。
+  </description>
+  <maintainer email="user@todo.todo">User</maintainer>
+  <license>Apache-2.0</license>
+
+  <!--===== 编译工具 ===== -->
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <!-- ===== Python脚本运行依赖 ===== -->
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>nav2_msgs</depend>
+
+  <!-- ===== Grid Map（costmap 插件依赖）===== -->
+  <depend>grid_map_costmap_2d</depend>
+
+  <!-- ===== Nav2 核心组件 ===== -->
+  <depend>nav2_bringup</depend>
+  <depend>nav2_controller</depend>
+  <depend>nav2_planner</depend>
+  <depend>nav2_bt_navigator</depend>
+  <depend>nav2_behaviors</depend>
+  <depend>nav2_lifecycle_manager</depend>
+  <depend>nav2_costmap_2d</depend>
+  <depend>nav2_regulated_pure_pursuit_controller</depend>
+  <depend>nav2_smac_planner</depend>
+
+  <!-- ===== 传感器与定位 ===== -->
+  <depend>fast_lio_robosense</depend>
+  <depend>rslidar_sdk</depend>
+  <depend>slam_toolbox</depend>
+  <depend>pointcloud_to_laserscan</depend>
+  <depend>robot_state_publisher</depend>
+  <depend>joint_state_publisher</depend>
+  <depend>tf2_ros</depend>
+
+  <!-- ===== 你拆分出的独立功能包 ===== -->
+  <depend>humanoid_point_cloud_filter</depend>
+  <depend>elevation_mapping_opencl</depend>
+  <depend>humanoid_terrain_analyzer</depend>
+  <depend>lidar_localization</depend>
+
+  <!-- ===== 测试 ===== -->
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

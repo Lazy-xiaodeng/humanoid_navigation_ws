@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>humanoid_elevation_mapping</name>
+  <version>1.0.0</version>
+  <description>Orin NX and VM configurations for humanoid elevation mapping</description>
+  <maintainer email="user@todo.todo">User</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- 两个引擎的依赖 -->
+  <exec_depend>elevation_mapping</exec_depend>       <!-- CPU 版本 -->
+  <exec_depend>elevation_mapping_cupy</exec_depend>  <!-- GPU 版本 -->
+  
+  
+  <!-- 外部功能包 -->
+  <exec_depend>fast_lio_robosense</exec_depend>
+  <exec_depend>humanoid_navigation2</exec_depend>
+  <exec_depend>grid_map_ros</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>humanoid_interfaces</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -1,0 +1,168 @@
+import os
+import yaml
+import math
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch_ros.actions import Node
+from launch.actions import DeclareLaunchArgument, GroupAction, TimerAction, ExecuteProcess
+from launch.substitutions import LaunchConfiguration
+
+def generate_launch_description():
+    pkg_nav2 = get_package_share_directory('humanoid_navigation2')
+
+    nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params.yaml')
+    slam_params_file = os.path.join(pkg_nav2, 'config', 'slam_toolbox_params.yaml')
+    bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_with_stairs.xml')
+    map_posegraph = os.path.join(pkg_nav2, 'maps', 'hall')
+
+    use_sim_time = LaunchConfiguration('use_sim_time', default='false')
+
+    # ========== 1. 读取初始位姿配置 ==========
+    try:
+        with open(slam_params_file, 'r') as f:
+            slam_params = yaml.safe_load(f)
+        
+        # 获取 ros__parameters 下面的参数
+        params = slam_params['slam_toolbox']['ros__parameters']
+        
+        # 读取 x, y, yaw (如果没有配置则默认 0)
+        init_x = float(params.get('initial_pose_x', 0.0))
+        init_y = float(params.get('initial_pose_y', 0.0))
+        init_yaw = float(params.get('initial_pose_yaw', 0.0))
+        
+        # 将角度 (yaw) 转换为四元数 (只需要 z 和 w)
+        q_z = math.sin(init_yaw / 2)
+        q_w = math.cos(init_yaw / 2)
+        
+        print(f"✅ 读取初始位姿成功：x={init_x}, y={init_y}, yaw={init_yaw}")
+    except Exception as e:
+        print(f"⚠️  读取 slam 参数失败，使用默认原点: {e}")
+        init_x, init_y, q_z, q_w = 0.0, 0.0, 0.0, 1.0
+
+    # ========== 2. 点云转激光 (延迟1秒) ==========
+    pc_to_scan_node = TimerAction(
+        period=1.0,
+        actions=[
+            Node(
+                package='pointcloud_to_laserscan',
+                executable='pointcloud_to_laserscan_node',
+                name='pointcloud_to_laserscan',
+                remappings=[
+                    ('cloud_in', '/fast_lio/cloud_registered'),
+                    ('scan', '/scan')
+                ],
+                parameters=[{
+                    'use_sim_time': use_sim_time,
+                    'target_frame': 'base_footprint',
+                    'min_height': 0.1,
+                    'max_height': 1.2,
+                    'range_min': 0.6,
+                    'range_max': 30.0,
+                    'scan_time': 0.1,
+                    'transform_tolerance': 2.0,
+                    'inf_epsilon': 1.0,
+                    'use_inf': True,
+                    'queue_size': 50,
+                }]
+            )
+        ]
+    )
+
+    # ========== 3. Nav2 核心节点 (延迟3秒) ==========
+    nav_nodes = TimerAction(
+        period=3.0,
+        actions=[
+            GroupAction([
+                # 1. slam_toolbox 定位模式
+                Node(
+                    package='slam_toolbox',
+                    executable='localization_slam_toolbox_node',
+                    name='slam_toolbox',
+                    parameters=[
+                        slam_params_file,
+                        {
+                            'use_sim_time': use_sim_time,
+                            'map_file_name': map_posegraph,
+                        }
+                    ]
+                ),
+
+                # 2. 规划服务器
+                Node(
+                    package='nav2_planner',
+                    executable='planner_server',
+                    name='planner_server',
+                    output='screen',
+                    parameters=[nav2_params_file, {'use_sim_time': use_sim_time}]
+                ),
+
+                # 3. 控制服务器
+                Node(
+                    package='nav2_controller',
+                    executable='controller_server',
+                    output='screen',
+                    parameters=[nav2_params_file, {'use_sim_time': use_sim_time}]
+                ),
+
+                # 4. 行为服务器
+                Node(
+                    package='nav2_behaviors',
+                    executable='behavior_server',
+                    name='behavior_server',
+                    output='screen',
+                    parameters=[nav2_params_file, {'use_sim_time': use_sim_time}]
+                ),
+
+                # 5. 行为树导航
+                Node(
+                    package='nav2_bt_navigator',
+                    executable='bt_navigator',
+                    name='bt_navigator',
+                    output='screen',
+                    parameters=[
+                        nav2_params_file,
+                        {
+                            'use_sim_time': use_sim_time,
+                            'default_bt_xml_filename': bt_xml_file
+                        }
+                    ]
+                ),
+
+                # 6. 生命周期管理（最后启动）
+                Node(
+                    package='nav2_lifecycle_manager',
+                    executable='lifecycle_manager',
+                    name='lifecycle_manager_navigation',
+                    output='screen',
+                    parameters=[
+                        {'use_sim_time': use_sim_time},
+                        {'autostart': True},
+                        {'bond_timeout': 0.0},
+                        {'node_names': [
+                            'slam_toolbox',
+                            'planner_server',
+                            'controller_server',
+                            'behavior_server',
+                            'bt_navigator'
+                        ]}
+                    ]
+                ),
+
+                # 7. ★★★ 发布初始位姿 (延迟3秒后执行，确保 SLAM 已启动) ★★★
+                ExecuteProcess(
+                    cmd=[
+                        'ros2', 'topic', 'pub', '--once', '/initialpose', 
+                        'geometry_msgs/msg/PoseWithCovarianceStamped',
+                        '{header: {frame_id: "map"}, pose: {pose: {position: {x: ' + str(init_x) + ', y: ' + str(init_y) + ', z: 0.0}, orientation: {x: 0.0, y: 0.0, z: ' + str(q_z) + ', w: ' + str(q_w) + '}}, covariance: [0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.06853891945200942]}}'
+                    ],
+                    output='screen'
+                )
+            ])
+        ]
+    )
+
+    return LaunchDescription([
+        DeclareLaunchArgument('use_sim_time', default_value='false'),
+        pc_to_scan_node,
+        nav_nodes
+    ])

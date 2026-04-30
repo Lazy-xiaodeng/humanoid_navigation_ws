@@ -1,0 +1,125 @@
+# 动态路点管理器配置文件
+# 注意：此文件不再包含预设点位，只包含配置参数
+# 所有点位由APP动态设置和管理
+
+dynamic_waypoints:
+  # 数据存储配置
+  data_storage:
+    enabled: true
+    auto_save: true
+    save_interval: 300  # 自动保存间隔（秒）
+    file_path: "~/humanoid_ws/src//humanoid_navigation/data/dynamic_waypoints_data.json"
+    backup_count: 5
+    
+  # 点位类型定义（与APP端保持一致）
+  waypoint_types:
+    navigation_target:
+      name: "导航目标点"
+      color: [0.0, 1.0, 0.0, 1.0]  # RGBA - 绿色
+      icon: "flag"
+      editable: true
+      deletable: true
+      default_stay_time: 0.0
+      
+    exhibition_point:
+      name: "展台点"
+      color: [0.0, 0.0, 1.0, 1.0]  # RGBA - 蓝色  
+      icon: "exhibition"
+      editable: true
+      deletable: true  
+      default_stay_time: 10.0
+      
+    obstacle_point:
+      name: "障碍物点"
+      color: [1.0, 0.0, 0.0, 0.7]  # RGBA - 红色半透明
+      icon: "warning"
+      editable: true
+      deletable: true
+      default_stay_time: 0.0
+      
+    charging_point:
+      name: "充电点"
+      color: [1.0, 1.0, 0.0, 1.0]  # RGBA - 黄色
+      icon: "battery"
+      editable: false  # 充电点位置固定
+      deletable: false
+      default_stay_time: 30.0
+      
+    rest_point:
+      name: "休息点"
+      color: [0.5, 0.5, 0.5, 1.0]  # RGBA - 灰色
+      icon: "home"
+      editable: true
+      deletable: true
+      default_stay_time: 60.0
+      
+    landmark_point:
+      name: "地标点"
+      color: [1.0, 0.5, 0.0, 1.0]  # RGBA - 橙色
+      icon: "landmark"
+      editable: true
+      deletable: true
+      default_stay_time: 5.0
+
+  # 导航模式配置
+  navigation_modes:
+    single_point:
+      name: "单点导航"
+      description: "导航到单个目标点"
+      allowed_waypoint_types: ["navigation_target", "exhibition_point", "charging_point", "rest_point", "landmark_point"]
+      enable_auto_return: false
+      
+    multi_point:
+      name: "多点导航"  
+      description: "按顺序导航到多个点"
+      allowed_waypoint_types: ["navigation_target", "exhibition_point", "landmark_point"]
+      max_waypoints: 20
+      enable_loop: false
+      
+    exhibition_tour:
+      name: "展台巡航"
+      description: "自动巡航所有展台点"
+      allowed_waypoint_types: ["exhibition_point"]
+      auto_include_all: true  # 自动包含所有展台点
+      sequence_order: "nearest_first"  # nearest_first, predefined_order
+      enable_continuous: false  # 完成后是否重新开始
+      
+    charging_route:
+      name: "充电路线"
+      description: "按照充电路线导航"
+      allowed_waypoint_types: ["charging_point"]
+      predefined_sequence: ["charging_station"]  # 预设的充电路线
+      enable_auto_charge: true
+
+  # WebSocket通信配置
+  websocket:
+    enabled: true
+    reconnect_timeout: 5.0
+    heartbeat_interval: 3.0
+    message_timeout: 10.0
+    
+  # 性能优化配置
+  performance:
+    max_cached_waypoints: 1000
+    waypoint_update_throttle: 0.1  # 点位更新节流（秒）
+    status_update_frequency: 2.0   # 状态更新频率（Hz）
+    
+  # 安全限制
+  safety:
+    max_waypoints_per_sequence: 50
+    min_waypoint_distance: 0.1    # 最小点位间距（米）
+    max_navigation_speed: 1.0     # 最大导航速度（m/s）
+    emergency_stop_distance: 0.3  # 紧急停止距离（米）
+
+# 初始数据（空，由APP动态填充）
+initial  waypoints: {}
+  sequences: {}
+  navigation_history: []
+  
+# 日志配置
+logging:
+  level: "INFO"
+  file_enabled: true
+  file_path: "/var/log/dynamic_waypoints.log"
+  max_file_size: "10MB"
+  backup_count: 5

@@ -1,0 +1,53 @@
+# slam_toolbox 纯地图加载模式
+# 只加载并发布 2D 地图，不发布任何坐标变换
+# 用于替代 map_server，解决地图原点 Z 轴问题
+
+slam_toolbox:
+  ros__parameters:
+
+    # ========== 基础设置 ==========
+    mode: localization          # 定位模式（只加载地图，不建图）
+    use_sim_time: false
+    
+    # 坐标系设置
+    odom_frame: odom_unused     # 设置为不使用的名称
+    map_frame: map
+    base_frame: base_footprint
+    scan_topic: /scan_unused    # 设置为不使用的 topic
+    
+    # ========== 关键：禁用所有 TF 发布 ==========
+    publish_map_to_odom_tf: false     # ★ 不发布 map->odom 变换
+    publish_odom_tf: false            # ★ 不发布 odom 相关变换
+    publish_pose_graph: false         # 不发布 pose graph
+    
+    # ========== 禁用里程计和激光输入 ==========
+    use_odometry: false               # 禁用里程计
+    throttle_scans: 0                 # ★ 不处理任何激光扫描
+    scan_queue_size: 0                # 不缓存扫描数据
+    
+    # ========== 地图加载参数 ==========
+    map_file_name: "/home/ubuntu/humanoid_ws/src/humanoid_navigation2/maps/hall"  # posegraph 路径（不含扩展名）
+    map_start_at_dock: false          # 不在 dock 点启动
+    map_start_with_all: true          # 启动时加载完整地图
+    
+    # ========== 地图保存（禁用） ==========
+    save_map: false                   # 禁止保存地图
+    enable_interactive_mode: false    # 关闭交互模式
+    
+    # ========== 分辨率（与建图时一致） ==========
+    resolution: 0.05
+    
+    # ========== 禁用所有更新 ==========
+    minimum_travel_distance: 999.0    # 设置为极大值，永不触发更新
+    minimum_travel_heading: 999.0     # 设置为极大值，永不触发更新
+    
+    # ========== 禁用回环检测 ==========
+    do_loop_closing: false
+    
+    # ========== TF 超时设置（不重要，因为不发布 TF） ==========
+    transform_timeout: 1.0
+    transform_tolerance: 1.0
+    
+    # ========== 激光范围（不重要，因为不处理扫描） ==========
+    min_laser_range: 0.0
+    max_laser_range: 1.0

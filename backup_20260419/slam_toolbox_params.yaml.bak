@@ -1,0 +1,52 @@
+# ~/humanoid_ws/src/humanoid_navigation2/config/slam_toolbox_params.yaml
+slam_toolbox:
+  ros__parameters:
+
+    #隐藏参数
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None
+    
+
+    # 基础设置
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_footprint
+    scan_topic: /scan
+    scan_queue_size: 5             # ★ 修改：从50降到5，减少队列积压
+
+    # 定位模式
+    mode: localization
+
+    # 分辨率
+    resolution: 0.05
+
+    # ★ 修复1: 使用系统当前时间作为TF时间戳，避免scan时间戳延迟导致TF查询失败
+    restamp_tf: true
+
+    # 里程计配置
+    transform_timeout: 1.0        # TF查询超时	如果出现TF超时警告→增大到0.5s
+    transform_tolerance: 2.0      # TF时间戳容忍度
+
+    # ★ 修复2: 确保发布map->odom变换
+    publish_map_to_odom_tf: true
+
+    # ★ 修复3: 关闭回环检测（定位模式不需要，且会导致700ms+的延迟）
+    do_loop_closing: false
+    loop_search_maximum_distance: 13.0
+
+    # 性能参数
+    throttle_scans: 1             # 保持1，每帧都处理
+    minimum_travel_distance: 0.15 # 保持原值
+    minimum_travel_heading: 0.1   # ★ 修改：从0.15降到0.1（约5.7°），提高角度更新灵敏度
+    min_laser_range: 0.3
+    max_laser_range: 12.0         # ★ 修改：从20.0降到12.0，减少Ceres计算量
+    
+    # 定位相关
+    map_start_at_dock: false  # ★ 关闭，由重定位节点提供初始位姿
+    map_start_pose: [0.0, 0.0, 0.0]
+    
+    # ★ 修复TF时间同步问题
+    process_noise_debug: false  # 关闭调试输出，减少处理延迟

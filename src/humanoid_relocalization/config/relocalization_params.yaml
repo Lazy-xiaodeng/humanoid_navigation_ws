@@ -1,0 +1,38 @@
+relocalization_node:
+  ros__parameters:
+    # ========== 路径配置 (★ 必须修改) ==========
+    # SC 数据库路径 - 由 build_sc_database.py 生成
+    sc_database_path: "/home/ubuntu/humanoid_ws/src/humanoid_navigation2/maps/hall_sc.bin"
+    
+    # PCD 地图路径 - Fast-LIO 建图生成的点云地图
+    pcd_map_path: "/home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd"
+    
+    # ========== 话题配置 (根据你的系统修改) ==========
+    cloud_topic: "/fast_lio/cloud_registered"  # Fast-LIO 输出的点云话题
+    initial_pose_topic: "/initialpose"          # slam_toolbox 订阅的初始位姿话题
+    target_frame: "map"                         # 目标坐标系
+    
+    # ========== Scan Context 参数 ==========
+    # sc_distance_threshold 调参表：经常找不到匹配	0.4	调大到 0.5-0.6 || 匹配到错误位置	0.4	调小到 0.3-0.35；|| 环境特征重复多	0.4	调小到 0.25-0.3，同时增加 top_k；|| 环境特征独特	0.4	可以调大到 0.5
+    # icp_max_correspondence_distance 调参表：ICP 不收敛	2.0	调大到 3.0-5.0 || ICP 收敛到错误位置	2.0	调小到 1.0-1.5 || SC 初始位姿误差大	2.0	调大到 4.0-6.0 || SC 初始位姿很准	2.0	可以调小到 1.0
+    #icp_fitness_threshold 调参表：重定位经常失败	0.5	调大到 0.8-1.0 || 重定位结果不准	0.5	调小到 0.3-0.4 || 环境变化大 (有移动物体)	0.5	调大到 0.8 || 环境静态稳定	0.5	可以调小到 0.3
+
+    sc_num_sectors: 60          # 扇区数量，角度分辨率 (360°/60=6°)	 一般不用改。环境特征少可降到 40，特征丰富可升到 80
+    sc_num_rings: 20            # 环数量，一般不用改，距离分辨率	一般不用改。小环境可降到 15，大环境可升到 25
+    sc_max_range: 60.0          # 最大检测距离	必须根据雷达设置。Airy 雷达设 60m
+    lidar_height: 1.21          # 雷达安装高度	必须根据实际安装高度设置。影响高度编码
+    sc_distance_threshold: 0.65  # ★★★ 修改：从0.7降低到0.65，提高匹配精度
+    sc_top_k_candidates: 10     # ★★★ 修改：从15降低到10，减少错误候选
+    
+    # ========== ICP 参数 ==========
+    icp_max_iterations: 100   # ★ 修改：从50增加到100，给ICP更多收敛机会
+    icp_max_correspondence_distance: 5.0  # ★ 修改：从2.0增加到5.0，允许更大的初始位姿误差
+    icp_fitness_threshold: 1.5   # ★ 修改：从0.5增加到1.5，适应GICP的实际fitness范围
+    
+    # ========== 点云处理 ==========
+    voxel_leaf_size: 0.1  # ICP前的点云降采样格子大小	如果ICP很慢→增大到0.3；如果ICP不收敛→减小到0.1
+    
+    # ========== 行为控制 ==========
+    auto_relocalize: false
+    relocalize_on_startup: true
+    max_relocalization_attempts: 8  # ★ 修改：从5增加到8，给更多重试机会

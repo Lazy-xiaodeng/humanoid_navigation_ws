@@ -1,0 +1,192 @@
+[INFO] [launch]: All log files can be found below /home/ubuntu/.ros/log/2026-04-27-20-38-59-951845-ubuntu-268806
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [268884]
+[INFO] [joint_state_publisher-2]: process started with pid [268885]
+[INFO] [rslidar_sdk_node-3]: process started with pid [268886]
+[INFO] [fastlio_mapping-4]: process started with pid [268887]
+[INFO] [static_transform_publisher-5]: process started with pid [268888]
+[INFO] [static_transform_publisher-6]: process started with pid [268889]
+[INFO] [pointcloud_to_laserscan_node-7]: process started with pid [268890]
+[INFO] [async_slam_toolbox_node-8]: process started with pid [268891]
+[rslidar_sdk_node-3] [1m[35m********************************************************[0m
+[rslidar_sdk_node-3] [1m[35m**********                                    **********[0m
+[rslidar_sdk_node-3] [1m[35m**********    RSLidar_SDK Version: v1.5.18     **********[0m
+[rslidar_sdk_node-3] [1m[35m**********                                    **********[0m
+[rslidar_sdk_node-3] [1m[35m********************************************************[0m
+[static_transform_publisher-6] [INFO] [1777293540.232100268] [tf_body_to_base_footprint]: Spinning until stopped - publishing transform
+[static_transform_publisher-6] translation: ('0.004000', '1.215000', '0.072000')
+[static_transform_publisher-6] rotation: ('0.500000', '0.500000', '-0.500000', '0.500000')
+[static_transform_publisher-6] from 'body' to 'base_footprint'
+[rslidar_sdk_node-3] [1m[32m--------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32mConfig loaded from PATH:[0m
+[rslidar_sdk_node-3] [1m[32m/home/ubuntu/humanoid_ws/src/rslidar_sdk/config/config.yaml[0m
+[rslidar_sdk_node-3] [1m[32m--------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32mReceive Packets From : Online LiDAR[0m
+[rslidar_sdk_node-3] [1m[32mMsop Port: 6699[0m
+[rslidar_sdk_node-3] [1m[32mDifop Port: 7788[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Driver Parameters [0m
+[rslidar_sdk_node-3] [32minput type: ONLINE_LIDAR[0m
+[rslidar_sdk_node-3] [32mlidar_type: RSAIRY[0m
+[rslidar_sdk_node-3] [32mframe_id: rslidar[0m
+[rslidar_sdk_node-3] [32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Input Parameters [0m
+[rslidar_sdk_node-3] [32mmsop_port: 6699[0m
+[rslidar_sdk_node-3] [32mdifop_port: 7788[0m
+[rslidar_sdk_node-3] [32mimu_port: 6688[0m
+[rslidar_sdk_node-3] [32muser_layer_bytes: 0[0m
+[rslidar_sdk_node-3] [32mtail_layer_bytes: 0[0m
+[rslidar_sdk_node-3] [32mhost_address: 0.0.0.0[0m
+[rslidar_sdk_node-3] [32mgroup_address: 0.0.0.0[0m
+[rslidar_sdk_node-3] [32msocket_recv_buf: 106496[0m
+[rslidar_sdk_node-3] [32mpcap_path: /home/robosense/lidar.pcap[0m
+[rslidar_sdk_node-3] [32mpcap_rate: 1[0m
+[rslidar_sdk_node-3] [32mpcap_repeat: 1[0m
+[rslidar_sdk_node-3] [32muse_vlan: 0[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Decoder Parameters [0m
+[rslidar_sdk_node-3] [32mmin_distance: 0.1[0m
+[rslidar_sdk_node-3] [32mmax_distance: 60[0m
+[rslidar_sdk_node-3] [32muse_lidar_clock: 0[0m
+[rslidar_sdk_node-3] [32mdense_points: 0[0m
+[rslidar_sdk_node-3] [32mts_first_point: 1[0m
+[rslidar_sdk_node-3] [32mwait_for_difop: 1[0m
+[rslidar_sdk_node-3] [32mconfig_from_file: 0[0m
+[rslidar_sdk_node-3] [32mangle_path: [0m
+[rslidar_sdk_node-3] [32mstart_angle: 0[0m
+[rslidar_sdk_node-3] [32mend_angle: 360[0m
+[rslidar_sdk_node-3] [32msplit_frame_mode: 1[0m
+[rslidar_sdk_node-3] [32msplit_angle: 0[0m
+[rslidar_sdk_node-3] [32mnum_blks_split: 0[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Transform Parameters [0m
+[rslidar_sdk_node-3] [32mx: 0[0m
+[rslidar_sdk_node-3] [32my: 0[0m
+[rslidar_sdk_node-3] [32mz: 0[0m
+[rslidar_sdk_node-3] [32mroll: 0[0m
+[rslidar_sdk_node-3] [32mpitch: 0[0m
+[rslidar_sdk_node-3] [32myaw: 0[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[36m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[36mSend PointCloud To : ROS[0m
+[rslidar_sdk_node-3] [1m[36mPointCloud Topic: /airy_points[0m
+[rslidar_sdk_node-3] [1m[36m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [WARN] [1777293540.241538423] [rcl.logging_rosout]: Publisher already registered for node name: 'rslidar_sdk_node'. If this is due to multiple nodes with the same name then all logs for the logger named 'rslidar_sdk_node' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[static_transform_publisher-5] [INFO] [1777293540.245357008] [tf_odom_to_camera_init]: Spinning until stopped - publishing transform
+[static_transform_publisher-5] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-5] rotation: ('-0.500000', '-0.500000', '0.500000', '0.500000')
+[static_transform_publisher-5] from 'odom' to 'camera_init'
+[rslidar_sdk_node-3] [1m[37mRoboSense-LiDAR-Driver is running.....[0m
+[robot_state_publisher-1] [INFO] [1777293540.253292932] [robot_state_publisher]: Robot initialized
+[fastlio_mapping-4] [INFO] [1777293540.377779216] [fast_lio_node]: p_pre->lidar_type 5
+[fastlio_mapping-4] [INFO] [1777293540.387545363] [fast_lio_node]: Node init finished.
+[fastlio_mapping-4] [INFO] [1777293540.387685100] [fast_lio_node]: Starting LaserMappingNode with MultiThreadedExecutor (4 Threads)...
+[joint_state_publisher-2] [INFO] [1777293540.673244710] [joint_state_publisher]: Waiting for robot_description to be published on the robot_description topic...
+[fastlio_mapping-4] [WARN] [1777293540.806555392] [fast_lio_node]: No point, skip this scan!
+[fastlio_mapping-4] 
+[fastlio_mapping-4] [INFO] [1777293540.923879300] [fast_lio_node]: Initialize the map kdtree
+[joint_state_publisher-2] [INFO] [1777293541.750484414] [joint_state_publisher]: Got description, configuring robot
+[INFO] [lifecycle_manager-9]: process started with pid [269430]
+[lifecycle_manager-9] [INFO] [1777293543.281786689] [lifecycle_manager_slam]: Creating
+[lifecycle_manager-9] [INFO] [1777293543.288148365] [lifecycle_manager_slam]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[lifecycle_manager-9] [INFO] [1777293544.713657015] [lifecycle_manager_slam]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-9] [INFO] [1777293544.713700905] [lifecycle_manager_slam]: [34m[1mConfiguring slam_toolbox[0m[0m
+[async_slam_toolbox_node-8] [INFO] [1777293544.717062754] [slam_toolbox]: Configuring
+[async_slam_toolbox_node-8] [INFO] [1777293544.737982549] [slam_toolbox]: Using solver plugin solver_plugins::CeresSolver
+[async_slam_toolbox_node-8] [INFO] [1777293544.738303815] [slam_toolbox]: CeresSolver: Using SCHUR_JACOBI preconditioner.
+[lifecycle_manager-9] [INFO] [1777293544.771334346] [lifecycle_manager_slam]: [34m[1mActivating slam_toolbox[0m[0m
+[async_slam_toolbox_node-8] [INFO] [1777293544.771447354] [slam_toolbox]: Activating
+[lifecycle_manager-9] [INFO] [1777293544.778875213] [lifecycle_manager_slam]: [34m[1mManaged nodes are active[0m[0m
+[pointcloud_to_laserscan_node-7] [INFO] [1777293544.845402247] [pointcloud_to_laserscan]: Got a subscriber to laserscan, starting pointcloud subscriber
+[INFO] [websocket_server_node-10]: process started with pid [269674]
+[INFO] [data_integration_node-11]: process started with pid [269675]
+[INFO] [websocket_client_node-12]: process started with pid [269676]
+[INFO] [message_bridge_node-13]: process started with pid [269677]
+[INFO] [facial_driver-14]: process started with pid [269678]
+[async_slam_toolbox_node-8] Registering sensor: [Custom Described Lidar]
+[facial_driver-14] [ERROR] [1777293545.538034536] [facial_driver]: ❌ 头部串口连接失败: [Errno 2] could not open port /dev/ttyCH341USB0: [Errno 2] No such file or directory: '/dev/ttyCH341USB0'
+[facial_driver-14] [INFO] [1777293545.544911704] [facial_driver]: 📚 成功加载表情库，共 30 个动作
+[facial_driver-14] [INFO] [1777293545.552109073] [facial_driver]: 🔍 先终止眼部循环和嘴部动作循环...
+[facial_driver-14] [ERROR] [1777293545.552364659] [facial_driver]: ❌ 串口未连接，无法发送指令
+[facial_driver-14] [ERROR] [1777293545.652974627] [facial_driver]: ❌ 串口未连接，无法发送指令
+[message_bridge_node-13] [INFO] [1777293545.659777514] [message_bridge]: 更新率: 10.0Hz, 缓冲区大小: 1000
+[message_bridge_node-13] [INFO] [1777293545.660005456] [message_bridge]: ✅ Message bridge node 初始化完成
+[message_bridge_node-13] [INFO] [1777293545.667708138] [message_bridge]: 消息桥接节点启动
+[websocket_server_node-10] [INFO] [1777293545.674153863] [websocket_server]: ✅ 完整ROS通信接口设置完成
+[websocket_server_node-10] [INFO] [1777293545.675086249] [websocket_server]: ✅ 开始启动WebSocket服务器: 0.0.0.0:8765
+[websocket_server_node-10] [INFO] [1777293545.675150908] [websocket_server]: 🔄 创建WebSocket服务器实例...
+[websocket_client_node-12] [INFO] [1777293545.676856178] [websocket_client]: ROS组件初始化完成
+[websocket_client_node-12] [INFO] [1777293545.677592965] [websocket_client]: 尝试连接机器人服务器...
+[websocket_client_node-12] [INFO] [1777293545.678275947] [websocket_client]: WebSocket客户端启动，连接服务器: ws://10.192.1.2:5000
+[websocket_client_node-12] [INFO] [1777293545.692960617] [websocket_client]: 已连接到机器人本体WebSocket服务器
+[data_integration_node-11] [INFO] [1777293545.694803409] [data_integration_node]: ✅ ROS通信接口设置完成
+[data_integration_node-11] [INFO] [1777293545.695531097] [data_integration_node]: ✅ 定时任务设置完成
+[websocket_server_node-10] [ERROR] [1777293545.708208375] [websocket_server]: ❌ WebSocket服务器运行错误: [Errno 98] error while attempting to bind on address ('0.0.0.0', 8765): address already in use
+[data_integration_node-11] [INFO] [1777293545.708707753] [data_integration_node]: ✅ 已从 YAML 动态加载 18 个动作
+[websocket_server_node-10] [ERROR] [1777293545.714273444] [websocket_server]: ❌ 详细错误信息: Traceback (most recent call last):
+[websocket_server_node-10]   File "/home/ubuntu/humanoid_ws/build/humanoid_websocket/humanoid_websocket/websocket_server.py", line 211, in _run_websocket_server_blocking
+[websocket_server_node-10]     self.server_instance = loop.run_until_complete(create_server())
+[websocket_server_node-10]                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[websocket_server_node-10]   File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+[websocket_server_node-10]     return future.result()
+[websocket_server_node-10]            ^^^^^^^^^^^^^^^
+[websocket_server_node-10]   File "/home/ubuntu/humanoid_ws/build/humanoid_websocket/humanoid_websocket/websocket_server.py", line 200, in create_server
+[websocket_server_node-10]     server = await websockets.serve(
+[websocket_server_node-10]              ^^^^^^^^^^^^^^^^^^^^^^^
+[websocket_server_node-10]   File "/usr/lib/python3/dist-packages/websockets/legacy/server.py", line 1117, in __await_impl__
+[websocket_server_node-10]     server = await self._create_server()
+[websocket_server_node-10]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[websocket_server_node-10]   File "/usr/lib/python3.12/asyncio/base_events.py", line 1572, in create_server
+[websocket_server_node-10]     raise OSError(err.errno, msg) from None
+[websocket_server_node-10] OSError: [Errno 98] error while attempting to bind on address ('0.0.0.0', 8765): address already in use
+[websocket_server_node-10] 
+[data_integration_node-11] [INFO] [1777293545.725346683] [data_integration_node]: ✅ 已独立加载 30 个面部表情
+[data_integration_node-11] [INFO] [1777293545.725609868] [data_integration_node]: 🎯 统一数据整合节点启动完成
+[data_integration_node-11] [INFO] [1777293545.725832252] [data_integration_node]: 📊 协议版本: 2.0
+[data_integration_node-11] [INFO] [1777293545.726048639] [data_integration_node]: 🔄 支持的数据类型: ['robot_pose', 'navigation_status', 'navigation_path', 'system_status', 'gesture_list', 'facial_gesture_list']
+[data_integration_node-11] [INFO] [1777293545.726296845] [data_integration_node]: 🚀 启动统一数据整合节点主循环...
+[facial_driver-14] [INFO] [1777293545.753690561] [facial_driver]: ✅ 强制终止眼部循环（发送1次终止指令）
+[facial_driver-14] [ERROR] [1777293545.754042809] [facial_driver]: ❌ 串口未连接，无法发送指令
+[facial_driver-14] [INFO] [1777293545.854892670] [facial_driver]: ✅ 强制终止嘴部循环（发送1次终止指令）
+[facial_driver-14] [ERROR] [1777293545.855286465] [facial_driver]: ❌ 串口未连接，无法发送指令
+[facial_driver-14] [INFO] [1777293545.956225062] [facial_driver]: 🔄 眼部强制复位（眼球居中+正常睁眼）
+[facial_driver-14] [INFO] [1777293545.956705340] [facial_driver]: 🎬 执行表情: idle
+[websocket_client_node-12] [INFO] [1777293546.000760934] [websocket_client]: 🔄 机器人状态变更: Unknown -> ZeroTorque
+[facial_driver-14] [INFO] [1777293546.057706705] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[INFO] [rviz2-15]: process started with pid [269921]
+[facial_driver-14] [ERROR] [1777293546.558429862] [facial_driver]: ❌ 串口未连接，无法发送指令
+[websocket_server_node-10] [INFO] [1777293546.675951305] [websocket_server]: ✅ 定时任务设置完成
+[websocket_server_node-10] [INFO] [1777293546.676378661] [websocket_server]: 🚀 完整WebSocket服务器启动完成
+[websocket_server_node-10] [INFO] [1777293546.676745477] [websocket_server]: 📡 服务器地址: ws://0.0.0.0:8765
+[websocket_server_node-10] [INFO] [1777293546.677102246] [websocket_server]: 📊 协议版本: 2.0
+[rviz2-15] [INFO] [1777293546.689358816] [rviz2]: Stereo is NOT SUPPORTED
+[rviz2-15] [INFO] [1777293546.689553879] [rviz2]: OpenGl version: 4.6 (GLSL 4.6)
+[rviz2-15] [INFO] [1777293546.717478740] [rviz2]: Stereo is NOT SUPPORTED
+[rviz2-15] [INFO] [1777293547.138018135] [rviz2]: Subscribing to: /fast_lio/cloud_registered
+[rviz2-15] 
+[rviz2-15] [INFO] [1777293547.150541449] [rviz2]: Subscribing to: /fast_lio/cloud_registered
+[rviz2-15] 
+[facial_driver-14] [INFO] [1777293547.459487501] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[facial_driver-14] [ERROR] [1777293547.459899493] [facial_driver]: ❌ 串口未连接，无法发送指令
+[facial_driver-14] [INFO] [1777293547.660935496] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[data_integration_node-11] [INFO] [1777293547.727247545] [data_integration_node]: 📤 已触发初始动作库和表情库同步到服务器
+[websocket_server_node-10] [INFO] [1777293547.729710511] [websocket_server]: 🍭 收到面部表情库更新
+[rviz2-15] [INFO] [1777293548.325601870] [rviz2]: Trying to create a map of size 383 x 342 using 1 swatches
+[rviz2-15] [ERROR] [1777293548.362704497] [rviz2]: rviz/glsl120/indexed_8bit_image.vert
+[rviz2-15] rviz/glsl120/indexed_8bit_image.frag
+[rviz2-15]  GLSL link result : 
+[rviz2-15] active samplers with a different type refer to the same texture image unit
+[rviz2-15] [INFO] [1777293550.258843378] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1777293540.378 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1777293550.695631733] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1777293553.238896401] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1777293540.378 for reason 'the timestamp on the message is earlier than all the data in the transform cache'

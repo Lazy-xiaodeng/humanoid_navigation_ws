@@ -1,0 +1,10 @@
+<class_libraries>
+  <library path="grid_map_costmap_layer">
+    <class type="grid_map_costmap_plugin::GridMapLayer" base_class_type="nav2_costmap_2d::Layer">
+      <description>
+        A costmap layer plugin that subscribes to grid_map messages and converts
+        traversability data into costmap costs for Nav2 navigation.
+      </description>
+    </class>
+  </library>
+</class_libraries>

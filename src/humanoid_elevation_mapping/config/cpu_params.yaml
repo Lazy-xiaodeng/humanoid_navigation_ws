@@ -1,0 +1,32 @@
+elevation_mapping:
+  ros__parameters:
+    # 坐标系设置
+    robot_base_frame_id: "base_link"
+    map_frame_id: "odom"
+    track_point_frame_id: "base_link"
+    
+    # 地图几何参数 (与 GPU 版保持一致)
+    length_in_x: 6.0
+    length_in_y: 6.0
+    resolution: 0.05      # 虚拟机建议略微降低分辨率以保障流畅度
+    min_update_rate: 5.0  # 刷新率
+    
+    # 传感器输入源
+    inputs: ["front_lidar"]
+    front_lidar:
+      type: "pointcloud"
+      topic: "/airy_points_filtered"
+      queue_size: 10
+      publish_on_update: true
+      sensor_processor:
+        type: "perfect"
+    
+    # 地图维护参数
+    scanning_duration: 0.1
+    map_cleanup_rate: 1.0
+    enable_visibility_cleanup: true
+    visibility_cleanup_rate: 1.0
+    
+    # 地图发布层级
+    base_name: "elevation_map"
+    map_layers_all: ["elevation", "variance", "horizontal_variance_x", "horizontal_variance_y", "time", "lowest_scan_point"]

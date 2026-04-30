@@ -1,0 +1,104 @@
+roi_obstacle_detector:
+  ros__parameters:
+    # Direct LiDAR point cloud. Override to /fast_lio/cloud_registered only for bag smoke tests.
+    input_topic: "/airy_points"
+
+    # Preferred output frame for ROI. This node does not need odom or Fast-LIO pose.
+    target_frame: "base_footprint"
+    source_frame_override: ""
+
+    # transform_mode:
+    #   tf     - use TF from source point cloud frame to target_frame
+    #   manual - use manual_translation_xyz/manual_rotation_rpy as source->target
+    #   imu    - no TF/odom; level source cloud from IMU, then apply manual transform
+    #   none   - do not transform; ROI is interpreted in the incoming point cloud frame
+    transform_mode: "imu"
+    fallback_to_manual: false
+    tf_timeout_sec: 0.05
+
+    # Manual transform maps a level source cloud into target_frame:
+    # p_target = R * p_level_source + manual_translation_xyz
+    # For transform_mode=imu, fill this as LiDAR-level-frame -> base_footprint.
+    # Values below are derived from:
+    #   fast_lio_robosense/config/robosenseAiry.yaml mapping.extrinsic_{R,T}
+    #   humanoid_navigation2/launch/navigation2.launch.py body -> base_footprint TF
+    manual_translation_xyz: [0.07646, 0.00025, 1.21082]
+    manual_rotation_rpy: [0.800940953, -1.568796326, 2.338240618]
+    manual_rotation_matrix: [
+      -0.001422, -0.002460,  0.999996,
+       0.001474, -0.999996, -0.002458,
+       0.999998,  0.001470,  0.001425
+    ]
+
+    # IMU leveling for transform_mode=imu. /airy_imu and /airy_points both use
+    # frame_id=rslidar in this bag, but their internal axes differ. The
+    # source_to_imu_rotation_matrix below is the Fast-LIO LiDAR -> IMU rotation
+    # from robosenseAiry.yaml, and is required before using acceleration to
+    # level the point cloud.
+    enable_imu_leveling: false
+    imu_topic: "/airy_imu"
+    imu_mode: "accel"          # accel | orientation
+    imu_filter_mode: "complementary"  # lowpass | complementary
+    source_to_imu_rotation_matrix: [
+       0.001474, -0.999996, -0.002458,
+      -0.999998, -0.001470, -0.001425,
+       0.001422,  0.002460, -0.999996
+    ]
+    imu_timeout_sec: 0.3
+    # For lowpass this is the newest accel weight. For complementary this is
+    # the accel correction weight after gyro prediction.
+    imu_accel_alpha: 0.003
+    imu_accel_is_up: true      # true: resting accel points to the local up axis
+    imu_expected_accel_norm: 9.80665
+    imu_accel_gate_sigma: 3.0
+    imu_max_gyro_dt_sec: 0.05
+    imu_gyro_bias_xyz: [0.0, 0.0, 0.0]
+    estimate_gyro_bias: false
+    gyro_bias_estimation_sec: 2.0
+    gyro_bias_min_samples: 100
+    level_up_axis: [0.0, 0.0, 1.0]
+    # level_reference_axis_source omitted: derive nominal source up from manual_rotation_matrix
+
+    # After roll/pitch leveling, estimate the floor height from the point cloud
+    # and shift z so the floor stays near z=0. This compensates LiDAR vertical
+    # body bounce without integrating IMU acceleration.
+    enable_ground_z_compensation: true
+    ground_roi_min_x: 0.25
+    ground_roi_max_x: 3.0
+    ground_roi_min_y: -1.2
+    ground_roi_max_y: 1.2
+    ground_roi_min_z: -0.45
+    ground_roi_max_z: 0.35
+    ground_z_percentile: 35.0
+    ground_min_points: 200
+    ground_filter_alpha: 0.35
+    ground_max_step: 0.08
+    ground_z_offset: 0.0
+
+    # Front ROI in target_frame: x forward, y left, z up.
+    roi_min_x: 0.45
+    roi_max_x: 2.0
+    roi_min_y: -0.35
+    roi_max_y: 0.35
+    roi_min_z: 0.28
+    roi_max_z: 1.2
+
+    # Filtering and decision logic.
+    voxel_leaf_size: 0.05
+    min_points: 10
+    use_clustering: true
+    cluster_min_size: 20
+    cluster_connectivity: 26
+
+    # Hysteresis against gait and sparse-point flicker.
+    trigger_frames: 3
+    clear_frames: 5
+
+    # Outputs.
+    has_obstacle_topic: "/front_obstacle/has_obstacle"
+    debug_topic: "/front_obstacle/debug"
+    roi_cloud_topic: "/front_obstacle/roi_cloud"
+    publish_roi_cloud: true
+    publish_debug: true
+    debug_publish_period_sec: 0.5
+    log_input_stats: true

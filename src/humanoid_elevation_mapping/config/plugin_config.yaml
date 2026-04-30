@@ -1,0 +1,66 @@
+
+
+# 1. 最小值过滤 (Min Filter)：安全余量处理器
+# 作用：把有效的高程值向外稍微“膨胀”一圈，用于填补机器人脚下或者墙角处激光雷达扫不到的细小漏洞。
+min_filter:
+  enable: True                                # 是否启用该插件
+  fill_nan: False                             # 是否用有效值去代替原来的无效/空网格(NaN)
+  is_height_layer: True                       # 这个滤镜处理的是不是“高度”数据层
+  layer_name: "min_filter"                    # 生成的新数据层的名称
+  extra_params:
+    dilation_size: 1                          # 膨胀尺寸（也就是往外扩张几个像素/网格）
+    iteration_n: 30                           # 迭代计算的次数。次数越多，往外延伸得越大越平滑。
+
+# 2. 地形平滑 (Smooth Filter)：除毛刺滤镜
+# 作用：用来干掉激光雷达打在稍微有噪点的地面（比如草地、粗糙水泥地）产生的“毛刺”。
+smooth_filter:
+  enable: True                                # 是否启用平滑滤波
+  fill_nan: False                             # 是否把空洞填掉（留给后面的 Inpainting 专门补洞）
+  is_height_layer: True                       # 这也是在处理高度数据
+  layer_name: "smooth"                        # 生成的新数据层的名称：平滑层
+  extra_params:
+    input_layer_name: "min_filter"            # 重点！基于上一步生成的 min_filter 层进行平滑
+
+# 3. 图像修补/空洞填补 (Inpainting)：机器视觉复原
+# 作用：使用经典的 OpenCV Telea 算法，像修补老照片一样，推断并填补雷达完全扫不到的一小块“视觉盲区黑洞”。
+inpainting:
+  enable: True                                # 启用坑洞修补
+  fill_nan: False
+  is_height_layer: True                       
+  layer_name: "inpaint"                       # 生成一层叫 inpaint 的数据补完层
+  extra_params:
+    method: "telea"                           # 修补算法：选用基于快速行进方法(FMM)的 TELEA 算法（也可以选 "ns"：Navier-Stokes）
+
+# 4. 可通行性计算（最核心）
+traversability:
+  enable: True
+  fill_nan: False
+  is_height_layer: False                      # 输出的是可通行性分数(0~1)，不是物理高度
+  layer_name: "traversability"
+  extra_params:
+    # 权重分配：坡度和台阶各占一半
+    slope_weight: 0.5
+    step_weight: 0.5
+    
+    # 关键阈值：
+    max_slope: 0.45 # 约26度，超过此坡度 → 不可通行
+                # 15度坡(0.262rad) < 0.45 → 可通行 ✅
+    max_step_height: 0.03 # 3cm，超过此台阶高度 → 不可通行
+                                              # 机器人抬腿高度约2cm，3cm是安全阈值
+                                              # 楼梯(15-18cm) >> 0.03 → 绝对不可通行 ✅
+    
+    roughness_weight: 0.0                     # 暂不考虑地面粗糙度
+    
+# 5. 可通行区域侵蚀 (Erosion Filter)：安全内缩防御
+# 作用：这是针对“可通行度(Traversability)”的。把原本算出来“安全能走”的区域，往内部收缩几圈。
+# 举例：贴着墙走虽然理论上安全，但人形机器人胳膊甩动容易刮墙。这个功能会让“绝对安全区”远离墙边和楼梯边缘。
+erosion:
+  enable: True                                # 启用安全侵蚀
+  fill_nan: False
+  is_height_layer: False                      # 【注意】False，因为它现在处理的不是物理高度了，而是分数（0~1的危险评估系数）
+  layer_name: "erosion"                       # 生成一个名叫 erosion 的安全缩进层
+  extra_params:
+    input_layer_name: "traversability"        # 调用底层 GPU 自动算好的 traversability(可通行度) 层来修改
+    dilation_size: 3                          # 侵蚀尺寸：往内收缩/侵蚀掉 3个网格的尺寸（强行拉远与危险区的距离）
+    iteration_n: 20                           # 迭代执行 20 次，产生渐变的缓冲带
+    reverse: True                             # 参数反转运算：因为地形高度是越大越高，而危险度可能是越小越危险，反转用于兼容计算。

@@ -1,0 +1,13 @@
+# 请求
+string waypoint_id
+string waypoint_name  
+string waypoint_type
+float64[] position
+float64[] orientation
+string frame_id
+string properties_json
+
+---
+# 响应
+bool success
+string message

@@ -1,0 +1,169 @@
+# ============================================================
+# elevation_mapping_opencl 高程图节点参数配置
+# ============================================================
+elevation_mapping_opencl_node:
+  ros__parameters:
+
+    # ===== 话题配置 =====
+    input_cloud_topic: "/airy_points_for_elevation"
+    # 输入点云话题，必须与点云滤波节点的 output_elevation_topic 一致
+    # 不要修改
+
+    odom_topic: "/odom"
+    # 里程计话题，来自 Fast-LIO
+    # 必须与 Fast-LIO 实际发布的里程计话题一致
+    # 常见值："/Odometry" / "/odom" / "/fast_lio/odometry"
+
+    output_map_topic: "/elevation_mapping/output"
+    # 高程图输出话题
+    # 必须与 terrain_analyzer.yaml 的 map_topic 一致
+    # 必须与 nav2_params.yaml 的 grid_map_topic 一致
+    # 不要修改
+
+    # ===== 坐标系 =====
+    map_frame: "odom"
+    # 高程图的参考坐标系
+    # 必须与 Nav2 的 odom_frame 一致，不要改
+
+    base_frame: "base_footprint"
+    # 机器人底盘坐标系，用于跟踪机器人位置
+    # 必须与 Nav2 的 robot_base_frame 一致
+
+    # ===== 地图参数 =====
+    resolution: 0.05
+    # 高程图分辨率（米/格）
+    # 调整方向：
+    #   → 减小（如 0.03）：更精细，能检测更小的台阶，但计算量大
+    #   → 增大（如 0.05~0.08）：计算快，但细节变差
+    #   建议与 nav2_params.yaml 的 costmap resolution 保持一致（当前都是 0.05）
+    
+
+    map_length: 6.0
+    # 高程图边长（米），地图为正方形
+    # 调整方向：
+    #   → 增大（如 8.0~10.0）：覆盖更大范围，适合快速移动
+    #   → 减小（如 4.0）：减少计算量，适合慢速精细导航
+    # ⚠️ 必须大于 Nav2 局部代价地图的 width/height（当前 3m），建议至少是其2倍
+
+    publish_rate: 5.0
+    # 高程图发布频率（Hz）
+    # 调整方向：
+    #   → 增大（如 10.0）：地形信息更实时，但GPU 负载增加
+    #   → 减小（如 3.0）：降低负载，适合算力紧张的情况
+    # 建议：台阶检测场景用 5~10Hz，平地场景 3~5Hz 足够
+
+    enable_traversability: true
+    # 是否计算可通行性（traversability）
+    # 必须开启，否则 Nav2 的 grid_map_layer 无法工作
+
+    # ===== 传感器噪声模型 =====
+    sensor_noise_factor: 0.0025
+    # ⚠️ 原文件写的是 0.05，这里已修正
+    # 噪声方差 = factor × distance²
+    # 调整方向：
+    #   → 增大：认为传感器噪声大，高程图更新更保守（更平滑但响应慢）
+    #   → 减小：认为传感器精度高，高程图更新更激进（响应快但可能抖动）
+    # 建议范围：0.001~0.01
+
+    mahalanobis_thresh: 2.0
+    # 马氏距离离群点阈值
+    # 新点与当前高程差超过 thresh×sqrt(variance) 时视为离群点
+    # 调整方向：
+    #   → 减小（如 1.5）：更严格地拒绝新点，高程图更稳定但更新慢
+    #   → 增大（如 3.0）：接受更多新点，高程图更新快但可能引入噪声
+
+    outlier_variance: 0.01
+    # 离群点的方差增量（米²）
+    # 被判定为离群点时，该格子的方差增加此值，使其更容易被后续点更新
+    # 调整方向：一般不需要修改
+
+    min_valid_distance: 0.3
+    # 最小有效点云距离（米），过滤极近距离的点
+    # 调整方向：与点云滤波的min_range 保持一致或略小
+
+    max_height_range: 10.5
+    # 最大有效高度范围（米），过滤异常高点
+    # 调整方向：根据实际环境高度设置
+
+    # ===== 时间衰减 =====
+    time_variance: 0.0001
+    # 每帧方差增量，模拟高程图随时间的不确定性增加
+    # 调整方向：
+    #   → 增大（如 0.001）：高程图"遗忘"旧数据更快，适合动态环境
+    #   → 减小（如 0.00001）：高程图更稳定，适合静态环境
+
+    max_variance: 100.0
+    # 方差上限，防止无限增长
+    # 一般不需要修改
+
+    # ===== 可通行性参数 =====
+    max_slope: 0.35
+    # 最大允许坡度（弧度），约20°
+    # 调整方向：
+    #   → 减小（如 0.3，约17°）：更保守，只走平坦地面
+    #   → 增大（如 0.6，约34°）：允许走更陡的坡
+    # ⚠️ 必须与 terrain_analyzer.yaml 的 safe_slope_threshold 协调
+
+    max_step_height: 0.03
+    # 高程图内部的最大台阶高度（米），用于可通行性计算
+    # 注意：这是高程图格子间的高度差，不是实际台阶高度
+    # 调整方向：
+    #   → 减小（如 0.02）：更敏感，小凸起也标为不可通行
+    #   → 增大（如 0.05）：只有较大台阶才标为不可通行
+
+    slope_weight: 0.5
+    # 坡度在可通行性评分中的权重
+    # slope_weight + step_weight 建议 = 1.0
+
+    step_weight: 0.5
+    # 台阶高度在可通行性评分中的权重
+
+    # ===== 后处理开关 =====
+    enable_post_processing: true
+    # 后处理总开关，关闭则跳过所有后处理步骤
+
+    enable_min_filter: true
+    # 最小值滤波：抑制孤立高点（如飞虫、灰尘）
+    # 调整方向：地面噪点多时开启
+
+    enable_smooth: true
+    # 高斯平滑：降低高程图噪声
+    # 调整方向：高程图抖动明显时开启，但会使边缘变模糊
+
+    enable_inpaint: true
+    # 空洞填补：填补激光盲区（如地面正下方）
+    # 调整方向：高程图空洞多时开启
+
+    enable_visibility_cleanup: false
+    # 视野清理：清除机器人视野外的旧障碍
+    # ⚠️ 性能开销大，默认关闭
+    # 调整方向：动态环境中障碍物会移动时开启
+
+    enable_erosion: true
+    # 形态学侵蚀：生成安全缓冲区（erosion 层）
+    # 必须开启，否则 Nav2 的 grid_map_layer 读取的erosion 层为空
+
+    # ===== 侵蚀参数 =====
+    erosion_radius: 3
+    # 侵蚀半径（格子数），实际距离 = radius × resolution
+    # 当前：3 × 0.04 = 0.12m的安全缓冲
+    # 调整方向：
+    #   → 增大（如 4~5）：安全缓冲更大，机器人更保守
+    #   → 减小（如 2）：允许更靠近障碍物通过
+
+    erosion_safety_threshold: 0.3
+    # 侵蚀的可通行性阈值，低于此值的格子会被侵蚀扩散
+    # 必须与 nav2_params.yaml 的 grid_map_layer lethal_threshold 一致（当前都是 0.3）✅
+
+    erosion_strength: 0.7
+    # 侵蚀强度，被侵蚀格子的可通行性会被设为此值
+    # 调整方向：
+    #   → 减小（如 0.5）：侵蚀区域代价更高，机器人更倾向绕行
+    #   → 增大（如 0.9）：侵蚀区域代价较低，机器人可以靠近
+
+    min_filter_spike_threshold: 0.10
+    # 孤立高点检测阈值（米）
+    # 某格子高度比周围高出此值以上时视为孤立噪点
+    # 调整方向：
+    #   → 减小（如 0.05）：更敏感，小凸起也被过滤
+    #   → 增大（如 0.15~0.2）：只过滤明显的孤立高点

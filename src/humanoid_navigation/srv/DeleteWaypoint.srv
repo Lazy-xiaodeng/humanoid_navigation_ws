@@ -1,0 +1,5 @@
+# DeleteWaypoint.srv - 删除航点服务
+string waypoint_name  # 航点名称
+---
+bool success          # 是否成功
+string message        # 返回消息

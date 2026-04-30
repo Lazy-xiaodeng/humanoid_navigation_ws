@@ -1,0 +1,85 @@
+<?xml version="1.0"?>
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+
+  <BehaviorTree ID="MainTree">
+    <!--
+      ============================================================================
+      核心策略：
+      1. 遇到障碍物时：机器人停下等待，不旋转、不清costmap、不重新规划
+      2. 路径偏离时：规划器持续低频重规划（1Hz），自动纠正路径
+      3. 区分方式：
+         - 障碍停下 = FollowPath碰撞检测失败 → 进入Wait → 不重试
+         - 路径偏离 = 规划器持续运行 → 自动更新路径
+      ============================================================================
+    -->
+    
+    <!-- 
+      RecoveryNode：控制失败后的重试次数
+      number_of_retries="0"：失败后不自动重试，避免无限循环重规划
+    -->
+    <RecoveryNode number_of_retries="0" name="NoRetryRecovery">
+
+      <!-- 
+        主导航流程：持续规划 + 跟踪路径
+        PipelineSequence：并行执行规划和跟踪
+      -->
+      <PipelineSequence name="ContinuousReplanAndFollow">
+        
+        <!-- 
+          低频持续重规划：每秒1次
+          作用：自动纠正路径偏离，但不会因为障碍物而频繁重规划
+        -->
+        <RateController hz="1.0">
+          <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+        </RateController>
+
+        <!-- 
+          路径跟踪：执行规划好的路径
+          如果碰撞检测失败 → 退出到Fallback
+        -->
+        <FollowPath path="{path}" controller_id="FollowPath"/>
+
+      </PipelineSequence>
+
+      <!-- 
+        失败处理逻辑：
+        1. 优先检查是否有新目标 → 有则立即重启导航
+        2. 否则执行Wait等待 → 等待后不重试（因为number_of_retries=0）
+      -->
+      <Fallback name="ObstacleWaitOnly">
+        
+        <!-- 
+          检查目标是否更新
+          如果APP发送了新目标，立即重启导航流程
+        -->
+        <GoalUpdated/>
+
+        <!-- 
+          遇到障碍物时的处理：只等待，不做其他动作
+          - 不清除costmap（保留障碍物信息）
+          - 不重新规划（避免反复尝试同一路径）
+          - 不旋转恢复（spin已从behavior_server移除）
+        -->
+        <Sequence name="WaitForObstacleClear">
+          <!-- 
+            等待5秒
+            期望：动态障碍物离开，或人工干预
+          -->
+          <Wait wait_duration="10.0"/>
+          
+          <!-- 
+            等待后不会重试主流程（因为RecoveryNode的retries=0）
+            机器人会保持停止状态，直到：
+            1. 障碍物消失且路径仍有效 → 控制器自动继续
+            2. APP发送新目标 → GoalUpdated触发重启
+            3. 人工干预
+          -->
+        </Sequence>
+
+      </Fallback>
+
+    </RecoveryNode>
+
+  </BehaviorTree>
+
+</root>

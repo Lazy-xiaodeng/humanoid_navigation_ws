@@ -1,0 +1,57 @@
+# 统一节点名为 websocket_server (Launch文件中的name)
+websocket_server:
+  ros__parameters:
+    # ================= 原 websocket_server 部分 =================
+    server_port: 5000
+    host: "10.192.1.2"
+    max_connections: 50
+    connection_timeout: 300
+    
+    heartbeat_enabled: true
+    heartbeat_interval: 5.0
+    heartbeat_timeout_factor: 3.0
+    
+    security_enable_ssl: false
+    
+    performance_max_message_size: 1048576
+    performance_buffer_size: 8192
+    
+    logging_level: "INFO"
+    logging_file_path: "/home/ros/humanoid_ws/log/websocket_server.log" # 改为用户路径
+
+    # ================= 原 message_protocol 部分 (变为下级参数) =================
+    message_protocol:
+      version: "1.0"
+      supported_messages: ["heartbeat", "navigation_goal", "emergency_stop", "velocity_command", "action_command", "point_management", "robot_status", "imu_data", "joint_states"]
+      validation_strict_mode: true
+      # 为避免解析错误，复杂的字典结构建议简化，或者在代码中硬编码
+      required_fields_goal: ["x", "y"]
+      
+    # ================= 原 robot_status_forwarding 部分 =================
+    robot_status_forwarding:
+      enabled: true
+      topics_names: ["/robot_status_processed", "/imu", "/joint_states"] # 修改为你实际存在的话题
+      topics_types: ["humanoid_interfaces/msg/RobotStatus", "sensor_msgs/msg/Imu", "sensor_msgs/msg/JointState"]
+
+    # ================= 原 app_command_handling 部分 =================
+    app_command_handling:
+      navigation_goal_frame: "map"
+      velocity_max_linear: 1.0
+      velocity_max_angular: 1.57
+      # 下面这些映射表建议保持简单的 Key-Value 结构
+      action_mapping_wave_hand: "action_wave"
+      action_mapping_bow: "action_bow"
+      action_mapping_sit_down: "action_sit"
+
+    # ================= 原 point_management 部分 =================
+    point_management:
+      storage_file: "/home/ros/humanoid_ws/data/robot_points.json"
+      auto_save: true
+      save_interval: 60
+      
+    # ================= 原 ros_topic_mapping 部分 =================
+    ros_topic_mapping:
+      inputs_navigation_goal: "/goal_pose"  # 修正为Nav2的标准话题
+      inputs_emergency_stop: "/emergency_stop"
+      inputs_cmd_vel: "/cmd_vel"
+      outputs_robot_status: "/robot_status_processed"

@@ -1,0 +1,5 @@
+# ExecuteSequence.srv - 执行序列服务
+string sequence_name  # 序列名称
+---
+bool success          # 是否成功
+string message        # 返回消息

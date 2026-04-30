@@ -1,0 +1,91 @@
+[INFO] [launch]: All log files can be found below /home/ubuntu/.ros/log/2026-04-16-10-45-36-340155-ubuntu-80965
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [rslidar_sdk_node-1]: process started with pid [81022]
+[INFO] [fastlio_mapping-2]: process started with pid [81023]
+[INFO] [static_transform_publisher-3]: process started with pid [81024]
+[INFO] [static_transform_publisher-4]: process started with pid [81025]
+[rslidar_sdk_node-1] [1m[35m********************************************************[0m
+[rslidar_sdk_node-1] [1m[35m**********                                    **********[0m
+[rslidar_sdk_node-1] [1m[35m**********    RSLidar_SDK Version: v1.5.18     **********[0m
+[rslidar_sdk_node-1] [1m[35m**********                                    **********[0m
+[rslidar_sdk_node-1] [1m[35m********************************************************[0m
+[rslidar_sdk_node-1] [1m[32m--------------------------------------------------------[0m
+[rslidar_sdk_node-1] [1m[32mConfig loaded from PATH:[0m
+[rslidar_sdk_node-1] [1m[32m/home/ubuntu/humanoid_ws/src/rslidar_sdk/config/config.yaml[0m
+[rslidar_sdk_node-1] [1m[32m--------------------------------------------------------[0m
+[rslidar_sdk_node-1] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-1] [1m[32mReceive Packets From : Online LiDAR[0m
+[rslidar_sdk_node-1] [1m[32mMsop Port: 6699[0m
+[rslidar_sdk_node-1] [1m[32mDifop Port: 7788[0m
+[rslidar_sdk_node-1] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-1] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-1] [1m[32m             RoboSense Driver Parameters [0m
+[rslidar_sdk_node-1] [32minput type: ONLINE_LIDAR[0m
+[rslidar_sdk_node-1] [32mlidar_type: RSAIRY[0m
+[rslidar_sdk_node-1] [32mframe_id: rslidar[0m
+[rslidar_sdk_node-1] [32m------------------------------------------------------[0m
+[rslidar_sdk_node-1] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-1] [1m[32m             RoboSense Input Parameters [0m
+[rslidar_sdk_node-1] [32mmsop_port: 6699[0m
+[rslidar_sdk_node-1] [32mdifop_port: 7788[0m
+[rslidar_sdk_node-1] [32mimu_port: 6688[0m
+[rslidar_sdk_node-1] [32muser_layer_bytes: 0[0m
+[rslidar_sdk_node-1] [32mtail_layer_bytes: 0[0m
+[rslidar_sdk_node-1] [32mhost_address: 0.0.0.0[0m
+[rslidar_sdk_node-1] [32mgroup_address: 0.0.0.0[0m
+[rslidar_sdk_node-1] [32msocket_recv_buf: 106496[0m
+[rslidar_sdk_node-1] [32mpcap_path: /home/robosense/lidar.pcap[0m
+[rslidar_sdk_node-1] [32mpcap_rate: 1[0m
+[rslidar_sdk_node-1] [32mpcap_repeat: 1[0m
+[rslidar_sdk_node-1] [32muse_vlan: 0[0m
+[rslidar_sdk_node-1] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-1] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-1] [1m[32m             RoboSense Decoder Parameters [0m
+[rslidar_sdk_node-1] [32mmin_distance: 0.1[0m
+[rslidar_sdk_node-1] [32mmax_distance: 60[0m
+[rslidar_sdk_node-1] [32muse_lidar_clock: 0[0m
+[rslidar_sdk_node-1] [32mdense_points: 0[0m
+[rslidar_sdk_node-1] [32mts_first_point: 1[0m
+[rslidar_sdk_node-1] [32mwait_for_difop: 1[0m
+[rslidar_sdk_node-1] [32mconfig_from_file: 0[0m
+[rslidar_sdk_node-1] [32mangle_path: [0m
+[rslidar_sdk_node-1] [32mstart_angle: 0[0m
+[rslidar_sdk_node-1] [32mend_angle: 360[0m
+[rslidar_sdk_node-1] [32msplit_frame_mode: 1[0m
+[rslidar_sdk_node-1] [32msplit_angle: 0[0m
+[rslidar_sdk_node-1] [32mnum_blks_split: 0[0m
+[rslidar_sdk_node-1] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-1] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-1] [1m[32m             RoboSense Transform Parameters [0m
+[rslidar_sdk_node-1] [32mx: 0[0m
+[rslidar_sdk_node-1] [32my: 0[0m
+[rslidar_sdk_node-1] [32mz: 0[0m
+[rslidar_sdk_node-1] [32mroll: 0[0m
+[rslidar_sdk_node-1] [32mpitch: 0[0m
+[rslidar_sdk_node-1] [32myaw: 0[0m
+[rslidar_sdk_node-1] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-1] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-1] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-1] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-1] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-1] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-1] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-1] [1m[36m------------------------------------------------------[0m
+[rslidar_sdk_node-1] [1m[36mSend PointCloud To : ROS[0m
+[rslidar_sdk_node-1] [1m[36mPointCloud Topic: /airy_points[0m
+[rslidar_sdk_node-1] [1m[36m------------------------------------------------------[0m
+[rslidar_sdk_node-1] [WARN] [1776307536.449156970] [rcl.logging_rosout]: Publisher already registered for node name: 'rslidar_sdk_node'. If this is due to multiple nodes with the same name then all logs for the logger named 'rslidar_sdk_node' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[static_transform_publisher-3] [INFO] [1776307536.451538430] [tf_odom_to_camera_init]: Spinning until stopped - publishing transform
+[static_transform_publisher-3] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-3] rotation: ('-0.500000', '-0.500000', '0.500000', '0.500000')
+[static_transform_publisher-3] from 'odom' to 'camera_init'
+[rslidar_sdk_node-1] [1m[37mRoboSense-LiDAR-Driver is running.....[0m
+[static_transform_publisher-4] [INFO] [1776307536.462921405] [tf_body_to_base_footprint]: Spinning until stopped - publishing transform
+[static_transform_publisher-4] translation: ('0.004000', '1.215000', '0.072000')
+[static_transform_publisher-4] rotation: ('0.500000', '0.500000', '-0.500000', '0.500000')
+[static_transform_publisher-4] from 'body' to 'base_footprint'
+[fastlio_mapping-2] [INFO] [1776307536.602088183] [fast_lio_node]: p_pre->lidar_type 5
+[fastlio_mapping-2] [INFO] [1776307536.608929006] [fast_lio_node]: Node init finished.
+[fastlio_mapping-2] [WARN] [1776307537.378328899] [fast_lio_node]: No point, skip this scan!
+[fastlio_mapping-2] 
+[fastlio_mapping-2] [INFO] [1776307537.585117938] [fast_lio_node]: Initialize the map kdtree

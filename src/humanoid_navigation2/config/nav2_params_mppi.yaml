@@ -1,0 +1,1071 @@
+# ==============================================================================
+# 文件名建议：nav2_params_mppi.yaml
+#
+# 功能说明：
+#   人形机器人 Nav2 + MPPI 导航配置文件
+#
+# 适配机器人特征：
+#   1. 线速度死区约 0.15 m/s，低于该速度机器人可能不走。
+#   2. 角速度死区约 0.15 rad/s，低于该角速度机器人可能不转。
+#   3. 可以只输出角速度进行原地转向，但实际会产生约 5cm 的位置偏移。
+#   4. 后方没有传感器，因此禁止倒车，行为树中也不允许 BackUp。
+#   5. 不支持横移，因此 vy_max = 0.0。
+#   6. 雷达安装在胸口，导航代价地图统一使用 ground 坐标系。
+#
+# 坐标系约定：
+#   map ──> map_ground
+#    │
+#    └──> odom ──> camera_init ──> body ──> base_footprint
+#           │
+#           └──> odom_ground
+#
+# 核心策略：
+#   行为树：
+#     使用行为树 navigate_with_stairs.xml
+#     低频重规划 + 先等待再清图 + 小角度 Spin + 不 BackUp
+#
+#   控制器：
+#     MPPIController
+#     使用 DiffDrive 模型
+#     允许停车 vx_min = 0.0
+#     禁止倒车，不采样负速度
+#     不允许横移 vy_max = 0.0
+#     使用 VelocityDeadbandCritic 惩罚速度死区内的非零速度
+#
+#   规划器：
+#     SmacPlanner2D
+#     让全局路径更自由，MPPI 负责局部平滑和避障
+#
+#   恢复行为：
+#     只加载 Spin 和 Wait
+#     不加载 BackUp
+# ==============================================================================
+
+# ==============================================================================
+# BT Navigator
+# 行为树导航器
+# ==============================================================================
+bt_navigator:
+  ros__parameters:
+    use_sim_time: False
+
+    # --------------------------------------------------------------------------
+    # 全局坐标系
+    #
+    # 必须和 global_costmap 的 global_frame 保持一致。
+    # --------------------------------------------------------------------------
+    global_frame: map_ground
+
+    # --------------------------------------------------------------------------
+    # 机器人底盘坐标系
+    #
+    # base_footprint 是机器人投影到地面的中心点，适合 2D 导航。
+    # --------------------------------------------------------------------------
+    robot_base_frame: base_footprint
+
+    # --------------------------------------------------------------------------
+    # 里程计坐标系
+    #
+    # 必须和 local_costmap 的 global_frame 保持一致。
+    # --------------------------------------------------------------------------
+    odom_frame: odom_ground
+
+    # --------------------------------------------------------------------------
+    # 自定义行为树
+    #
+    # 这里使用行为树：
+    #   /home/ubuntu/humanoid_ws/src/humanoid_navigation2/config/behavior_tree/navigate_with_stairs.xml
+    #
+    # 该行为树特点：
+    #   1. RateController hz=0.3，约 3.3 秒重规划一次；
+    #   2. 前方动态障碍短暂出现时，倾向于先等待；
+    #   3. 恢复动作不包含 BackUp；
+    #   4. 恢复顺序为 Wait/Clear/Spin/Wait。
+    # --------------------------------------------------------------------------
+    default_bt_xml_filename: "/home/ubuntu/humanoid_ws/src/humanoid_navigation2/config/behavior_tree/navigate_with_stairs.xml"
+
+    # --------------------------------------------------------------------------
+    # 如果启动时报 BT 节点未识别，例如：
+    #   Node not recognized: RateController
+    #   Node not recognized: PipelineSequence
+    #   Node not recognized: ClearEntireCostmap
+    #
+    # 再取消下面 plugin_lib_names 的注释。
+    #
+    # 正常情况下， Nav2 版本会自动加载默认 BT 插件，可以不写。
+    # --------------------------------------------------------------------------
+    # plugin_lib_names:
+    #   - nav2_compute_path_to_pose_action_bt_node
+    #   - nav2_follow_path_action_bt_node
+    #   - nav2_wait_action_bt_node
+    #   - nav2_spin_action_bt_node
+    #   - nav2_clear_costmap_service_bt_node
+    #   - nav2_recovery_node_bt_node
+    #   - nav2_pipeline_sequence_bt_node
+    #   - nav2_rate_controller_bt_node
+    #   - nav2_round_robin_node_bt_node
+    #   - nav2_goal_updated_condition_bt_node
+
+# ==============================================================================
+# Controller Server
+# 控制器服务器
+#
+# 重点：
+#   这里使用 MPPIController 替代 RPP。
+#
+# MPPI 的优势：
+#   1. 局部动态避障能力强于 RPP；
+#   2. 可以在不立即全局重规划的情况下尝试局部绕障；
+#   3. 对 2D planner 的折线路径有一定平滑执行能力。
+#
+# MPPI 的风险：
+#   1. 参数敏感；
+#   2. 算力压力大；
+#   3. 容易输出低于硬件速度死区的小速度；
+#   4. 如果 costmap 有残影，可能比 RPP 更容易犹豫。
+#
+# 本配置通过 VelocityDeadbandCritic 来处理速度死区问题。
+# ==============================================================================
+controller_server:
+  ros__parameters:
+    use_sim_time: False
+
+    # --------------------------------------------------------------------------
+    # 控制频率
+    #
+    # MPPI 比 RPP 更吃 CPU。
+    # 建议第一轮实机测试先用 10Hz，不要直接上 20Hz。
+    #
+    # 如果日志出现：
+    #   Controller loop missed its desired rate
+    #
+    # 说明算力不足，可以：
+    #   1. batch_size 降到 700；
+    #   2. time_steps 降到 16；
+    #   3. local_costmap publish_frequency 降低；
+    #   4. 不要提高 controller_frequency。
+    # --------------------------------------------------------------------------
+    controller_frequency: 10.0
+
+    # --------------------------------------------------------------------------
+    # TF 容忍时间
+    #
+    # 0.5s 对控制器本身比较合适。
+    # 不建议长期设置 3.0s，因为那可能掩盖 TF 延迟并导致控制使用旧位姿。
+    # --------------------------------------------------------------------------
+    transform_tolerance: 0.5
+
+    # --------------------------------------------------------------------------
+    # 速度阈值
+    #
+    # 注意：
+    #   这几个参数不是“把小速度抬升到死区以上”的参数。
+    #   它们更多用于控制器内部判断低速是否近似为 0。
+    #
+    # 对 MPPI 来说，真正处理速度死区的是：
+    #   VelocityDeadbandCritic
+    #
+    # 这里不要设得过高，否则你很难观察 MPPI 原始输出行为。
+    # 建议：
+    #   第一轮测试用 0.10；
+    #   如果确认硬件低于 0.15 完全不动，再配合 VelocityDeadbandCritic 调整。
+    # --------------------------------------------------------------------------
+    min_x_velocity_threshold: 0.15
+    min_y_velocity_threshold: 0.0
+    min_theta_velocity_threshold: 0.15
+
+    # --------------------------------------------------------------------------
+    # 控制失败容忍度
+    #
+    # MPPI 在障碍前可能短时没有可行轨迹。
+    # 0.5s 可以避免瞬时失败立刻中断导航。
+    # --------------------------------------------------------------------------
+    failure_tolerance: 0.5
+
+    # --------------------------------------------------------------------------
+    # Progress Checker
+    #
+    # 人形机器人可能会：
+    #   1. 先原地转向；
+    #   2. 遇人等待；
+    #   3. 起步较慢；
+    #   4. MPPI 局部避障时短时间犹豫。
+    #
+    # 因此 movement_time_allowance 不要太小。
+    # --------------------------------------------------------------------------
+    progress_checker_plugin: "progress_checker"
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+
+      # 在 movement_time_allowance 时间内至少移动该距离。
+      # 对你的机器人，0.15 比较合适。
+      required_movement_radius: 0.15
+
+      # 允许 20 秒无明显位移。
+      # 如果你希望更快进入恢复，可降到 15。
+      # 如果经常误触发 Failed to make progress，可升到 25~30。
+      movement_time_allowance: 20.0
+
+    # --------------------------------------------------------------------------
+    # Goal Checker
+    #
+    # MPPI 在终点附近如果容差太小，容易来回试探或抖动。
+    # 所以这里比普通小车略放宽。
+    # --------------------------------------------------------------------------
+    goal_checker_plugins: ["general_goal_checker"]
+    general_goal_checker:
+      plugin: "nav2_controller::SimpleGoalChecker"
+      stateful: True
+
+      # XY 到达容差。
+      # 如果停靠精度不够，可降到 0.20。
+      # 如果终点附近抖动，可升到 0.30。
+      xy_goal_tolerance: 0.30
+
+      # 朝向容差。
+      # 0.35 rad 约等于 20 度。
+      # 你的机器人原地转会偏移 5cm 左右，因此不要设太小。
+      yaw_goal_tolerance: 0.35
+
+    # --------------------------------------------------------------------------
+    # 控制器插件列表
+    # --------------------------------------------------------------------------
+    controller_plugins: ["FollowPath"]
+
+    # ==========================================================================
+    # MPPI Controller
+    # ==========================================================================
+    FollowPath:
+      plugin: "nav2_mppi_controller::MPPIController"
+
+      # ------------------------------------------------------------------------
+      # MPPI 基础采样参数
+      # ------------------------------------------------------------------------
+
+      # 预测步数。
+      #
+      # time_steps * model_dt = 预测时长
+      # 20 * 0.1 = 2.0 秒
+      #
+      # 对 0.25m/s 的速度，相当于预测前方约 0.5m。
+      # 这对室内人形机器人比较安全，不会看得太远导致过度绕障。
+      #
+      # 调参：
+      #   算力不足：降到 16
+      #   希望绕障更提前：升到 24
+      time_steps: 20
+
+      # 模型时间步长。
+      #
+      # controller_frequency = 10Hz 时，周期就是 0.1s。
+      # 因此 model_dt = 0.1 比较自然。
+      model_dt: 0.1
+
+      # 每次控制周期采样的轨迹数量。
+      #
+      # 1000 是比较稳妥的起点。
+      #
+      # 调参：
+      #   算力不足：700
+      #   避障不够平滑且 CPU 充足：1500
+      batch_size: 1500
+
+      # MPPI 通常保持 1。
+      iteration_count: 1
+
+      # 是否每次重新生成噪声。
+      # true 会让轨迹探索更充分。
+      regenerate_noises: true
+
+      # 是否可视化采样轨迹。
+      # 实机测试先关闭，避免额外 CPU / RViz 压力。
+      visualize: true
+
+      # 可视化采样轨迹的稀疏程度
+      # trajectory_step 越大，显示的采样轨迹越少，RViz 压力越小
+      # time_step 越大，每条轨迹显示的点越稀疏
+      trajectory_step: 5
+      time_step: 3
+
+      # 温度参数。
+      #
+      # 越小：
+      #   越偏向最低代价轨迹，动作可能更果断但也可能更抖。
+      #
+      # 越大：
+      #   多条较优轨迹加权，动作更平滑但可能更犹豫。
+      #
+      # 推荐：
+      #   0.2 ~ 0.5
+      temperature: 0.3
+
+      # 控制代价折扣/平滑相关参数。
+      # 通常 0.015 是比较常见的稳定值。
+      gamma: 0.015
+
+      # 裁剪机器人后方路径的距离。
+      # 后方无传感器，且不允许倒车，因此不需要保留太长后方路径。
+      prune_distance: 1.5
+
+      # MPPI 查询 TF 的容忍时间。
+      transform_tolerance: 1.0
+
+      # ------------------------------------------------------------------------
+      # 运动模型
+      #
+      # 人形机器人不是 Ackermann：
+      #   1. 它可以接近原地转；
+      #   2. 只是原地转时有约 5cm 位移；
+      #   3. 不像汽车那样必须有线速度才能转向。
+      #
+      # 因此用 DiffDrive 更合适。
+      #
+      # 注意：
+      #   不同 Nav2 版本参数名可能不同。
+      #
+      # 如果启动时报 motion_model 不识别，可以改成：
+      #   model_type: "diff_drive"
+      #
+      # 不建议使用：
+      #   model_type: "ackermann"
+      # ------------------------------------------------------------------------
+      motion_model: "DiffDrive"
+      # model_type: "diff_drive"
+
+      # ------------------------------------------------------------------------
+      # 速度限制
+      #
+      # 核心原则：
+      #   1. vx_min = 0.0，允许停车；
+      #   2. 不允许负速度，禁止倒车；
+      #   3. vy_max = 0.0，禁止横移；
+      #   4. 最大速度先保守，后续再提高。
+      #
+      # 为什么 vx_min 不设 0.15？
+      #   因为 vx_min: 0.15 会让 MPPI 很难自然停车。
+      #   前方有人时，它可能仍然倾向于往前找路。
+      #
+      # 正确做法：
+      #   vx_min: 0.0 允许停车；
+      #   VelocityDeadbandCritic 惩罚 0~0.15 之间的非零速度。
+      # ------------------------------------------------------------------------
+      vx_min: 0.0
+      vx_max: 0.35
+      vy_max: 0.0
+      wz_max: 0.45
+
+      # ------------------------------------------------------------------------
+      # 加速度限制
+      #
+      # 人形机器人起步、急停、急转都不宜太猛。
+      #
+      # ax_min:
+      #   负值表示最大减速度。
+      #
+      # ax_max:
+      #   最大加速度。
+      #
+      # az_max:
+      #   最大角加速度。
+      #
+      # 调参：
+      #   起步太猛：ax_max 降到 0.20~0.25
+      #   刹车太慢：ax_min 改为 -0.40
+      #   转向太猛：az_max 降到 0.40~0.50
+      #   转向太慢：az_max 升到 0.80
+      # ------------------------------------------------------------------------
+      ax_min: -0.30
+      ax_max: 0.30
+      ay_max: 0.0
+      az_max: 0.60
+
+      # ------------------------------------------------------------------------
+      # 采样噪声标准差
+      #
+      # vx_std：
+      #   线速度采样范围。
+      #
+      # wz_std：
+      #   角速度采样范围。
+      #
+      # 如果太大：
+      #   机器人可能一遇障碍就猛绕、动作激进。
+      #
+      # 如果太小：
+      #   机器人局部绕障能力弱，容易停住。
+      #
+      # 当前设置偏保守，适合第一轮实机测试。
+      # ------------------------------------------------------------------------
+      vx_std: 0.12
+      vy_std: 0.0
+      wz_std: 0.15
+
+      # ------------------------------------------------------------------------
+      # Critics
+      #
+      # MPPI 会采样很多条轨迹，然后用这些 critic 给每条轨迹打分。
+      # 总分最低的轨迹用于生成最终 cmd_vel。
+      #
+      # 重点：
+      #   VelocityDeadbandCritic 是为你的速度死区准备的。
+      #
+      # 如果启动时报：
+      #   Critic plugin VelocityDeadbandCritic not found
+      #
+      # 说明 Nav2 版本不支持这个 critic。
+      # 这时需要：
+      #   1. 从 critics 列表删除 VelocityDeadbandCritic；
+      #   2. 删除下面 VelocityDeadbandCritic 配置块；
+      #   3. 后续考虑在 /cmd_vel 和底层之间加速度适配节点。
+      # ------------------------------------------------------------------------
+      critics: [
+        "ConstraintCritic",
+        "ObstaclesCritic",
+        "PathAlignCritic",
+        "PathFollowCritic",
+        "GoalCritic",
+        "GoalAngleCritic",
+        "PreferForwardCritic",
+        "VelocityDeadbandCritic"
+      ]
+
+      # ------------------------------------------------------------------------
+      # ConstraintCritic
+      #
+      # 约束 critic：
+      #   惩罚超过速度、加速度等限制的轨迹。
+      # ------------------------------------------------------------------------
+      ConstraintCritic:
+        enabled: True
+        cost_power: 1
+        cost_weight: 4.0
+
+      # ------------------------------------------------------------------------
+      # ObstaclesCritic
+      #
+      # 避障 critic：
+      #   用 local_costmap 判断轨迹是否靠近障碍或碰撞。
+      #
+      # 对 MPPI 非常重要。
+      #
+      # 调参：
+      #   机器人太贴障碍：
+      #     cost_weight 增大到 5.0
+      #     repulsion_weight 增大到 1.5
+      #
+      #   机器人太胆小、不敢走：
+      #     cost_weight 降到 3.0
+      #     repulsion_weight 降到 1.0
+      #
+      #   狭窄走廊总想硬挤：
+      #     cost_weight 增大
+      #     wz_max 降低
+      #     wz_std 降低
+      # ------------------------------------------------------------------------
+      ObstaclesCritic:
+        enabled: True
+        cost_power: 1
+
+        # 碰撞代价必须很高，防止选择碰撞轨迹。
+        collision_cost: 10000.0
+
+        # 使用 footprint 检测碰撞。
+        # 对你这种非圆形人形机器人必须开启。
+        consider_footprint: True
+
+        # 总避障权重。
+        cost_weight: 4.5
+
+        # 障碍物斥力权重。
+        repulsion_weight: 1.2
+
+        # 临界代价。
+        critical_cost: 20.0
+
+        # 接近目标时降低障碍 critic 的过度影响，避免目标附近绕圈。
+        near_goal_distance: 0.6
+
+        # 必须和 local_costmap 中 inflation_layer 名称一致。
+        inflation_layer_name: "inflation_layer"
+
+      # ------------------------------------------------------------------------
+      # PathAlignCritic
+      #
+      # 路径对齐 critic：
+      #   惩罚轨迹偏离全局路径。
+      #
+      # 权重太高：
+      #   MPPI 死守路径，前方有人时不愿绕。
+      #
+      # 权重太低：
+      #   MPPI 可能一遇障碍就大幅偏离路径。
+      #
+      #
+      # ------------------------------------------------------------------------
+      PathAlignCritic:
+        enabled: True
+        cost_power: 1
+        cost_weight: 10.0
+
+        # 如果路径前方占用比例过高，可减少对路径对齐的考虑。
+        max_path_occupancy_ratio: 0.07
+
+        # 每隔几个轨迹点计算一次。
+        trajectory_point_step: 3
+
+        # 距离目标多远以内才考虑该 critic。
+        threshold_to_consider: 1.5
+
+        # 从轨迹最远可达点往后偏移，用于路径对齐计算。
+        offset_from_furthest: 16
+
+        # 不使用路径朝向。
+        # 对 SmacPlanner2D 来说，路径朝向不一定适合人形机器人执行。
+        use_path_orientations: False
+
+      # ------------------------------------------------------------------------
+      # PathFollowCritic
+      #
+      # 路径跟随 critic：
+      #   鼓励机器人沿着全局路径方向向前推进。
+      #
+      # 权重太高：
+      #   遇障碍时可能太想往前挤。
+      #
+      # 权重太低：
+      #   机器人可能犹豫、前进动力不足。
+      # ------------------------------------------------------------------------
+      PathFollowCritic:
+        enabled: True
+        cost_power: 1
+        cost_weight: 4.0
+        offset_from_furthest: 6
+        threshold_to_consider: 1.4
+
+      # ------------------------------------------------------------------------
+      # GoalCritic
+      #
+      # 目标 critic：
+      #   鼓励靠近目标。
+      #
+      # 权重太高：
+      #   可能切角、急着冲向目标。
+      #
+      # 权重太低：
+      #   目标吸引力不足，终点附近可能慢。
+      # ------------------------------------------------------------------------
+      GoalCritic:
+        enabled: True
+        cost_power: 1
+        cost_weight: 5.0
+        threshold_to_consider: 1.5
+
+      # ------------------------------------------------------------------------
+      # GoalAngleCritic
+      #
+      # 目标朝向 critic：
+      #   接近目标时鼓励调整到目标朝向。
+      #
+      # 机器人原地转会偏移约 5cm，
+      # 所以不要把朝向权重和朝向容差设得太严格。
+      # ------------------------------------------------------------------------
+      GoalAngleCritic:
+        enabled: True
+        cost_power: 1
+        cost_weight: 3.0
+        threshold_to_consider: 0.6
+
+      # ------------------------------------------------------------------------
+      # PreferForwardCritic
+      #
+      # 偏好前进 critic：
+      #   惩罚倒车倾向。
+      #
+      # 注意：
+      #   vx_min = 0.0 已经不允许负速度采样。
+      #   这个 critic 是额外保险。
+      #
+      # 后方无传感器，建议保留且权重较高。
+      # ------------------------------------------------------------------------
+      PreferForwardCritic:
+        enabled: True
+        cost_power: 1
+        cost_weight: 8.0
+        threshold_to_consider: 0.5
+
+      # ------------------------------------------------------------------------
+      # VelocityDeadbandCritic
+      #
+      # 速度死区 critic：
+      #   这是本配置适配人形机器人最关键的 critic。
+      #
+      # 你的机器人：
+      #   线速度低于 0.15 m/s 可能不走；
+      #   角速度低于 0.15 rad/s 可能不转。
+      #
+      # 这个 critic 的作用：
+      #   惩罚落在死区内的非零速度，让 MPPI 倾向于输出：
+      #     1. 完全停车：0.0
+      #     2. 或者超过死区的有效速度
+      #
+      # 它不是硬 clamp。
+      # 它不会把 0.05 强制改成 0.15。
+      # 它是在优化评分中让 0.05 这种速度变得“不划算”。
+      #
+      # 这样比硬 clamp 更安全：
+      #   前方有人时，MPPI 可以选择停车 0.0，
+      #   而不是被强行放大成 0.15 继续往前走。
+      #
+      # 如果 Nav2 版本不支持该 critic：
+      #   删除 critics 列表里的 VelocityDeadbandCritic；
+      #   删除本配置块。
+      # ------------------------------------------------------------------------
+      VelocityDeadbandCritic:
+        enabled: True
+        cost_power: 1
+
+        # 权重越大，越不喜欢死区速度。
+        #
+        # 调参：
+        #   仍然经常输出 0.03~0.10 导致机器人不动：
+        #     增大到 30.0 或 40.0
+        #
+        #   动作变得太突兀：
+        #     降到 10.0~15.0
+        cost_weight: 30.0
+
+        # [vx_deadband, vy_deadband, wz_deadband]
+        #
+        # vx_deadband = 0.15:
+        #   惩罚 0~0.15 m/s 之间的非零线速度。
+        #
+        # vy_deadband = 0.0:
+        #   机器人不横移，vy_max 也已经是 0。
+        #
+        # wz_deadband = 0.15:
+        #   惩罚 0~0.15 rad/s 之间的非零角速度。
+        deadband_velocities: [0.15, 0.0, 0.15]
+
+# ==============================================================================
+# Local Costmap
+# 局部代价地图
+#
+#
+# MPPI 对 local_costmap 比 RPP 更敏感：
+#   1. 障碍残影会让 MPPI 犹豫；
+#   2. 漏障碍会让 MPPI 生成危险轨迹；
+#   3. TF/时间戳错误会导致局部避障不稳定。
+#
+# ==============================================================================
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      use_sim_time: False
+
+      # TF 容忍时间。
+      # 如果仍有 Message Filter 或 TF extrapolation，可以临时升到 1.5。
+      transform_tolerance: 1.0
+
+      # 调试阶段建议 True，RViz 显示完整。
+      always_send_full_costmap: True
+
+      # MPPI 依赖局部地图，但点云+体素层比较耗 CPU。
+      update_frequency: 10.0
+      publish_frequency: 10.0
+
+      # 局部地图使用 odom_ground，避免 map 跳变影响局部控制。
+      global_frame: odom_ground
+      robot_base_frame: base_footprint
+
+      rolling_window: true
+
+      # 8m x 8m 对室内导航足够。
+      # 如果速度更快或希望更早看到障碍，可改 10。
+      width: 8
+      height: 8
+
+      resolution: 0.05
+
+      # 机器人 footprint。
+      # 如果 MPPI 过于胆小，可以优先调 inflation，而不是马上缩 footprint。
+      footprint: "[ [0.25, 0.26], [0.25, -0.26], [-0.25, -0.26], [-0.25, 0.26] ]"
+
+      plugins: ["static_layer", "voxel_layer", "inflation_layer"]
+
+      # ------------------------------------------------------------------------
+      # 静态层
+      # ------------------------------------------------------------------------
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        enabled: True
+        map_subscribe_transient_local: True
+
+      # ------------------------------------------------------------------------
+      # 体素层
+      #
+      # 注意：
+      #   /airy_points_filtered 必须确认是 PointCloud2。
+      #   可用命令：
+      #     ros2 topic info /airy_points_filtered
+      # ------------------------------------------------------------------------
+      voxel_layer:
+        plugin: "nav2_costmap_2d::VoxelLayer"
+        enabled: True
+        publish_voxel_map: True
+        transform_tolerance: 1.0
+
+        # Z 方向范围：
+        #   origin_z = -0.2
+        #   z_resolution = 0.125
+        #   z_voxels = 16
+        #
+        # 覆盖高度约：
+        #   -0.2 到 1.8m
+        origin_z: -0.2
+        z_resolution: 0.125
+        z_voxels: 16
+
+        # 最大障碍高度。
+        max_obstacle_height: 1.8
+
+        # 点数阈值。
+        # 大：抗噪强，小障碍可能漏；
+        # 小：敏感，噪声可能多。
+        mark_threshold: 4
+
+        # 观测源：
+        #   pointcloud：真实点云标记障碍；
+        #   clearing_3d：周期清除点云，只清除不标记。
+        observation_sources: pointcloud clearing_3d
+
+        pointcloud:
+          topic: /airy_points_filtered
+          data_type: "PointCloud2"
+
+          min_obstacle_height: 0.03
+          max_obstacle_height: 1.7
+
+          marking: True
+          clearing: True
+
+          raytrace_min_range: 0.10
+          raytrace_max_range: 10.0
+
+          obstacle_min_range: 0.20
+          obstacle_max_range: 5.0
+
+          # 0 表示不保留旧观测。
+          # 如果障碍物闪烁，可试 0.2。
+          # 如果残影明显，保持 0.0。
+          observation_persistence: 0.0
+
+        clearing_3d:
+          topic: /clearing_cloud_3d
+          data_type: "PointCloud2"
+
+          min_obstacle_height: 0.03
+          max_obstacle_height: 1.7
+
+          marking: False
+          clearing: True
+
+          raytrace_min_range: 0.10
+          raytrace_max_range: 10.0
+
+          observation_persistence: 0.0
+          min_pixels: 2
+
+      # ------------------------------------------------------------------------
+      # 膨胀层
+      #
+      # MPPI 的 ObstaclesCritic 会读取 inflation_layer 代价。
+      #
+      # inflation_radius:
+      #   越大越保守。
+      #
+      # cost_scaling_factor:
+      #   越大代价衰减越快，机器人更敢贴近障碍；
+      #   越小代价衰减越慢，机器人更保守。
+      #
+      # 当前：
+      #   0.55 + 5.0 是你 RPP 版本的稳定设置。
+      # ------------------------------------------------------------------------
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        enabled: True
+        inflation_radius: 0.55
+        cost_scaling_factor: 5.0
+
+# ==============================================================================
+# Global Costmap
+# 全局代价地图
+#
+# 说明：
+#   不建议全局 costmap 用 10Hz，会增加 CPU 和 TF 压力。
+# ==============================================================================
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      use_sim_time: False
+
+      transform_tolerance: 1.0
+      always_send_full_costmap: True
+
+      # 全局地图 5Hz 足够。
+      update_frequency: 5.0
+      publish_frequency: 5.0
+
+      global_frame: map_ground
+      robot_base_frame: base_footprint
+
+      footprint: "[ [0.25, 0.26], [0.25, -0.26], [-0.25, -0.26], [-0.25, 0.26] ]"
+
+      resolution: 0.05
+
+      # 跟踪未知区域。
+      # 配合 planner allow_unknown:false，避免走进未知区域。
+      track_unknown_space: true
+
+      #plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+      plugins: ["static_layer", "inflation_layer"]
+
+      # ------------------------------------------------------------------------
+      # 静态地图层
+      # ------------------------------------------------------------------------
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        enabled: True
+        map_subscribe_transient_local: True
+
+      # ------------------------------------------------------------------------
+      # 障碍层
+      #
+      # 用于把较远动态障碍加入全局规划。
+      #
+      # 如果后续发现动态障碍残影导致全局绕路，可以考虑：
+      #   1. 减小 obstacle_max_range；
+      #   2. 关闭 global obstacle_layer；
+      #   3. 只让 local_costmap 处理动态障碍。
+      # ------------------------------------------------------------------------
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        transform_tolerance: 1.0
+
+        observation_sources: pointcloud periodic_clearing
+
+        pointcloud:
+          topic: /airy_points_filtered
+
+          # 如果 /airy_points_filtered 实际是 LaserScan，把这里改为 "LaserScan"
+          data_type: "PointCloud2"
+
+          # 标记高度范围
+          min_obstacle_height: 0.1
+          max_obstacle_height: 1.8
+
+          # marking=True：
+          # 点云命中的地方标记为障碍。
+          marking: False
+
+          # clearing=True：
+          #   沿传感器射线清除已经消失的障碍。
+          clearing: False
+
+          # 射线追踪范围
+          raytrace_min_range: 0.10
+          raytrace_max_range: 11.0
+
+          # 障碍物标记范围
+          obstacle_min_range: 0.50
+          obstacle_max_range: 10.0
+
+          # 观测保留时间
+          #
+          # 0.0 表示只使用最新观测，不保留历史点。
+          # 如果点云短暂丢帧导致障碍闪烁，可设 0.2~0.5。
+          observation_persistence: 0.0
+
+        periodic_clearing:
+          topic: /clearing_scan     
+          max_obstacle_height: 1.7
+          min_obstacle_height: 0.05    # ★★★ 最小障碍物高度（3cm，低于此视为地面）★★★
+          clearing: True               # 启用清除（射线追踪清除旧障碍物）
+          marking: False               # 不启用标记（只清除）
+          data_type: "LaserScan"       # 数据类型（LaserScan 或 PointCloud2）
+          raytrace_max_range: 10.0     # 射线追踪最大范围
+          raytrace_min_range: 0.1      # 射线追踪最小范围
+          bstacle_max_range: 15.0      # 障碍物标记最大范围
+          obstacle_min_range: 0.30     # 障碍物标记最小范围
+          observation_persistence: 0.0 # 观测持续时间（0 = 不保留旧观测）
+          min_pixels: 2                # 最小像素数
+          inf_is_valid: True
+
+      # ------------------------------------------------------------------------
+      # 膨胀层
+      # ------------------------------------------------------------------------
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        enabled: True
+        inflation_radius: 0.55
+        cost_scaling_factor: 5.0
+
+# ==============================================================================
+# Planner Server (规划器服务器)
+# 使用 SmacPlannerHybrid 替换原先的 2D，生成 MPPI 最喜欢的平滑曲线轨迹
+# ==============================================================================
+planner_server:
+  ros__parameters:
+    use_sim_time: False
+    expected_planner_frequency: 3.0
+    planner_plugins: ["GridBased"]
+
+    GridBased:
+      plugin: "nav2_smac_planner::SmacPlannerHybrid"
+
+      downsample_costmap: false
+      downsampling_factor: 1
+      tolerance: 0.30
+      allow_unknown: false
+
+      max_iterations: 1000000
+      max_on_heading_iterations: 2000
+      max_planning_time: 4.0
+
+      # 【关键约束1】DUBIN 模型只允许前进，禁止倒车规划
+      motion_model_for_search: "DUBIN"
+      allow_reverse_expansion: false
+
+      # 【关键约束2】最小转弯半径
+      # 设为 0.4 米，保证曲线足够圆滑，防止原地猛打方向导致机器人横向滑动
+      minimum_turning_radius: 0.4
+      angle_bin_size: 72
+
+      # 惩罚项
+      reverse_penalty: 5.0                 
+      change_penalty: 0.2                 
+      non_straight_penalty: 1.2            
+      cost_penalty: 2.5                    
+      retrospective_penalty: 0.025         
+
+      lookup_table_size: 20.0
+      cache_obstacle_heuristic: false
+
+      # 开启后处理平滑，让 MPPI 跑起来更丝滑
+      smooth_path: true
+      smoother:
+        max_iterations: 1000
+        w_smooth: 0.3
+        w_data: 0.2
+        tolerance: 1.0e-10
+        do_refinement: True
+        refinement_num: 2
+
+# ==============================================================================
+# Behavior Server
+# 行为服务器
+#
+# 关键：
+#   后方无传感器，不加载 BackUp。
+# ==============================================================================
+behavior_server:
+  ros__parameters:
+    use_sim_time: False
+
+    costmap_topic: local_costmap/costmap_raw
+    footprint_topic: local_costmap/published_footprint
+
+    cycle_frequency: 10.0
+
+    # 只加载 spin 和 wait。
+    # 不加载 backup。
+    # 不加载 drive_on_heading。
+    behavior_plugins: ["spin", "wait"]
+
+    # --------------------------------------------------------------------------
+    # Spin 行为
+    #
+    # 你的机器人可以原地转，但会有约 5cm 位移。
+    # 因此行为树中 Spin 已经设置为 0.78rad 小角度旋转。
+    #
+    # 这里的速度也不要太大。
+    # --------------------------------------------------------------------------
+    spin:
+      plugin: "nav2_behaviors::Spin"
+
+      # 执行旋转前模拟未来 2 秒是否碰撞。
+      simulate_ahead_time: 2.0
+
+      # 最大旋转速度。
+      max_rotational_vel: 0.5
+
+      # 最小旋转速度。
+      # 你的角速度死区约 0.15，因此这里建议 0.15。
+      min_rotational_vel: 0.15
+
+      # 角加速度限制。
+      rotational_acc_lim: 0.5
+
+    wait:
+      plugin: "nav2_behaviors::Wait"
+
+    # 与 local_costmap 保持一致。
+    global_frame: odom_ground
+    robot_base_frame: base_footprint
+    transform_timeout: 1.0
+
+# ==============================================================================
+# Map Server
+# 地图服务器
+# ==============================================================================
+map_server:
+  ros__parameters:
+    use_sim_time: False
+
+    # 地图 yaml 文件路径通常由 launch 文件传入。
+    yaml_filename: ""
+
+    # 关键：
+    #   如果 global_costmap 使用 map_ground，
+    #   map_server 发布的 map frame 也建议是 map_ground。
+    frame_id: "map_ground"
+
+# ==============================================================================
+# Map Saver
+# 地图保存器
+# ==============================================================================
+map_saver:
+  ros__parameters:
+    use_sim_time: False
+    save_map_timeout: 5.0
+    free_thresh_default: 0.25
+    occupied_thresh_default: 0.65
+    map_subscribe_transient_local: True
+    frame_id: map_ground
+
+# ==============================================================================
+# Robot State Publisher
+# ==============================================================================
+robot_state_publisher:
+  ros__parameters:
+    use_sim_time: False
+
+# ==============================================================================
+# Lifecycle Manager
+# 生命周期管理器
+#
+# 注意：
+#   如果 map_server 已经由另一个 lifecycle_manager_map 管理，
+#   这里不要把 map_server 加进 node_names。
+# ==============================================================================
+lifecycle_manager_navigation:
+  ros__parameters:
+    use_sim_time: False
+    autostart: true
+
+    node_names: [
+      'planner_server',
+      'controller_server',
+      'behavior_server',
+      'bt_navigator'
+    ]

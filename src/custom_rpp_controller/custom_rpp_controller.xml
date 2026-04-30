@@ -1,0 +1,8 @@
+<library path="libcustom_rpp_controller">
+  <class type="humanoid_navigation2::RegulatedPurePursuitWithMinAngular"
+         base_class_type="nav2_core::Controller">
+    <description>
+      Regulated Pure Pursuit 控制器 + 渐进式角速度增强（解决低角速度震荡问题）
+    </description>
+  </class>
+</library>

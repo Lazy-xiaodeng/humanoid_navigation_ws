@@ -1,0 +1,4 @@
+# LoadWaypoints.srv - 加载航点服务
+---
+bool success    # 是否成功
+string message  # 返回消息
