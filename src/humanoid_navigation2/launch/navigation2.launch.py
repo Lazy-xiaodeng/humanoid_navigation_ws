@@ -77,11 +77,11 @@ def generate_launch_description():
     
     # ========== 路径配置 ==========
     pkg_nav2 = get_package_share_directory('humanoid_navigation2')
-    pkg_lidar_loc = get_package_share_directory('lidar_localization_ros2')
-    
+    pkg_global_loc = get_package_share_directory('humanoid_global_localization')
+
     # 参数文件
     nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params_rpp.yaml')
-    localization_params_file = os.path.join(pkg_lidar_loc, 'param', 'localization.yaml')
+    global_localization_params_file = os.path.join(pkg_global_loc, 'config', 'global_localization.yaml')
     
     # 地图文件（2D栅格地图，用于Nav2）
     map_yaml_file = os.path.join(pkg_nav2, 'maps', 'hall.yaml')
@@ -235,35 +235,40 @@ def generate_launch_description():
                 parameters=[{'use_sim_time': use_sim_time}, {'autostart': True}, {'node_names': ['map_server']}]) ]
     )
 
-    # 3.NDT全局定位节点 (延迟时间改为 5.0)
-    ndt_localization_node = TimerAction(
-        period=5.0,
-        actions=[ Node(
-                package='lidar_localization_ros2', executable='lidar_localization_node', name='lidar_localization',
-                parameters=[localization_params_file, {'use_sim_time': use_sim_time}],
-                remappings=[('/cloud', '/fast_lio/cloud_registered')]) ]
+    # 3.全局定位节点 (替代旧的 NDT 定位)
+    #    包含多分辨率 NDT 网格搜索全局初始化 + 持续跟踪
+    #    全局搜索在无初始位姿时自动运行，可在任意位置启动
+    global_localization_node = Node(
+        package='humanoid_global_localization',
+        executable='global_localization_node',
+        name='global_localization',
+        output='screen',
+        parameters=[global_localization_params_file, {'use_sim_time': use_sim_time}],
     )
 
-    # 4.NDT生命周期管理器 (延迟时间改为 7.0)
-    ndt_lifecycle_manager = TimerAction(
-        period=7.0,
-        actions=[ Node(
-                package='nav2_lifecycle_manager', executable='lifecycle_manager', name='lifecycle_manager_ndt',
-                parameters=[{'use_sim_time': use_sim_time}, {'autostart': True}, {'bond_timeout': 0.0}, {'node_names': ['lidar_localization']}]) ]
+    # 4.全局定位生命周期管理器
+    global_loc_lifecycle_manager = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lifecycle_manager_global_loc',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'autostart': True,
+            'bond_timeout': 0.0,
+            'node_names': ['global_localization']
+        }]
     )
 
-    # 4. 机器人实时位姿发布器（从 TF 读取 map->base_footprint）
-    robot_realpose_publisher = TimerAction(
-        period=5.5,  # 在 NDT 启动后 0.5 秒启动
-        actions=[
-            Node(
-                package='humanoid_navigation2',
-                executable='robot_realpose_publisher',
-                name='robot_realpose_publisher',
-                parameters=[{'use_sim_time': use_sim_time}],
-                output='screen'
-            )
-        ]
+    # 5.机器人实时位姿发布器（从 TF 读取 map_ground->base_footprint）
+    #    与 /pcl_pose 不同：/pcl_pose 发布的是 map->odom 偏移量（通常 0.1-0.5m），
+    #    本节点通过完整 TF 链计算机器人在地图中的实际位姿，发布到 /robot_realpose
+    robot_realpose_publisher = Node(
+        package='humanoid_navigation2',
+        executable='robot_realpose_publisher',
+        name='robot_realpose_publisher',
+        parameters=[{'use_sim_time': use_sim_time}],
+        output='screen'
     )
 
     # =========================================================================
@@ -407,21 +412,19 @@ def generate_launch_description():
         # TimerAction(period=1.0, actions=[elevation_map_launch]),  # 需要时取消注释
         # TimerAction(period=2.0, actions=[terrain_analyzer_launch]),  # 需要时取消注释
 
-        # ========== 第三部分：定位层（延迟启动） ==========
-        # map_server先启动（0.5秒），加载2D地图
+        # ========== 第三部分：定位层（延迟启动，确保Fast-LIO数据就绪） ==========
+        # map_server先启动（1秒），加载2D地图
         map_server_node,
-        
-        # NDT定位节点后启动（0.5秒），等待Fast-LIO点云数据
-        ndt_localization_node,
 
-        # NDT生命周期管理（1秒），自动配置和激活
-        ndt_lifecycle_manager,
-        
-        # map_server生命周期管理（1秒），自动激活
+        # map_server生命周期管理（3秒），自动激活
         map_server_lifecycle,
 
-        #发布机器人实时位姿
-        robot_realpose_publisher, 
+        # 全局定位节点（延迟5秒，等点云稳定）
+        TimerAction(period=5.0, actions=[global_localization_node]),
+        # 全局定位生命周期管理（延迟7秒）
+        TimerAction(period=7.0, actions=[global_loc_lifecycle_manager]),
+        # 机器人实时位姿发布器（延迟7.5秒，等 TF 树完整）
+        TimerAction(period=7.5, actions=[robot_realpose_publisher]),
 
         # ========== 第四部分：辅助节点（可选） ==========
         # 定期清除点云发布器（2秒）
