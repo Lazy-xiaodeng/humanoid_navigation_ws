@@ -1,0 +1,109 @@
+<?xml version="1.0"?>
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+
+  <BehaviorTree ID="MainTree">
+    <!--
+      ============================================================================
+      双层恢复策略行为树
+      文件名：navigate_stuck_recovery.xml
+
+      设计目标：
+        1. 动态障碍物 → 停下等待 → 障碍物消失后重试
+        2. 面壁/卡住 → 先后退远离墙壁 → 再旋转调整朝向 → 重新规划导航
+
+      内层 RecoveryNode (retries=1)：
+        处理动态障碍物 —— 先等待 8 秒，等障碍物消失后重试一次。
+        如果重试成功（障碍物已消失），导航继续。
+        如果重试仍然失败 → 交给外层处理。
+
+      外层 RecoveryNode (retries=0)：
+        处理面壁/卡住 —— 先后退 0.5 米远离墙壁，再旋转 90° 调整朝向，
+        然后行为树重新 tick，规划器生成新路径继续导航。
+
+        如果旋转因碰撞检测失败（贴墙太近）→ Fallback 兜底，
+        至少后退已经成功，机器人已远离墙壁。
+
+      关键设计决策：
+        - BackUp 在 Spin 前面执行：先拉开距离再旋转，
+          解决"离墙只有十几公分转不了"的问题。
+        - Spin 有 simulate_ahead_time 碰撞检测：贴墙太近时自动拒绝执行。
+        - 外层 Fallback 有兜底分支：即使 Spin 失败，后退已经完成。
+
+      behavior_server 配置与行为树的关系：
+        behavior_server 只是"加载"了 spin/wait/backup 三个工具的 Action Server，
+        本身是被动的，不会主动触发任何行为。
+        实际何时调用、按什么顺序调用，完全由本行为树文件决定。
+        两者不冲突，是"工具箱"和"使用顺序"的关系。
+      ============================================================================
+    -->
+
+    <!-- 外层 RecoveryNode：面壁脱困恢复
+         number_of_retries="0" 表示恢复成功后不重试内层，
+         而是让行为树重新从根部 tick，给内层全新的 retries 配额 -->
+    <RecoveryNode number_of_retries="0" name="StuckRecovery">
+
+      <!-- 内层 RecoveryNode：动态障碍物恢复
+           number_of_retries="1" 表示等待后重试一次主导航 -->
+      <RecoveryNode number_of_retries="1" name="DynamicObstacleRecovery">
+
+        <!-- 主导航流程：持续低频重规划 + 路径跟踪
+             PipelineSequence 并行执行两个子节点：
+             - RateController 控制规划器以 1Hz 频率重规划
+             - FollowPath 实时跟踪规划好的路径
+             当 FollowPath 失败（碰撞检测/进度检查）时，PipelineSequence 失败 -->
+        <PipelineSequence name="ContinuousReplanAndFollow">
+          <RateController hz="1.0">
+            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+          </RateController>
+          <FollowPath path="{path}" controller_id="FollowPath"/>
+        </PipelineSequence>
+
+        <!-- 内层恢复动作：等待动态障碍物消失
+             Fallback 依次尝试子节点，第一个成功的子节点决定 Fallback 的结果 -->
+        <Fallback name="WaitOrNewGoal">
+          <!-- 优先级1：如果收到新目标，立即返回 SUCCESS，让 RecoveryNode 重试主导航 -->
+          <GoalUpdated/>
+
+          <!-- 优先级2：等待 8 秒，期望动态障碍物在此期间离开 -->
+          <Sequence name="WaitForObstacleClear">
+            <Wait wait_duration="8.0"/>
+          </Sequence>
+        </Fallback>
+
+      </RecoveryNode>
+
+      <!-- 外层恢复动作：面壁脱困
+           Fallback 依次尝试，提供多层兜底 -->
+      <Fallback name="StuckHandler">
+        <!-- 优先级1：如果收到新目标，立即返回 SUCCESS -->
+        <GoalUpdated/>
+
+        <!-- 优先级2：首选方案 —— 先后退再旋转 -->
+        <Sequence name="BackupThenSpin">
+          <!-- 第一步：后退 0.5 米，速度 0.1 m/s（极慢，安全优先）
+               后退会让机器人从贴墙 ~0.1-0.2m 变成 ~0.6-0.7m，
+               为后续旋转创造足够的安全空间 -->
+          <BackUp backup_dist="0.5" backup_speed="0.1"/>
+
+          <!-- 第二步：原地旋转 90 度（1.57 rad），调整朝向
+               此时机器人已远离墙壁，旋转碰撞检测应能通过
+               如果仍然太近，simulate_ahead_time 检测会拒绝执行，保证安全 -->
+          <Spin spin_dist="1.57"/>
+
+          <!-- 第三步：稳定 1 秒，等待代价地图更新 -->
+          <Wait wait_duration="1.0"/>
+        </Sequence>
+
+        <!-- 优先级3：兜底方案 —— 如果 Spin 被碰撞检测拒绝
+               此时 BackUp 已经在优先级2中成功执行，机器人已远离墙壁
+               只需等待片刻，让行为树重新 tick 后规划器重新规划 -->
+        <Sequence name="BackupOnlyFallback">
+          <Wait wait_duration="2.0"/>
+        </Sequence>
+      </Fallback>
+
+    </RecoveryNode>
+
+  </BehaviorTree>
+
+</root>

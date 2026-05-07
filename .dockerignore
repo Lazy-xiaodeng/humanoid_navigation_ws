@@ -1,0 +1,32 @@
+# 编译产物（在容器内重新编译）
+build/
+install/
+log/
+
+# Git
+.git/
+.gitattributes
+.gitignore
+
+# 调试输出
+debug_output*.txt
+*.gv
+*.pdf
+
+# 文档（不需要打包进镜像）
+*.md
+!README.MD
+
+# 临时文件
+backup_*/
+.vscode/
+.sixth/
+
+# Python
+__pycache__/
+*.pyc
+
+# 大文件/数据集
+*.bag
+*.pcd
+*.xlsx

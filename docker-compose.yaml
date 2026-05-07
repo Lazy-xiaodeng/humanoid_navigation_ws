@@ -1,0 +1,72 @@
+version: "3.8"
+
+services:
+  humanoid:
+    image: humanoid-ros2:jazzy-dev
+    container_name: humanoid_ws
+
+    # ============================================================
+    # 网络：host 模式确保 ROS2 DDS 节点发现正常工作
+    # ============================================================
+    network_mode: host
+
+    # ============================================================
+    # IPC：host 模式支持 FastDDS 共享内存传输
+    # ============================================================
+    ipc: host
+
+    # ============================================================
+    # 保持容器运行（不执行命令时）
+    # ============================================================
+    stdin_open: true
+    tty: true
+
+    # ============================================================
+    # 硬件和设备访问
+    # ============================================================
+    privileged: true
+    # 更安全的替代方案（按需取消注释）：
+    # devices:
+    #   - /dev/ttyUSB0:/dev/ttyUSB0  # 串口
+    #   - /dev/lidar:/dev/lidar       # 雷达
+
+    # ============================================================
+    # 挂载卷
+    # ============================================================
+    volumes:
+      # 工作空间（源码 + 编译产物都在宿主机，容器内可改可编）
+      - ./src:/ws/src:rw
+      - ./build:/ws/build:rw
+      - ./install:/ws/install:rw
+
+      # FastDDS 共享内存配置
+      - ${HOME}/.config/fastdds_shm.xml:/root/.config/fastdds_shm.xml:ro
+
+      # 设备文件（如果需要更精细控制，可替换为 devices 字段）
+      - /dev:/dev:rw
+
+      # X11 图形显示（RViz / rqt 等 GUI 工具）
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+
+      # ROS 日志（可选，方便在宿主机查看）
+      - ./log:/ws/log:rw
+
+    # ============================================================
+    # 环境变量
+    # ============================================================
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      - QT_X11_NO_MITSHM=1
+      # FastDDS 配置
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+      - FASTRTPS_DEFAULT_PROFILES_FILE=/root/.config/fastdds_shm.xml
+      - RMW_FASTRTPS_USE_QOS_FROM_XML=1
+      # ROS 域 ID（默认为 0，多机器人场景需修改）
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+
+    # ============================================================
+    # 默认启动命令（进入交互式 bash）
+    # ============================================================
+    # 要直接启动导航，使用：
+    #   docker compose run humanoid ros2 launch humanoid_bringup robot_real.launch.py
+    command: bash
