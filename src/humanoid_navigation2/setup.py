@@ -50,7 +50,8 @@ setup(
             'nav2_motion_monitor = humanoid_navigation2.nav2_motion_monitor:main',
             'velocity_tester_gui = humanoid_navigation2.velocity_tester_gui:main',
             'robot_realpose_publisher = humanoid_navigation2.robot_realpose_publisher:main',
-
+            'imu_transformer = humanoid_navigation2.imu_transformer:main',
+            'pcd_converter = humanoid_navigation2.pcd_converter:main',
         ],
     },
 )

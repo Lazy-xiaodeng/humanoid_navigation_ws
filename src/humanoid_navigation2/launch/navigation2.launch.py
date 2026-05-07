@@ -3,31 +3,38 @@
 
 系统架构：
 1. 感知层：点云滤波、高程图（可选）、地形分析（可选）
-2. 定位层：NDT定位（发布map→odom TF）+ map_server（发布2D栅格地图）
+2. 定位层：定位节点（发布map→odom TF）+ map_server（发布2D栅格地图）
+   支持三种定位方案（三选一，注释切换）：
+     方案A - lidar_localization_ros2 (单分辨率NDT, 旧方案)
+     方案B - humanoid_global_localization (多分辨率NDT网格搜索, ★当前使用★)
+     方案C - hdl_localization (UKF+NDT_OMP, Humble移植)
 3. 导航层：Nav2导航栈（规划、控制、行为树）
 
 启动顺序：
 0秒：感知层（点云滤波）
-0.5秒：map_server（加载2D地图）
-1秒：NDT定位节点（全局定位）
-1秒：map_server生命周期管理
-2秒：定期清除点云发布器（可选功能）
-3秒：Nav2导航栈（规划、控制、行为树）
+1秒：map_server（加载2D地图）
+3秒：map_server生命周期管理
+5秒：定位节点启动
+7秒：定位生命周期管理
+7.5秒：机器人实时位姿发布器
+6秒：Nav2核心节点
+12秒：Nav2生命周期激活
 
 TF树：
 map → odom → camera_init → body → base_footprint → base_link → 传感器
   ↑        ↑
-NDT发布  Fast-LIO发布
+定位发布  Fast-LIO发布
 (动态)   (动态)
 
 使用方式：
-ros2 launch humanoid_navigation2 navigation_stack.launch.py use_sim_time:=false
+ros2 launch humanoid_navigation2 navigation2.launch.py use_sim_time:=false
 """
 
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch_ros.actions import Node
+from launch_ros.actions import Node, ComposableNodeContainer
+from launch_ros.descriptions import ComposableNode
 from launch.actions import (
     DeclareLaunchArgument,
     GroupAction,
@@ -78,10 +85,17 @@ def generate_launch_description():
     # ========== 路径配置 ==========
     pkg_nav2 = get_package_share_directory('humanoid_navigation2')
     pkg_global_loc = get_package_share_directory('humanoid_global_localization')
+    pkg_hdl_loc = get_package_share_directory('hdl_localization')
+    # pkg_lidar_loc = get_package_share_directory('lidar_localization_ros2')  # [方案A: 旧NDT]
 
     # 参数文件
     nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params_rpp.yaml')
+    # --- 方案B: 多分辨率 NDT 全局定位 (当前使用) ---
     global_localization_params_file = os.path.join(pkg_global_loc, 'config', 'global_localization.yaml')
+    # --- 方案A: 单分辨率 NDT 定位 (旧方案) ---
+    # localization_params_file = os.path.join(pkg_lidar_loc, 'param', 'localization.yaml')
+    # --- 方案C: hdl_localization UKF+NDT (Humble移植) ---
+    # hdl_globalmap_pcd = '/home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall_standard.pcd'  # 需要预转换到标准坐标系
     
     # 地图文件（2D栅格地图，用于Nav2）
     map_yaml_file = os.path.join(pkg_nav2, 'maps', 'hall.yaml')
@@ -235,9 +249,25 @@ def generate_launch_description():
                 parameters=[{'use_sim_time': use_sim_time}, {'autostart': True}, {'node_names': ['map_server']}]) ]
     )
 
-    # 3.全局定位节点 (替代旧的 NDT 定位)
-    #    包含多分辨率 NDT 网格搜索全局初始化 + 持续跟踪
-    #    全局搜索在无初始位姿时自动运行，可在任意位置启动
+    # ╔══════════════════════════════════════════════════════════════════════════╗
+    # ║                   定位方案选择 (三选一，注释/取消注释切换)                ║
+    # ║                                                                          ║
+    # ║  方案A: lidar_localization_ros2 — 单分辨率NDT (旧方案，简单稳定)         ║
+    # ║  方案B: humanoid_global_localization — 多分辨率NDT网格搜索 (推荐)    ║
+    # ║  方案C: hdl_localization — UKF+NDT_OMP (Humble移植，最成熟)          ║
+    # ║                                                                          ║
+    # ║  切换步骤：                                                              ║
+    # ║    1. 在下面"节点定义"区域注释掉当前方案的代码块                           ║
+    # ║    2. 取消注释目标方案的代码块                                            ║
+    # ║    3. 在底部 LaunchDescription 区域做同样操作                             ║
+    # ╚══════════════════════════════════════════════════════════════════════════╝
+
+    # ┌──────────────────────────────────────────────────────────────────────────┐
+    # │  方案B：多分辨率 NDT 全局定位 (推荐, ★当前使用★)                         │
+    # │  算法：粗NDT(3m)网格搜索 → 中NDT(1.5m)精化 → 细NDT(1m)跟踪 + 指数平滑   │
+    # │  特点：可在任意位置启动，仅依赖PCL，550行代码易维护                       │
+    # │  启动：延迟5秒启动节点 + 7秒激活生命周期                                   │
+    # └──────────────────────────────────────────────────────────────────────────┘
     global_localization_node = Node(
         package='humanoid_global_localization',
         executable='global_localization_node',
@@ -245,8 +275,6 @@ def generate_launch_description():
         output='screen',
         parameters=[global_localization_params_file, {'use_sim_time': use_sim_time}],
     )
-
-    # 4.全局定位生命周期管理器
     global_loc_lifecycle_manager = Node(
         package='nav2_lifecycle_manager',
         executable='lifecycle_manager',
@@ -260,7 +288,7 @@ def generate_launch_description():
         }]
     )
 
-    # 5.机器人实时位姿发布器（从 TF 读取 map_ground->base_footprint）
+    # 5. 机器人实时位姿发布器（从 TF 读取 map_ground->base_footprint）
     #    与 /pcl_pose 不同：/pcl_pose 发布的是 map->odom 偏移量（通常 0.1-0.5m），
     #    本节点通过完整 TF 链计算机器人在地图中的实际位姿，发布到 /robot_realpose
     robot_realpose_publisher = Node(
@@ -270,6 +298,124 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time}],
         output='screen'
     )
+
+    # ┌──────────────────────────────────────────────────────────────────────────┐
+    # │  方案A：单分辨率 NDT 定位 (旧方案, 已注释)                                │
+    # │  算法：PCL NDT_OMP, 1m分辨率，无全局搜索                                │
+    # │  特点：需要人工指定初始位姿或放在原点附近(<0.5m)，简单稳定               │
+    # │  依赖：lidar_localization_ros2 包                                        │
+    # └──────────────────────────────────────────────────────────────────────────┘
+    # ndt_localization_node = Node(
+    #     package='lidar_localization_ros2',
+    #     executable='lidar_localization_node',
+    #     name='lidar_localization',
+    #     parameters=[localization_params_file, {'use_sim_time': use_sim_time}],
+    #     remappings=[('/cloud', '/fast_lio/cloud_registered')],
+    # )
+    # ndt_lifecycle_manager = Node(
+    #     package='nav2_lifecycle_manager',
+    #     executable='lifecycle_manager',
+    #     name='lifecycle_manager_ndt',
+    #     parameters=[{
+    #         'use_sim_time': use_sim_time,
+    #         'autostart': True,
+    #         'bond_timeout': 0.0,
+    #         'node_names': ['lidar_localization']
+    #     }]
+    # )
+
+    # ┌──────────────────────────────────────────────────────────────────────────┐
+    # │  方案C：hdl_localization (Humble移植, 已注释)                             │
+    # │                                                                          │
+    # │  算法：UKF(16维状态)预测 + NDT_OMP扫描匹配校正                           │
+    # │        状态: [位置(3),速度(3),姿态(4),加速度偏置(3),陀螺仪偏置(3)]       │
+    # │        预测: IMU数据驱动(加速度+角速度) → UKF sigma点传播                │
+    # │        校正: NDT_OMP多线程扫描匹配结果 → UKF观测更新                     │
+    # │        辅助: TF链odometry delta预测(可选)                                │
+    # │        + hdl_global_localization BBS/FPFH+RANSAC全局重定位(可选)          │
+    # │                                                                          │
+    # │  特点：论文方案(koide3,名古屋大学/AIST)，UKF比指数平滑理论更完备         │
+    # │                                                                          │
+    # │  依赖：ndt_omp + fast_gicp (已编译适配Jazzy, 修复4处API)                 │
+    # │                                                                          │
+    # │  ╔══════════════════════════════════════════════════════════════╗        │
+    # │  ║  使用方案C前的准备工作:                                      ║        │
+    # │  ║                                                              ║        │
+    # │  ║  1. PCD地图预转换 (一次性):                                  ║        │
+    # │  ║     python3 -c "from humanoid_navigation2.pcd_converter     ║        │
+    # │  ║         import convert_pcd;                                  ║        │
+    # │  ║         convert_pcd('hall.pcd', 'hall_standard.pcd')"       ║        │
+    # │  ║                                                              ║        │
+    # │  ║  2. IMU坐标转换节点 (自动启动):                              ║        │
+    # │  ║     imu_transformer: /airy_imu(body帧)→/imu_standard(标准帧) ║        │
+    # │  ║     转换矩阵: R_body_to_std=[[0,1,0],[0,0,-1],[-1,0,0]]    ║        │
+    # │  ║                                                              ║        │
+    # │  ║  3. 点云坐标转换 (hdl内部通过TF自动完成):                   ║        │
+    # │  ║     body帧→base_footprint帧 (由body→base_footprint静态TF)   ║        │
+    # │  ║                                                              ║        │
+    # │  ║  4. Odom预测 (hdl内部通过TF链自动完成):                      ║        │
+    # │  ║     通过TF查base_footprint帧间delta, 在odom帧表达           ║        │
+    # │  ╚══════════════════════════════════════════════════════════════╝        │
+    # └──────────────────────────────────────────────────────────────────────────┘
+    # # --- 方案C数据预处理: IMU坐标转换 ---
+    # # 将 /airy_imu 从 body帧(非标) 旋转到 base_footprint帧(标准), 发布 /imu_standard
+    # imu_transformer_node = Node(
+    #     package='humanoid_navigation2',
+    #     executable='imu_transformer',
+    #     name='imu_transformer',
+    #     output='screen',
+    #     parameters=[{'use_sim_time': use_sim_time}],
+    # )
+    #
+    # # --- 方案C核心: hdl_localization 容器 ---
+    # # 包含 GlobalmapServer (加载标准坐标系PCD地图) + HdlLocalization (UKF+NDT定位)
+    # hdl_container = ComposableNodeContainer(
+    #     name='hdl_container',
+    #     namespace='',
+    #     package='rclcpp_components',
+    #     executable='component_container',
+    #     composable_node_descriptions=[
+    #         ComposableNode(
+    #             package='hdl_localization',
+    #             plugin='hdl_localization::GlobalmapServerNodelet',
+    #             name='GlobalmapServerNodelet',
+    #             parameters=[{
+    #                 'globalmap_pcd': hdl_globalmap_pcd,  # 预转换后的标准坐标系PCD
+    #                 'convert_utm_to_local': False,       # 不需要UTM转换
+    #                 'downsample_resolution': 0.1,
+    #             }]
+    #         ),
+    #         ComposableNode(
+    #             package='hdl_localization',
+    #             plugin='hdl_localization::HdlLocalizationNodelet',
+    #             name='HdlLocalizationNodelet',
+    #             remappings=[
+    #                 ('/velodyne_points', '/fast_lio/cloud_registered'),  # 点云(body帧)
+    #                 ('/gpsimu_driver/imu_data', '/imu_standard'),       # IMU(标准帧, 经imu_transformer转换)
+    #             ],
+    #             parameters=[{
+    #                 # --- 帧配置 ---
+    #                 'odom_child_frame_id': 'base_footprint',  # 传感器/机器人帧(标准坐标系)
+    #                 'robot_odom_frame_id': 'odom',            # 里程计帧ID
+    #                 # --- IMU ---
+    #                 'use_imu': True,            # 启用IMU预测 (使用转换后的标准帧IMU)
+    #                 'invert_acc': False,         # 不需要翻转, imu_transformer已处理坐标转换
+    #                 'invert_gyro': False,
+    #                 # --- 里程计预测 ---
+    #                 'enable_robot_odometry_prediction': True,  # 启用odom预测 (通过TF链自动转换)
+    #                 # --- 扫描匹配 ---
+    #                 'reg_method': 'NDT_OMP',     # 多线程NDT加速
+    #                 'ndt_resolution': 1.0,        # NDT分辨率(米), 室内推荐0.5~1.0
+    #                 'downsample_resolution': 0.1, # 点云降采样(米)
+    #                 # --- 初始位姿 ---
+    #                 'cool_time_duration': 2.0,    # 初始收敛冷却时间(秒)
+    #                 'specify_init_pose': False,   # 不指定初始位姿, 从/initialpose或全局定位获取
+    #                 'use_global_localization': False,  # 改为True启用 BBS/FPFH+RANSAC 全局重定位
+    #             }]
+    #         )
+    #     ],
+    #     output='screen',
+    # )
 
     # =========================================================================
     # 第四部分：辅助节点（可选功能）
@@ -419,10 +565,22 @@ def generate_launch_description():
         # map_server生命周期管理（3秒），自动激活
         map_server_lifecycle,
 
-        # 全局定位节点（延迟5秒，等点云稳定）
+        # ┌─ 方案B：多分辨率 NDT 全局定位 (★当前使用★) ─┐
         TimerAction(period=5.0, actions=[global_localization_node]),
-        # 全局定位生命周期管理（延迟7秒）
         TimerAction(period=7.0, actions=[global_loc_lifecycle_manager]),
+        # └──────────────────────────────────────────┘
+
+        # ┌─ 方案A：单分辨率 NDT 定位 (旧方案, 已注释) ─┐
+        # TimerAction(period=5.0, actions=[ndt_localization_node]),
+        # TimerAction(period=7.0, actions=[ndt_lifecycle_manager]),
+        # └──────────────────────────────────────────────┘
+
+        # ┌─ 方案C：hdl_localization UKF+NDT (Humble移植, 已注释) ─┐
+        #   hdl组件容器自带生命周期, 无需TimerAction和lifecycle_manager
+        # imu_transformer_node,  # IMU坐标转换 (先启动)
+        # hdl_container,         # hdl定位容器 (GlobalmapServer + HdlLocalization)
+        # └─────────────────────────────────────────────────────────┘
+
         # 机器人实时位姿发布器（延迟7.5秒，等 TF 树完整）
         TimerAction(period=7.5, actions=[robot_realpose_publisher]),
 
