@@ -96,7 +96,7 @@ def generate_launch_description():
     # --- 方案A: 单分辨率 NDT 定位 (旧方案) ---
     # localization_params_file = os.path.join(pkg_lidar_loc, 'param', 'localization.yaml')
     # --- 方案C: hdl_localization UKF+NDT (Humble移植) ---
-    hdl_globalmap_pcd = '/home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall_standard.pcd'  # 已预转换到标准坐标系
+    hdl_globalmap_pcd = '/home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall_localization_grounded.pcd'  # 已转为标准坐标系并以base_footprint为地面原点
     # hdl 输入点云已通过 body -> base_footprint 转到机器人导航基准系。
     # Nav2 和定位统一使用 map/odom，避免重复叠加高度偏移。
     
@@ -453,7 +453,7 @@ def generate_launch_description():
                     'validate_global_localization_with_scan_matching': True,
                     'global_localization_max_fitness_score': 0.15,
                     'force_2d_pose': True,
-                    'force_2d_fixed_z': False,
+                    'force_2d_fixed_z': True,
                     'global_localization_query_timeout_sec': 60.0,
                 }]
             )
