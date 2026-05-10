@@ -619,13 +619,6 @@ private:
       }
     }
 
-    if (pose_msg->header.frame_id == "map_ground" && std::abs(global_localization_pose_z_offset) > 1e-6) {
-      pose.pose.position.z = global_localization_pose_z_offset;
-      RCLCPP_INFO_STREAM(
-        get_logger(),
-        "overrode initial pose z from map_ground: z=" << pose.pose.position.z);
-    }
-
     const auto& p = pose.pose.position;
     const auto& q = pose.pose.orientation;
     pose_estimator.reset(

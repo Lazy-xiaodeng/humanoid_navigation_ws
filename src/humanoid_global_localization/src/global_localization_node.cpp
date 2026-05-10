@@ -53,8 +53,6 @@
  *
  * TF 树结构：
  *   map ──(本节点发布)──→ odom ──(静态)──→ camera_init ──(Fast-LIO)──→ body
- *     │                    │
- *     └──(静态 Z=-1.215)──→ map_ground    └──(静态)──→ odom_ground
  *
  * 输入点云坐标系说明：
  *   Fast-LIO 输出的 /fast_lio/cloud_registered 处于 camera_init 坐标系，

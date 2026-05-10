@@ -11,7 +11,7 @@ class RobotRealPosePublisher(Node):
     def __init__(self):
         super().__init__('robot_realpose_publisher')
 
-        self.declare_parameter('global_frame', 'map_ground')
+        self.declare_parameter('global_frame', 'map')
         self.declare_parameter('base_frame', 'base_footprint')
         self.declare_parameter('publish_rate', 10.0)
 

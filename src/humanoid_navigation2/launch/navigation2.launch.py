@@ -97,9 +97,8 @@ def generate_launch_description():
     # localization_params_file = os.path.join(pkg_lidar_loc, 'param', 'localization.yaml')
     # --- 方案C: hdl_localization UKF+NDT (Humble移植) ---
     hdl_globalmap_pcd = '/home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall_standard.pcd'  # 已预转换到标准坐标系
-    # hdl 输入点云已通过 body -> base_footprint 转到地面系。
-    # map_ground/odom_ground 仅作为 Nav2 2D frame 别名，不再额外施加高度偏移。
-    ground_z_offset = '-1.215'
+    # hdl 输入点云已通过 body -> base_footprint 转到机器人导航基准系。
+    # Nav2 和定位统一使用 map/odom，避免重复叠加高度偏移。
     
     # 地图文件（2D栅格地图，用于Nav2）
     map_yaml_file = os.path.join(pkg_nav2, 'maps', 'hall.yaml')
@@ -172,32 +171,6 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time}]
     )
 
-    # map -> map_ground 的静态 TF
-    tf_map_to_ground = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='tf_map_to_ground',
-        arguments=[
-            '--x', '0.0', '--y', '0.0', '--z', '-1.215',
-            '--qx', '0.0', '--qy', '0.0', '--qz', '0.0', '--qw', '1.0',
-            '--frame-id', 'map', '--child-frame-id', 'map_ground'
-        ],
-        parameters=[{'use_sim_time': use_sim_time}]
-    )
-
-    # odom -> odom_ground 的静态 TF
-    tf_odom_to_ground = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='tf_odom_to_ground',
-        arguments=[
-            '--x', '0.0', '--y', '0.0', '--z', '-1.215',
-            '--qx', '0.0', '--qy', '0.0', '--qz', '0.0', '--qw', '1.0',
-            '--frame-id', 'odom', '--child-frame-id', 'odom_ground'
-        ],
-        parameters=[{'use_sim_time': use_sim_time}]
-    )
-
     # =========================================================================
     # 第二部分：感知层 （延迟启动，等待传感器数据稳定）
     # =========================================================================
@@ -244,7 +217,7 @@ def generate_launch_description():
         period=1.0,
         actions=[ Node(
                 package='nav2_map_server', executable='map_server', name='map_server',
-                parameters=[{'use_sim_time': use_sim_time}, {'yaml_filename': map_yaml_file}, {'frame_id': 'map_ground'}]) ]
+                parameters=[{'use_sim_time': use_sim_time}, {'yaml_filename': map_yaml_file}, {'frame_id': 'map'}]) ]
     )
 
     # 2.map_server生命周期管理，等待图层加载完再激活 (延迟时间改为 3.0)
@@ -294,7 +267,7 @@ def generate_launch_description():
     #     }]
     # )
 
-    # 5. 机器人实时位姿发布器（从 TF 读取 map_ground->base_footprint）
+    # 5. 机器人实时位姿发布器（从 TF 读取 map->base_footprint）
     #    与 /pcl_pose 不同：/pcl_pose 发布的是 map->odom 偏移量（通常 0.1-0.5m），
     #    本节点通过完整 TF 链计算机器人在地图中的实际位姿，发布到 /robot_realpose
     robot_realpose_publisher = Node(
@@ -617,9 +590,6 @@ def generate_launch_description():
         # 2. TF桥接
         tf_bridge_odom,
         tf_bridge_base,
-        tf_map_to_ground,
-        tf_odom_to_ground,
-
         # ========== 第二部分：感知层（最先启动） ==========
         # 点云滤波最先启动，处理原始点云数据dan
         point_cloud_filter_launch,

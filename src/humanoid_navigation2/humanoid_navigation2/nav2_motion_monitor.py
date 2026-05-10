@@ -566,7 +566,7 @@ def parse_args():
                         help='cmd_vel 消息类型：twist 或 twist_stamped，默认 twist')
 
     parser.add_argument('--global-frame', default='map',
-                        help='全局坐标系，默认 map。如果你用 map_ground，这里改成 map_ground')
+                        help='全局坐标系，默认 map')
 
     parser.add_argument('--base-frame', default='base_footprint',
                         help='机器人基座坐标系，默认 base_footprint')

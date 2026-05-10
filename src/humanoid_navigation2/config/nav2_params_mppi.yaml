@@ -10,14 +10,10 @@
 #   3. 可以只输出角速度进行原地转向，但实际会产生约 5cm 的位置偏移。
 #   4. 后方没有传感器，因此禁止倒车，行为树中也不允许 BackUp。
 #   5. 不支持横移，因此 vy_max = 0.0。
-#   6. 雷达安装在胸口，导航代价地图统一使用 ground 坐标系。
+#   6. 雷达安装在胸口，点云由 TF 转到 base_footprint 后参与导航。
 #
 # 坐标系约定：
-#   map ──> map_ground
-#    │
-#    └──> odom ──> camera_init ──> body ──> base_footprint
-#           │
-#           └──> odom_ground
+#   map ──> odom ──> camera_init ──> body ──> base_footprint
 #
 # 核心策略：
 #   行为树：
@@ -54,7 +50,7 @@ bt_navigator:
     #
     # 必须和 global_costmap 的 global_frame 保持一致。
     # --------------------------------------------------------------------------
-    global_frame: map_ground
+    global_frame: map
 
     # --------------------------------------------------------------------------
     # 机器人底盘坐标系
@@ -68,7 +64,7 @@ bt_navigator:
     #
     # 必须和 local_costmap 的 global_frame 保持一致。
     # --------------------------------------------------------------------------
-    odom_frame: odom_ground
+    odom_frame: odom
 
     # --------------------------------------------------------------------------
     # 自定义行为树
@@ -673,8 +669,8 @@ local_costmap:
       update_frequency: 10.0
       publish_frequency: 10.0
 
-      # 局部地图使用 odom_ground，避免 map 跳变影响局部控制。
-      global_frame: odom_ground
+      # 局部地图使用 odom，避免 map 跳变影响局部控制。
+      global_frame: odom
       robot_base_frame: base_footprint
 
       rolling_window: true
@@ -815,7 +811,7 @@ global_costmap:
       update_frequency: 5.0
       publish_frequency: 5.0
 
-      global_frame: map_ground
+      global_frame: map
       robot_base_frame: base_footprint
 
       footprint: "[ [0.25, 0.26], [0.25, -0.26], [-0.25, -0.26], [-0.25, 0.26] ]"
@@ -887,7 +883,7 @@ global_costmap:
           observation_persistence: 0.0
 
         periodic_clearing:
-          topic: /clearing_scan     
+          topic: /clearing_scan
           max_obstacle_height: 1.7
           min_obstacle_height: 0.05    # ★★★ 最小障碍物高度（3cm，低于此视为地面）★★★
           clearing: True               # 启用清除（射线追踪清除旧障碍物）
@@ -942,11 +938,11 @@ planner_server:
       angle_bin_size: 72
 
       # 惩罚项
-      reverse_penalty: 5.0                 
-      change_penalty: 0.2                 
-      non_straight_penalty: 1.2            
-      cost_penalty: 2.5                    
-      retrospective_penalty: 0.025         
+      reverse_penalty: 5.0
+      change_penalty: 0.2
+      non_straight_penalty: 1.2
+      cost_penalty: 2.5
+      retrospective_penalty: 0.025
 
       lookup_table_size: 20.0
       cache_obstacle_heuristic: false
@@ -1010,7 +1006,7 @@ behavior_server:
       plugin: "nav2_behaviors::Wait"
 
     # 与 local_costmap 保持一致。
-    global_frame: odom_ground
+    global_frame: odom
     robot_base_frame: base_footprint
     transform_timeout: 1.0
 
@@ -1026,9 +1022,9 @@ map_server:
     yaml_filename: ""
 
     # 关键：
-    #   如果 global_costmap 使用 map_ground，
-    #   map_server 发布的 map frame 也建议是 map_ground。
-    frame_id: "map_ground"
+    #   如果 global_costmap 使用 map，
+    #   map_server 发布的 map frame 也建议是 map。
+    frame_id: "map"
 
 # ==============================================================================
 # Map Saver
@@ -1041,7 +1037,7 @@ map_saver:
     free_thresh_default: 0.25
     occupied_thresh_default: 0.65
     map_subscribe_transient_local: True
-    frame_id: map_ground
+    frame_id: map
 
 # ==============================================================================
 # Robot State Publisher
