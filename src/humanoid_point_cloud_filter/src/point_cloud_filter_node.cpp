@@ -276,15 +276,6 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
   cloud_elevation->reserve(cloud_filtered->size());
   cloud_nav->reserve(cloud_filtered->size());
 
-  // 手臂包络盒参数（base_footprint 坐标系，标准ROS，原点在脚底）
-  // X前、Y左、Z上，坐标含义直觉化，实测后调整
-  const float arm_x_min = -0.1f;   // 身体后方10cm（手臂后摆）
-  const float arm_x_max =  0.6f;   // 前方60cm
-  const float arm_y_min = -0.45f;  // 右侧45cm
-  const float arm_y_max =  0.45f;  // 左侧45cm
-  const float arm_z_min =  0.7f;   // 离地70cm（腰部以上）
-  const float arm_z_max =  1.2f;   // 离地120cm（胸部以下）
-
   // ★★★ 吊架包络盒参数（base_footprint 坐标系）
   // 注意：吊架在 LiDAR 下方约1.2m处（因为 body 在 base_footprint 上方 1.215m）
   // 所以吊架在 base_footprint 坐标系中大约在 Z=0.0~0.2m 范围
@@ -317,19 +308,19 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
     
     // 高程图点云：用于建立高程地图
     if (z > elev_min_z_ && z < elev_max_z_) {
-        cloud_elevation->push_back(cloud_filtered->points[i]);
+        cloud_elevation->push_back(cloud_bf->points[i]);
     }
     
     // 导航点云：用于障碍物检测
     if (z > nav_min_z_ && z < nav_max_z_) {
-        cloud_nav->push_back(cloud_filtered->points[i]);
+        cloud_nav->push_back(cloud_bf->points[i]);
     }
   }
   
   // ===== 第 7 步：发布点云 =====
   std_msgs::msg::Header header;
   header.stamp = msg->header.stamp;
-  header.frame_id = "body";
+  header.frame_id = "base_footprint";
   
   if (!cloud_elevation->empty()) {
     sensor_msgs::msg::PointCloud2 msg_elevation;

@@ -454,6 +454,9 @@ def generate_launch_description():
                     'global_localization_max_fitness_score': 0.15,
                     'force_2d_pose': True,
                     'force_2d_fixed_z': True,
+                    'global_localization_use_height_filter': True,
+                    'global_localization_min_z': 0.05,
+                    'global_localization_max_z': 1.90,
                     'global_localization_query_timeout_sec': 60.0,
                 }]
             )

@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cmath>
 #include <limits>
+#include <string>
 
 #include <rclcpp/rclcpp.hpp>
 #include <pcl_ros/transforms.hpp>
@@ -92,6 +93,9 @@ public:
     global_localization_max_fitness_score = declare_parameter<double>("global_localization_max_fitness_score", max_scan_matching_fitness_score);
     force_2d_pose = declare_parameter<bool>("force_2d_pose", true);
     force_2d_fixed_z = declare_parameter<bool>("force_2d_fixed_z", false);
+    global_localization_use_height_filter = declare_parameter<bool>("global_localization_use_height_filter", false);
+    global_localization_min_z = declare_parameter<double>("global_localization_min_z", 0.05);
+    global_localization_max_z = declare_parameter<double>("global_localization_max_z", 1.9);
     global_localization_query_timeout_sec = declare_parameter<double>("global_localization_query_timeout_sec", 60.0);
     globalmap_set_for_global_localization = false;
     auto_relocalize_done = false;
@@ -495,6 +499,23 @@ private:
       delta_estimater->reset();
       scan = last_scan;
     }
+    if (global_localization_use_height_filter) {
+      scan = filter_height(scan, global_localization_min_z, global_localization_max_z);
+      if (scan->empty()) {
+        RCLCPP_ERROR_STREAM(
+          get_logger(),
+          "global localization scan is empty after height filter: z=["
+            << global_localization_min_z << ", " << global_localization_max_z << "]");
+        relocalizing = false;
+        return false;
+      }
+      RCLCPP_INFO_STREAM_THROTTLE(
+        get_logger(),
+        *get_clock(),
+        5000,
+        "global localization height-filtered scan points: " << scan->size()
+          << " z=[" << global_localization_min_z << ", " << global_localization_max_z << "]");
+    }
 
     auto query_req = std::make_shared<hdl_global_localization::srv::QueryGlobalLocalization::Request>();
     pcl::toROSMsg(*scan, query_req->cloud);
@@ -537,6 +558,14 @@ private:
     }
     pose = pose * delta_estimater->estimated_delta();
 
+    if (force_2d_pose) {
+      const float yaw = std::atan2(pose.matrix()(1, 0), pose.matrix()(0, 0));
+      pose.linear() = Eigen::AngleAxisf(yaw, Eigen::Vector3f::UnitZ()).toRotationMatrix();
+      if (force_2d_fixed_z) {
+        pose.translation().z() = global_localization_pose_z_offset;
+      }
+    }
+
     std::lock_guard<std::mutex> lock(pose_estimator_mutex);
     if (!allow_overwrite_existing_pose && pose_estimator) {
       RCLCPP_WARN(get_logger(), "discard auto relocalization result because an initial pose is already available");
@@ -568,14 +597,6 @@ private:
       pose = Eigen::Isometry3f(registration->getFinalTransformation());
     }
 
-    if (force_2d_pose) {
-      const float yaw = std::atan2(pose.matrix()(1, 0), pose.matrix()(0, 0));
-      pose.linear() = Eigen::AngleAxisf(yaw, Eigen::Vector3f::UnitZ()).toRotationMatrix();
-      if (force_2d_fixed_z) {
-        pose.translation().z() = global_localization_pose_z_offset;
-      }
-    }
-
     pose_estimator.reset(new hdl_localization::PoseEstimator(
       registration,
       get_clock()->now(),
@@ -590,6 +611,27 @@ private:
     relocalizing = false;
 
     return true;
+  }
+
+  pcl::PointCloud<PointT>::Ptr filter_height(
+    const pcl::PointCloud<PointT>::ConstPtr& cloud,
+    double min_z,
+    double max_z) const {
+    pcl::PointCloud<PointT>::Ptr filtered(new pcl::PointCloud<PointT>());
+    filtered->reserve(cloud->size());
+    for (const auto& point : cloud->points) {
+      if (!std::isfinite(point.z)) {
+        continue;
+      }
+      if (point.z >= min_z && point.z <= max_z) {
+        filtered->push_back(point);
+      }
+    }
+    filtered->header = cloud->header;
+    filtered->width = static_cast<uint32_t>(filtered->size());
+    filtered->height = 1;
+    filtered->is_dense = false;
+    return filtered;
   }
 
   /**
@@ -801,6 +843,9 @@ private:
   double global_localization_max_fitness_score;
   bool force_2d_pose;
   bool force_2d_fixed_z;
+  bool global_localization_use_height_filter;
+  double global_localization_min_z;
+  double global_localization_max_z;
   double global_localization_query_timeout_sec;
   std::atomic_bool relocalizing;
   std::atomic_bool globalmap_set_for_global_localization;
