@@ -452,6 +452,8 @@ def generate_launch_description():
                     'global_localization_pose_z_offset': 0.0,
                     'validate_global_localization_with_scan_matching': True,
                     'global_localization_max_fitness_score': 0.15,
+                    'global_localization_max_candidates': 10,
+                    'global_localization_min_fitness_margin': 0.05,
                     'force_2d_pose': True,
                     'force_2d_fixed_z': True,
                     'global_localization_use_height_filter': True,

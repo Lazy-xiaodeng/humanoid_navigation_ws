@@ -5,9 +5,11 @@
 #include <chrono>
 #include <future>
 #include <atomic>
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <string>
+#include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 #include <pcl_ros/transforms.hpp>
@@ -91,6 +93,8 @@ public:
     global_localization_pose_z_offset = declare_parameter<double>("global_localization_pose_z_offset", 0.0);
     validate_global_localization_with_scan_matching = declare_parameter<bool>("validate_global_localization_with_scan_matching", true);
     global_localization_max_fitness_score = declare_parameter<double>("global_localization_max_fitness_score", max_scan_matching_fitness_score);
+    global_localization_max_candidates = declare_parameter<int>("global_localization_max_candidates", 10);
+    global_localization_min_fitness_margin = declare_parameter<double>("global_localization_min_fitness_margin", 0.05);
     force_2d_pose = declare_parameter<bool>("force_2d_pose", true);
     force_2d_fixed_z = declare_parameter<bool>("force_2d_fixed_z", false);
     global_localization_use_height_filter = declare_parameter<bool>("global_localization_use_height_filter", false);
@@ -519,7 +523,7 @@ private:
 
     auto query_req = std::make_shared<hdl_global_localization::srv::QueryGlobalLocalization::Request>();
     pcl::toROSMsg(*scan, query_req->cloud);
-    query_req->max_num_candidates = 1;
+    query_req->max_num_candidates = std::max(1, global_localization_max_candidates);
 
     auto query_result_future = query_global_localization_service->async_send_request(query_req);
     auto query_timeout = std::chrono::duration<double>(global_localization_query_timeout_sec);
@@ -536,36 +540,6 @@ private:
       return false;
     }
 
-    const auto& result = query_result->poses[0];
-
-    RCLCPP_INFO_STREAM(get_logger(), "--- Global localization result ---");
-    RCLCPP_INFO_STREAM(get_logger(), "Trans :" << result.position.x << " " << result.position.y << " " << result.position.z);
-    RCLCPP_INFO_STREAM(get_logger(), "Quat  :" << result.orientation.x << " " << result.orientation.y << " " << result.orientation.z << " " << result.orientation.w);
-    RCLCPP_INFO_STREAM(get_logger(), "Error :" << query_result->errors[0]);
-    RCLCPP_INFO_STREAM(get_logger(), "Inlier:" << query_result->inlier_fractions[0]);
-
-    Eigen::Isometry3f pose = Eigen::Isometry3f::Identity();
-    pose.linear() = Eigen::Quaternionf(result.orientation.w, result.orientation.x, result.orientation.y, result.orientation.z).toRotationMatrix();
-    pose.translation() = Eigen::Vector3f(
-      result.position.x,
-      result.position.y,
-      result.position.z + global_localization_pose_z_offset);
-    if (std::abs(global_localization_pose_z_offset) > 1e-6) {
-      RCLCPP_INFO_STREAM(
-        get_logger(),
-        "Applied global localization z offset: " << global_localization_pose_z_offset
-          << ", corrected z=" << pose.translation().z());
-    }
-    pose = pose * delta_estimater->estimated_delta();
-
-    if (force_2d_pose) {
-      const float yaw = std::atan2(pose.matrix()(1, 0), pose.matrix()(0, 0));
-      pose.linear() = Eigen::AngleAxisf(yaw, Eigen::Vector3f::UnitZ()).toRotationMatrix();
-      if (force_2d_fixed_z) {
-        pose.translation().z() = global_localization_pose_z_offset;
-      }
-    }
-
     std::lock_guard<std::mutex> lock(pose_estimator_mutex);
     if (!allow_overwrite_existing_pose && pose_estimator) {
       RCLCPP_WARN(get_logger(), "discard auto relocalization result because an initial pose is already available");
@@ -574,27 +548,131 @@ private:
       return false;
     }
 
+    Eigen::Isometry3f pose = Eigen::Isometry3f::Identity();
     if (validate_global_localization_with_scan_matching) {
-      pcl::PointCloud<PointT>::Ptr aligned(new pcl::PointCloud<PointT>());
-      registration->setInputSource(scan);
-      registration->align(*aligned, pose.matrix());
+      struct ValidatedCandidate {
+        size_t index;
+        double fitness;
+        double error;
+        double inlier_fraction;
+        Eigen::Isometry3f pose;
+      };
 
-      const bool converged = registration->hasConverged();
-      const double fitness_score = registration->getFitnessScore();
-      const bool fitness_score_valid = std::isfinite(fitness_score);
+      std::vector<ValidatedCandidate> accepted_candidates;
+      registration->setInputSource(scan);
+
       RCLCPP_INFO_STREAM(
         get_logger(),
-        "Global localization NDT validation: converged=" << converged
-          << " fitness=" << fitness_score
-          << " threshold=" << global_localization_max_fitness_score);
+        "Global localization candidates: returned=" << query_result->poses.size()
+          << " requested=" << query_req->max_num_candidates
+          << " fitness_threshold=" << global_localization_max_fitness_score
+          << " min_margin=" << global_localization_min_fitness_margin);
 
-      if (!converged || !fitness_score_valid || fitness_score > global_localization_max_fitness_score) {
-        RCLCPP_WARN(get_logger(), "reject global localization result by NDT validation");
+      for (size_t i = 0; i < query_result->poses.size(); ++i) {
+        const auto& result = query_result->poses[i];
+        const double error = i < query_result->errors.size() ? query_result->errors[i] : std::numeric_limits<double>::quiet_NaN();
+        const double inlier = i < query_result->inlier_fractions.size() ? query_result->inlier_fractions[i] : std::numeric_limits<double>::quiet_NaN();
+
+        Eigen::Isometry3f candidate_pose = Eigen::Isometry3f::Identity();
+        candidate_pose.linear() = Eigen::Quaternionf(
+          result.orientation.w,
+          result.orientation.x,
+          result.orientation.y,
+          result.orientation.z).toRotationMatrix();
+        candidate_pose.translation() = Eigen::Vector3f(
+          result.position.x,
+          result.position.y,
+          result.position.z + global_localization_pose_z_offset);
+        candidate_pose = candidate_pose * delta_estimater->estimated_delta();
+        apply_2d_constraints(candidate_pose);
+
+        pcl::PointCloud<PointT>::Ptr aligned(new pcl::PointCloud<PointT>());
+        registration->align(*aligned, candidate_pose.matrix());
+
+        const bool converged = registration->hasConverged();
+        const double fitness_score = registration->getFitnessScore();
+        const bool fitness_score_valid = std::isfinite(fitness_score);
+
+        RCLCPP_INFO_STREAM(
+          get_logger(),
+          "Global localization candidate[" << i << "]"
+            << " trans=(" << result.position.x << ", " << result.position.y << ", " << result.position.z << ")"
+            << " error=" << error
+            << " inlier=" << inlier
+            << " ndt_converged=" << converged
+            << " ndt_fitness=" << fitness_score);
+
+        if (!converged || !fitness_score_valid || fitness_score > global_localization_max_fitness_score) {
+          continue;
+        }
+
+        Eigen::Isometry3f refined_pose(registration->getFinalTransformation());
+        apply_2d_constraints(refined_pose);
+        accepted_candidates.push_back(ValidatedCandidate{i, fitness_score, error, inlier, refined_pose});
+      }
+
+      if (accepted_candidates.empty()) {
+        RCLCPP_WARN(get_logger(), "reject global localization result: no candidate passed NDT validation");
         relocalizing = false;
         return false;
       }
 
-      pose = Eigen::Isometry3f(registration->getFinalTransformation());
+      std::sort(
+        accepted_candidates.begin(),
+        accepted_candidates.end(),
+        [](const auto& lhs, const auto& rhs) {
+          return lhs.fitness < rhs.fitness;
+        });
+
+      const auto& best = accepted_candidates[0];
+      RCLCPP_INFO_STREAM(
+        get_logger(),
+        "Best global localization candidate[" << best.index << "]"
+          << " fitness=" << best.fitness
+          << " error=" << best.error
+          << " inlier=" << best.inlier_fraction
+          << " accepted_candidates=" << accepted_candidates.size());
+
+      if (accepted_candidates.size() >= 2) {
+        const auto& second = accepted_candidates[1];
+        const double margin = second.fitness - best.fitness;
+        RCLCPP_INFO_STREAM(
+          get_logger(),
+          "Second global localization candidate[" << second.index << "]"
+            << " fitness=" << second.fitness
+            << " margin=" << margin);
+
+        if (margin < global_localization_min_fitness_margin) {
+          RCLCPP_WARN_STREAM(
+            get_logger(),
+            "reject global localization result: ambiguous candidates, fitness margin "
+              << margin << " < " << global_localization_min_fitness_margin);
+          relocalizing = false;
+          return false;
+        }
+      }
+
+      pose = best.pose;
+    } else {
+      const auto& result = query_result->poses[0];
+
+      RCLCPP_INFO_STREAM(get_logger(), "--- Global localization result ---");
+      RCLCPP_INFO_STREAM(get_logger(), "Trans :" << result.position.x << " " << result.position.y << " " << result.position.z);
+      RCLCPP_INFO_STREAM(get_logger(), "Quat  :" << result.orientation.x << " " << result.orientation.y << " " << result.orientation.z << " " << result.orientation.w);
+      if (!query_result->errors.empty()) {
+        RCLCPP_INFO_STREAM(get_logger(), "Error :" << query_result->errors[0]);
+      }
+      if (!query_result->inlier_fractions.empty()) {
+        RCLCPP_INFO_STREAM(get_logger(), "Inlier:" << query_result->inlier_fractions[0]);
+      }
+
+      pose.linear() = Eigen::Quaternionf(result.orientation.w, result.orientation.x, result.orientation.y, result.orientation.z).toRotationMatrix();
+      pose.translation() = Eigen::Vector3f(
+        result.position.x,
+        result.position.y,
+        result.position.z + global_localization_pose_z_offset);
+      pose = pose * delta_estimater->estimated_delta();
+      apply_2d_constraints(pose);
     }
 
     pose_estimator.reset(new hdl_localization::PoseEstimator(
@@ -632,6 +710,18 @@ private:
     filtered->height = 1;
     filtered->is_dense = false;
     return filtered;
+  }
+
+  void apply_2d_constraints(Eigen::Isometry3f& pose) const {
+    if (!force_2d_pose) {
+      return;
+    }
+
+    const float yaw = std::atan2(pose.matrix()(1, 0), pose.matrix()(0, 0));
+    pose.linear() = Eigen::AngleAxisf(yaw, Eigen::Vector3f::UnitZ()).toRotationMatrix();
+    if (force_2d_fixed_z) {
+      pose.translation().z() = global_localization_pose_z_offset;
+    }
   }
 
   /**
@@ -841,6 +931,8 @@ private:
   double global_localization_pose_z_offset;
   bool validate_global_localization_with_scan_matching;
   double global_localization_max_fitness_score;
+  int global_localization_max_candidates;
+  double global_localization_min_fitness_margin;
   bool force_2d_pose;
   bool force_2d_fixed_z;
   bool global_localization_use_height_filter;
