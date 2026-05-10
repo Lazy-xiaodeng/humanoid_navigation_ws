@@ -451,14 +451,27 @@ def generate_launch_description():
                     'auto_relocalize_after_rejections': 0,
                     'global_localization_pose_z_offset': 0.0,
                     'validate_global_localization_with_scan_matching': True,
-                    'global_localization_max_fitness_score': 0.15,
+                    'global_localization_max_fitness_score': 0.12,
                     'global_localization_max_candidates': 10,
-                    'global_localization_min_fitness_margin': 0.05,
+                    'global_localization_min_fitness_margin': 0.10,
+                    # A/B 房间结构相似时，单次 FPFH/RANSAC+NDT 结果不够可信。
+                    # 启动阶段必须多次落在同一个位姿簇内，才真正发布 map->odom。
+                    'global_localization_required_consistent_results': 3,
+                    'global_localization_consistency_window': 5,
+                    'global_localization_consistency_xy_tolerance': 0.8,
+                    'global_localization_consistency_yaw_tolerance': 0.35,
+                    # 使用启动后多帧局部点云作为 query，增加门框/墙角/天花板等判别特征。
+                    'global_localization_query_accumulation_frames': 8,
+                    'global_localization_query_min_accumulation_frames': 3,
+                    # 发布后前几帧必须能被 NDT 跟踪；否则撤销该全局定位并继续自动重试。
+                    'global_localization_post_accept_validation_frames': 5,
+                    'global_localization_post_accept_max_rejections': 1,
                     'force_2d_pose': True,
                     'force_2d_fixed_z': True,
                     'global_localization_use_height_filter': True,
-                    'global_localization_min_z': 0.05,
-                    'global_localization_max_z': 1.90,
+                    'global_localization_min_z': 0.0,
+                    'global_localization_max_z': 0.0,
+                    'global_localization_use_max_z_filter': False,
                     'global_localization_query_timeout_sec': 60.0,
                 }]
             )

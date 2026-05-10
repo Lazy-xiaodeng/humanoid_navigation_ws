@@ -7,6 +7,7 @@
 #include <atomic>
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <limits>
 #include <string>
 #include <vector>
@@ -95,16 +96,27 @@ public:
     global_localization_max_fitness_score = declare_parameter<double>("global_localization_max_fitness_score", max_scan_matching_fitness_score);
     global_localization_max_candidates = declare_parameter<int>("global_localization_max_candidates", 10);
     global_localization_min_fitness_margin = declare_parameter<double>("global_localization_min_fitness_margin", 0.05);
+    global_localization_required_consistent_results = declare_parameter<int>("global_localization_required_consistent_results", 1);
+    global_localization_consistency_window = declare_parameter<int>("global_localization_consistency_window", 5);
+    global_localization_consistency_xy_tolerance = declare_parameter<double>("global_localization_consistency_xy_tolerance", 0.8);
+    global_localization_consistency_yaw_tolerance = declare_parameter<double>("global_localization_consistency_yaw_tolerance", 0.35);
+    global_localization_query_accumulation_frames = declare_parameter<int>("global_localization_query_accumulation_frames", 1);
+    global_localization_query_min_accumulation_frames = declare_parameter<int>("global_localization_query_min_accumulation_frames", 1);
+    global_localization_post_accept_validation_frames = declare_parameter<int>("global_localization_post_accept_validation_frames", 0);
+    global_localization_post_accept_max_rejections = declare_parameter<int>("global_localization_post_accept_max_rejections", 1);
     force_2d_pose = declare_parameter<bool>("force_2d_pose", true);
     force_2d_fixed_z = declare_parameter<bool>("force_2d_fixed_z", false);
     global_localization_use_height_filter = declare_parameter<bool>("global_localization_use_height_filter", false);
     global_localization_min_z = declare_parameter<double>("global_localization_min_z", 0.05);
     global_localization_max_z = declare_parameter<double>("global_localization_max_z", 1.9);
+    global_localization_use_max_z_filter = declare_parameter<bool>("global_localization_use_max_z_filter", true);
     global_localization_query_timeout_sec = declare_parameter<double>("global_localization_query_timeout_sec", 60.0);
     globalmap_set_for_global_localization = false;
     auto_relocalize_done = false;
     relocalize_requested = false;
     consecutive_scan_matching_rejections = 0;
+    global_pose_probation_frames_remaining = 0;
+    global_pose_probation_rejections = 0;
     if (use_global_localization) {
       RCLCPP_INFO_STREAM(get_logger(), "wait for global localization services");
       global_localization_callback_group = create_callback_group(rclcpp::CallbackGroupType::Reentrant);
@@ -180,6 +192,10 @@ public:
   }
 
 private:
+  struct PendingGlobalLocalizationCandidate {
+    Eigen::Isometry3f pose;
+  };
+
   rclcpp::Time node_time(const builtin_interfaces::msg::Time& stamp) const {
     return rclcpp::Time(stamp, get_clock()->get_clock_type());
   }
@@ -312,6 +328,7 @@ private:
 
     auto filtered = downsample(cloud);
     last_scan = filtered;
+    add_recent_scan(filtered);
 
     if (!pose_estimator) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5.0, "waiting for initial pose input or global relocalization!!");
@@ -417,6 +434,10 @@ private:
       consecutive_scan_matching_rejections = 0;
     }
 
+    if (!handle_global_pose_probation(correction_accepted)) {
+      return;
+    }
+
     if (aligned_pub->get_subscription_count()) {
       aligned->header.frame_id = "map";
       aligned->header.stamp = cloud->header.stamp;
@@ -501,15 +522,26 @@ private:
 
       relocalizing = true;
       delta_estimater->reset();
-      scan = last_scan;
+      scan = build_global_localization_query();
+      if (!scan || scan->empty()) {
+        RCLCPP_WARN_STREAM(
+          get_logger(),
+          "not enough accumulated scans for global localization: have "
+            << recent_scans.size()
+            << " need " << std::max(1, global_localization_query_min_accumulation_frames));
+        relocalizing = false;
+        return false;
+      }
     }
     if (global_localization_use_height_filter) {
-      scan = filter_height(scan, global_localization_min_z, global_localization_max_z);
+      scan = filter_height(scan, global_localization_min_z, global_localization_max_z, global_localization_use_max_z_filter);
       if (scan->empty()) {
         RCLCPP_ERROR_STREAM(
           get_logger(),
           "global localization scan is empty after height filter: z=["
-            << global_localization_min_z << ", " << global_localization_max_z << "]");
+            << global_localization_min_z << ", "
+            << (global_localization_use_max_z_filter ? std::to_string(global_localization_max_z) : std::string("inf"))
+            << "]");
         relocalizing = false;
         return false;
       }
@@ -518,7 +550,9 @@ private:
         *get_clock(),
         5000,
         "global localization height-filtered scan points: " << scan->size()
-          << " z=[" << global_localization_min_z << ", " << global_localization_max_z << "]");
+          << " z=[" << global_localization_min_z << ", "
+          << (global_localization_use_max_z_filter ? std::to_string(global_localization_max_z) : std::string("inf"))
+          << "]");
     }
 
     auto query_req = std::make_shared<hdl_global_localization::srv::QueryGlobalLocalization::Request>();
@@ -566,7 +600,8 @@ private:
         "Global localization candidates: returned=" << query_result->poses.size()
           << " requested=" << query_req->max_num_candidates
           << " fitness_threshold=" << global_localization_max_fitness_score
-          << " min_margin=" << global_localization_min_fitness_margin);
+          << " min_margin=" << global_localization_min_fitness_margin
+          << " query_points=" << scan->size());
 
       for (size_t i = 0; i < query_result->poses.size(); ++i) {
         const auto& result = query_result->poses[i];
@@ -645,10 +680,8 @@ private:
         if (margin < global_localization_min_fitness_margin) {
           RCLCPP_WARN_STREAM(
             get_logger(),
-            "reject global localization result: ambiguous candidates, fitness margin "
+            "global localization result is ambiguous; requiring repeatability, fitness margin "
               << margin << " < " << global_localization_min_fitness_margin);
-          relocalizing = false;
-          return false;
         }
       }
 
@@ -675,6 +708,19 @@ private:
       apply_2d_constraints(pose);
     }
 
+    const int consistent_count = update_global_localization_consistency(pose);
+    if (consistent_count < std::max(1, global_localization_required_consistent_results)) {
+      RCLCPP_WARN_STREAM(
+        get_logger(),
+        "hold global localization result until it is repeatable: consistent="
+          << consistent_count << "/" << std::max(1, global_localization_required_consistent_results)
+          << " window=" << global_localization_consistency_window
+          << " xy_tol=" << global_localization_consistency_xy_tolerance
+          << " yaw_tol=" << global_localization_consistency_yaw_tolerance);
+      relocalizing = false;
+      return false;
+    }
+
     pose_estimator.reset(new hdl_localization::PoseEstimator(
       registration,
       get_clock()->now(),
@@ -684,6 +730,9 @@ private:
       force_2d_pose,
       force_2d_fixed_z ? global_localization_pose_z_offset : std::numeric_limits<double>::quiet_NaN()));
     consecutive_scan_matching_rejections = 0;
+    global_pose_probation_frames_remaining = std::max(0, global_localization_post_accept_validation_frames);
+    global_pose_probation_rejections = 0;
+    pending_global_localization_candidates.clear();
     auto_relocalize_done = true;
 
     relocalizing = false;
@@ -694,14 +743,15 @@ private:
   pcl::PointCloud<PointT>::Ptr filter_height(
     const pcl::PointCloud<PointT>::ConstPtr& cloud,
     double min_z,
-    double max_z) const {
+    double max_z,
+    bool use_max_z) const {
     pcl::PointCloud<PointT>::Ptr filtered(new pcl::PointCloud<PointT>());
     filtered->reserve(cloud->size());
     for (const auto& point : cloud->points) {
       if (!std::isfinite(point.z)) {
         continue;
       }
-      if (point.z >= min_z && point.z <= max_z) {
+      if (point.z >= min_z && (!use_max_z || point.z <= max_z)) {
         filtered->push_back(point);
       }
     }
@@ -710,6 +760,109 @@ private:
     filtered->height = 1;
     filtered->is_dense = false;
     return filtered;
+  }
+
+  void add_recent_scan(const pcl::PointCloud<PointT>::ConstPtr& scan) {
+    if (!scan || scan->empty()) {
+      return;
+    }
+
+    recent_scans.push_back(scan);
+    const size_t max_scans = static_cast<size_t>(std::max(1, global_localization_query_accumulation_frames));
+    while (recent_scans.size() > max_scans) {
+      recent_scans.pop_front();
+    }
+  }
+
+  pcl::PointCloud<PointT>::ConstPtr build_global_localization_query() const {
+    const size_t min_scans = static_cast<size_t>(std::max(1, global_localization_query_min_accumulation_frames));
+    if (recent_scans.size() < min_scans) {
+      return nullptr;
+    }
+
+    if (recent_scans.size() == 1) {
+      return recent_scans.back();
+    }
+
+    pcl::PointCloud<PointT>::Ptr merged(new pcl::PointCloud<PointT>());
+    for (const auto& scan : recent_scans) {
+      *merged += *scan;
+    }
+    merged->header = recent_scans.back()->header;
+    return downsample(merged);
+  }
+
+  static double normalize_angle(double angle) {
+    while (angle > M_PI) {
+      angle -= 2.0 * M_PI;
+    }
+    while (angle < -M_PI) {
+      angle += 2.0 * M_PI;
+    }
+    return angle;
+  }
+
+  static double pose_yaw(const Eigen::Isometry3f& pose) {
+    return std::atan2(pose.matrix()(1, 0), pose.matrix()(0, 0));
+  }
+
+  bool poses_consistent(const Eigen::Isometry3f& lhs, const Eigen::Isometry3f& rhs) const {
+    const Eigen::Vector2f lhs_xy(lhs.translation().x(), lhs.translation().y());
+    const Eigen::Vector2f rhs_xy(rhs.translation().x(), rhs.translation().y());
+    const double xy_distance = (lhs_xy - rhs_xy).norm();
+    const double yaw_distance = std::abs(normalize_angle(pose_yaw(lhs) - pose_yaw(rhs)));
+    return xy_distance <= global_localization_consistency_xy_tolerance &&
+           yaw_distance <= global_localization_consistency_yaw_tolerance;
+  }
+
+  int update_global_localization_consistency(const Eigen::Isometry3f& pose) {
+    PendingGlobalLocalizationCandidate candidate;
+    candidate.pose = pose;
+    pending_global_localization_candidates.push_back(candidate);
+
+    const size_t max_candidates = static_cast<size_t>(std::max(1, global_localization_consistency_window));
+    while (pending_global_localization_candidates.size() > max_candidates) {
+      pending_global_localization_candidates.erase(pending_global_localization_candidates.begin());
+    }
+
+    int consistent_count = 0;
+    for (const auto& existing : pending_global_localization_candidates) {
+      if (poses_consistent(existing.pose, pose)) {
+        ++consistent_count;
+      }
+    }
+    return consistent_count;
+  }
+
+  bool handle_global_pose_probation(bool correction_accepted) {
+    if (global_pose_probation_frames_remaining <= 0) {
+      return true;
+    }
+
+    --global_pose_probation_frames_remaining;
+    if (!correction_accepted) {
+      ++global_pose_probation_rejections;
+    }
+
+    if (global_pose_probation_rejections >= std::max(1, global_localization_post_accept_max_rejections)) {
+      RCLCPP_WARN_STREAM(
+        get_logger(),
+        "revoke global localization result during post-accept validation: rejections="
+          << global_pose_probation_rejections
+          << "/" << std::max(1, global_localization_post_accept_max_rejections));
+      pose_estimator.reset();
+      auto_relocalize_done = false;
+      relocalize_requested = true;
+      global_pose_probation_frames_remaining = 0;
+      global_pose_probation_rejections = 0;
+      consecutive_scan_matching_rejections = 0;
+      return false;
+    }
+
+    if (global_pose_probation_frames_remaining == 0) {
+      RCLCPP_INFO(get_logger(), "global localization result passed post-accept scan matching validation");
+    }
+    return true;
   }
 
   void apply_2d_constraints(Eigen::Isometry3f& pose) const {
@@ -933,11 +1086,20 @@ private:
   double global_localization_max_fitness_score;
   int global_localization_max_candidates;
   double global_localization_min_fitness_margin;
+  int global_localization_required_consistent_results;
+  int global_localization_consistency_window;
+  double global_localization_consistency_xy_tolerance;
+  double global_localization_consistency_yaw_tolerance;
+  int global_localization_query_accumulation_frames;
+  int global_localization_query_min_accumulation_frames;
+  int global_localization_post_accept_validation_frames;
+  int global_localization_post_accept_max_rejections;
   bool force_2d_pose;
   bool force_2d_fixed_z;
   bool global_localization_use_height_filter;
   double global_localization_min_z;
   double global_localization_max_z;
+  bool global_localization_use_max_z_filter;
   double global_localization_query_timeout_sec;
   std::atomic_bool relocalizing;
   std::atomic_bool globalmap_set_for_global_localization;
@@ -945,8 +1107,12 @@ private:
   std::atomic_bool relocalize_requested;
   std::unique_ptr<DeltaEstimater> delta_estimater;
   int consecutive_scan_matching_rejections;
+  int global_pose_probation_frames_remaining;
+  int global_pose_probation_rejections;
+  std::vector<PendingGlobalLocalizationCandidate> pending_global_localization_candidates;
 
   pcl::PointCloud<PointT>::ConstPtr last_scan;
+  std::deque<pcl::PointCloud<PointT>::ConstPtr> recent_scans;
   rclcpp::CallbackGroup::SharedPtr global_localization_callback_group;
   rclcpp::Client<hdl_global_localization::srv::SetGlobalMap>::SharedPtr set_global_map_service;
   rclcpp::Client<hdl_global_localization::srv::QueryGlobalLocalization>::SharedPtr query_global_localization_service;

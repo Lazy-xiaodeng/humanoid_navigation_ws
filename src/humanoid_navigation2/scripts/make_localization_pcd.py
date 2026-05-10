@@ -128,13 +128,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input_pcd", type=Path)
     parser.add_argument("output_pcd", type=Path)
-    parser.add_argument("--min-z", type=float, default=0.05)
-    parser.add_argument("--max-z", type=float, default=1.90)
+    parser.add_argument("--min-z", type=float, default=0.0)
+    parser.add_argument("--max-z", type=float, default=2.30)
     parser.add_argument("--voxel-size", type=float, default=0.10)
     parser.add_argument(
-        "--keep-floor",
+        "--keep-ceiling",
         action="store_true",
-        help="Keep all points above min-z instead of making a wall-slice map.",
+        help="Keep all points above min-z instead of clipping at max-z.",
+    )
+    parser.add_argument(
+        "--keep-floor",
+        dest="keep_ceiling",
+        action="store_true",
+        help=argparse.SUPPRESS,
     )
     args = parser.parse_args()
 
@@ -153,7 +159,7 @@ def main() -> None:
     data[:, xyz_cols] = xyz_map
     summarize("grounded ROS map", xyz_map)
 
-    if args.keep_floor:
+    if args.keep_ceiling:
         z_mask = xyz_map[:, 2] >= args.min_z
     else:
         z_mask = (xyz_map[:, 2] >= args.min_z) & (xyz_map[:, 2] <= args.max_z)
