@@ -1,5 +1,7 @@
 #include <hdl_localization/pose_estimator.hpp>
 
+#include <cmath>
+
 #include <pcl/filters/voxel_grid.h>
 #include <hdl_localization/pose_system.hpp>
 #include <hdl_localization/odom_system.hpp>
@@ -15,13 +17,35 @@ namespace hdl_localization {
  * @param quat                initial orientation
  * @param cool_time_duration  during "cool time", prediction is not performed
  */
-PoseEstimator::PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& registration, const rclcpp::Time& stamp, const Eigen::Vector3f& pos, const Eigen::Quaternionf& quat, double cool_time_duration)
-    : init_stamp(stamp), registration(registration), cool_time_duration(cool_time_duration) {
+PoseEstimator::PoseEstimator(
+  pcl::Registration<PointT, PointT>::Ptr& registration,
+  const rclcpp::Time& stamp,
+  const Eigen::Vector3f& pos,
+  const Eigen::Quaternionf& quat,
+  double cool_time_duration,
+  bool force_2d_pose,
+  double fixed_z)
+    : init_stamp(stamp),
+      registration(registration),
+      cool_time_duration(cool_time_duration),
+      force_2d_pose(force_2d_pose),
+      fixed_z(fixed_z) {
 
   prev_stamp = rclcpp::Time((int64_t)0, init_stamp.get_clock_type());
+  last_correction_stamp = rclcpp::Time((int64_t)0, init_stamp.get_clock_type());
   last_observation = Eigen::Matrix4f::Identity();
-  last_observation.block<3, 3>(0, 0) = quat.toRotationMatrix();
-  last_observation.block<3, 1>(0, 3) = pos;
+  Eigen::Quaternionf init_quat = quat;
+  Eigen::Vector3f init_pos = pos;
+  if (force_2d_pose) {
+    const Eigen::Matrix3f init_rot = quat.toRotationMatrix();
+    const float yaw = std::atan2(init_rot(1, 0), init_rot(0, 0));
+    init_quat = Eigen::Quaternionf(Eigen::AngleAxisf(yaw, Eigen::Vector3f::UnitZ()));
+    if (std::isfinite(fixed_z)) {
+      init_pos.z() = fixed_z;
+    }
+  }
+  last_observation.block<3, 3>(0, 0) = init_quat.toRotationMatrix();
+  last_observation.block<3, 1>(0, 3) = init_pos;
 
   process_noise = Eigen::MatrixXf::Identity(16, 16);
   process_noise.middleRows(0, 3) *= 1.0;
@@ -35,9 +59,9 @@ PoseEstimator::PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& registratio
   measurement_noise.middleRows(3, 4) *= 0.001;
 
   Eigen::VectorXf mean(16);
-  mean.middleRows(0, 3) = pos;
+  mean.middleRows(0, 3) = init_pos;
   mean.middleRows(3, 3).setZero();
-  mean.middleRows(6, 4) = Eigen::Vector4f(quat.w(), quat.x(), quat.y(), quat.z());
+  mean.middleRows(6, 4) = Eigen::Vector4f(init_quat.w(), init_quat.x(), init_quat.y(), init_quat.z());
   mean.middleRows(10, 3).setZero();
   mean.middleRows(13, 3).setZero();
 
@@ -135,8 +159,15 @@ void PoseEstimator::predict_odom(const Eigen::Matrix4f& odom_delta) {
  * @param cloud   input cloud
  * @return cloud aligned to the globalmap
  */
-pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const rclcpp::Time& stamp, const pcl::PointCloud<PointT>::ConstPtr& cloud) {
-  last_correction_stamp = stamp;
+pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(
+  const rclcpp::Time& stamp,
+  const pcl::PointCloud<PointT>::ConstPtr& cloud,
+  bool reject_non_converged,
+  double max_fitness_score,
+  bool* correction_accepted) {
+  if (correction_accepted) {
+    *correction_accepted = false;
+  }
 
   Eigen::Matrix4f no_guess = last_observation;
   Eigen::Matrix4f imu_guess;
@@ -179,8 +210,23 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const rclcpp:
   pcl::PointCloud<PointT>::Ptr aligned(new pcl::PointCloud<PointT>());
   registration->setInputSource(cloud);
   registration->align(*aligned, init_guess);
+  last_correction_stamp = stamp;
+
+  const bool converged = registration->hasConverged();
+  const double fitness_score = registration->getFitnessScore();
+  const bool fitness_score_valid = std::isfinite(fitness_score);
+  if ((reject_non_converged && !converged) || (max_fitness_score > 0.0 && (!fitness_score_valid || fitness_score > max_fitness_score))) {
+    return aligned;
+  }
 
   Eigen::Matrix4f trans = registration->getFinalTransformation();
+  if (force_2d_pose) {
+    const float yaw = std::atan2(trans(1, 0), trans(0, 0));
+    trans.block<3, 3>(0, 0) = Eigen::AngleAxisf(yaw, Eigen::Vector3f::UnitZ()).toRotationMatrix();
+    if (std::isfinite(fixed_z)) {
+      trans(2, 3) = fixed_z;
+    }
+  }
   Eigen::Vector3f p = trans.block<3, 1>(0, 3);
   Eigen::Quaternionf q(trans.block<3, 3>(0, 0));
 
@@ -205,6 +251,10 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const rclcpp:
 
     odom_ukf->correct(observation);
     odom_pred_error = odom_guess.inverse() * registration->getFinalTransformation();
+  }
+
+  if (correction_accepted) {
+    *correction_accepted = true;
   }
 
   return aligned;

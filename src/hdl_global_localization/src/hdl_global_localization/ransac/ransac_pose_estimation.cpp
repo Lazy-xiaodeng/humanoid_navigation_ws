@@ -57,13 +57,22 @@ namespace hdl_global_localization {
 
 template <typename FeatureT>
 RansacPoseEstimation<FeatureT>::RansacPoseEstimation(rclcpp::Node::SharedPtr node) : node(node) {
-  this->node->declare_parameter<bool>("ransac/voxel_based", true);
-  this->node->declare_parameter<double>("ransac/max_correspondence_distance", 1.0);
-  this->node->declare_parameter<double>("ransac/similarity_threshold", 0.5);
-  this->node->declare_parameter<int>("ransac/correspondence_randomness", 2);
-  this->node->declare_parameter<int>("ransac/max_iterations", 100000);
-  this->node->declare_parameter<int>("ransac/matching_budget", 10000);
-  this->node->declare_parameter<double>("ransac/inlier_fraction", 0.25);
+  params.voxel_based = this->node->declare_parameter<bool>("ransac/voxel_based", true);
+  params.max_correspondence_distance = this->node->declare_parameter<double>("ransac/max_correspondence_distance", 1.0);
+  params.similarity_threshold = this->node->declare_parameter<double>("ransac/similarity_threshold", 0.5);
+  params.correspondence_randomness = this->node->declare_parameter<int>("ransac/correspondence_randomness", 2);
+  params.max_iterations = this->node->declare_parameter<int>("ransac/max_iterations", 100000);
+  params.matching_budget = this->node->declare_parameter<int>("ransac/matching_budget", 10000);
+  params.inlier_fraction = this->node->declare_parameter<double>("ransac/inlier_fraction", 0.25);
+  RCLCPP_INFO_STREAM(
+    this->node->get_logger(),
+    "RANSAC params: voxel_based=" << params.voxel_based
+      << " max_corr=" << params.max_correspondence_distance
+      << " similarity=" << params.similarity_threshold
+      << " randomness=" << params.correspondence_randomness
+      << " max_iterations=" << params.max_iterations
+      << " matching_budget=" << params.matching_budget
+      << " min_inlier=" << params.inlier_fraction);
 }
 
 template <typename FeatureT>

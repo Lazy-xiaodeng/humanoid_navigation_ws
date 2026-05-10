@@ -5,6 +5,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <pcl_conversions/pcl_conversions.h>
+#include <pcl/PCLPointCloud2.h>
+#include <pcl/conversions.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/io/pcd_io.h>
 
@@ -45,15 +47,51 @@ public:
   }
 
 private:
+  pcl::PointCloud<PointT>::Ptr load_globalmap(const std::string& globalmap_pcd) const {
+    pcl::PCLPointCloud2 cloud_blob;
+    if (pcl::io::loadPCDFile(globalmap_pcd, cloud_blob) < 0) {
+      RCLCPP_ERROR_STREAM(get_logger(), "Failed to load globalmap PCD: " << globalmap_pcd);
+      return pcl::PointCloud<PointT>::Ptr(new pcl::PointCloud<PointT>());
+    }
+
+    bool has_intensity = false;
+    for (const auto& field : cloud_blob.fields) {
+      if (field.name == "intensity") {
+        has_intensity = true;
+        break;
+      }
+    }
+
+    pcl::PointCloud<PointT>::Ptr loaded(new pcl::PointCloud<PointT>());
+    if (has_intensity) {
+      pcl::fromPCLPointCloud2(cloud_blob, *loaded);
+    } else {
+      pcl::PointCloud<pcl::PointXYZ> xyz_cloud;
+      pcl::fromPCLPointCloud2(cloud_blob, xyz_cloud);
+      loaded->reserve(xyz_cloud.size());
+      for (const auto& pt : xyz_cloud.points) {
+        PointT out;
+        out.x = pt.x;
+        out.y = pt.y;
+        out.z = pt.z;
+        out.intensity = 0.0f;
+        loaded->push_back(out);
+      }
+      loaded->width = static_cast<uint32_t>(loaded->size());
+      loaded->height = 1;
+      loaded->is_dense = xyz_cloud.is_dense;
+    }
+
+    loaded->header.frame_id = "map";
+    return loaded;
+  }
 
 ////***************************start pyc modified***************************/
   void map_update_callback(const std_msgs::msg::String::SharedPtr msg) {
     cout << "in map update callback" << endl;
     RCLCPP_INFO(get_logger(), "Received map request, map path : ");
     std::string globalmap_pcd = msg->data;
-    globalmap.reset(new pcl::PointCloud<PointT>());
-    pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
-    globalmap->header.frame_id = "map";
+    globalmap = load_globalmap(globalmap_pcd);
 
     // downsample globalmap
     double downsample_resolution = declare_parameter<double>("downsample_resolution", 0.1);
@@ -85,9 +123,7 @@ private:
     cout << endl << globalmap_pcd << endl << endl;
 /***************************end pyc modified***************************////
 
-    globalmap.reset(new pcl::PointCloud<PointT>());
-    pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
-    globalmap->header.frame_id = "map";
+    globalmap = load_globalmap(globalmap_pcd);
 
 ////***************************start pyc modified***************************/
     // cout << endl << *globalmap << endl << endl;
@@ -147,4 +183,3 @@ private:
 
 #include "rclcpp_components/register_node_macro.hpp"
 RCLCPP_COMPONENTS_REGISTER_NODE(hdl_localization::GlobalmapServerNodelet)
-

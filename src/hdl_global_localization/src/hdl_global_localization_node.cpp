@@ -21,8 +21,12 @@ namespace hdl_global_localization {
 class GlobalLocalizationNode : public rclcpp::Node {
 public:
   GlobalLocalizationNode(const rclcpp::NodeOptions& options) : rclcpp::Node("global_localization_node", options) {
-    declare_parameter<double>("globalmap_downsample_resolution", 0.5);
-    declare_parameter<double>("query_downsample_resolution", 0.5);
+    globalmap_downsample_resolution = declare_parameter<double>("globalmap_downsample_resolution", 0.5);
+    query_downsample_resolution = declare_parameter<double>("query_downsample_resolution", 0.5);
+    RCLCPP_INFO_STREAM(
+      get_logger(),
+      "global localization downsample resolutions: map="
+        << globalmap_downsample_resolution << " query=" << query_downsample_resolution);
     
     set_engine(this->declare_parameter<std::string>("global_localization_engine", std::string("FPFH_RANSAC")));
     
@@ -32,6 +36,10 @@ public:
   }
 
 private:
+  rclcpp::Node::SharedPtr node_handle() {
+    return rclcpp::Node::SharedPtr(this, [](rclcpp::Node*) {});
+  }
+
   pcl::PointCloud<pcl::PointXYZ>::Ptr downsample(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, double resolution) {
     pcl::PointCloud<pcl::PointXYZ>::Ptr filtered(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::ApproximateVoxelGrid<pcl::PointXYZ> voxelgrid;
@@ -43,9 +51,9 @@ private:
 
   bool set_engine(const std::string& engine_name) {
     if (engine_name == "BBS") {
-      engine.reset(new GlobalLocalizationBBS(rclcpp::Node::SharedPtr(this)));
+      engine.reset(new GlobalLocalizationBBS(node_handle()));
     } else if (engine_name == "FPFH_RANSAC") {
-      engine.reset(new GlobalLocalizationEngineFPFH_RANSAC(rclcpp::Node::SharedPtr(this)));
+      engine.reset(new GlobalLocalizationEngineFPFH_RANSAC(node_handle()));
     }
     else {
       RCLCPP_ERROR_STREAM(get_logger(), "Unknown Global Localization Engine:" << engine_name);

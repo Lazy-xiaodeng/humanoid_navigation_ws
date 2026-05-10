@@ -29,6 +29,7 @@ GlobalLocalizationBBS::GlobalLocalizationBBS(rclcpp::Node::SharedPtr node) : nod
   params.map_height = this->node->declare_parameter<int>("bbs/map_height", 1024);
   params.map_pyramid_level = this->node->declare_parameter<int>("bbs/map_pyramid_level", 6);
   params.max_points_per_cell = this->node->declare_parameter<int>("bbs/max_points_per_cell", 5);
+  params.min_score_ratio = this->node->declare_parameter<double>("bbs/min_score_ratio", 0.0);
 }
 
 GlobalLocalizationBBS ::~GlobalLocalizationBBS() {}
@@ -80,6 +81,17 @@ GlobalLocalizationResults GlobalLocalizationBBS::query(pcl::PointCloud<pcl::Poin
     return GlobalLocalizationResults(results);
   }
 
+  const double score_ratio = best_score / static_cast<double>(scan_2d.size());
+  RCLCPP_INFO_STREAM(
+    node->get_logger(),
+    "BBS best score: raw=" << best_score << " ratio=" << score_ratio);
+  if (params.min_score_ratio > 0.0 && score_ratio < params.min_score_ratio) {
+    RCLCPP_WARN_STREAM(
+      node->get_logger(),
+      "BBS score ratio is too low: " << score_ratio << " < " << params.min_score_ratio);
+    return GlobalLocalizationResults(results);
+  }
+
   if (scan_slice_pub->get_subscription_count()) {
     auto scan_3d = unslice(scan_2d);
     scan_3d->header = cloud->header;
@@ -93,7 +105,7 @@ GlobalLocalizationResults GlobalLocalizationBBS::query(pcl::PointCloud<pcl::Poin
   trans_3d.translation().head<2>() = trans_2d->translation();
 
   results.resize(1);
-  results[0].reset(new GlobalLocalizationResult(best_score, best_score, trans_3d));
+  results[0].reset(new GlobalLocalizationResult(1.0 - score_ratio, score_ratio, trans_3d));
 
   return GlobalLocalizationResults(results);
 }

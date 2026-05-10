@@ -2,6 +2,7 @@
 #define POSE_ESTIMATOR_HPP
 
 #include <memory>
+#include <limits>
 #include <boost/optional.hpp>
 
 #include <rclcpp/rclcpp.hpp>
@@ -37,7 +38,14 @@ public:
    * @param quat                initial orientation
    * @param cool_time_duration  during "cool time", prediction is not performed
    */
-  PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& registration, const rclcpp::Time& stamp, const Eigen::Vector3f& pos, const Eigen::Quaternionf& quat, double cool_time_duration = 1.0);
+  PoseEstimator(
+    pcl::Registration<PointT, PointT>::Ptr& registration,
+    const rclcpp::Time& stamp,
+    const Eigen::Vector3f& pos,
+    const Eigen::Quaternionf& quat,
+    double cool_time_duration = 1.0,
+    bool force_2d_pose = false,
+    double fixed_z = std::numeric_limits<double>::quiet_NaN());
   ~PoseEstimator();
 
   /**
@@ -64,7 +72,12 @@ public:
    * @param cloud   input cloud
    * @return cloud aligned to the globalmap
    */
-  pcl::PointCloud<PointT>::Ptr correct(const rclcpp::Time& stamp, const pcl::PointCloud<PointT>::ConstPtr& cloud);
+  pcl::PointCloud<PointT>::Ptr correct(
+    const rclcpp::Time& stamp,
+    const pcl::PointCloud<PointT>::ConstPtr& cloud,
+    bool reject_non_converged = false,
+    double max_fitness_score = -1.0,
+    bool* correction_accepted = nullptr);
 
   /* getters */
   rclcpp::Time last_correction_time() const;
@@ -87,6 +100,8 @@ private:
   rclcpp::Time prev_stamp;             // when the estimator was updated last time
   rclcpp::Time last_correction_stamp;  // when the estimator performed the correction step
   double cool_time_duration;        //
+  bool force_2d_pose;
+  double fixed_z;
 
   Eigen::MatrixXf process_noise;
   std::unique_ptr<kkl::alg::UnscentedKalmanFilterX<float, PoseSystem>> ukf;

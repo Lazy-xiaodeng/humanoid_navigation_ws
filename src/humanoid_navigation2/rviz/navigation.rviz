@@ -4,6 +4,7 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
+        - /Grid1
         - /Map1/Topic1
       Splitter Ratio: 0.5
     Tree Height: 445
@@ -24,7 +25,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: FastLIO_Cloud
+    SyncSource: ""
 Visualization Manager:
   Class: ""
   Displays:
@@ -43,7 +44,7 @@ Visualization Manager:
         Y: 0
         Z: 0
       Plane: XY
-      Plane Cell Count: 10
+      Plane Cell Count: 100
       Reference Frame: map_ground
       Value: true
     - Alpha: 0.699999988079071
@@ -830,7 +831,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 8.533452987670898
+      Distance: 49.95037841796875
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -845,10 +846,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.6149998307228088
+      Pitch: 0.7649996876716614
       Target Frame: base_footprint
       Value: Orbit (rviz)
-      Yaw: 3.115013360977173
+      Yaw: 3.145017385482788
     Saved: ~
 Window Geometry:
   Displays:

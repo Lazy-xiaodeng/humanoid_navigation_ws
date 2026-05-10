@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import rclpy
+import time
 from rclpy.node import Node
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from tf2_ros import Buffer, TransformListener, TransformException
@@ -20,6 +21,8 @@ class RobotRealPosePublisher(Node):
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
+        self.last_tf_warn_time = 0.0
+        self.tf_ready_logged = False
 
         self.pub = self.create_publisher(PoseWithCovarianceStamped, '/robot_realpose', 10)
 
@@ -56,9 +59,15 @@ class RobotRealPosePublisher(Node):
             msg.pose.covariance = [0.0] * 36
 
             self.pub.publish(msg)
+            if not self.tf_ready_logged:
+                self.get_logger().info(f'TF ready: {self.global_frame}->{self.base_frame}')
+                self.tf_ready_logged = True
 
         except TransformException as e:
-            self.get_logger().warn(f'Failed to get TF {self.global_frame}->{self.base_frame}: {e}')
+            now = time.monotonic()
+            if now - self.last_tf_warn_time > 2.0:
+                self.get_logger().warn(f'Failed to get TF {self.global_frame}->{self.base_frame}: {e}')
+                self.last_tf_warn_time = now
 
 def main(args=None):
     # 1. 初始化 ROS2 环境

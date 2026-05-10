@@ -7,12 +7,12 @@ IMU 坐标系转换节点
 发布到 /imu_standard 供 hdl_localization 使用。
 
 转换使用 body → base_footprint 的静态 TF 中定义的旋转：
-  q_body_to_standard = (x=0.5, y=0.5, z=-0.5, w=0.5)
-  旋转矩阵 R = [[0, 1, 0], [0, 0, -1], [-1, 0, 0]]
+  q_body_to_standard = (w=0.5, x=-0.5, y=-0.5, z=0.5)
+  旋转矩阵 R = [[0, 0, -1], [1, 0, 0], [0, -1, 0]]
 
-  标准_X = body_Y      (前 = 左)
-  标准_Y = -body_Z     (左 = 上)
-  标准_Z = -body_X     (上 = 前)
+  标准_X = -body_Z     (前 = 后的反向)
+  标准_Y =  body_X     (左 = 左)
+  标准_Z = -body_Y     (上 = 下的反向)
 
 用法:
   ros2 run humanoid_navigation2 imu_transformer.py
@@ -36,19 +36,27 @@ class ImuTransformer(Node):
         input_topic = self.get_parameter('input_topic').value
         output_topic = self.get_parameter('output_topic').value
 
-        # body → 标准 的旋转矩阵
-        # q(x=0.5, y=0.5, z=-0.5, w=0.5) → R = [[0,1,0],[0,0,-1],[-1,0,0]]
+        # body/camera_init -> ROS标准 的旋转矩阵，必须和 PCD 转换、方案A 中的
+        # q_cam_to_ros(w=0.5, x=-0.5, y=-0.5, z=0.5) 保持一致。
         self.R = np.array([
-            [0.0,  1.0,  0.0],
             [0.0,  0.0, -1.0],
-            [-1.0, 0.0,  0.0]
+            [1.0,  0.0,  0.0],
+            [0.0, -1.0,  0.0]
         ])
 
-        self.sub = self.create_subscription(Imu, input_topic, self.callback, 10)
+        # 使用 BEST_EFFORT QoS 匹配 rslidar_sdk 的 IMU 发布者（发布者使用 BestEffort）
+        from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
+        imu_sub_qos = QoSProfile(
+            depth=2000,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST
+        )
+        self.sub = self.create_subscription(Imu, input_topic, self.callback, imu_sub_qos)
         self.pub = self.create_publisher(Imu, output_topic, 10)
 
         self.get_logger().info(f'IMU坐标转换: {input_topic} → {output_topic}')
-        self.get_logger().info('  旋转矩阵: R_body_to_standard = [[0,1,0],[0,0,-1],[-1,0,0]]')
+        self.get_logger().info('  旋转矩阵: R_body_to_standard = [[0,0,-1],[1,0,0],[0,-1,0]]')
 
     def callback(self, msg: Imu):
         # 转换线性加速度: a_std = R * a_body
@@ -70,8 +78,8 @@ class ImuTransformer(Node):
             abs(msg.orientation.y) + abs(msg.orientation.z)) > 0.001:
             q_orig = np.array([msg.orientation.w, msg.orientation.x,
                                msg.orientation.y, msg.orientation.z])
-            # q_body_to_std = (w=0.5, x=0.5, y=0.5, z=-0.5)
-            q_rot = np.array([0.5, 0.5, 0.5, -0.5])  # w,x,y,z
+            # q_body_to_std = (w=0.5, x=-0.5, y=-0.5, z=0.5)
+            q_rot = np.array([0.5, -0.5, -0.5, 0.5])  # w,x,y,z
             # 四元数乘法: q_new = q_rot * q_orig
             w1, x1, y1, z1 = q_rot
             w2, x2, y2, z2 = q_orig

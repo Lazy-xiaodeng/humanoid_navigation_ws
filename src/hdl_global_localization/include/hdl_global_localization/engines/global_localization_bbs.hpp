@@ -27,6 +27,7 @@ typedef struct {
   int map_height;
   int map_pyramid_level;
   int max_points_per_cell;
+  double min_score_ratio;
 } GlobalBBSParams;
 
 class BBSLocalization;

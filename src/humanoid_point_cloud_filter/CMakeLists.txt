@@ -7,16 +7,7 @@ project(humanoid_point_cloud_filter)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# ============================================================
-# 设置 Intel SYCL 编译器
-# ============================================================
-# 添加 Intel oneAPI CMake 模块路径
-list(APPEND CMAKE_PREFIX_PATH "/opt/intel/oneapi/compiler/2025.3/lib/cmake")
-list(APPEND CMAKE_MODULE_PATH "/opt/intel/oneapi/compiler/2025.3/lib/cmake/IntelSYCL")
-
-# 设置 SYCL 编译器
-set(CMAKE_CXX_COMPILER "icpx")
-set(CMAKE_C_COMPILER "icx")
+option(ENABLE_SYCL "Build point_cloud_filter_node with Intel oneAPI SYCL support" OFF)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -39,14 +30,15 @@ find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common filters kdtree)
 find_package(ament_index_cpp REQUIRED)
 
-# SYCL / OpenMP 二选一
-find_package(IntelSYCL QUIET)
-
-if(IntelSYCL_FOUND)
-  message(STATUS "✅ 找到 Intel SYCL，启用 GPU 加速")
+# SYCL / OpenMP 二选一。默认使用 CPU/OpenMP，避免部署机缺少 libsycl.so 时节点无法启动。
+if(ENABLE_SYCL)
+  list(APPEND CMAKE_PREFIX_PATH "/opt/intel/oneapi/compiler/2025.3/lib/cmake")
+  list(APPEND CMAKE_MODULE_PATH "/opt/intel/oneapi/compiler/2025.3/lib/cmake/IntelSYCL")
+  find_package(IntelSYCL REQUIRED)
+  message(STATUS "ENABLE_SYCL=ON, build with Intel SYCL acceleration")
   set(USE_SYCL ON)
 else()
-  message(WARNING "⚠️ 未找到 Intel SYCL，使用 CPU 多线程版本")
+  message(STATUS "ENABLE_SYCL=OFF, build CPU/OpenMP point cloud filter")
   set(USE_SYCL OFF)
   find_package(OpenMP REQUIRED)
 endif()
