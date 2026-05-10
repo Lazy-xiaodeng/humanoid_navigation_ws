@@ -668,7 +668,7 @@ local_costmap:
         #   层数。
         #
         # 当前覆盖高度：
-        #   -1.3 到 -1.3 + 0.15*22 = 2.0 m
+        #   -1.3 到 -1.3 + 0.21*16 = 2.06 m
         #
         # 胸口雷达/FAST-LIO body 帧相对 base_footprint 约 1.215m。
         # Nav2 raytrace 会检查 observation source 的传感器原点是否落在
@@ -676,8 +676,8 @@ local_costmap:
         # "Sensor origin ... z=-1.21 is out of map bounds"。
         # ----------------------------------------------------------------------
         origin_z: -1.3
-        z_resolution: 0.15
-        z_voxels: 22
+        z_resolution: 0.21
+        z_voxels: 16
 
         # ----------------------------------------------------------------------
         # 最大障碍物高度
