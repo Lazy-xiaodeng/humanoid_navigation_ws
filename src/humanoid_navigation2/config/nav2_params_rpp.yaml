@@ -668,15 +668,16 @@ local_costmap:
         #   层数。
         #
         # 当前覆盖高度：
-        #   -1.3 到 -1.3 + 0.21*16 = 2.06 m
+        #   -1.6 到 -1.6 + 0.225*16 = 2.0 m
         #
         # 胸口雷达/FAST-LIO body 帧相对 base_footprint 约 1.215m。
         # Nav2 raytrace 会检查 observation source 的传感器原点是否落在
-        # VoxelLayer z 网格内；下边界必须低于 -1.215m，否则会持续报
-        # "Sensor origin ... z=-1.21 is out of map bounds"。
+        # VoxelLayer z 网格内。实测全局定位后传感器原点可能到 -1.45m，
+        # 下边界需要留出余量，否则会持续报
+        # "Sensor origin ... z=... is out of map bounds"。
         # ----------------------------------------------------------------------
-        origin_z: -1.3
-        z_resolution: 0.21
+        origin_z: -1.6
+        z_resolution: 0.225
         z_voxels: 16
 
         # ----------------------------------------------------------------------
