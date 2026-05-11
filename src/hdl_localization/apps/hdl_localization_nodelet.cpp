@@ -931,47 +931,65 @@ private:
   }
 
   void publish_odometry(const rclcpp::Time& stamp, const Eigen::Matrix4f& pose) {
+    (void)stamp;
+    const rclcpp::Time output_stamp = get_clock()->now();
+
     // broadcast the transform over tf
     if (send_tf_transforms) {
-      if (tf_buffer->canTransform(robot_odom_frame_id, odom_child_frame_id, zero_time())) {
-        geometry_msgs::msg::TransformStamped map_wrt_frame = tf2::eigenToTransform(Eigen::Isometry3d(pose.inverse().cast<double>()));
-        map_wrt_frame.header.stamp = stamp;
-        map_wrt_frame.header.frame_id = odom_child_frame_id;
-        map_wrt_frame.child_frame_id = "map";
+      try {
+        if (!tf_buffer->canTransform(
+              robot_odom_frame_id,
+              odom_child_frame_id,
+              zero_time(),
+              rclcpp::Duration(std::chrono::milliseconds(100)))) {
+          RCLCPP_WARN_THROTTLE(
+            get_logger(),
+            *get_clock(),
+            2000,
+            "skip map->odom TF: cannot transform %s -> %s",
+            robot_odom_frame_id.c_str(),
+            odom_child_frame_id.c_str());
+        } else {
+          geometry_msgs::msg::TransformStamped map_wrt_frame =
+            tf2::eigenToTransform(Eigen::Isometry3d(pose.inverse().cast<double>()));
+          map_wrt_frame.header.stamp = output_stamp;
+          map_wrt_frame.header.frame_id = odom_child_frame_id;
+          map_wrt_frame.child_frame_id = "map";
 
-        geometry_msgs::msg::TransformStamped frame_wrt_odom = tf_buffer->lookupTransform(
-          robot_odom_frame_id,
-          odom_child_frame_id,
-          zero_time(),
-          rclcpp::Duration(std::chrono::milliseconds(100)));
-        Eigen::Matrix4f frame2odom = tf2::transformToEigen(frame_wrt_odom).cast<float>().matrix();
+          geometry_msgs::msg::TransformStamped frame_wrt_odom = tf_buffer->lookupTransform(
+            robot_odom_frame_id,
+            odom_child_frame_id,
+            zero_time(),
+            rclcpp::Duration(std::chrono::milliseconds(100)));
 
-        geometry_msgs::msg::TransformStamped map_wrt_odom;
-        tf2::doTransform(map_wrt_frame, map_wrt_odom, frame_wrt_odom);
+          geometry_msgs::msg::TransformStamped map_wrt_odom;
+          tf2::doTransform(map_wrt_frame, map_wrt_odom, frame_wrt_odom);
 
-        tf2::Transform odom_wrt_map;
-        tf2::fromMsg(map_wrt_odom.transform, odom_wrt_map);
-        odom_wrt_map = odom_wrt_map.inverse();
+          tf2::Transform odom_wrt_map;
+          tf2::fromMsg(map_wrt_odom.transform, odom_wrt_map);
+          odom_wrt_map = odom_wrt_map.inverse();
 
-        geometry_msgs::msg::TransformStamped odom_trans;
-        odom_trans.transform = tf2::toMsg(odom_wrt_map);
-        odom_trans.header.stamp = stamp;
-        odom_trans.header.frame_id = "map";
-        odom_trans.child_frame_id = robot_odom_frame_id;
+          geometry_msgs::msg::TransformStamped odom_trans;
+          odom_trans.transform = tf2::toMsg(odom_wrt_map);
+          odom_trans.header.stamp = output_stamp;
+          odom_trans.header.frame_id = "map";
+          odom_trans.child_frame_id = robot_odom_frame_id;
 
-        tf_broadcaster->sendTransform(odom_trans);
-      } else {
-        geometry_msgs::msg::TransformStamped odom_trans = tf2::eigenToTransform(Eigen::Isometry3d(pose.cast<double>()));
-        odom_trans.header.stamp = stamp;
-        odom_trans.header.frame_id = "map";
-        odom_trans.child_frame_id = odom_child_frame_id;
-        tf_broadcaster->sendTransform(odom_trans);
+          tf_broadcaster->sendTransform(odom_trans);
+        }
+      } catch (const tf2::TransformException& e) {
+        RCLCPP_WARN_THROTTLE(
+          get_logger(),
+          *get_clock(),
+          2000,
+          "skip map->odom TF: %s",
+          e.what());
       }
     }
 
     // publish the transform
     nav_msgs::msg::Odometry odom;
-    odom.header.stamp = stamp;
+    odom.header.stamp = output_stamp;
     odom.header.frame_id = "map";
 
     odom.pose.pose = tf2::toMsg(Eigen::Isometry3d(pose.cast<double>()));
