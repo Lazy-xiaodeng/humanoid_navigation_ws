@@ -104,6 +104,11 @@ public:
     global_localization_query_min_accumulation_frames = declare_parameter<int>("global_localization_query_min_accumulation_frames", 1);
     global_localization_post_accept_validation_frames = declare_parameter<int>("global_localization_post_accept_validation_frames", 0);
     global_localization_post_accept_max_rejections = declare_parameter<int>("global_localization_post_accept_max_rejections", 1);
+    global_localization_enforce_xy_bounds = declare_parameter<bool>("global_localization_enforce_xy_bounds", false);
+    global_localization_min_x = declare_parameter<double>("global_localization_min_x", -std::numeric_limits<double>::infinity());
+    global_localization_max_x = declare_parameter<double>("global_localization_max_x", std::numeric_limits<double>::infinity());
+    global_localization_min_y = declare_parameter<double>("global_localization_min_y", -std::numeric_limits<double>::infinity());
+    global_localization_max_y = declare_parameter<double>("global_localization_max_y", std::numeric_limits<double>::infinity());
     force_2d_pose = declare_parameter<bool>("force_2d_pose", true);
     force_2d_fixed_z = declare_parameter<bool>("force_2d_fixed_z", false);
     global_localization_use_height_filter = declare_parameter<bool>("global_localization_use_height_filter", false);
@@ -660,6 +665,18 @@ private:
         });
 
       const auto& best = accepted_candidates[0];
+      if (!global_localization_pose_in_bounds(best.pose)) {
+        const auto& t = best.pose.translation();
+        RCLCPP_WARN_STREAM(
+          get_logger(),
+          "reject global localization result: best pose outside XY bounds, pose=("
+            << t.x() << ", " << t.y() << ") bounds x=["
+            << global_localization_min_x << ", " << global_localization_max_x
+            << "] y=[" << global_localization_min_y << ", " << global_localization_max_y << "]");
+        relocalizing = false;
+        return false;
+      }
+
       RCLCPP_INFO_STREAM(
         get_logger(),
         "Best global localization candidate[" << best.index << "]"
@@ -680,8 +697,10 @@ private:
         if (margin < global_localization_min_fitness_margin) {
           RCLCPP_WARN_STREAM(
             get_logger(),
-            "global localization result is ambiguous; requiring repeatability, fitness margin "
+            "reject global localization result: ambiguous fitness margin "
               << margin << " < " << global_localization_min_fitness_margin);
+          relocalizing = false;
+          return false;
         }
       }
 
@@ -706,6 +725,18 @@ private:
         result.position.z + global_localization_pose_z_offset);
       pose = pose * delta_estimater->estimated_delta();
       apply_2d_constraints(pose);
+    }
+
+    if (!global_localization_pose_in_bounds(pose)) {
+      const auto& t = pose.translation();
+      RCLCPP_WARN_STREAM(
+        get_logger(),
+        "reject global localization result: pose outside XY bounds, pose=("
+          << t.x() << ", " << t.y() << ") bounds x=["
+          << global_localization_min_x << ", " << global_localization_max_x
+          << "] y=[" << global_localization_min_y << ", " << global_localization_max_y << "]");
+      relocalizing = false;
+      return false;
     }
 
     const int consistent_count = update_global_localization_consistency(pose);
@@ -813,6 +844,20 @@ private:
     const double yaw_distance = std::abs(normalize_angle(pose_yaw(lhs) - pose_yaw(rhs)));
     return xy_distance <= global_localization_consistency_xy_tolerance &&
            yaw_distance <= global_localization_consistency_yaw_tolerance;
+  }
+
+  bool global_localization_pose_in_bounds(const Eigen::Isometry3f& pose) const {
+    if (!global_localization_enforce_xy_bounds) {
+      return true;
+    }
+
+    const auto& t = pose.translation();
+    return std::isfinite(t.x()) &&
+           std::isfinite(t.y()) &&
+           t.x() >= global_localization_min_x &&
+           t.x() <= global_localization_max_x &&
+           t.y() >= global_localization_min_y &&
+           t.y() <= global_localization_max_y;
   }
 
   int update_global_localization_consistency(const Eigen::Isometry3f& pose) {
@@ -1112,6 +1157,11 @@ private:
   int global_localization_query_min_accumulation_frames;
   int global_localization_post_accept_validation_frames;
   int global_localization_post_accept_max_rejections;
+  bool global_localization_enforce_xy_bounds;
+  double global_localization_min_x;
+  double global_localization_max_x;
+  double global_localization_min_y;
+  double global_localization_max_y;
   bool force_2d_pose;
   bool force_2d_fixed_z;
   bool global_localization_use_height_filter;

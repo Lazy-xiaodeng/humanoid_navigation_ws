@@ -13,6 +13,7 @@ from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from nav_msgs.msg import Odometry, Path
 from nav2_msgs.action import NavigateToPose
 from action_msgs.msg import GoalStatus
+from action_msgs.srv import CancelGoal
 from nav2_msgs.action import NavigateToPose
 from nav2_msgs.msg import BehaviorTreeLog
 import rclpy.duration
@@ -653,7 +654,7 @@ class NavigationStateManager(Node):
             
             # 检查是否有可恢复的路点
             if not self.current_waypoint:
-                self.send_acknowledgment("error", "没有可恢复的导航目标")
+                self.send_acknowledgment("navigation_resumed", "error", "没有可恢复的导航目标")
                 self.reset_navigation_state()
                 return
             
@@ -948,11 +949,11 @@ class NavigationStateManager(Node):
         """处理取消导航结果"""
         try:
             response = future.result()
-            if response.return_code == GoalStatus.STATUS_CANCELED:
+            if response.return_code == CancelGoal.Response.ERROR_NONE:
                self.current_goal_handle = None
                self.get_logger().info("导航已成功取消")
             else:
-               self.get_logger().warning("取消导航请求未被接受")
+               self.get_logger().warning(f"取消导航请求未被接受，return_code={response.return_code}")
         except Exception as e:
             self.current_goal_handle = None
             self.get_logger().error(f"处理取消导航响应错误: {e}")

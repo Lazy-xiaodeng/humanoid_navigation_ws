@@ -51,11 +51,12 @@ point_cloud_filter_node:
     # 调整方向：根据机器人高度设置，通常为机器人高度 × 0.9
 
     # ===== 机器人自身包络盒过滤（手臂去除）(base_footprint坐标系，x前y左z上，原点脚底)=====
+    # 只过滤 footprint 内的机身/手臂区域，避免把机器人正前方近距离真人障碍一起删掉。
     enable_body_box_filter: true
     arm_box_x_min: -0.10   # 后方边界（m）
-    arm_box_x_max:  0.60   # 前方边界（m）
-    arm_box_y_min: -0.6   # 右侧边界（m，负值=右）
-    arm_box_y_max:  0.60   # 左侧边界（m）
+    arm_box_x_max:  0.25   # 前方边界（m）
+    arm_box_y_min: -0.30   # 右侧边界（m，负值=右）
+    arm_box_y_max:  0.30   # 左侧边界（m）
     arm_box_z_min:  0.0   # 下边界，离地高度（m）
     arm_box_z_max:  1.20   # 上边界，离地高度（m）
 

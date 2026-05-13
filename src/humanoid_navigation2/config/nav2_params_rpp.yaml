@@ -530,7 +530,10 @@ controller_server:
 #   维护机器人周围一定范围内的障碍物，用于局部避障和控制器碰撞检测。
 #
 # 推荐：
-#   使用 odom 作为坐标系。
+#   使用连续局部坐标系作为 global_frame。
+#   本工程中 localization 的 odom 高度基准在雷达/机身附近，
+#   base_footprint 在 odom 下约 z=-1.2m。为了让 3D VoxelLayer 的
+#   Z 网格按地面高度工作，local_costmap 使用 odom_ground。
 # ==============================================================================
 local_costmap:
   local_costmap:
@@ -571,7 +574,7 @@ local_costmap:
       # ------------------------------------------------------------------------
       # 坐标系
       # ------------------------------------------------------------------------
-      global_frame: odom
+      global_frame: odom_ground
       robot_base_frame: base_footprint
 
       # ------------------------------------------------------------------------
@@ -622,8 +625,8 @@ local_costmap:
       # static_layer：
       #   引入静态地图中的墙体。
       #
-      # voxel_layer：
-      #   使用 3D 点云标记/清除障碍物。
+      # obstacle_layer：
+      #   使用 3D 点云投影到 2D 局部代价地图，标记/清除动态障碍物。
       #
       # inflation_layer：
       #   对障碍物进行膨胀，必须放最后。
@@ -668,16 +671,14 @@ local_costmap:
         #   层数。
         #
         # 当前覆盖高度：
-        #   -1.6 到 -1.6 + 0.225*16 = 2.0 m
+        #   -0.05 到 -0.05 + 0.11*16 = 1.71 m
         #
-        # 胸口雷达/FAST-LIO body 帧相对 base_footprint 约 1.215m。
-        # Nav2 raytrace 会检查 observation source 的传感器原点是否落在
-        # VoxelLayer z 网格内。实测全局定位后传感器原点可能到 -1.45m，
-        # 下边界需要留出余量，否则会持续报
-        # "Sensor origin ... z=... is out of map bounds"。
+        # local_costmap 使用 odom_ground 后，base_footprint 在该坐标系下
+        # 接近 z=0。这里从地面下方留 5cm 余量并覆盖到 1.71m，
+        # 与障碍物高度范围对齐，同时避免 sensor origin z 轻微抖动越界。
         # ----------------------------------------------------------------------
-        origin_z: -1.6
-        z_resolution: 0.225
+        origin_z: -0.05
+        z_resolution: 0.11
         z_voxels: 16
 
         # ----------------------------------------------------------------------
@@ -699,19 +700,19 @@ local_costmap:
         # 值越小：
         #   更敏感，但更容易把噪点当障碍。
         # ----------------------------------------------------------------------
-        mark_threshold: 4
+        mark_threshold: 2
 
         # ----------------------------------------------------------------------
         # 观测源
         #
-        # 这里只保留一个点云源。
-        # 不建议一开始就加 periodic_clearing，避免配置复杂导致误清除。
-        # 如果后面发现障碍残影明显，再单独加 clearing source。
+        # pointcloud 使用真实雷达观测同时标记/清除。
+        # lidar_height clearing cloud 只补充全向空旷区域的清除射线。
         # ----------------------------------------------------------------------
         observation_sources: pointcloud clearing_3d
 
         pointcloud:
           topic: /airy_points_filtered
+          sensor_frame: clearing_lidar
 
           # 如果 /airy_points_filtered 实际是 LaserScan，把这里改为 "LaserScan"
           data_type: "PointCloud2"
@@ -721,20 +722,22 @@ local_costmap:
           max_obstacle_height: 1.7
 
           # marking=True：
-          #   点云命中的地方标记为障碍。
+          # 点云命中的地方标记为障碍。
           marking: True
 
           # clearing=True：
-          # 沿传感器射线清除已经消失的障碍。
-          clearing: true
+          # 使用真实雷达射线清除消失障碍。sensor_frame 指到雷达高度，
+          # 避免从 base_footprint 地面原点向上 raytrace 导致体素清除不完整。
+          clearing: True
 
           # 射线追踪范围
-          raytrace_min_range: 0.10
+          raytrace_min_range: 0.05
           raytrace_max_range: 10.0
 
           # 障碍物标记范围
           obstacle_min_range: 0.20
           obstacle_max_range: 5.0
+
 
           # 观测保留时间
           #
@@ -743,18 +746,18 @@ local_costmap:
           observation_persistence: 0.0
 
         clearing_3d:
-          topic: /clearing_cloud_3d     
+          topic: /clearing_cloud_3d_lidar
+          data_type: "PointCloud2"
+          min_obstacle_height: 0.05
           max_obstacle_height: 1.7
-          min_obstacle_height: 0.05    # ★★★ 最小障碍物高度（3cm，低于此视为地面）★★★
-          clearing: True               # 启用清除（射线追踪清除旧障碍物）
-          marking: False               # 不启用标记（只清除）
-          data_type: "PointCloud2"       # 数据类型（LaserScan 或 PointCloud2）
-          raytrace_max_range: 15.0     # 射线追踪最大范围
-          raytrace_min_range: 0.1     # 射线追踪最小范围
-          obstacle_max_range: 8.0      # 障碍物标记最大范围（局部地图不需要太远）
-          obstacle_min_range: 0.50     # 障碍物标记最小范围
-          observation_persistence: 0.0 # 观测持续时间（0 = 不保留旧观测）
-          min_pixels: 2                # 最小像素数
+          marking: False
+          clearing: True
+          raytrace_min_range: 0.05
+          raytrace_max_range: 10.0
+          obstacle_min_range: 0.20
+          obstacle_max_range: 5.0
+          observation_persistence: 0.0
+          min_pixels: 2
 
         # periodic_clearing:
         #   topic: /clearing_scan     
@@ -910,7 +913,7 @@ global_costmap:
           data_type: "LaserScan"       # 数据类型（LaserScan 或 PointCloud2）
           raytrace_max_range: 10.0     # 射线追踪最大范围
           raytrace_min_range: 0.1     # 射线追踪最小范围
-          bstacle_max_range: 15.0     # 障碍物标记最大范围
+          obstacle_max_range: 15.0     # 障碍物标记最大范围
           obstacle_min_range: 0.30     # 障碍物标记最小范围
           observation_persistence: 0.0 # 观测持续时间（0 = 不保留旧观测）
           min_pixels: 2                # 最小像素数
@@ -1195,7 +1198,7 @@ behavior_server:
     #
     # 与 local_costmap 保持一致。
     # --------------------------------------------------------------------------
-    global_frame: odom
+    global_frame: odom_ground
     robot_base_frame: base_footprint
     transform_timeout: 1.0
 

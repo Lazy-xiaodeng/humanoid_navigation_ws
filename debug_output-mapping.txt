@@ -1,22 +1,22 @@
-[INFO] [launch]: All log files can be found below /home/ubuntu/.ros/log/2026-04-27-20-38-59-951845-ubuntu-268806
+[INFO] [launch]: All log files can be found below /home/ubuntu/.ros/log/2026-05-09-14-47-17-614811-ubuntu-80168
 [INFO] [launch]: Default logging verbosity is set to INFO
-[INFO] [robot_state_publisher-1]: process started with pid [268884]
-[INFO] [joint_state_publisher-2]: process started with pid [268885]
-[INFO] [rslidar_sdk_node-3]: process started with pid [268886]
-[INFO] [fastlio_mapping-4]: process started with pid [268887]
-[INFO] [static_transform_publisher-5]: process started with pid [268888]
-[INFO] [static_transform_publisher-6]: process started with pid [268889]
-[INFO] [pointcloud_to_laserscan_node-7]: process started with pid [268890]
-[INFO] [async_slam_toolbox_node-8]: process started with pid [268891]
+[INFO] [robot_state_publisher-1]: process started with pid [80246]
+[INFO] [joint_state_publisher-2]: process started with pid [80247]
+[INFO] [rslidar_sdk_node-3]: process started with pid [80248]
+[INFO] [fastlio_mapping-4]: process started with pid [80249]
+[INFO] [static_transform_publisher-5]: process started with pid [80250]
+[INFO] [static_transform_publisher-6]: process started with pid [80251]
+[INFO] [pointcloud_to_laserscan_node-7]: process started with pid [80252]
+[INFO] [async_slam_toolbox_node-8]: process started with pid [80253]
 [rslidar_sdk_node-3] [1m[35m********************************************************[0m
 [rslidar_sdk_node-3] [1m[35m**********                                    **********[0m
 [rslidar_sdk_node-3] [1m[35m**********    RSLidar_SDK Version: v1.5.18     **********[0m
 [rslidar_sdk_node-3] [1m[35m**********                                    **********[0m
 [rslidar_sdk_node-3] [1m[35m********************************************************[0m
-[static_transform_publisher-6] [INFO] [1777293540.232100268] [tf_body_to_base_footprint]: Spinning until stopped - publishing transform
-[static_transform_publisher-6] translation: ('0.004000', '1.215000', '0.072000')
-[static_transform_publisher-6] rotation: ('0.500000', '0.500000', '-0.500000', '0.500000')
-[static_transform_publisher-6] from 'body' to 'base_footprint'
+[static_transform_publisher-5] [INFO] [1778309237.913140204] [tf_odom_to_camera_init]: Spinning until stopped - publishing transform
+[static_transform_publisher-5] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-5] rotation: ('-0.500000', '-0.500000', '0.500000', '0.500000')
+[static_transform_publisher-5] from 'odom' to 'camera_init'
 [rslidar_sdk_node-3] [1m[32m--------------------------------------------------------[0m
 [rslidar_sdk_node-3] [1m[32mConfig loaded from PATH:[0m
 [rslidar_sdk_node-3] [1m[32m/home/ubuntu/humanoid_ws/src/rslidar_sdk/config/config.yaml[0m
@@ -82,111 +82,456 @@
 [rslidar_sdk_node-3] [1m[36mSend PointCloud To : ROS[0m
 [rslidar_sdk_node-3] [1m[36mPointCloud Topic: /airy_points[0m
 [rslidar_sdk_node-3] [1m[36m------------------------------------------------------[0m
-[rslidar_sdk_node-3] [WARN] [1777293540.241538423] [rcl.logging_rosout]: Publisher already registered for node name: 'rslidar_sdk_node'. If this is due to multiple nodes with the same name then all logs for the logger named 'rslidar_sdk_node' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
-[static_transform_publisher-5] [INFO] [1777293540.245357008] [tf_odom_to_camera_init]: Spinning until stopped - publishing transform
-[static_transform_publisher-5] translation: ('0.000000', '0.000000', '0.000000')
-[static_transform_publisher-5] rotation: ('-0.500000', '-0.500000', '0.500000', '0.500000')
-[static_transform_publisher-5] from 'odom' to 'camera_init'
+[rslidar_sdk_node-3] [WARN] [1778309237.919316865] [rcl.logging_rosout]: Publisher already registered for node name: 'rslidar_sdk_node'. If this is due to multiple nodes with the same name then all logs for the logger named 'rslidar_sdk_node' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[robot_state_publisher-1] [INFO] [1778309237.924145431] [robot_state_publisher]: Robot initialized
 [rslidar_sdk_node-3] [1m[37mRoboSense-LiDAR-Driver is running.....[0m
-[robot_state_publisher-1] [INFO] [1777293540.253292932] [robot_state_publisher]: Robot initialized
-[fastlio_mapping-4] [INFO] [1777293540.377779216] [fast_lio_node]: p_pre->lidar_type 5
-[fastlio_mapping-4] [INFO] [1777293540.387545363] [fast_lio_node]: Node init finished.
-[fastlio_mapping-4] [INFO] [1777293540.387685100] [fast_lio_node]: Starting LaserMappingNode with MultiThreadedExecutor (4 Threads)...
-[joint_state_publisher-2] [INFO] [1777293540.673244710] [joint_state_publisher]: Waiting for robot_description to be published on the robot_description topic...
-[fastlio_mapping-4] [WARN] [1777293540.806555392] [fast_lio_node]: No point, skip this scan!
+[static_transform_publisher-6] [INFO] [1778309237.951658356] [tf_body_to_base_footprint]: Spinning until stopped - publishing transform
+[static_transform_publisher-6] translation: ('0.004000', '1.215000', '0.072000')
+[static_transform_publisher-6] rotation: ('0.500000', '0.500000', '-0.500000', '0.500000')
+[static_transform_publisher-6] from 'body' to 'base_footprint'
+[fastlio_mapping-4] [INFO] [1778309238.092313923] [fast_lio_node]: p_pre->lidar_type 5
+[fastlio_mapping-4] [INFO] [1778309238.103868696] [fast_lio_node]: Node init finished.
+[fastlio_mapping-4] [INFO] [1778309238.104004273] [fast_lio_node]: Starting LaserMappingNode with MultiThreadedExecutor (4 Threads)...
+[joint_state_publisher-2] [INFO] [1778309238.283676592] [joint_state_publisher]: Waiting for robot_description to be published on the robot_description topic...
+[joint_state_publisher-2] [INFO] [1778309238.412443524] [joint_state_publisher]: Got description, configuring robot
+[fastlio_mapping-4] [WARN] [1778309239.042834203] [fast_lio_node]: No point, skip this scan!
 [fastlio_mapping-4] 
-[fastlio_mapping-4] [INFO] [1777293540.923879300] [fast_lio_node]: Initialize the map kdtree
-[joint_state_publisher-2] [INFO] [1777293541.750484414] [joint_state_publisher]: Got description, configuring robot
-[INFO] [lifecycle_manager-9]: process started with pid [269430]
-[lifecycle_manager-9] [INFO] [1777293543.281786689] [lifecycle_manager_slam]: Creating
-[lifecycle_manager-9] [INFO] [1777293543.288148365] [lifecycle_manager_slam]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
-[lifecycle_manager-9] [INFO] [1777293544.713657015] [lifecycle_manager_slam]: [34m[1mStarting managed nodes bringup...[0m[0m
-[lifecycle_manager-9] [INFO] [1777293544.713700905] [lifecycle_manager_slam]: [34m[1mConfiguring slam_toolbox[0m[0m
-[async_slam_toolbox_node-8] [INFO] [1777293544.717062754] [slam_toolbox]: Configuring
-[async_slam_toolbox_node-8] [INFO] [1777293544.737982549] [slam_toolbox]: Using solver plugin solver_plugins::CeresSolver
-[async_slam_toolbox_node-8] [INFO] [1777293544.738303815] [slam_toolbox]: CeresSolver: Using SCHUR_JACOBI preconditioner.
-[lifecycle_manager-9] [INFO] [1777293544.771334346] [lifecycle_manager_slam]: [34m[1mActivating slam_toolbox[0m[0m
-[async_slam_toolbox_node-8] [INFO] [1777293544.771447354] [slam_toolbox]: Activating
-[lifecycle_manager-9] [INFO] [1777293544.778875213] [lifecycle_manager_slam]: [34m[1mManaged nodes are active[0m[0m
-[pointcloud_to_laserscan_node-7] [INFO] [1777293544.845402247] [pointcloud_to_laserscan]: Got a subscriber to laserscan, starting pointcloud subscriber
-[INFO] [websocket_server_node-10]: process started with pid [269674]
-[INFO] [data_integration_node-11]: process started with pid [269675]
-[INFO] [websocket_client_node-12]: process started with pid [269676]
-[INFO] [message_bridge_node-13]: process started with pid [269677]
-[INFO] [facial_driver-14]: process started with pid [269678]
+[fastlio_mapping-4] [INFO] [1778309239.149415763] [fast_lio_node]: Initialize the map kdtree
+[INFO] [lifecycle_manager-9]: process started with pid [80775]
+[lifecycle_manager-9] [INFO] [1778309240.902337873] [lifecycle_manager_slam]: Creating
+[lifecycle_manager-9] [INFO] [1778309240.909002913] [lifecycle_manager_slam]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[lifecycle_manager-9] [INFO] [1778309241.006381683] [lifecycle_manager_slam]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-9] [INFO] [1778309241.006420273] [lifecycle_manager_slam]: [34m[1mConfiguring slam_toolbox[0m[0m
+[async_slam_toolbox_node-8] [INFO] [1778309241.006711701] [slam_toolbox]: Configuring
+[async_slam_toolbox_node-8] [INFO] [1778309241.027801719] [slam_toolbox]: Using solver plugin solver_plugins::CeresSolver
+[async_slam_toolbox_node-8] [INFO] [1778309241.028044331] [slam_toolbox]: CeresSolver: Using SCHUR_JACOBI preconditioner.
+[lifecycle_manager-9] [INFO] [1778309241.054566975] [lifecycle_manager_slam]: [34m[1mActivating slam_toolbox[0m[0m
+[async_slam_toolbox_node-8] [INFO] [1778309241.054629486] [slam_toolbox]: Activating
+[lifecycle_manager-9] [INFO] [1778309241.058425815] [lifecycle_manager_slam]: [34m[1mManaged nodes are active[0m[0m
+[pointcloud_to_laserscan_node-7] [INFO] [1778309241.124007677] [pointcloud_to_laserscan]: Got a subscriber to laserscan, starting pointcloud subscriber
 [async_slam_toolbox_node-8] Registering sensor: [Custom Described Lidar]
-[facial_driver-14] [ERROR] [1777293545.538034536] [facial_driver]: ❌ 头部串口连接失败: [Errno 2] could not open port /dev/ttyCH341USB0: [Errno 2] No such file or directory: '/dev/ttyCH341USB0'
-[facial_driver-14] [INFO] [1777293545.544911704] [facial_driver]: 📚 成功加载表情库，共 30 个动作
-[facial_driver-14] [INFO] [1777293545.552109073] [facial_driver]: 🔍 先终止眼部循环和嘴部动作循环...
-[facial_driver-14] [ERROR] [1777293545.552364659] [facial_driver]: ❌ 串口未连接，无法发送指令
-[facial_driver-14] [ERROR] [1777293545.652974627] [facial_driver]: ❌ 串口未连接，无法发送指令
-[message_bridge_node-13] [INFO] [1777293545.659777514] [message_bridge]: 更新率: 10.0Hz, 缓冲区大小: 1000
-[message_bridge_node-13] [INFO] [1777293545.660005456] [message_bridge]: ✅ Message bridge node 初始化完成
-[message_bridge_node-13] [INFO] [1777293545.667708138] [message_bridge]: 消息桥接节点启动
-[websocket_server_node-10] [INFO] [1777293545.674153863] [websocket_server]: ✅ 完整ROS通信接口设置完成
-[websocket_server_node-10] [INFO] [1777293545.675086249] [websocket_server]: ✅ 开始启动WebSocket服务器: 0.0.0.0:8765
-[websocket_server_node-10] [INFO] [1777293545.675150908] [websocket_server]: 🔄 创建WebSocket服务器实例...
-[websocket_client_node-12] [INFO] [1777293545.676856178] [websocket_client]: ROS组件初始化完成
-[websocket_client_node-12] [INFO] [1777293545.677592965] [websocket_client]: 尝试连接机器人服务器...
-[websocket_client_node-12] [INFO] [1777293545.678275947] [websocket_client]: WebSocket客户端启动，连接服务器: ws://10.192.1.2:5000
-[websocket_client_node-12] [INFO] [1777293545.692960617] [websocket_client]: 已连接到机器人本体WebSocket服务器
-[data_integration_node-11] [INFO] [1777293545.694803409] [data_integration_node]: ✅ ROS通信接口设置完成
-[data_integration_node-11] [INFO] [1777293545.695531097] [data_integration_node]: ✅ 定时任务设置完成
-[websocket_server_node-10] [ERROR] [1777293545.708208375] [websocket_server]: ❌ WebSocket服务器运行错误: [Errno 98] error while attempting to bind on address ('0.0.0.0', 8765): address already in use
-[data_integration_node-11] [INFO] [1777293545.708707753] [data_integration_node]: ✅ 已从 YAML 动态加载 18 个动作
-[websocket_server_node-10] [ERROR] [1777293545.714273444] [websocket_server]: ❌ 详细错误信息: Traceback (most recent call last):
-[websocket_server_node-10]   File "/home/ubuntu/humanoid_ws/build/humanoid_websocket/humanoid_websocket/websocket_server.py", line 211, in _run_websocket_server_blocking
-[websocket_server_node-10]     self.server_instance = loop.run_until_complete(create_server())
-[websocket_server_node-10]                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[websocket_server_node-10]   File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
-[websocket_server_node-10]     return future.result()
-[websocket_server_node-10]            ^^^^^^^^^^^^^^^
-[websocket_server_node-10]   File "/home/ubuntu/humanoid_ws/build/humanoid_websocket/humanoid_websocket/websocket_server.py", line 200, in create_server
-[websocket_server_node-10]     server = await websockets.serve(
-[websocket_server_node-10]              ^^^^^^^^^^^^^^^^^^^^^^^
-[websocket_server_node-10]   File "/usr/lib/python3/dist-packages/websockets/legacy/server.py", line 1117, in __await_impl__
-[websocket_server_node-10]     server = await self._create_server()
-[websocket_server_node-10]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[websocket_server_node-10]   File "/usr/lib/python3.12/asyncio/base_events.py", line 1572, in create_server
-[websocket_server_node-10]     raise OSError(err.errno, msg) from None
-[websocket_server_node-10] OSError: [Errno 98] error while attempting to bind on address ('0.0.0.0', 8765): address already in use
-[websocket_server_node-10] 
-[data_integration_node-11] [INFO] [1777293545.725346683] [data_integration_node]: ✅ 已独立加载 30 个面部表情
-[data_integration_node-11] [INFO] [1777293545.725609868] [data_integration_node]: 🎯 统一数据整合节点启动完成
-[data_integration_node-11] [INFO] [1777293545.725832252] [data_integration_node]: 📊 协议版本: 2.0
-[data_integration_node-11] [INFO] [1777293545.726048639] [data_integration_node]: 🔄 支持的数据类型: ['robot_pose', 'navigation_status', 'navigation_path', 'system_status', 'gesture_list', 'facial_gesture_list']
-[data_integration_node-11] [INFO] [1777293545.726296845] [data_integration_node]: 🚀 启动统一数据整合节点主循环...
-[facial_driver-14] [INFO] [1777293545.753690561] [facial_driver]: ✅ 强制终止眼部循环（发送1次终止指令）
-[facial_driver-14] [ERROR] [1777293545.754042809] [facial_driver]: ❌ 串口未连接，无法发送指令
-[facial_driver-14] [INFO] [1777293545.854892670] [facial_driver]: ✅ 强制终止嘴部循环（发送1次终止指令）
-[facial_driver-14] [ERROR] [1777293545.855286465] [facial_driver]: ❌ 串口未连接，无法发送指令
-[facial_driver-14] [INFO] [1777293545.956225062] [facial_driver]: 🔄 眼部强制复位（眼球居中+正常睁眼）
-[facial_driver-14] [INFO] [1777293545.956705340] [facial_driver]: 🎬 执行表情: idle
-[websocket_client_node-12] [INFO] [1777293546.000760934] [websocket_client]: 🔄 机器人状态变更: Unknown -> ZeroTorque
-[facial_driver-14] [INFO] [1777293546.057706705] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
-[INFO] [rviz2-15]: process started with pid [269921]
-[facial_driver-14] [ERROR] [1777293546.558429862] [facial_driver]: ❌ 串口未连接，无法发送指令
-[websocket_server_node-10] [INFO] [1777293546.675951305] [websocket_server]: ✅ 定时任务设置完成
-[websocket_server_node-10] [INFO] [1777293546.676378661] [websocket_server]: 🚀 完整WebSocket服务器启动完成
-[websocket_server_node-10] [INFO] [1777293546.676745477] [websocket_server]: 📡 服务器地址: ws://0.0.0.0:8765
-[websocket_server_node-10] [INFO] [1777293546.677102246] [websocket_server]: 📊 协议版本: 2.0
-[rviz2-15] [INFO] [1777293546.689358816] [rviz2]: Stereo is NOT SUPPORTED
-[rviz2-15] [INFO] [1777293546.689553879] [rviz2]: OpenGl version: 4.6 (GLSL 4.6)
-[rviz2-15] [INFO] [1777293546.717478740] [rviz2]: Stereo is NOT SUPPORTED
-[rviz2-15] [INFO] [1777293547.138018135] [rviz2]: Subscribing to: /fast_lio/cloud_registered
+[INFO] [websocket_server_node-10]: process started with pid [81015]
+[INFO] [data_integration_node-11]: process started with pid [81020]
+[INFO] [websocket_client_node-12]: process started with pid [81021]
+[INFO] [message_bridge_node-13]: process started with pid [81022]
+[INFO] [facial_driver-14]: process started with pid [81023]
+[facial_driver-14] [INFO] [1778309243.241237477] [facial_driver]: ✅ 已连接到仿生头模块: /dev/ttyUSB0
+[message_bridge_node-13] [INFO] [1778309243.624866241] [message_bridge]: 更新率: 10.0Hz, 缓冲区大小: 1000
+[message_bridge_node-13] [INFO] [1778309243.625089811] [message_bridge]: ✅ Message bridge node 初始化完成
+[websocket_server_node-10] [INFO] [1778309243.627482341] [websocket_server]: ✅ 完整ROS通信接口设置完成
+[websocket_server_node-10] [INFO] [1778309243.629400932] [websocket_server]: 🔄 创建WebSocket服务器实例...
+[websocket_server_node-10] [INFO] [1778309243.630290022] [websocket_server]: ✅ 开始启动WebSocket服务器: 0.0.0.0:8765
+[websocket_client_node-12] [INFO] [1778309243.635775179] [websocket_client]: ROS组件初始化完成
+[message_bridge_node-13] [INFO] [1778309243.636167092] [message_bridge]: 消息桥接节点启动
+[websocket_client_node-12] [INFO] [1778309243.636794757] [websocket_client]: 尝试连接机器人服务器...
+[websocket_client_node-12] [INFO] [1778309243.637013688] [websocket_client]: WebSocket客户端启动，连接服务器: ws://10.192.1.2:5000
+[data_integration_node-11] [INFO] [1778309243.641817554] [data_integration_node]: ✅ ROS通信接口设置完成
+[data_integration_node-11] [INFO] [1778309243.642386485] [data_integration_node]: ✅ 定时任务设置完成
+[websocket_server_node-10] [INFO] [1778309243.642649262] [websocket_server]: ✅ WebSocket服务器启动成功: 0.0.0.0:8765
+[websocket_server_node-10] [INFO] [1778309243.642880447] [websocket_server]: 🔄 WebSocket服务器正在运行...
+[websocket_client_node-12] [INFO] [1778309243.648348964] [websocket_client]: 已连接到机器人本体WebSocket服务器
+[data_integration_node-11] [INFO] [1778309243.649974880] [data_integration_node]: ✅ 已从 YAML 动态加载 13 个动作
+[data_integration_node-11] [INFO] [1778309243.660295124] [data_integration_node]: ✅ 已独立加载 30 个面部表情
+[data_integration_node-11] [INFO] [1778309243.660708600] [data_integration_node]: 🎯 统一数据整合节点启动完成
+[data_integration_node-11] [INFO] [1778309243.663079766] [data_integration_node]: 📊 协议版本: 2.0
+[data_integration_node-11] [INFO] [1778309243.663351379] [data_integration_node]: 🔄 支持的数据类型: ['robot_pose', 'navigation_status', 'navigation_path', 'system_status', 'gesture_list', 'facial_gesture_list']
+[data_integration_node-11] [INFO] [1778309243.663629006] [data_integration_node]: 🚀 启动统一数据整合节点主循环...
+[websocket_client_node-12] [INFO] [1778309243.846794003] [websocket_client]: 🔄 机器人状态变更: Unknown -> ZeroTorque
+[INFO] [rviz2-15]: process started with pid [81262]
+[rviz2-15] [INFO] [1778309244.383118556] [rviz2]: Stereo is NOT SUPPORTED
+[rviz2-15] [INFO] [1778309244.383262542] [rviz2]: OpenGl version: 4.6 (GLSL 4.6)
+[rviz2-15] [INFO] [1778309244.414851453] [rviz2]: Stereo is NOT SUPPORTED
+[rviz2-15] [INFO] [1778309244.624269658] [rviz2]: Subscribing to: /fast_lio/cloud_registered
 [rviz2-15] 
-[rviz2-15] [INFO] [1777293547.150541449] [rviz2]: Subscribing to: /fast_lio/cloud_registered
+[websocket_server_node-10] [INFO] [1778309244.632813860] [websocket_server]: ✅ 定时任务设置完成
+[websocket_server_node-10] [INFO] [1778309244.633285405] [websocket_server]: 🚀 完整WebSocket服务器启动完成
+[websocket_server_node-10] [INFO] [1778309244.633683835] [websocket_server]: 📡 服务器地址: ws://0.0.0.0:8765
+[websocket_server_node-10] [INFO] [1778309244.634094318] [websocket_server]: 📊 协议版本: 2.0
+[rviz2-15] [INFO] [1778309244.635294595] [rviz2]: Subscribing to: /fast_lio/cloud_registered
 [rviz2-15] 
-[facial_driver-14] [INFO] [1777293547.459487501] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
-[facial_driver-14] [ERROR] [1777293547.459899493] [facial_driver]: ❌ 串口未连接，无法发送指令
-[facial_driver-14] [INFO] [1777293547.660935496] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
-[data_integration_node-11] [INFO] [1777293547.727247545] [data_integration_node]: 📤 已触发初始动作库和表情库同步到服务器
-[websocket_server_node-10] [INFO] [1777293547.729710511] [websocket_server]: 🍭 收到面部表情库更新
-[rviz2-15] [INFO] [1777293548.325601870] [rviz2]: Trying to create a map of size 383 x 342 using 1 swatches
-[rviz2-15] [ERROR] [1777293548.362704497] [rviz2]: rviz/glsl120/indexed_8bit_image.vert
+[facial_driver-14] [INFO] [1778309245.253920232] [facial_driver]: 📚 成功加载表情库，共 30 个动作
+[facial_driver-14] [INFO] [1778309245.257978659] [facial_driver]: 🔍 先终止眼部循环和嘴部动作循环...
+[facial_driver-14] [INFO] [1778309245.258467526] [facial_driver]: Serial Out: !stop
+[facial_driver-14] [INFO] [1778309245.359295345] [facial_driver]: Serial Out: !stop
+[facial_driver-14] [INFO] [1778309245.459993118] [facial_driver]: ✅ 强制终止眼部循环（发送1次终止指令）
+[facial_driver-14] [INFO] [1778309245.460443068] [facial_driver]: Serial Out: ?stop
+[facial_driver-14] [INFO] [1778309245.561614414] [facial_driver]: ✅ 强制终止嘴部循环（发送1次终止指令）
+[facial_driver-14] [INFO] [1778309245.562219343] [facial_driver]: Serial Out: $DGL:1!
+[facial_driver-14] [INFO] [1778309245.662945656] [facial_driver]: 🔄 眼部强制复位（眼球居中+正常睁眼）
+[facial_driver-14] [INFO] [1778309245.663484619] [facial_driver]: 🎬 执行表情: idle
+[data_integration_node-11] [INFO] [1778309245.664057310] [data_integration_node]: 📤 已触发初始动作库和表情库同步到服务器
+[websocket_server_node-10] [INFO] [1778309245.668477073] [websocket_server]: 🍭 收到面部表情库更新
+[facial_driver-14] [INFO] [1778309245.764049084] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[facial_driver-14] [INFO] [1778309246.264576574] [facial_driver]: Serial Out: !normal_start
+[rviz2-15] [INFO] [1778309247.090243332] [rviz2]: Trying to create a map of size 339 x 390 using 1 swatches
+[rviz2-15] [ERROR] [1778309247.131341189] [rviz2]: rviz/glsl120/indexed_8bit_image.vert
 [rviz2-15] rviz/glsl120/indexed_8bit_image.frag
 [rviz2-15]  GLSL link result : 
 [rviz2-15] active samplers with a different type refer to the same texture image unit
-[rviz2-15] [INFO] [1777293550.258843378] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1777293540.378 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
-[data_integration_node-11] [INFO] [1777293550.695631733] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
-[rviz2-15] [INFO] [1777293553.238896401] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1777293540.378 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[facial_driver-14] [INFO] [1778309247.165318835] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[facial_driver-14] [INFO] [1778309247.165609890] [facial_driver]: Serial Out: #DGM:1!\n
+[facial_driver-14] [INFO] [1778309247.366198932] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[rviz2-15] [INFO] [1778309247.780674271] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309248.642677463] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309250.878885329] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309254.782419559] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309257.758623101] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309261.470389742] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309265.054707606] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309269.374906841] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309272.670416517] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309275.678258844] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309278.366183628] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309280.066520088] [rviz2]: Trying to create a map of size 404 x 506 using 1 swatches
+[rviz2-15] [INFO] [1778309282.686265026] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309283.647549998] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309286.591151476] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309290.271240417] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309293.790705352] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309297.374358260] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309300.862297727] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309301.089912135] [rviz2]: Trying to create a map of size 510 x 506 using 1 swatches
+[rviz2-15] [INFO] [1778309304.067383171] [rviz2]: Trying to create a map of size 530 x 506 using 1 swatches
+[websocket_server_node-10] [INFO] [1778309304.631512812] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[rviz2-15] [INFO] [1778309305.374656795] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309305.374738037] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309302.961 for reason 'discarding message because the queue is full'
+[rviz2-15] [INFO] [1778309307.074658370] [rviz2]: Trying to create a map of size 533 x 507 using 1 swatches
+[rviz2-15] [INFO] [1778309308.671043695] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309312.862836184] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309313.647890104] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309315.678735357] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309320.062943794] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309323.262382902] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309326.366539543] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309330.174512612] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309332.862746572] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309336.671104118] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309339.870744252] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309342.463199807] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309346.462539336] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309348.643938334] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309349.886286201] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309352.958667089] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309355.967392608] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309360.350295803] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309364.478765015] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[websocket_server_node-10] [INFO] [1778309364.631535599] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[rviz2-15] [INFO] [1778309367.966747025] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309371.776241933] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309374.974782084] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309378.974478170] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309383.070462264] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309383.648175967] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309385.662812425] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309389.567343435] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309393.662502512] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309397.150607821] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309400.766902296] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309403.678399019] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309406.654671269] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309410.591008233] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309415.487184276] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309418.175119806] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309418.642697390] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309421.759029504] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[websocket_server_node-10] [INFO] [1778309424.631546299] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[rviz2-15] [INFO] [1778309425.662286672] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309429.982973928] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309433.598370084] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309436.959259996] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309440.670531066] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309443.998338067] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309448.382629083] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309451.078169600] [rviz2]: Trying to create a map of size 533 x 517 using 1 swatches
+[rviz2-15] [INFO] [1778309451.871092031] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309453.648153013] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309454.086646766] [rviz2]: Trying to create a map of size 538 x 517 using 1 swatches
+[rviz2-15] [INFO] [1778309455.870256978] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309459.968022592] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309460.102221841] [rviz2]: Trying to create a map of size 539 x 517 using 1 swatches
+[rviz2-15] [INFO] [1778309463.167157881] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309466.782557188] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309469.094487025] [rviz2]: Trying to create a map of size 541 x 517 using 1 swatches
+[rviz2-15] [INFO] [1778309470.271033416] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309474.462717745] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309478.120664567] [rviz2]: Trying to create a map of size 542 x 517 using 1 swatches
+[rviz2-15] [INFO] [1778309478.398270847] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309482.078589975] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309484.102068815] [rviz2]: Trying to create a map of size 542 x 526 using 1 swatches
+[websocket_server_node-10] [INFO] [1778309484.631793365] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[rviz2-15] [INFO] [1778309485.183066469] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309488.643396427] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309488.670897060] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309491.871032527] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309495.679281751] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309499.967162745] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309503.455099731] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309506.782604493] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309509.854530675] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309512.991259373] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309517.095636266] [rviz2]: Trying to create a map of size 543 x 530 using 1 swatches
+[rviz2-15] [INFO] [1778309517.982472139] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309521.758323345] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309523.116263476] [rviz2]: Trying to create a map of size 544 x 531 using 1 swatches
+[data_integration_node-11] [INFO] [1778309523.647557416] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309525.470503606] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309526.091039819] [rviz2]: Trying to create a map of size 546 x 533 using 1 swatches
+[rviz2-15] [INFO] [1778309529.470703326] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309532.112777377] [rviz2]: Trying to create a map of size 547 x 533 using 1 swatches
+[rviz2-15] [INFO] [1778309533.479169770] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309536.678990299] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309540.966879477] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309544.070974030] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309544.111376268] [rviz2]: Trying to create a map of size 547 x 534 using 1 swatches
+[websocket_server_node-10] [INFO] [1778309544.631563952] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[rviz2-15] [INFO] [1778309547.087155320] [rviz2]: Trying to create a map of size 547 x 660 using 1 swatches
+[rviz2-15] [INFO] [1778309547.174738667] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309550.094267333] [rviz2]: Trying to create a map of size 547 x 675 using 1 swatches
+[rviz2-15] [INFO] [1778309551.175053597] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309553.139326192] [rviz2]: Trying to create a map of size 548 x 675 using 1 swatches
+[data_integration_node-11] [INFO] [1778309553.649088290] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309555.078285985] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309556.143138825] [rviz2]: Trying to create a map of size 549 x 675 using 1 swatches
+[rviz2-15] [INFO] [1778309558.086321898] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309559.153361838] [rviz2]: Trying to create a map of size 550 x 675 using 1 swatches
+[rviz2-15] [INFO] [1778309561.958559899] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309564.775088710] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309568.262584619] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309571.366589875] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309575.462678458] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309579.175243994] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309583.558741970] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309587.975067533] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309588.642657152] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309591.783200421] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309592.111857250] [rviz2]: Trying to create a map of size 553 x 675 using 1 swatches
+[rviz2-15] [INFO] [1778309595.179127941] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309598.982500355] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309603.175176149] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[websocket_server_node-10] [INFO] [1778309604.631574195] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[rviz2-15] [INFO] [1778309607.462838878] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309611.591250241] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309613.103177014] [rviz2]: Trying to create a map of size 553 x 714 using 1 swatches
+[rviz2-15] [INFO] [1778309614.790784300] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309616.112321314] [rviz2]: Trying to create a map of size 553 x 716 using 1 swatches
+[rviz2-15] [INFO] [1778309618.566564639] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309618.642645573] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309621.576367345] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309624.775197065] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309628.198931137] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309631.119906151] [rviz2]: Trying to create a map of size 553 x 721 using 1 swatches
+[rviz2-15] [INFO] [1778309631.174773237] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309634.096757247] [rviz2]: Trying to create a map of size 553 x 725 using 1 swatches
+[rviz2-15] [INFO] [1778309634.886969990] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309637.106259457] [rviz2]: Trying to create a map of size 553 x 789 using 1 swatches
+[rviz2-15] [INFO] [1778309637.575246666] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309641.095052329] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309643.122036469] [rviz2]: Trying to create a map of size 553 x 798 using 1 swatches
+[rviz2-15] [INFO] [1778309644.583215346] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309647.686402043] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309648.644335111] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309650.982516677] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309652.113384769] [rviz2]: Trying to create a map of size 553 x 800 using 1 swatches
+[rviz2-15] [INFO] [1778309654.886930647] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309655.122599922] [rviz2]: Trying to create a map of size 553 x 803 using 1 swatches
+[rviz2-15] [INFO] [1778309658.130281479] [rviz2]: Trying to create a map of size 597 x 826 using 1 swatches
+[rviz2-15] [INFO] [1778309659.270874177] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309663.270407719] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[websocket_server_node-10] [INFO] [1778309664.631548942] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[rviz2-15] [INFO] [1778309666.087068821] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309669.767264596] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309673.382886041] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309676.678937192] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309681.094811197] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309683.648062392] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309685.094609936] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309688.167441385] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309692.262475309] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309695.271244517] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309697.862342742] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309701.202752082] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309704.582673788] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309707.559171387] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309711.590345150] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309713.648528073] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309715.783234724] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309720.166866163] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309723.879015659] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309724.113413661] [rviz2]: Trying to create a map of size 597 x 830 using 1 swatches
+[websocket_server_node-10] [INFO] [1778309724.631166764] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[rviz2-15] [INFO] [1778309727.784341599] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309731.206494613] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309735.207110660] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309739.176495705] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309742.128492800] [rviz2]: Trying to create a map of size 598 x 830 using 1 swatches
+[rviz2-15] [INFO] [1778309742.183084576] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[async_slam_toolbox_node-8] [INFO] [1778309744.082605724] [slam_toolbox]: Message Filter dropping message: frame 'base_footprint' at time 1778309743.443 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309745.190232260] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309743.269 for reason 'discarding message because the queue is full'
+[rviz2-15] [INFO] [1778309745.798593047] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309748.116438833] [rviz2]: Trying to create a map of size 634 x 830 using 1 swatches
+[data_integration_node-11] [INFO] [1778309748.642646143] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309748.871104022] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309751.122328588] [rviz2]: Trying to create a map of size 637 x 830 using 1 swatches
+[rviz2-15] [INFO] [1778309753.574527516] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309756.103080235] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309759.782897590] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309762.598846454] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309766.471004196] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309769.574306781] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309772.294762306] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309776.870568323] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309778.642998229] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309779.494825940] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309783.014721648] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[websocket_server_node-10] [INFO] [1778309784.631182933] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[rviz2-15] [INFO] [1778309787.590757133] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309791.270758761] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309794.183306266] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309797.670726595] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309801.062424875] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309805.094866469] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309808.142794837] [rviz2]: Trying to create a map of size 637 x 831 using 1 swatches
+[rviz2-15] [INFO] [1778309808.582815932] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309811.151740871] [rviz2]: Trying to create a map of size 637 x 833 using 1 swatches
+[rviz2-15] [INFO] [1778309812.391059636] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309813.648731253] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309814.128477536] [rviz2]: Trying to create a map of size 637 x 834 using 1 swatches
+[rviz2-15] [INFO] [1778309815.463190945] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309817.135266633] [rviz2]: Trying to create a map of size 637 x 837 using 1 swatches
+[rviz2-15] [INFO] [1778309818.694989258] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309823.270472853] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309826.128988600] [rviz2]: Trying to create a map of size 640 x 843 using 1 swatches
+[rviz2-15] [INFO] [1778309826.694913266] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309829.382436581] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309833.382735021] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309836.678501597] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309839.462413962] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309842.791172044] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309843.650458062] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-10] [INFO] [1778309844.631174407] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[rviz2-15] [INFO] [1778309847.270592010] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309851.366583307] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309854.887161462] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309857.990362855] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309861.191070942] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309863.979109274] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309866.479309118] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309869.102395747] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309872.687153174] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309877.102369203] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309878.645228123] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309880.879128957] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309883.790367913] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309886.895369257] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309889.998743174] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309893.774342813] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309897.678919599] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309900.494491936] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[websocket_server_node-10] [INFO] [1778309904.631409548] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[rviz2-15] [INFO] [1778309904.694468970] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309908.183199931] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309911.574501555] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309913.646068382] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309915.382656659] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[async_slam_toolbox_node-8] WARNING: Logging before InitGoogleLogging() is written to STDERR
+[async_slam_toolbox_node-8] W20260509 14:58:37.840523 80253 preprocessor.cc:67] Specified options.num_threads: 50 exceeds maximum available from the threading model Ceres was compiled with: 16.  Bounding to maximum number available.
+[rviz2-15] [INFO] [1778309919.094759853] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309919.136947827] [rviz2]: Trying to create a map of size 637 x 834 using 1 swatches
+[rviz2-15] [INFO] [1778309922.710726018] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309925.272614662] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309929.366678349] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309933.270489086] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309936.886858897] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309937.122914355] [rviz2]: Trying to create a map of size 638 x 834 using 1 swatches
+[rviz2-15] [INFO] [1778309940.127508285] [rviz2]: Trying to create a map of size 640 x 834 using 1 swatches
+[rviz2-15] [INFO] [1778309940.694351383] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309943.140655828] [rviz2]: Trying to create a map of size 641 x 834 using 1 swatches
+[data_integration_node-11] [INFO] [1778309943.646166644] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309943.894707050] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309947.479006188] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309950.390690813] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309954.102398491] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309957.398825186] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309960.886599344] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[websocket_server_node-10] [INFO] [1778309964.631420870] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[rviz2-15] [INFO] [1778309965.366602934] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309970.263033053] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309973.974936451] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309977.590728827] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778309978.642695177] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778309981.878897001] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309985.366615507] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309988.886362857] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309993.078781245] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778309996.791177820] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310000.278404821] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310004.087339998] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778310008.642719564] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778310008.790759593] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310012.086364322] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310016.182555717] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310019.990614209] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310022.679377211] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[websocket_server_node-10] [INFO] [1778310024.631352520] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[rviz2-15] [INFO] [1778310026.774413982] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310030.294954313] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310034.102290396] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310038.198491412] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778310038.645495411] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778310041.078666474] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310044.279275980] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310047.862390705] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[async_slam_toolbox_node-8] W20260509 15:00:47.961083 80253 preprocessor.cc:67] Specified options.num_threads: 50 exceeds maximum available from the threading model Ceres was compiled with: 16.  Bounding to maximum number available.
+[rviz2-15] [INFO] [1778310048.163078942] [rviz2]: Trying to create a map of size 660 x 781 using 1 swatches
+[rviz2-15] [INFO] [1778310051.670934958] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310055.774788684] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310059.390852851] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310062.078332167] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310066.174397601] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310070.498737835] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778310073.645287500] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778310074.786893793] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310078.275126173] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310081.890216864] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[websocket_server_node-10] [INFO] [1778310084.631223458] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[rviz2-15] [INFO] [1778310085.794683938] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[async_slam_toolbox_node-8] Save To File /home/ubuntu/humanoid_ws/src/humanoid_navigation2/maps/hall.posegraph 
+[async_slam_toolbox_node-8] Mapper <- Module
+[async_slam_toolbox_node-8] Mapper <- m_pSequentialScanMatcher
+[async_slam_toolbox_node-8] Mapper <- m_pGraph
+[async_slam_toolbox_node-8] MapperGraph <- Graph; Graph <- m_Edges; Graph <- m_Vertices
+[async_slam_toolbox_node-8] MapperGraph <- m_pMapper; MapperGraph <- m_pLoopScanMatcher; MapperGraph <- m_pTraversal
+[async_slam_toolbox_node-8] Mapper <- m_pMapperSensorManager
+[async_slam_toolbox_node-8] MapperSensorManager <- m_ScanManagers; MapperSensorManager <- m_Scans
+[async_slam_toolbox_node-8] Mapper <- m_Listeners
+[async_slam_toolbox_node-8] **Finished serializing Mapper**
+[async_slam_toolbox_node-8] Save To File
+[async_slam_toolbox_node-8] **Serializing Dataset**
+[async_slam_toolbox_node-8] Dataset <- m_SensorNameLookup
+[async_slam_toolbox_node-8] Dataset <- m_Data
+[async_slam_toolbox_node-8] Dataset <- m_Lasers
+[async_slam_toolbox_node-8] Dataset <- m_pDatasetInfo
+[async_slam_toolbox_node-8] **Finished serializing Dataset**
+[rviz2-15] [INFO] [1778310089.090238836] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310092.482533398] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310095.970683210] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310098.595117216] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310101.474373153] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778310103.646365579] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778310104.866796453] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310107.875255356] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310110.467882399] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310113.986252421] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310116.963166478] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310119.906753374] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310123.394456840] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310127.080382113] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310129.998590341] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310133.582362201] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[data_integration_node-11] [INFO] [1778310133.647312495] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[rviz2-15] [INFO] [1778310136.399005680] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310140.175043869] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310143.567322006] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[websocket_server_node-10] [INFO] [1778310144.631211375] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[rviz2-15] [INFO] [1778310146.874512732] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+[rviz2-15] [INFO] [1778310149.499185176] [rviz2]: Message Filter dropping message: frame 'camera_init' at time 1778309238.092 for reason 'the timestamp on the message is earlier than all the data in the transform cache'

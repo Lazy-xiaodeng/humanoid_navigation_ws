@@ -158,6 +158,23 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time}]
     )
 
+    # odom → odom_ground
+    # Nav2 local VoxelLayer uses its global_frame to check 3D sensor origins.
+    # The localization odom currently places base_footprint at about z=-1.20m.
+    # Keep the localization odom unchanged and provide a ground-aligned odom
+    # frame only for local costmap / local recovery behaviors.
+    tf_bridge_odom_ground = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='tf_odom_to_odom_ground',
+        arguments=[
+            '--x', '0', '--y', '0', '--z', '-1.215',
+            '--qx', '0', '--qy', '0', '--qz', '0', '--qw', '1',
+            '--frame-id', 'odom', '--child-frame-id', 'odom_ground'
+        ],
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+
     # body → base_footprint
     tf_bridge_base = Node(
         package='tf2_ros',
@@ -466,6 +483,13 @@ def generate_launch_description():
                     # 发布后前几帧必须能被 NDT 跟踪；否则撤销该全局定位并继续自动重试。
                     'global_localization_post_accept_validation_frames': 5,
                     'global_localization_post_accept_max_rejections': 1,
+                    # hall.yaml: origin=(-6.675,-12.819), size=(33.0m,39.05m)。
+                    # 给边缘留 0.3m 余量，避免全局重定位把机器人放到 Nav2 地图外。
+                    'global_localization_enforce_xy_bounds': True,
+                    'global_localization_min_x': -6.375,
+                    'global_localization_max_x': 26.025,
+                    'global_localization_min_y': -12.519,
+                    'global_localization_max_y': 25.931,
                     'force_2d_pose': True,
                     'force_2d_fixed_z': True,
                     'global_localization_use_height_filter': True,
@@ -497,14 +521,33 @@ def generate_launch_description():
             )
         ]
     )
+    # protected_clearing_3d_node = TimerAction(
+    #     period=2.0,
+    #     actions=[
+    #         Node(
+    #             package='humanoid_navigation2',
+    #             executable='protected_clearing_3d_publisher',
+    #             name='protected_clearing_3d_publisher',
+    #             parameters=[nav2_params_file, {'use_sim_time': use_sim_time}],
+    #             output='screen'
+    #         )
+    #     ]
+    # )
     periodic_clearing_3d_node = TimerAction(
         period=2.0,
         actions=[
             Node(
                 package='humanoid_navigation2',
-                executable='periodic_clearing_3d_publisher',
-                name='periodic_clearing_3d_publisher',
-                parameters=[nav2_params_file, {'use_sim_time': use_sim_time}],
+                executable='lidar_height_clearing_3d_publisher',
+                name='lidar_height_clearing_3d_publisher',
+                parameters=[
+                    nav2_params_file,
+                    {
+                        'use_sim_time': use_sim_time,
+                        'lidar_z': 1.215,
+                        'output_topic': '/clearing_cloud_3d_lidar',
+                    }
+                ],
                 output='screen'
             )
         ]
@@ -607,6 +650,7 @@ def generate_launch_description():
 
         # 2. TF桥接
         tf_bridge_odom,
+        tf_bridge_odom_ground,
         tf_bridge_base,
         # ========== 第二部分：感知层（最先启动） ==========
         # 点云滤波最先启动，处理原始点云数据dan
@@ -647,6 +691,7 @@ def generate_launch_description():
         # ========== 第四部分：辅助节点（可选） ==========
         # 定期清除点云发布器（2秒）
         periodic_clearing_node, 
+        #protected_clearing_3d_node,
         periodic_clearing_3d_node,
 
         # ========== 第五部分：导航层（最后启动） ==========

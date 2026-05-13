@@ -47,6 +47,8 @@ setup(
             'map_coordinate_viewer = humanoid_navigation2.map_coordinate_viewer:main',
             'periodic_clearing_publisher = humanoid_navigation2.periodic_clearing_publisher:main',
             'periodic_clearing_3d_publisher = humanoid_navigation2.periodic_clearing_3d_publisher:main',
+            'lidar_height_clearing_3d_publisher = humanoid_navigation2.lidar_height_clearing_3d_publisher:main',
+            'protected_clearing_3d_publisher = humanoid_navigation2.protected_clearing_3d_publisher:main',
             'nav2_motion_monitor = humanoid_navigation2.nav2_motion_monitor:main',
             'velocity_tester_gui = humanoid_navigation2.velocity_tester_gui:main',
             'robot_realpose_publisher = humanoid_navigation2.robot_realpose_publisher:main',

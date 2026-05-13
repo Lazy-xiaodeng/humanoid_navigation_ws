@@ -17,7 +17,10 @@
 #include <pcl/common/transforms.h>
 #include <pcl/point_types.h>
 #include <tf2_eigen/tf2_eigen.hpp>
+#include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <limits>
 #include <rclcpp/executors.hpp>
 
 namespace humanoid_point_cloud_filter
@@ -276,6 +279,11 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
   cloud_elevation->reserve(cloud_filtered->size());
   cloud_nav->reserve(cloud_filtered->size());
 
+  float bf_z_min = std::numeric_limits<float>::infinity();
+  float bf_z_max = -std::numeric_limits<float>::infinity();
+  size_t mount_filtered_count = 0;
+  size_t body_filtered_count = 0;
+
   // ★★★ 吊架包络盒参数（base_footprint 坐标系）
   // 注意：吊架在 LiDAR 下方约1.2m处（因为 body 在 base_footprint 上方 1.215m）
   // 所以吊架在 base_footprint 坐标系中大约在 Z=0.0~0.2m 范围
@@ -293,18 +301,27 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
     float y = cloud_bf->points[i].y;
     float z = cloud_bf->points[i].z;
 
+    bf_z_min = std::min(bf_z_min, z);
+    bf_z_max = std::max(bf_z_max, z);
+
     // ★★★ 吊架过滤：过滤 LiDAR 正下方的支架点云
     bool in_mount_box = (x > mount_x_min && x < mount_x_max &&
                          y > mount_y_min && y < mount_y_max &&
                          z > mount_z_min && z < mount_z_max);
-    if (in_mount_box) continue;  // 丢弃吊架上的点
+    if (in_mount_box) {
+      mount_filtered_count++;
+      continue;  // 丢弃吊架上的点
+    }
 
     // 判断是否在手臂包络盒内（是则丢弃）
     bool in_arm_box = enable_body_box_filter_ &&
                   (x > arm_box_x_min_ && x < arm_box_x_max_ &&
                    y > arm_box_y_min_ && y < arm_box_y_max_ &&
                    z > arm_box_z_min_ && z < arm_box_z_max_);
-    if (in_arm_box) continue;
+    if (in_arm_box) {
+      body_filtered_count++;
+      continue;
+    }
     
     // 高程图点云：用于建立高程地图
     if (z > elev_min_z_ && z < elev_max_z_) {
@@ -334,6 +351,24 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
     pcl::toROSMsg(*cloud_nav, msg_nav);
     msg_nav.header = header;
     pub_nav_->publish(msg_nav);
+  } else {
+    RCLCPP_WARN_THROTTLE(
+      this->get_logger(), *this->get_clock(), 2000,
+      "导航点云为空，未发布 %s: input=%zu range=%zu filtered=%zu elevation=%zu "
+      "mount_filtered=%zu body_filtered=%zu bf_z=[%.3f, %.3f] "
+      "nav_z_filter=(%.3f, %.3f), body_box=%s",
+      output_nav_topic_.c_str(),
+      cloud_input->size(),
+      cloud_range_filtered->size(),
+      cloud_filtered->size(),
+      cloud_elevation->size(),
+      mount_filtered_count,
+      body_filtered_count,
+      std::isfinite(bf_z_min) ? bf_z_min : 0.0f,
+      std::isfinite(bf_z_max) ? bf_z_max : 0.0f,
+      nav_min_z_,
+      nav_max_z_,
+      enable_body_box_filter_ ? "on" : "off");
   }
   
   // ===== 第 8 步：性能统计 =====
