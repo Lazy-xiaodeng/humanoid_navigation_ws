@@ -13,6 +13,7 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     # 获取功能包共享路径
     pkg_humanoid_navigation = FindPackageShare('humanoid_navigation')
+    pkg_humanoid_navigation2 = FindPackageShare('humanoid_navigation2')
     
     # 声明启动参数
     use_sim_time = LaunchConfiguration('use_sim_time')
@@ -55,7 +56,10 @@ def generate_launch_description():
             'publish_tf': True,
             'default_frame_id': 'map',
             'auto_pause_on_localization_recovery': True,
-            'localization_recovery_status_topic': '/localization/recovery_status'
+            'localization_recovery_status_topic': '/localization/recovery_status',
+            'reverse_navigation_bt_xml': PathJoinSubstitution([
+                pkg_humanoid_navigation2, 'behavior_tree', 'navigate_reverse_xy_then_yaw.xml'
+            ])
         }]
     )
     

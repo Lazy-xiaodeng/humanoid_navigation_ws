@@ -63,7 +63,12 @@ class NavigationStateManager(Node):
             ('require_walk_mode_for_navigation', True),
             ('robot_status_timeout', 2.0),
             ('pending_navigation_timeout', 90.0),
-            ('obstacle_block_near_goal_distance', 0.7)
+            ('obstacle_block_near_goal_distance', 0.7),
+            (
+                'reverse_navigation_bt_xml',
+                '/home/ubuntu/humanoid_ws/src/humanoid_navigation2/config/behavior_tree/'
+                'navigate_reverse_xy_then_yaw.xml'
+            )
         ])
 
         self.position_tolerance = self.get_parameter('position_tolerance').value
@@ -77,6 +82,7 @@ class NavigationStateManager(Node):
         self.robot_status_timeout = float(self.get_parameter('robot_status_timeout').value)
         self.pending_navigation_timeout = float(self.get_parameter('pending_navigation_timeout').value)
         self.obstacle_block_near_goal_distance = float(self.get_parameter('obstacle_block_near_goal_distance').value)
+        self.reverse_navigation_bt_xml = str(self.get_parameter('reverse_navigation_bt_xml').value)
         
         # ========== 导航状态 ==========
         self.current_state = NavigationState.IDLE
@@ -1023,6 +1029,26 @@ class NavigationStateManager(Node):
         
         # 开始导航到第一个路点
         self.navigate_to_waypoint(waypoint_data)
+
+    def get_waypoint_walk_direction(self, waypoint_data: Dict[str, Any]) -> str:
+        """读取点位行走方向。默认正走；properties.walk_direction=backward 时倒走。"""
+        properties = waypoint_data.get("properties", {}) or {}
+        direction = (
+            properties.get("walk_direction")
+            or properties.get("navigation_direction")
+            or properties.get("drive_direction")
+            or properties.get("motion_direction")
+            or waypoint_data.get("walk_direction")
+            or "forward"
+        )
+
+        if isinstance(direction, bool):
+            return "backward" if direction else "forward"
+
+        normalized = str(direction).strip().lower()
+        if normalized in {"backward", "reverse", "back", "倒走", "倒车", "后退"}:
+            return "backward"
+        return "forward"
     
     def navigate_to_waypoint(self, waypoint_data: Dict[str, Any]):
         """导航到指定路点"""
@@ -1035,6 +1061,9 @@ class NavigationStateManager(Node):
             goal_pose = self.waypoint_to_pose_stamped(waypoint_data)
             goal_msg = NavigateToPose.Goal()
             goal_msg.pose = goal_pose
+            walk_direction = self.get_waypoint_walk_direction(waypoint_data)
+            if walk_direction == "backward":
+                goal_msg.behavior_tree = self.reverse_navigation_bt_xml
         
             # 等待动作服务器
             if not self.nav_to_pose_client.wait_for_server(timeout_sec=5.0):
@@ -1055,12 +1084,15 @@ class NavigationStateManager(Node):
                 "waypoint_name": waypoint_data.get("name", ""),
                 "waypoint_index": self.current_waypoint_index,
                 "total_waypoints": self.total_waypoints,
-                "position": waypoint_data.get("position", [])
+                "position": waypoint_data.get("position", []),
+                "walk_direction": walk_direction,
+                "behavior_tree": goal_msg.behavior_tree
             })
             
             self.get_logger().info(
                 f"开始导航到路点: {waypoint_data.get('name', '')} "
-                f"({self.current_waypoint_index + 1}/{self.total_waypoints})"
+                f"({self.current_waypoint_index + 1}/{self.total_waypoints}), "
+                f"walk_direction={walk_direction}"
             )
             
         except Exception as e:

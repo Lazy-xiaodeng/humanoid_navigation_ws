@@ -73,7 +73,12 @@ class NavigationStateManager(Node):
             ('localization_recovery_status_topic', '/localization/recovery_status'),
             ('map_frame', 'map'),
             ('base_frame', 'base_footprint'),
-            ('pose_tf_timeout_sec', 0.05)
+            ('pose_tf_timeout_sec', 0.05),
+            (
+                'reverse_navigation_bt_xml',
+                '/home/ubuntu/humanoid_ws/src/humanoid_navigation2/config/behavior_tree/'
+                'navigate_reverse_xy_then_yaw.xml'
+            )
         ])
 
         self.position_tolerance = self.get_parameter('position_tolerance').value
@@ -90,6 +95,7 @@ class NavigationStateManager(Node):
         self.navigation_failure_policy = str(self.get_parameter('navigation_failure_policy').value)
         self.auto_pause_on_localization_recovery = bool(
             self.get_parameter('auto_pause_on_localization_recovery').value)
+        self.reverse_navigation_bt_xml = str(self.get_parameter('reverse_navigation_bt_xml').value)
         self.localization_recovery_status_topic = str(
             self.get_parameter('localization_recovery_status_topic').value)
         self.map_frame = str(self.get_parameter('map_frame').value)
@@ -1088,6 +1094,10 @@ class NavigationStateManager(Node):
             if self.current_state != NavigationState.PAUSED:
                 self.send_acknowledgment("resume_navigation", "error", "导航未暂停")
                 return
+
+            if self.is_localization_resume_blocked():
+                self.reject_resume_during_localization_recovery()
+                return
             
             # 检查是否有可恢复的路点
             if not self.current_waypoint:
@@ -1131,6 +1141,46 @@ class NavigationStateManager(Node):
         except Exception as e:
             self.get_logger().error(f"恢复导航错误: {e}")
             self.send_acknowledgment("navigation_resumed", "error", f"恢复导航失败: {str(e)}")
+
+    def is_localization_resume_blocked(self) -> bool:
+        """定位恢复链路还没完成时，禁止 App 手动恢复覆盖自动保护。"""
+        return (
+            self.localization_recovery_active or
+            self.localization_auto_paused or
+            self.localization_resume_pending or
+            self.current_detailed_state == "LOCALIZATION_RECOVERY"
+        )
+
+    def reject_resume_during_localization_recovery(self):
+        reason = "定位恢复中，暂不能手动恢复导航；定位准确且 TF 恢复后系统会自动继续未完成导航"
+        last_event = ""
+        if isinstance(self.localization_recovery_last_status, dict):
+            last_event = self.localization_recovery_last_status.get("event_type", "")
+
+        event_data = {
+            "reason": reason,
+            "blocked_command": "resume_navigation",
+            "manual_resume_rejected": True,
+            "localization_recovery_active": self.localization_recovery_active,
+            "localization_auto_paused": self.localization_auto_paused,
+            "localization_resume_pending": self.localization_resume_pending,
+            "localization_reason": self.localization_recovery_reason,
+            "localization_event": last_event,
+            "current_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
+            "current_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
+            "waypoint_index": self.current_waypoint_index,
+            "total_waypoints": self.total_waypoints,
+            "auto_resume_pending": self.localization_auto_paused or self.localization_resume_pending,
+        }
+
+        self.send_acknowledgment(
+            "resume_navigation",
+            "error",
+            reason,
+            event_data
+        )
+        self.publish_status_update("navigation_localization_resume_waiting", event_data)
+        self.get_logger().warning(f"拒绝手动恢复导航: {reason}")
 
     def localization_recovery_status_callback(self, msg: String):
         """定位恢复状态回调：定位失锁时暂停导航，恢复后继续当前未完成路点。"""
@@ -1489,6 +1539,26 @@ class NavigationStateManager(Node):
         
         # 开始导航到第一个路点
         self.navigate_to_waypoint(waypoint_data)
+
+    def get_waypoint_walk_direction(self, waypoint_data: Dict[str, Any]) -> str:
+        """读取点位行走方向。默认正走；properties.walk_direction=backward 时倒走。"""
+        properties = waypoint_data.get("properties", {}) or {}
+        direction = (
+            properties.get("walk_direction")
+            or properties.get("navigation_direction")
+            or properties.get("drive_direction")
+            or properties.get("motion_direction")
+            or waypoint_data.get("walk_direction")
+            or "forward"
+        )
+
+        if isinstance(direction, bool):
+            return "backward" if direction else "forward"
+
+        normalized = str(direction).strip().lower()
+        if normalized in {"backward", "reverse", "back", "倒走", "倒车", "后退"}:
+            return "backward"
+        return "forward"
     
     def navigate_to_waypoint(self, waypoint_data: Dict[str, Any]):
         """导航到指定路点"""
@@ -1501,6 +1571,9 @@ class NavigationStateManager(Node):
             goal_pose = self.waypoint_to_pose_stamped(waypoint_data)
             goal_msg = NavigateToPose.Goal()
             goal_msg.pose = goal_pose
+            walk_direction = self.get_waypoint_walk_direction(waypoint_data)
+            if walk_direction == "backward":
+                goal_msg.behavior_tree = self.reverse_navigation_bt_xml
         
             # 等待动作服务器
             if not self.nav_to_pose_client.wait_for_server(timeout_sec=5.0):
@@ -1521,12 +1594,15 @@ class NavigationStateManager(Node):
                 "waypoint_name": waypoint_data.get("name", ""),
                 "waypoint_index": self.current_waypoint_index,
                 "total_waypoints": self.total_waypoints,
-                "position": waypoint_data.get("position", [])
+                "position": waypoint_data.get("position", []),
+                "walk_direction": walk_direction,
+                "behavior_tree": goal_msg.behavior_tree
             })
             
             self.get_logger().info(
                 f"开始导航到路点: {waypoint_data.get('name', '')} "
-                f"({self.current_waypoint_index + 1}/{self.total_waypoints})"
+                f"({self.current_waypoint_index + 1}/{self.total_waypoints}), "
+                f"walk_direction={walk_direction}"
             )
             
         except Exception as e:

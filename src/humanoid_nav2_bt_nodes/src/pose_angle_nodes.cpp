@@ -17,6 +17,7 @@ namespace
 {
 
 constexpr double kReadyPollSeconds = 0.0;
+constexpr double kPi = 3.14159265358979323846;
 constexpr auto kMinActionResponseTimeout = std::chrono::milliseconds(2000);
 
 geometry_msgs::msg::Quaternion yawToQuaternion(double yaw)
@@ -25,6 +26,11 @@ geometry_msgs::msg::Quaternion yawToQuaternion(double yaw)
   q.setRPY(0.0, 0.0, yaw);
   q.normalize();
   return tf2::toMsg(q);
+}
+
+double normalizeRelativeYaw(double yaw)
+{
+  return angles::normalize_angle(yaw);
 }
 
 builtin_interfaces::msg::Duration secondsToDurationMsg(double seconds)
@@ -67,10 +73,12 @@ BT::NodeStatus MakePoseTowardGoal::tick()
   std::string configured_global_frame;
   std::string robot_base_frame;
   double min_heading_distance;
+  std::string heading_mode;
   double transform_tolerance;
 
   if (!getInputData(
-      goal, configured_global_frame, robot_base_frame, min_heading_distance, transform_tolerance))
+      goal, configured_global_frame, robot_base_frame, min_heading_distance, heading_mode,
+      transform_tolerance))
   {
     return BT::NodeStatus::FAILURE;
   }
@@ -88,7 +96,15 @@ BT::NodeStatus MakePoseTowardGoal::tick()
     output_goal.header.stamp = node_->now();
 
     if (distance > min_heading_distance) {
-      output_goal.pose.orientation = yawToQuaternion(std::atan2(dy, dx));
+      double heading = std::atan2(dy, dx);
+      if (heading_mode == "away") {
+        heading = normalizeRelativeYaw(heading + kPi);
+      } else if (heading_mode != "toward") {
+        throw std::runtime_error(
+                "MakePoseTowardGoal heading_mode must be 'toward' or 'away', got '" +
+                heading_mode + "'");
+      }
+      output_goal.pose.orientation = yawToQuaternion(heading);
     } else {
       output_goal.pose.orientation = robot_pose.pose.orientation;
     }
@@ -113,6 +129,7 @@ bool MakePoseTowardGoal::getInputData(
   std::string & global_frame,
   std::string & robot_base_frame,
   double & min_heading_distance,
+  std::string & heading_mode,
   double & transform_tolerance)
 {
   if (!getInput("goal", goal)) {
@@ -123,10 +140,14 @@ bool MakePoseTowardGoal::getInputData(
   getInput("global_frame", global_frame);
   getInput("robot_base_frame", robot_base_frame);
   getInput("min_heading_distance", min_heading_distance);
+  getInput("heading_mode", heading_mode);
   getInput("transform_tolerance", transform_tolerance);
 
   if (robot_base_frame.empty()) {
     robot_base_frame = "base_footprint";
+  }
+  if (heading_mode.empty()) {
+    heading_mode = "toward";
   }
 
   min_heading_distance = std::max(0.0, min_heading_distance);
@@ -384,7 +405,7 @@ SpinToPose::AngleCheck SpinToPose::computeAngleToTarget() const
   const double current_yaw = tf2::getYaw(robot_pose.pose.orientation);
   double target_yaw = 0.0;
 
-  if (mode_ == "goal_position") {
+  if (mode_ == "goal_position" || mode_ == "goal_position_reverse") {
     const double dx = transformed_goal.pose.position.x - robot_pose.pose.position.x;
     const double dy = transformed_goal.pose.position.y - robot_pose.pose.position.y;
     const double distance = std::hypot(dx, dy);
@@ -392,14 +413,23 @@ SpinToPose::AngleCheck SpinToPose::computeAngleToTarget() const
       return {true, 0.0};
     }
     target_yaw = std::atan2(dy, dx);
+    if (mode_ == "goal_position_reverse") {
+      target_yaw = normalizeRelativeYaw(target_yaw + kPi);
+    }
   } else if (mode_ == "goal_yaw") {
     target_yaw = tf2::getYaw(transformed_goal.pose.orientation);
   } else {
     throw std::runtime_error(
-            "SpinToPose mode must be 'goal_position' or 'goal_yaw', got '" + mode_ + "'");
+            "SpinToPose mode must be 'goal_position', 'goal_position_reverse', or 'goal_yaw', got '" +
+            mode_ + "'");
   }
 
-  const double angle = angles::shortest_angular_distance(current_yaw, target_yaw);
+  const double angle = normalizeRelativeYaw(
+    angles::shortest_angular_distance(current_yaw, target_yaw));
+  RCLCPP_INFO(
+    node_->get_logger(),
+    "SpinToPose angle check mode=%s current_yaw=%.3f target_yaw=%.3f shortest=%.3f",
+    mode_.c_str(), current_yaw, target_yaw, angle);
   return {std::abs(angle) <= yaw_tolerance_, angle};
 }
 

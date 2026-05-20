@@ -41,6 +41,9 @@ public:
       BT::InputPort<double>(
         "min_heading_distance", 0.15,
         "If robot is closer than this distance, preserve current yaw"),
+      BT::InputPort<std::string>(
+        "heading_mode", "toward",
+        "toward: final path yaw points toward goal, away: final path yaw points away from goal"),
       BT::InputPort<double>("transform_tolerance", 0.5, "TF lookup timeout in seconds")
     };
   }
@@ -53,6 +56,7 @@ private:
     std::string & global_frame,
     std::string & robot_base_frame,
     double & min_heading_distance,
+    std::string & heading_mode,
     double & transform_tolerance);
 
   geometry_msgs::msg::PoseStamped transformGoal(
@@ -93,7 +97,8 @@ public:
       BT::InputPort<geometry_msgs::msg::PoseStamped>("goal", "Original navigation goal"),
       BT::InputPort<std::string>(
         "mode", "goal_yaw",
-        "goal_position: face goal XY, goal_yaw: face final goal yaw"),
+        "goal_position: face goal XY, goal_position_reverse: face away from goal XY, "
+        "goal_yaw: face final goal yaw"),
       BT::InputPort<std::string>(
         "global_frame", "", "Frame used for angle calculation. Empty means goal frame."),
       BT::InputPort<std::string>(
