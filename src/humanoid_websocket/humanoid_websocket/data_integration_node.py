@@ -221,6 +221,18 @@ class UnifiedDataIntegrationNode(Node):
         # 线程安全锁
         self.data_lock = threading.RLock()
         self.subscription_lock = threading.RLock()
+
+        # 实际速度估计：主来源为 /robot_realpose 连续位姿差分。
+        # /odom.twist 在当前定位链路中经常为 0，只作为非零 fallback。
+        self.actual_speed_min_dt = 0.03
+        self.actual_speed_max_dt = 1.0
+        self.actual_speed_filter_alpha = 0.35
+        self.actual_speed_linear_deadzone = 0.02
+        self.actual_speed_angular_deadzone = 0.02
+        self.actual_speed_max_linear = 2.0
+        self.actual_speed_max_angular = 4.0
+        self.last_actual_speed_pose = None
+        self.filtered_actual_speed = None
         
         # ==================== 设置ROS通信接口 ====================
         self.setup_ros_communication()
@@ -597,6 +609,134 @@ class UnifiedDataIntegrationNode(Node):
     def apply_deadzone(value: float, threshold: float = 0.01) -> float:
         return 0.0 if abs(value) < threshold else value
 
+    @staticmethod
+    def normalize_angle(angle: float) -> float:
+        return math.atan2(math.sin(angle), math.cos(angle))
+
+    @staticmethod
+    def yaw_from_orientation(orientation: Dict[str, float]) -> float:
+        x = float(orientation.get("x", 0.0))
+        y = float(orientation.get("y", 0.0))
+        z = float(orientation.get("z", 0.0))
+        w = float(orientation.get("w", 1.0))
+        siny = 2.0 * (w * z + x * y)
+        cosy = 1.0 - 2.0 * (y * y + z * z)
+        return math.atan2(siny, cosy)
+
+    @staticmethod
+    def stamp_to_seconds(stamp) -> Optional[float]:
+        seconds = float(getattr(stamp, "sec", 0)) + float(getattr(stamp, "nanosec", 0)) * 1e-9
+        return seconds if seconds > 0.0 else None
+
+    @staticmethod
+    def has_nonzero_speed(speed_data: Dict[str, Any]) -> bool:
+        return any(
+            abs(float(speed_data.get(key, 0.0))) > 0.0
+            for key in ("linear_x", "linear_y", "angular_z")
+        )
+
+    def build_actual_speed_payload(
+        self,
+        linear_x: float,
+        linear_y: float,
+        angular_z: float,
+        pose_timestamp: float,
+        valid: bool = True,
+        reject_reason: str = ""
+    ) -> Dict[str, Any]:
+        linear_x = round(self.apply_deadzone(linear_x, self.actual_speed_linear_deadzone), 3)
+        linear_y = round(self.apply_deadzone(linear_y, self.actual_speed_linear_deadzone), 3)
+        angular_z = round(self.apply_deadzone(angular_z, self.actual_speed_angular_deadzone), 3)
+        speed_mps = round(math.sqrt(linear_x**2 + linear_y**2), 3)
+
+        payload = {
+            "linear_x": linear_x,
+            "linear_y": linear_y,
+            "angular_z": angular_z,
+            "linear": {
+                "x": linear_x,
+                "y": linear_y,
+                "z": 0.0
+            },
+            "angular": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": angular_z
+            },
+            "speed_mps": speed_mps,
+            "turn_rate_radps": angular_z,
+            "is_moving": speed_mps > 0.0 or abs(angular_z) > 0.0,
+            "coordinate_frame": "base_link_standard",
+            "source_topic": "/robot_realpose",
+            "source": "pose_delta",
+            "source_coordinate_frame": "map_pose_delta",
+            "timestamp": time.time(),
+            "pose_timestamp": pose_timestamp,
+            "valid": valid
+        }
+        if reject_reason:
+            payload["reject_reason"] = reject_reason
+        return payload
+
+    def estimate_actual_speed_from_pose(self, pose_data: Dict[str, Any], pose_timestamp: float) -> Optional[Dict[str, Any]]:
+        position = pose_data.get("position", {})
+        current = {
+            "x": float(position.get("x", 0.0)),
+            "y": float(position.get("y", 0.0)),
+            "yaw": self.yaw_from_orientation(pose_data.get("orientation", {})),
+            "time": pose_timestamp
+        }
+
+        previous = self.last_actual_speed_pose
+        self.last_actual_speed_pose = current
+
+        if previous is None:
+            return self.build_actual_speed_payload(0.0, 0.0, 0.0, pose_timestamp, valid=False, reject_reason="initializing")
+
+        dt = current["time"] - previous["time"]
+        if dt < self.actual_speed_min_dt:
+            return None
+
+        if dt > self.actual_speed_max_dt:
+            self.filtered_actual_speed = None
+            return self.build_actual_speed_payload(0.0, 0.0, 0.0, pose_timestamp, valid=False, reject_reason="pose_gap_reset")
+
+        map_vx = (current["x"] - previous["x"]) / dt
+        map_vy = (current["y"] - previous["y"]) / dt
+        yaw = current["yaw"]
+        linear_x = math.cos(yaw) * map_vx + math.sin(yaw) * map_vy
+        linear_y = -math.sin(yaw) * map_vx + math.cos(yaw) * map_vy
+        angular_z = self.normalize_angle(current["yaw"] - previous["yaw"]) / dt
+
+        if math.hypot(linear_x, linear_y) > self.actual_speed_max_linear or abs(angular_z) > self.actual_speed_max_angular:
+            self.filtered_actual_speed = None
+            self.get_logger().warn(
+                "⚠️ 实际速度估计检测到位姿跳变，已丢弃本帧速度",
+                throttle_duration_sec=5.0
+            )
+            return self.build_actual_speed_payload(0.0, 0.0, 0.0, pose_timestamp, valid=False, reject_reason="pose_jump_rejected")
+
+        raw_speed = {
+            "linear_x": linear_x,
+            "linear_y": linear_y,
+            "angular_z": angular_z
+        }
+        if self.filtered_actual_speed is None:
+            self.filtered_actual_speed = raw_speed
+        else:
+            alpha = self.actual_speed_filter_alpha
+            self.filtered_actual_speed = {
+                key: self.filtered_actual_speed[key] + alpha * (raw_speed[key] - self.filtered_actual_speed[key])
+                for key in raw_speed
+            }
+
+        return self.build_actual_speed_payload(
+            self.filtered_actual_speed["linear_x"],
+            self.filtered_actual_speed["linear_y"],
+            self.filtered_actual_speed["angular_z"],
+            pose_timestamp
+        )
+
     def convert_fastlio_velocity(self, msg: Odometry) -> Dict[str, Any]:
         """将Fast-LIO非标准坐标系速度转换为APP使用的标准机器人速度。"""
         linear_x = round(self.apply_deadzone(-float(msg.twist.twist.linear.z)), 3)
@@ -655,10 +795,18 @@ class UnifiedDataIntegrationNode(Node):
         }
 
     def odom_callback(self, msg: Odometry):
-        """处理 Fast-LIO 的非标准里程计数据，并转换为标准速度推送给 APP"""
+        """处理 Fast-LIO 的非标准里程计速度；只有非零 twist 才作为 fallback。"""
         try:
             with self.data_lock:
                 speed_data = self.convert_fastlio_velocity(msg)
+                if not self.has_nonzero_speed(speed_data):
+                    self.get_logger().debug(
+                        "跳过 /odom.twist 零速度，继续使用 /robot_realpose 差分速度",
+                        throttle_duration_sec=5.0
+                    )
+                    return
+
+                speed_data["source"] = "odom_twist"
                 self.data_storage['robot_speed'] = speed_data
                 self.last_update_times['robot_speed'] = time.time()
 
@@ -699,6 +847,14 @@ class UnifiedDataIntegrationNode(Node):
                 # ============ 存储：robot_pose（供所有业务使用） ============
                 self.data_storage['robot_pose'] = pose_data
                 self.last_update_times['robot_pose'] = time.time()
+
+                speed_data = self.estimate_actual_speed_from_pose(
+                    pose_data,
+                    self.stamp_to_seconds(msg.header.stamp) or pose_data["timestamp"]
+                )
+                if speed_data is not None:
+                    self.data_storage['robot_speed'] = speed_data
+                    self.last_update_times['robot_speed'] = time.time()
 
                 self.get_logger().debug(
                     f'📍 NDT定位数据已更新: [{pose_data["position"]["x"]:.2f}, '
