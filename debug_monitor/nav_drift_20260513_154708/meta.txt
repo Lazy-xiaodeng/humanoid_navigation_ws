@@ -1,0 +1,4 @@
+start_wall_epoch=1778659228.771319
+out_dir=/home/ubuntu/humanoid_ws/debug_monitor/nav_drift_20260513_154708
+sample_rate_hz=5.0
+tf_pairs=map->odom,odom->base_footprint,map->base_footprint,map_ground->base_footprint,odom_ground->base_footprint

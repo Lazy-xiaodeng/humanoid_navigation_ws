@@ -1,0 +1,1302 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Navigation App Simulator</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --line: #d9dee7;
+      --text: #1d2430;
+      --muted: #627086;
+      --accent: #2563eb;
+      --ok: #15803d;
+      --warn: #a16207;
+      --bad: #b91c1c;
+      --code: #0f172a;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    aside {
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+      padding: 18px;
+      overflow: auto;
+    }
+
+    main {
+      padding: 18px;
+      overflow: auto;
+    }
+
+    h1 {
+      margin: 0 0 18px;
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    h2 {
+      margin: 20px 0 10px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    label {
+      display: block;
+      margin: 10px 0 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    input, textarea, select, button {
+      width: 100%;
+      font: inherit;
+    }
+
+    input, textarea, select {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 9px 10px;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 104px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 9px 10px;
+      cursor: pointer;
+    }
+
+    button.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+
+    button.danger {
+      border-color: var(--bad);
+      color: var(--bad);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .toolbar button {
+      width: auto;
+      min-width: 92px;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 28px;
+      padding: 4px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+
+    .status.ok .dot {
+      background: var(--ok);
+    }
+
+    .status.bad .dot {
+      background: var(--bad);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .metric, .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .metric {
+      padding: 12px;
+      min-height: 74px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 24px;
+      line-height: 1.1;
+      margin-bottom: 6px;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .panel {
+      padding: 12px;
+      margin-bottom: 14px;
+    }
+
+    .panel h2 {
+      margin-top: 0;
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(160px, 1fr));
+      gap: 10px;
+    }
+
+    .status-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 10px;
+      min-height: 92px;
+    }
+
+    .status-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .status-card strong {
+      display: block;
+      font-size: 17px;
+      line-height: 1.25;
+      word-break: break-word;
+    }
+
+    .status-card small {
+      display: block;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .health-grid {
+      display: grid;
+      gap: 6px;
+    }
+
+    .health-row {
+      display: grid;
+      grid-template-columns: minmax(140px, 1.1fr) minmax(92px, 0.8fr) minmax(70px, 0.5fr) minmax(90px, 0.7fr);
+      gap: 8px;
+      align-items: center;
+      padding: 7px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      font-size: 13px;
+    }
+
+    .health-row.header {
+      background: #f1f5f9;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 24px;
+      width: max-content;
+      min-width: 64px;
+      border-radius: 999px;
+      padding: 3px 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .badge.ok {
+      border-color: #bbf7d0;
+      background: #f0fdf4;
+      color: var(--ok);
+    }
+
+    .badge.bad {
+      border-color: #fecaca;
+      background: #fef2f2;
+      color: var(--bad);
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .split.triple {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    pre {
+      margin: 0;
+      min-height: 220px;
+      max-height: 52vh;
+      overflow: auto;
+      border-radius: 6px;
+      background: var(--code);
+      color: #e5e7eb;
+      padding: 12px;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .log-list {
+      display: grid;
+      gap: 8px;
+      max-height: 52vh;
+      overflow: auto;
+    }
+
+    .entry {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      padding: 9px;
+    }
+
+    .entry header {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .entry .type {
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .entry.ok .type {
+      color: var(--ok);
+    }
+
+    .entry.warn .type {
+      color: var(--warn);
+    }
+
+    .entry.bad .type {
+      color: var(--bad);
+    }
+
+    @media (max-width: 900px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      aside {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .grid, .split, .split.triple, .status-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .health-row {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <h1>模拟 APP</h1>
+
+      <label for="wsUrl">WebSocket 地址</label>
+      <input id="wsUrl" value="ws://127.0.0.1:8765">
+
+      <div class="row" style="margin-top: 10px;">
+        <button id="connectBtn" class="primary">连接</button>
+        <button id="disconnectBtn" disabled>断开</button>
+      </div>
+
+      <h2>订阅</h2>
+      <textarea id="subTypes">robot_pose,navigation_status,navigation_command_result,system_status,robot_speed</textarea>
+      <button id="subscribeBtn" disabled>发送订阅</button>
+
+      <h2>导航命令</h2>
+      <label for="singleId">单点 ID</label>
+      <input id="singleId" placeholder="例如: waypoint_001">
+      <button id="singleBtn" disabled>开始单点导航</button>
+
+      <label for="multiIds">多点 ID，逗号分隔</label>
+      <input id="multiIds" placeholder="例如: p1,p2,p3">
+      <button id="multiBtn" disabled>开始多点导航</button>
+
+      <div class="row" style="margin-top: 10px;">
+        <button id="stopBtn" class="danger" disabled>终止导航</button>
+        <button id="clearBtn">清空日志</button>
+      </div>
+
+      <h2>自定义消息</h2>
+      <textarea id="customJson">{
+  "message_type": "command",
+  "data_type": "navigation_control",
+  "data": {
+    "command_type": "stop_navigation",
+    "stop_parameters": {
+      "reason": "user_request",
+      "preserve_state": true
+    }
+  }
+}</textarea>
+      <button id="customBtn" disabled>发送 JSON</button>
+    </aside>
+
+    <main>
+      <div class="toolbar">
+        <span id="connStatus" class="status"><span class="dot"></span><span>未连接</span></span>
+        <button id="exportBtn">导出日志</button>
+      </div>
+
+      <section class="grid">
+        <div class="metric"><strong id="totalCount">0</strong><span>收到消息</span></div>
+        <div class="metric"><strong id="resultCount">0</strong><span>命令结果</span></div>
+        <div class="metric"><strong id="statusCount">0</strong><span>导航状态</span></div>
+        <div class="metric"><strong id="eventCount">0</strong><span>到达/完成/终止</span></div>
+      </section>
+
+      <section class="panel">
+        <h2>实时状态总览</h2>
+        <div class="status-grid">
+          <div class="status-card">
+            <span>机器人电量</span>
+            <strong id="batteryValue">暂无</strong>
+            <small id="batteryMeta">等待 system_status</small>
+          </div>
+          <div class="status-card">
+            <span>机器人模式</span>
+            <strong id="robotModeValue">暂无</strong>
+            <small id="robotModeMeta">等待 system_status</small>
+          </div>
+          <div class="status-card">
+            <span>导航状态</span>
+            <strong id="navigationStateValue">暂无</strong>
+            <small id="navigationMeta">等待 navigation_status</small>
+          </div>
+          <div class="status-card">
+            <span>当前目标</span>
+            <strong id="goalValue">暂无</strong>
+            <small id="goalMeta">等待导航目标</small>
+          </div>
+          <div class="status-card">
+            <span>当前坐标位姿</span>
+            <strong id="poseValue">暂无</strong>
+            <small id="poseMeta">等待 robot_pose</small>
+          </div>
+          <div class="status-card">
+            <span>实时线速度</span>
+            <strong id="speedValue">暂无</strong>
+            <small id="speedMeta">等待 robot_speed</small>
+          </div>
+          <div class="status-card">
+            <span>实时角速度</span>
+            <strong id="turnRateValue">暂无</strong>
+            <small id="turnRateMeta">等待 robot_speed</small>
+          </div>
+          <div class="status-card">
+            <span>数据新鲜度</span>
+            <strong id="freshnessValue">暂无</strong>
+            <small id="freshnessMeta">按本网页收到消息时间计算</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>消息收包状态</h2>
+        <div class="health-grid">
+          <div class="health-row header">
+            <span>数据类型</span>
+            <span>状态</span>
+            <span>次数</span>
+            <span>最近一次</span>
+          </div>
+          <div class="health-row">
+            <span>robot_speed</span>
+            <span id="healthSpeedState" class="badge bad">未收到</span>
+            <span id="healthSpeedCount">0</span>
+            <span id="healthSpeedAge">-</span>
+          </div>
+          <div class="health-row">
+            <span>robot_pose</span>
+            <span id="healthPoseState" class="badge bad">未收到</span>
+            <span id="healthPoseCount">0</span>
+            <span id="healthPoseAge">-</span>
+          </div>
+          <div class="health-row">
+            <span>navigation_status</span>
+            <span id="healthNavState" class="badge bad">未收到</span>
+            <span id="healthNavCount">0</span>
+            <span id="healthNavAge">-</span>
+          </div>
+          <div class="health-row">
+            <span>system_status</span>
+            <span id="healthSystemState" class="badge bad">未收到</span>
+            <span id="healthSystemCount">0</span>
+            <span id="healthSystemAge">-</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="split">
+        <div class="panel">
+          <h2>最后一条导航结果</h2>
+          <pre id="lastResult">暂无</pre>
+        </div>
+        <div class="panel">
+          <h2>最后一条导航状态</h2>
+          <pre id="lastStatus">暂无</pre>
+        </div>
+      </section>
+
+      <section class="split triple">
+        <div class="panel">
+          <h2>最后一条系统状态</h2>
+          <pre id="lastSystem">暂无</pre>
+        </div>
+        <div class="panel">
+          <h2>最后一条位姿</h2>
+          <pre id="lastPose">暂无</pre>
+        </div>
+        <div class="panel">
+          <h2>最后一条速度</h2>
+          <pre id="lastSpeed">暂无</pre>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>消息时间线</h2>
+        <div id="timeline" class="log-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>原始消息</h2>
+        <pre id="rawLog"></pre>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const state = {
+      ws: null,
+      connected: false,
+      log: [],
+      counts: {
+        total: 0,
+        result: 0,
+        status: 0,
+        event: 0
+      },
+      latest: {
+        system: null,
+        navigation: null,
+        pose: null,
+        speed: null
+      },
+      messageStats: {},
+      receivedHistory: [],
+      sentHistory: [],
+      navigationEvents: [],
+      lastProgressStoredAt: 0,
+      lastSpeedStoredAt: 0
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const MAX_DIAGNOSTIC_HISTORY = 5000;
+    const MAX_NAVIGATION_EVENTS = 1000;
+    const WATCHED_TYPES = ["robot_speed", "robot_pose", "navigation_status", "system_status"];
+    const HEALTH_IDS = {
+      robot_speed: ["healthSpeedState", "healthSpeedCount", "healthSpeedAge"],
+      robot_pose: ["healthPoseState", "healthPoseCount", "healthPoseAge"],
+      navigation_status: ["healthNavState", "healthNavCount", "healthNavAge"],
+      system_status: ["healthSystemState", "healthSystemCount", "healthSystemAge"]
+    };
+
+    function nowSec() {
+      return Date.now() / 1000;
+    }
+
+    function newId(prefix) {
+      return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+    }
+
+    function baseMessage(messageType, dataType, data) {
+      return {
+        protocol_version: "2.0",
+        message_id: newId(messageType),
+        timestamp: nowSec(),
+        message_type: messageType,
+        data_type: dataType,
+        source: "app_simulator",
+        destination: "ros",
+        data: data || {}
+      };
+    }
+
+    function setConnected(connected) {
+      state.connected = connected;
+      $("connectBtn").disabled = connected;
+      $("disconnectBtn").disabled = !connected;
+      $("subscribeBtn").disabled = !connected;
+      $("singleBtn").disabled = !connected;
+      $("multiBtn").disabled = !connected;
+      $("stopBtn").disabled = !connected;
+      $("customBtn").disabled = !connected;
+
+      const status = $("connStatus");
+      status.className = `status ${connected ? "ok" : "bad"}`;
+      status.lastElementChild.textContent = connected ? "已连接" : "未连接";
+    }
+
+    function sendMessage(message) {
+      if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+        recordSentHistory(message, "send_failed");
+        addLocalLog("send_failed", { message: "WebSocket 未连接", payload: message }, "bad");
+        return;
+      }
+      state.ws.send(JSON.stringify(message));
+      recordSentHistory(message, "sent");
+      addLocalLog("sent", message, "warn");
+    }
+
+    function firstValue(...values) {
+      for (const value of values) {
+        if (value !== undefined && value !== null && value !== "") {
+          return value;
+        }
+      }
+      return null;
+    }
+
+    function numberValue(value) {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : null;
+    }
+
+    function formatNumber(value, digits = 2) {
+      const num = numberValue(value);
+      return num === null ? "暂无" : num.toFixed(digits);
+    }
+
+    function formatBool(value) {
+      if (value === true) return "是";
+      if (value === false) return "否";
+      return "未知";
+    }
+
+    function formatAgeFromMs(timestampMs) {
+      if (!timestampMs) {
+        return "-";
+      }
+      const ageSec = Math.max(0, (Date.now() - timestampMs) / 1000);
+      if (ageSec < 1) {
+        return "刚刚";
+      }
+      if (ageSec < 60) {
+        return `${ageSec.toFixed(1)}s前`;
+      }
+      return `${Math.floor(ageSec / 60)}m${Math.floor(ageSec % 60)}s前`;
+    }
+
+    function yawFromQuaternion(orientation) {
+      if (!orientation) {
+        return null;
+      }
+      const x = numberValue(orientation.x);
+      const y = numberValue(orientation.y);
+      const z = numberValue(orientation.z);
+      const w = numberValue(orientation.w);
+      if ([x, y, z, w].some((value) => value === null)) {
+        return null;
+      }
+      const siny = 2 * (w * z + x * y);
+      const cosy = 1 - 2 * (y * y + z * z);
+      return Math.atan2(siny, cosy);
+    }
+
+    function setText(id, text) {
+      const el = $(id);
+      if (el) {
+        el.textContent = text;
+      }
+    }
+
+    function setPre(id, message) {
+      const el = $(id);
+      if (el) {
+        el.textContent = JSON.stringify(message, null, 2);
+      }
+    }
+
+    function trimArray(items, maxLength) {
+      if (items.length > maxLength) {
+        items.splice(0, items.length - maxLength);
+      }
+    }
+
+    function compactMessageRecord(direction, message, status) {
+      const data = message.data || {};
+      return {
+        wall_time_ms: Date.now(),
+        wall_time_iso: new Date().toISOString(),
+        direction,
+        status: status || "",
+        message_type: message.message_type || "",
+        data_type: message.data_type || "",
+        event_type: data.event_type || "",
+        ack_type: data.ack_type || "",
+        current_state: data.current_state || "",
+        destination: message.destination || "",
+        source: message.source || "",
+        message_id: message.message_id || "",
+        metadata_status: message.metadata?.status || "",
+        message
+      };
+    }
+
+    function recordReceivedHistory(message) {
+      state.receivedHistory.push(compactMessageRecord("recv", message, "received"));
+      trimArray(state.receivedHistory, MAX_DIAGNOSTIC_HISTORY);
+    }
+
+    function recordSentHistory(message, status) {
+      state.sentHistory.push(compactMessageRecord("send", message, status));
+      trimArray(state.sentHistory, MAX_DIAGNOSTIC_HISTORY);
+    }
+
+    function recordNavigationEvent(message) {
+      if (message.data_type !== "navigation_status") {
+        return;
+      }
+
+      const data = message.data || {};
+      state.navigationEvents.push({
+        wall_time_ms: Date.now(),
+        wall_time_iso: new Date().toISOString(),
+        event_type: data.event_type || "",
+        current_state: data.current_state || "",
+        navigation_mode: data.navigation_mode || "",
+        sequence_id: data.sequence_id || "",
+        waypoint_index: firstValue(data.current_waypoint_index, data.event_data?.waypoint_index),
+        waypoint_id: firstValue(data.current_goal?.waypoint_id, data.event_data?.waypoint_id),
+        waypoint_name: firstValue(data.current_goal?.waypoint_name, data.event_data?.waypoint_name),
+        distance_to_goal: firstValue(data.distance_to_goal, data.event_data?.distance_to_goal),
+        progress_percentage: data.progress_percentage,
+        is_active: data.is_active,
+        message
+      });
+      trimArray(state.navigationEvents, MAX_NAVIGATION_EVENTS);
+    }
+
+    function noteMessageStats(message) {
+      const dataType = message.data_type || "unknown";
+      const stat = state.messageStats[dataType] || { count: 0, lastAt: 0 };
+      stat.count += 1;
+      stat.lastAt = Date.now();
+      stat.lastMessage = message;
+      state.messageStats[dataType] = stat;
+    }
+
+    function updateParsedState(message) {
+      const dataType = message.data_type || "";
+      const data = message.data || {};
+      const entry = {
+        data,
+        message,
+        receivedAt: Date.now()
+      };
+
+      if (dataType === "system_status") {
+        state.latest.system = entry;
+        setPre("lastSystem", message);
+      } else if (dataType === "robot_pose") {
+        state.latest.pose = entry;
+        setPre("lastPose", message);
+      } else if (dataType === "robot_speed") {
+        state.latest.speed = entry;
+        setPre("lastSpeed", message);
+      } else if (dataType === "navigation_status") {
+        state.latest.navigation = entry;
+      }
+    }
+
+    function getSpeedSource() {
+      if (state.latest.speed) {
+        return {
+          data: state.latest.speed.data,
+          source: "robot_speed",
+          receivedAt: state.latest.speed.receivedAt
+        };
+      }
+
+      const nav = state.latest.navigation?.data || {};
+      const navSpeed = nav.robot_speed || nav.current_velocity;
+      if (navSpeed) {
+        return {
+          data: navSpeed,
+          source: "navigation_status",
+          receivedAt: state.latest.navigation?.receivedAt
+        };
+      }
+
+      return null;
+    }
+
+    function renderDashboard() {
+      const system = state.latest.system?.data || {};
+      const details = system.details || {};
+      const power = details.power_info || system.power_info || {};
+      const nav = state.latest.navigation?.data || {};
+      const directPose = state.latest.pose?.data || null;
+      const pose = directPose || nav.current_pose || {};
+      const speedSource = getSpeedSource();
+      const speed = speedSource?.data || {};
+
+      const battery = firstValue(system.battery_level, details.battery_level);
+      setText("batteryValue", battery === null ? "暂无" : `${battery}%`);
+      const voltage = firstValue(power.total_voltage, power.voltage);
+      const current = firstValue(power.total_current, power.current);
+      setText(
+        "batteryMeta",
+        voltage === null && current === null
+          ? "等待 system_status"
+          : `电压 ${formatNumber(voltage, 1)}V，电流 ${formatNumber(current, 1)}A`
+      );
+
+      const robotState = firstValue(system.robot_status, system.robot_state, details.robot_state);
+      const systemMode = firstValue(system.system_mode, details.system_mode, details.mode);
+      const modeText = [systemMode, robotState].filter(Boolean).join(" / ");
+      setText("robotModeValue", modeText || "暂无");
+      setText(
+        "robotModeMeta",
+        `动作忙: ${formatBool(firstValue(system.motion_busy, details.motion_busy))}，导航就绪: ${formatBool(firstValue(system.control_ready_for_navigation, details.control_ready_for_navigation))}`
+      );
+
+      const navState = firstValue(nav.current_state, nav.event_type);
+      const navMode = firstValue(nav.navigation_mode, nav.current_navigation_mode);
+      const progress = numberValue(nav.progress_percentage);
+      setText("navigationStateValue", navState || "暂无");
+      setText(
+        "navigationMeta",
+        `${navMode || "无模式"}，进度 ${progress === null ? "暂无" : `${progress.toFixed(1)}%`}，active: ${formatBool(nav.is_active)}`
+      );
+
+      const goal = nav.current_goal || {};
+      const goalName = firstValue(goal.waypoint_name, goal.waypoint_id, nav.event_data?.waypoint_id);
+      const distance = firstValue(nav.distance_to_goal, nav.event_data?.distance_to_goal);
+      setText("goalValue", goalName || "暂无");
+      setText("goalMeta", distance === null ? "等待距离" : `距离目标 ${formatNumber(distance, 2)}m`);
+
+      const pos = pose.position || {};
+      const yaw = yawFromQuaternion(pose.orientation);
+      const hasPose = pos.x !== undefined || pos.y !== undefined || pos.z !== undefined;
+      setText(
+        "poseValue",
+        hasPose
+          ? `x ${formatNumber(pos.x, 2)}, y ${formatNumber(pos.y, 2)}, z ${formatNumber(pos.z, 2)}`
+          : "暂无"
+      );
+      setText(
+        "poseMeta",
+        hasPose
+          ? `${directPose ? "robot_pose" : "navigation_status.current_pose"}，yaw ${yaw === null ? "暂无" : `${(yaw * 180 / Math.PI).toFixed(1)}deg`}`
+          : "等待 robot_pose"
+      );
+
+      const vx = firstValue(speed.linear_x, speed.linear?.x);
+      const vy = firstValue(speed.linear_y, speed.linear?.y);
+      const wz = firstValue(speed.angular_z, speed.angular?.z);
+      const directSpeedMps = firstValue(speed.speed_mps);
+      const vxNumber = numberValue(vx);
+      const vyNumber = numberValue(vy);
+      const computedSpeed = directSpeedMps !== null
+        ? numberValue(directSpeedMps)
+        : (vxNumber !== null || vyNumber !== null ? Math.hypot(vxNumber || 0, vyNumber || 0) : null);
+      setText("speedValue", speedSource ? `${formatNumber(computedSpeed, 3)} m/s` : "暂无");
+      setText("speedMeta", speedSource ? `来源 ${speedSource.source}，x ${formatNumber(vx, 3)}，y ${formatNumber(vy, 3)}` : "等待 robot_speed");
+      setText("turnRateValue", speedSource ? `${formatNumber(wz, 3)} rad/s` : "暂无");
+      setText("turnRateMeta", speedSource ? `is_moving: ${formatBool(speed.is_moving)}` : "等待 robot_speed");
+
+      const freshnessParts = WATCHED_TYPES
+        .map((type) => {
+          const stat = state.messageStats[type];
+          return `${type}: ${stat ? formatAgeFromMs(stat.lastAt) : "-"}`;
+        });
+      setText("freshnessValue", state.counts.total ? `${state.counts.total} 条` : "暂无");
+      setText("freshnessMeta", freshnessParts.join(" | "));
+
+      renderMessageHealth();
+    }
+
+    function renderMessageHealth() {
+      WATCHED_TYPES.forEach((type) => {
+        const stat = state.messageStats[type];
+        const [stateId, countId, ageId] = HEALTH_IDS[type];
+        const stateEl = $(stateId);
+        const received = Boolean(stat && stat.count > 0);
+        if (stateEl) {
+          stateEl.textContent = received ? "已收到" : "未收到";
+          stateEl.className = `badge ${received ? "ok" : "bad"}`;
+        }
+        setText(countId, String(stat?.count || 0));
+        setText(ageId, stat ? formatAgeFromMs(stat.lastAt) : "-");
+      });
+    }
+
+    function classify(message) {
+      const dataType = message.data_type || "";
+      const data = message.data || {};
+      const eventType = data.event_type || "";
+      const ackType = data.ack_type || "";
+      const status = data.status || message.metadata?.status || "";
+
+      if (dataType === "navigation_command_result") {
+        return {
+          label: `result ${ackType || "unknown"} ${status || ""}`,
+          kind: status === "error" ? "bad" : "ok"
+        };
+      }
+      if (dataType === "navigation_status") {
+        const eventName = eventType || data.current_state || "status";
+        const isTerminal = ["waypoint_reached", "navigation_completed", "navigation_stopped"].includes(eventType);
+        return {
+          label: `status ${eventName}`,
+          kind: isTerminal ? "ok" : "warn"
+        };
+      }
+      return {
+        label: `${message.message_type || "message"} ${dataType || "unknown"}`,
+        kind: ""
+      };
+    }
+
+    function recordReceived(message) {
+      recordReceivedHistory(message);
+      recordNavigationEvent(message);
+      noteMessageStats(message);
+      updateParsedState(message);
+      const shouldStore = shouldStoreReceived(message);
+      const item = {
+        at: new Date().toLocaleTimeString(),
+        direction: "recv",
+        message
+      };
+      state.counts.total += 1;
+
+      if (message.data_type === "navigation_command_result") {
+        state.counts.result += 1;
+        $("lastResult").textContent = JSON.stringify(message, null, 2);
+      }
+
+      if (message.data_type === "navigation_status") {
+        state.counts.status += 1;
+        $("lastStatus").textContent = JSON.stringify(message, null, 2);
+        const eventType = message.data?.event_type;
+        if (["waypoint_reached", "navigation_completed", "navigation_stopped"].includes(eventType)) {
+          state.counts.event += 1;
+        }
+      }
+
+      if (message.data_type === "robot_speed") {
+        state.counts.speed = (state.counts.speed || 0) + 1;
+      }
+
+      if (message.data_type === "robot_pose") {
+        state.counts.pose = (state.counts.pose || 0) + 1;
+      }
+
+      if (message.data_type === "system_status") {
+        state.counts.system = (state.counts.system || 0) + 1;
+      }
+
+      if (shouldStore) {
+        state.log.unshift(item);
+        trimLog();
+        render();
+      } else {
+        renderCounts();
+      }
+    }
+
+    function shouldStoreReceived(message) {
+      const now = Date.now();
+      const isProgress = (
+        message.data_type === "navigation_status" &&
+        message.data?.event_type === "navigation_progress_update"
+      );
+      if (isProgress) {
+        if (now - state.lastProgressStoredAt < 1000) {
+          return false;
+        }
+        state.lastProgressStoredAt = now;
+      }
+
+      if (message.data_type === "robot_speed") {
+        if (now - state.lastSpeedStoredAt < 1000) {
+          return false;
+        }
+        state.lastSpeedStoredAt = now;
+      }
+
+      return true;
+    }
+
+    function addLocalLog(type, payload, kind) {
+      state.log.unshift({
+        at: new Date().toLocaleTimeString(),
+        direction: type,
+        kind: kind || "",
+        message: payload
+      });
+      trimLog();
+      render();
+    }
+
+    function trimLog() {
+      if (state.log.length > 200) {
+        state.log.length = 200;
+      }
+    }
+
+    function renderCounts() {
+      $("totalCount").textContent = state.counts.total;
+      $("resultCount").textContent = state.counts.result;
+      $("statusCount").textContent = state.counts.status;
+      $("eventCount").textContent = state.counts.event;
+      renderDashboard();
+    }
+
+    function render() {
+      renderCounts();
+
+      $("rawLog").textContent = state.log
+        .slice(0, 80)
+        .map((item) => `[${item.at}] ${item.direction}\n${JSON.stringify(item.message, null, 2)}`)
+        .join("\n\n");
+
+      const timeline = $("timeline");
+      timeline.textContent = "";
+      state.log.slice(0, 80).forEach((item) => {
+        const cls = item.kind || classify(item.message).kind;
+        const label = item.direction === "recv" ? classify(item.message).label : item.direction;
+        const entry = document.createElement("article");
+        entry.className = `entry ${cls || ""}`;
+
+        const header = document.createElement("header");
+        const type = document.createElement("span");
+        type.className = "type";
+        type.textContent = label;
+        const time = document.createElement("span");
+        time.textContent = item.at;
+        header.append(type, time);
+
+        const body = document.createElement("pre");
+        body.textContent = JSON.stringify(item.message.data || item.message, null, 2);
+        body.style.minHeight = "0";
+        body.style.maxHeight = "160px";
+
+        entry.append(header, body);
+        timeline.appendChild(entry);
+      });
+    }
+
+    function connect() {
+      const url = $("wsUrl").value.trim();
+      if (!url) {
+        return;
+      }
+
+      const ws = new WebSocket(url);
+      state.ws = ws;
+
+      ws.onopen = () => {
+        setConnected(true);
+        addLocalLog("connected", { url }, "ok");
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          recordReceived(JSON.parse(event.data));
+        } catch (err) {
+          recordReceived({ raw: event.data, parse_error: String(err) });
+        }
+      };
+
+      ws.onclose = () => {
+        setConnected(false);
+        addLocalLog("closed", { url }, "warn");
+      };
+
+      ws.onerror = () => {
+        addLocalLog("error", { url, message: "WebSocket error" }, "bad");
+      };
+    }
+
+    function disconnect() {
+      if (state.ws) {
+        state.ws.close();
+      }
+    }
+
+    function subscribe() {
+      const types = $("subTypes").value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      sendMessage(baseMessage("subscription", "system_status", {
+        action: "subscribe",
+        data_types: types,
+        push_frequency: 5.0
+      }));
+    }
+
+    function startSingle() {
+      const waypointId = $("singleId").value.trim();
+      sendMessage(baseMessage("command", "navigation_control", {
+        command_type: "start_single_navigation",
+        waypoint_id: waypointId
+      }));
+    }
+
+    function startMulti() {
+      const waypointIds = $("multiIds").value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      sendMessage(baseMessage("command", "navigation_control", {
+        command_type: "start_multi_point_navigation",
+        waypoint_ids: waypointIds
+      }));
+    }
+
+    function stopNavigation() {
+      sendMessage(baseMessage("command", "navigation_control", {
+        command_type: "stop_navigation",
+        stop_parameters: {
+          reason: "user_request",
+          preserve_state: true,
+          emergency_stop: false
+        }
+      }));
+    }
+
+    function sendCustom() {
+      try {
+        const payload = JSON.parse($("customJson").value);
+        const message = Object.assign(
+          baseMessage(payload.message_type || "command", payload.data_type || "navigation_control", {}),
+          payload
+        );
+        message.message_id = message.message_id || newId(message.message_type || "msg");
+        message.timestamp = message.timestamp || nowSec();
+        message.source = message.source || "app_simulator";
+        message.destination = message.destination || "ros";
+        sendMessage(message);
+      } catch (err) {
+        addLocalLog("invalid_json", { message: String(err) }, "bad");
+      }
+    }
+
+    function clearLog() {
+      state.log = [];
+      state.counts = { total: 0, result: 0, status: 0, event: 0 };
+      state.latest = { system: null, navigation: null, pose: null, speed: null };
+      state.messageStats = {};
+      state.receivedHistory = [];
+      state.sentHistory = [];
+      state.navigationEvents = [];
+      state.lastProgressStoredAt = 0;
+      state.lastSpeedStoredAt = 0;
+      $("lastResult").textContent = "暂无";
+      $("lastStatus").textContent = "暂无";
+      $("lastSystem").textContent = "暂无";
+      $("lastPose").textContent = "暂无";
+      $("lastSpeed").textContent = "暂无";
+      render();
+    }
+
+    function getSubscriptionTypes() {
+      return $("subTypes").value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    function messageStatsForExport() {
+      return Object.fromEntries(
+        Object.entries(state.messageStats).map(([dataType, stat]) => [
+          dataType,
+          {
+            count: stat.count,
+            last_at_ms: stat.lastAt,
+            last_at_iso: stat.lastAt ? new Date(stat.lastAt).toISOString() : null,
+            last_age_sec: stat.lastAt ? Number(((Date.now() - stat.lastAt) / 1000).toFixed(3)) : null,
+            last_message_id: stat.lastMessage?.message_id || "",
+            last_message_type: stat.lastMessage?.message_type || "",
+            last_data_type: stat.lastMessage?.data_type || "",
+            last_event_type: stat.lastMessage?.data?.event_type || "",
+            last_current_state: stat.lastMessage?.data?.current_state || "",
+            last_metadata_status: stat.lastMessage?.metadata?.status || ""
+          }
+        ])
+      );
+    }
+
+    function buildDiagnosticSummary() {
+      const speedSource = getSpeedSource();
+      const navTerminalEvents = state.navigationEvents.filter((item) =>
+        ["waypoint_reached", "navigation_completed", "navigation_stopped", "navigation_failed", "navigation_cancelled", "navigation_paused"].includes(item.event_type)
+      );
+
+      return {
+        received_robot_speed: Boolean(state.messageStats.robot_speed?.count),
+        received_robot_pose: Boolean(state.messageStats.robot_pose?.count),
+        received_navigation_status: Boolean(state.messageStats.navigation_status?.count),
+        received_system_status: Boolean(state.messageStats.system_status?.count),
+        speed_display_source: speedSource?.source || null,
+        missing_watched_types: WATCHED_TYPES.filter((type) => !state.messageStats[type]?.count),
+        received_navigation_completed: state.navigationEvents.some((item) => item.event_type === "navigation_completed"),
+        received_waypoint_reached: state.navigationEvents.some((item) => item.event_type === "waypoint_reached"),
+        received_navigation_terminal_events: navTerminalEvents.map((item) => ({
+          wall_time_iso: item.wall_time_iso,
+          event_type: item.event_type,
+          current_state: item.current_state,
+          waypoint_id: item.waypoint_id,
+          waypoint_name: item.waypoint_name
+        })),
+        last_navigation_event: state.navigationEvents[state.navigationEvents.length - 1] || null,
+        last_sent_navigation_command: [...state.sentHistory]
+          .reverse()
+          .find((item) => item.message?.data_type === "navigation_control") || null
+      };
+    }
+
+    function buildExportPayload() {
+      return {
+        export_schema: "navigation_app_simulator_diagnostic_v2",
+        exported_at_ms: Date.now(),
+        exported_at_iso: new Date().toISOString(),
+        page_url: window.location.href,
+        websocket_url: $("wsUrl").value.trim(),
+        connected_at_export: state.connected,
+        configured_subscription_types: getSubscriptionTypes(),
+        counts: state.counts,
+        message_stats: messageStatsForExport(),
+        diagnostic_summary: buildDiagnosticSummary(),
+        latest_messages: {
+          system_status: state.latest.system?.message || null,
+          navigation_status: state.latest.navigation?.message || null,
+          robot_pose: state.latest.pose?.message || null,
+          robot_speed: state.latest.speed?.message || null
+        },
+        navigation_events: state.navigationEvents,
+        sent_history: state.sentHistory,
+        received_history: state.receivedHistory,
+        visible_timeline: state.log
+      };
+    }
+
+    function exportLog() {
+      const blob = new Blob([JSON.stringify(buildExportPayload(), null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `navigation_app_sim_diagnostic_${Date.now()}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    $("connectBtn").addEventListener("click", connect);
+    $("disconnectBtn").addEventListener("click", disconnect);
+    $("subscribeBtn").addEventListener("click", subscribe);
+    $("singleBtn").addEventListener("click", startSingle);
+    $("multiBtn").addEventListener("click", startMulti);
+    $("stopBtn").addEventListener("click", stopNavigation);
+    $("customBtn").addEventListener("click", sendCustom);
+    $("clearBtn").addEventListener("click", clearLog);
+    $("exportBtn").addEventListener("click", exportLog);
+
+    setConnected(false);
+    render();
+    setInterval(renderDashboard, 1000);
+  </script>
+</body>
+</html>

@@ -24,7 +24,7 @@ def generate_launch_description():
         # 数据整合节点（存储和整合数据）
         Node(
             package='humanoid_websocket',
-            executable='data_integration_node',
+            executable='data_integration_node_recoverable',
             name='data_integration_node',
             output='screen'
         ),

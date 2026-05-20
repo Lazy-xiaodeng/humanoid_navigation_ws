@@ -202,6 +202,7 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
       "收到空点云，跳过处理");
     return;
   }
+  const rclcpp::Time cloud_stamp(msg->header.stamp, this->get_clock()->get_clock_type());
   
   // ===== 第 2 步：坐标变换到 body =====
   geometry_msgs::msg::TransformStamped transform_to_body;
@@ -209,7 +210,8 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
     transform_to_body = tf_buffer_->lookupTransform(
       "body",
       msg->header.frame_id,
-      tf2::TimePointZero
+      cloud_stamp,
+      rclcpp::Duration::from_seconds(0.1)
     );
   } catch (const tf2::TransformException & ex) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
@@ -258,7 +260,8 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
     transform_to_bf = tf_buffer_->lookupTransform(
       "base_footprint",
       "body",
-      tf2::TimePointZero
+      cloud_stamp,
+      rclcpp::Duration::from_seconds(0.1)
     );
   } catch (const tf2::TransformException & ex) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
@@ -336,6 +339,8 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
   
   // ===== 第 7 步：发布点云 =====
   std_msgs::msg::Header header;
+  // Keep the output stamp tied to the scan-time TF used above. Stamping this
+  // with wall time can put the cloud in the future of Fast-LIO's dynamic TF.
   header.stamp = msg->header.stamp;
   header.frame_id = "base_footprint";
   

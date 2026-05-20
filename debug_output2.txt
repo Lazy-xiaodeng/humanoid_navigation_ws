@@ -1,0 +1,950 @@
+[INFO] [launch]: All log files can be found below /home/ubuntu/.ros/log/2026-05-20-17-00-34-926619-ubuntu-411833
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [411910]
+[INFO] [joint_state_publisher-2]: process started with pid [411911]
+[robot_state_publisher-1] [INFO] [1779267635.317819616] [robot_state_publisher]: Robot initialized
+[joint_state_publisher-2] [INFO] [1779267635.623965188] [joint_state_publisher]: Waiting for robot_description to be published on the robot_description topic...
+[joint_state_publisher-2] [INFO] [1779267635.761186256] [joint_state_publisher]: Got description, configuring robot
+[INFO] [rslidar_sdk_node-3]: process started with pid [412776]
+[INFO] [fastlio_mapping-4]: process started with pid [412777]
+[INFO] [static_transform_publisher-5]: process started with pid [412778]
+[INFO] [static_transform_publisher-6]: process started with pid [412779]
+[INFO] [dynamic_odom_ground_publisher-7]: process started with pid [412780]
+[INFO] [static_transform_publisher-8]: process started with pid [412781]
+[INFO] [static_transform_publisher-9]: process started with pid [412782]
+[INFO] [point_cloud_filter_node-10]: process started with pid [412783]
+[INFO] [wait_for_tf-11]: process started with pid [412784]
+[static_transform_publisher-6] [WARN] [1779267641.306863077] []: Old-style arguments are deprecated; see --help for new-style arguments
+[rslidar_sdk_node-3] [1m[35m********************************************************[0m
+[rslidar_sdk_node-3] [1m[35m**********                                    **********[0m
+[rslidar_sdk_node-3] [1m[35m**********    RSLidar_SDK Version: v1.5.18     **********[0m
+[rslidar_sdk_node-3] [1m[35m**********                                    **********[0m
+[rslidar_sdk_node-3] [1m[35m********************************************************[0m
+[static_transform_publisher-9] [INFO] [1779267641.476885974] [tf_base_footprint_to_clearing_lidar]: Spinning until stopped - publishing transform
+[static_transform_publisher-9] translation: ('0.000000', '0.000000', '1.215000')
+[static_transform_publisher-9] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-9] from 'base_footprint' to 'clearing_lidar'
+[static_transform_publisher-8] [INFO] [1779267641.477251117] [tf_body_to_base_footprint]: Spinning until stopped - publishing transform
+[static_transform_publisher-8] translation: ('0.004000', '1.215000', '0.072000')
+[static_transform_publisher-8] rotation: ('0.500000', '0.500000', '-0.500000', '0.500000')
+[static_transform_publisher-8] from 'body' to 'base_footprint'
+[point_cloud_filter_node-10] [INFO] [1779267641.477392430] [point_cloud_filter_node]: 点云滤波线程数: 4
+[static_transform_publisher-5] [INFO] [1779267641.481634601] [tf_odom_to_camera_init]: Spinning until stopped - publishing transform
+[static_transform_publisher-5] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-5] rotation: ('-0.500000', '-0.500000', '0.500000', '0.500000')
+[static_transform_publisher-5] from 'odom' to 'camera_init'
+[static_transform_publisher-6] [INFO] [1779267641.484382270] [tf_map_to_ground]: Spinning until stopped - publishing transform
+[static_transform_publisher-6] translation: ('0.000000', '0.000000', '-1.215000')
+[static_transform_publisher-6] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-6] from 'map' to 'map_ground'
+[point_cloud_filter_node-10] [INFO] [1779267641.485427162] [point_cloud_filter_node]: 高性能点云滤波节点已启动
+[point_cloud_filter_node-10]   输入话题: /fast_lio/cloud_registered
+[point_cloud_filter_node-10]   高程图输出: /airy_points_for_elevation
+[point_cloud_filter_node-10]   导航输出: /airy_points_filtered
+[point_cloud_filter_node-10]   启用滤波: SOR=是, 高度连续=是, 密度=是, 运动检测=是
+[rslidar_sdk_node-3] [1m[32m--------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32mConfig loaded from PATH:[0m
+[rslidar_sdk_node-3] [1m[32m/home/ubuntu/humanoid_ws/src/rslidar_sdk/config/config.yaml[0m
+[rslidar_sdk_node-3] [1m[32m--------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32mReceive Packets From : Online LiDAR[0m
+[rslidar_sdk_node-3] [1m[32mMsop Port: 6699[0m
+[rslidar_sdk_node-3] [1m[32mDifop Port: 7788[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Driver Parameters [0m
+[rslidar_sdk_node-3] [32minput type: ONLINE_LIDAR[0m
+[rslidar_sdk_node-3] [32mlidar_type: RSAIRY[0m
+[rslidar_sdk_node-3] [32mframe_id: rslidar[0m
+[rslidar_sdk_node-3] [32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Input Parameters [0m
+[rslidar_sdk_node-3] [32mmsop_port: 6699[0m
+[rslidar_sdk_node-3] [32mdifop_port: 7788[0m
+[rslidar_sdk_node-3] [32mimu_port: 6688[0m
+[rslidar_sdk_node-3] [32muser_layer_bytes: 0[0m
+[rslidar_sdk_node-3] [32mtail_layer_bytes: 0[0m
+[rslidar_sdk_node-3] [32mhost_address: 0.0.0.0[0m
+[rslidar_sdk_node-3] [32mgroup_address: 0.0.0.0[0m
+[rslidar_sdk_node-3] [32msocket_recv_buf: 106496[0m
+[rslidar_sdk_node-3] [32mpcap_path: /home/robosense/lidar.pcap[0m
+[rslidar_sdk_node-3] [32mpcap_rate: 1[0m
+[rslidar_sdk_node-3] [32mpcap_repeat: 1[0m
+[rslidar_sdk_node-3] [32muse_vlan: 0[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Decoder Parameters [0m
+[rslidar_sdk_node-3] [32mmin_distance: 0.1[0m
+[rslidar_sdk_node-3] [32mmax_distance: 60[0m
+[rslidar_sdk_node-3] [32muse_lidar_clock: 0[0m
+[rslidar_sdk_node-3] [32mdense_points: 0[0m
+[rslidar_sdk_node-3] [32mts_first_point: 1[0m
+[rslidar_sdk_node-3] [32mwait_for_difop: 1[0m
+[rslidar_sdk_node-3] [32mconfig_from_file: 0[0m
+[rslidar_sdk_node-3] [32mangle_path: [0m
+[rslidar_sdk_node-3] [32mstart_angle: 0[0m
+[rslidar_sdk_node-3] [32mend_angle: 360[0m
+[rslidar_sdk_node-3] [32msplit_frame_mode: 1[0m
+[rslidar_sdk_node-3] [32msplit_angle: 0[0m
+[rslidar_sdk_node-3] [32mnum_blks_split: 0[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Transform Parameters [0m
+[rslidar_sdk_node-3] [32mx: 0[0m
+[rslidar_sdk_node-3] [32my: 0[0m
+[rslidar_sdk_node-3] [32mz: 0[0m
+[rslidar_sdk_node-3] [32mroll: 0[0m
+[rslidar_sdk_node-3] [32mpitch: 0[0m
+[rslidar_sdk_node-3] [32myaw: 0[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[36m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[36mSend PointCloud To : ROS[0m
+[rslidar_sdk_node-3] [1m[36mPointCloud Topic: /airy_points[0m
+[rslidar_sdk_node-3] [1m[36m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [WARN] [1779267641.507990978] [rcl.logging_rosout]: Publisher already registered for node name: 'rslidar_sdk_node'. If this is due to multiple nodes with the same name then all logs for the logger named 'rslidar_sdk_node' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[rslidar_sdk_node-3] [1m[37mRoboSense-LiDAR-Driver is running.....[0m
+[fastlio_mapping-4] [INFO] [1779267641.653203585] [fast_lio_node]: p_pre->lidar_type 5
+[fastlio_mapping-4] [INFO] [1779267641.675562912] [fast_lio_node]: Node init finished.
+[fastlio_mapping-4] [INFO] [1779267641.675762065] [fast_lio_node]: Starting LaserMappingNode with MultiThreadedExecutor (4 Threads)...
+[wait_for_tf-11] [INFO] [1779267641.938844544] [wait_for_localization_tf]: waiting for TF map_ground->base_footprint before starting dependent nodes
+[dynamic_odom_ground_publisher-7] [INFO] [1779267641.948718630] [dynamic_odom_ground_publisher]: publishing odom->odom_ground from odom->base_footprint height
+[dynamic_odom_ground_publisher-7] [WARN] [1779267642.019715275] [dynamic_odom_ground_publisher]: waiting for odom->base_footprint: "odom" passed to lookupTransform argument target_frame does not exist. 
+[wait_for_tf-11] [WARN] [1779267642.140219045] [wait_for_localization_tf]: TF not ready: map_ground->base_footprint: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[fastlio_mapping-4] [WARN] [1779267642.293806796] [fast_lio_node]: No point, skip this scan!
+[fastlio_mapping-4] 
+[INFO] [map_server-12]: process started with pid [413089]
+[map_server-12] [INFO] [1779267642.548659350] [map_server]: 
+[map_server-12] 	map_server lifecycle node launched. 
+[map_server-12] 	Waiting on external lifecycle transitions to activate
+[map_server-12] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[map_server-12] [INFO] [1779267642.548724985] [map_server]: Creating
+[fastlio_mapping-4] [INFO] [1779267642.684048714] [fast_lio_node]: Initialize the map kdtree
+[INFO] [periodic_clearing_publisher-13]: process started with pid [413327]
+[INFO] [periodic_clearing_3d_publisher-14]: process started with pid [413328]
+[periodic_clearing_3d_publisher-14] [INFO] [1779267643.779221836] [periodic_clearing_3d_publisher]: periodic_clearing_3d_publisher started.
+[periodic_clearing_3d_publisher-14] [INFO] [1779267643.779506502] [periodic_clearing_3d_publisher]: input_points_topic        : /fast_lio/cloud_registered
+[periodic_clearing_3d_publisher-14] [INFO] [1779267643.779699424] [periodic_clearing_3d_publisher]: output_clearing_cloud     : /clearing_cloud_3d
+[periodic_clearing_3d_publisher-14] [INFO] [1779267643.779894340] [periodic_clearing_3d_publisher]: target_frame              : base_footprint
+[periodic_clearing_3d_publisher-14] [INFO] [1779267643.780091521] [periodic_clearing_3d_publisher]: angle_min_deg             : -180.0
+[periodic_clearing_3d_publisher-14] [INFO] [1779267643.780294501] [periodic_clearing_3d_publisher]: angle_max_deg             : 180.0
+[periodic_clearing_3d_publisher-14] [INFO] [1779267643.780486541] [periodic_clearing_3d_publisher]: angle_increment_deg       : 1.0
+[periodic_clearing_3d_publisher-14] [INFO] [1779267643.780680248] [periodic_clearing_3d_publisher]: bin_count                 : 361
+[periodic_clearing_3d_publisher-14] [INFO] [1779267643.780890252] [periodic_clearing_3d_publisher]: clearing_range            : 0.3 ~ 5.0, step=0.5
+[periodic_clearing_3d_publisher-14] [INFO] [1779267643.781101473] [periodic_clearing_3d_publisher]: clearing_height_layers    : [0.05, 0.08, 0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5, 1.7]
+[periodic_clearing_3d_publisher-14] [INFO] [1779267643.781300977] [periodic_clearing_3d_publisher]: max_publish_rate_hz       : 2.0
+[periodic_clearing_3d_publisher-14] [INFO] [1779267643.781509252] [periodic_clearing_3d_publisher]: precomputed clearing_points : 39710
+[periodic_clearing_publisher-13] [INFO] [1779267643.808293764] [periodic_clearing_publisher]: 全向暴力 clearing_scan 节点已启动
+[periodic_clearing_publisher-13] [INFO] [1779267643.808572169] [periodic_clearing_publisher]: output topic      : /clearing_scan
+[periodic_clearing_publisher-13] [INFO] [1779267643.808740834] [periodic_clearing_publisher]: target frame      : base_footprint
+[periodic_clearing_publisher-13] [INFO] [1779267643.808919897] [periodic_clearing_publisher]: angle range       : -180.0 ~ 180.0 deg
+[periodic_clearing_publisher-13] [INFO] [1779267643.809081124] [periodic_clearing_publisher]: angle increment   : 1.0 deg
+[periodic_clearing_publisher-13] [INFO] [1779267643.809312064] [periodic_clearing_publisher]: scan size         : 361
+[periodic_clearing_publisher-13] [INFO] [1779267643.809484156] [periodic_clearing_publisher]: range             : 0.05 ~ 8.0 m
+[periodic_clearing_publisher-13] [INFO] [1779267643.809654244] [periodic_clearing_publisher]: publish rate      : 2.0 Hz
+[periodic_clearing_publisher-13] [INFO] [1779267643.809841017] [periodic_clearing_publisher]: clear mode        : range_max
+[INFO] [dynamic_waypoints_manager-15]: process started with pid [413581]
+[INFO] [navigation_state_manager_recoverable-16]: process started with pid [413582]
+[INFO] [websocket_server_node-17]: process started with pid [413583]
+[INFO] [data_integration_node_recoverable-18]: process started with pid [413584]
+[INFO] [websocket_client_node-19]: process started with pid [413585]
+[INFO] [message_bridge_node-20]: process started with pid [413586]
+[INFO] [facial_driver-21]: process started with pid [413587]
+[INFO] [lifecycle_manager-22]: process started with pid [413594]
+[lifecycle_manager-22] [INFO] [1779267644.449410550] [lifecycle_manager_map]: Creating
+[lifecycle_manager-22] [INFO] [1779267644.456140742] [lifecycle_manager_map]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[facial_driver-21] [INFO] [1779267644.747036317] [facial_driver]: ✅ 已连接到仿生头模块: /dev/ttyUSB0
+[websocket_server_node-17] [INFO] [1779267644.785386668] [websocket_server]: ✅ 完整ROS通信接口设置完成
+[websocket_server_node-17] [INFO] [1779267644.786590976] [websocket_server]: 🔄 创建WebSocket服务器实例...
+[websocket_server_node-17] [INFO] [1779267644.786887817] [websocket_server]: ✅ 开始启动WebSocket服务器: 0.0.0.0:8765
+[data_integration_node_recoverable-18] [INFO] [1779267644.793657067] [data_integration_node]: ✅ ROS通信接口设置完成
+[data_integration_node_recoverable-18] [INFO] [1779267644.793989393] [data_integration_node]: ✅ 定时任务设置完成
+[data_integration_node_recoverable-18] [INFO] [1779267644.796587735] [data_integration_node]: ✅ 已从 YAML 动态加载 5 个动作
+[websocket_server_node-17] [INFO] [1779267644.802306984] [websocket_server]: ✅ WebSocket服务器启动成功: 0.0.0.0:8765
+[websocket_server_node-17] [INFO] [1779267644.802576421] [websocket_server]: 🔄 WebSocket服务器正在运行...
+[data_integration_node_recoverable-18] [INFO] [1779267644.803075261] [data_integration_node]: ✅ 已独立加载 30 个面部表情
+[data_integration_node_recoverable-18] [INFO] [1779267644.803301982] [data_integration_node]: 🎯 统一数据整合节点启动完成
+[data_integration_node_recoverable-18] [INFO] [1779267644.803490173] [data_integration_node]: 📊 协议版本: 2.0
+[data_integration_node_recoverable-18] [INFO] [1779267644.803680056] [data_integration_node]: 🔄 支持的数据类型: ['robot_pose', 'robot_speed', 'navigation_status', 'navigation_path', 'system_status', 'gesture_list', 'facial_gesture_list']
+[data_integration_node_recoverable-18] [INFO] [1779267644.803898226] [data_integration_node]: 🚀 启动统一数据整合节点主循环...
+[dynamic_waypoints_manager-15] [INFO] [1779267645.078643387] [dynamic_waypoints_manager]: 数据持久化已启用，文件路径: /home/ubuntu/humanoid_ws/data/dynamic_waypoints.json
+[dynamic_waypoints_manager-15] [INFO] [1779267645.079830729] [dynamic_waypoints_manager]: 从文件加载点位数据完成，共 24 个点位，0 个序列
+[dynamic_waypoints_manager-15] [INFO] [1779267645.080204050] [dynamic_waypoints_manager]: 动态路点管理器启动完成 - 仅负责路点管理
+[dynamic_waypoints_manager-15] [INFO] [1779267645.080441352] [dynamic_waypoints_manager]: 动态路点管理器启动成功
+[websocket_client_node-19] [INFO] [1779267645.104133460] [websocket_client]: ✅ 已加载 2 个动作时长提示
+[websocket_client_node-19] [INFO] [1779267645.109780334] [websocket_client]: ROS组件初始化完成
+[websocket_client_node-19] [INFO] [1779267645.110859160] [websocket_client]: 尝试连接机器人服务器...
+[websocket_client_node-19] [INFO] [1779267645.111213375] [websocket_client]: WebSocket客户端启动，连接服务器: ws://10.192.1.2:5000
+[message_bridge_node-20] [INFO] [1779267645.121171268] [message_bridge]: 更新率: 10.0Hz, 缓冲区大小: 1000
+[websocket_client_node-19] [INFO] [1779267645.121203927] [websocket_client]: 已连接到机器人本体WebSocket服务器
+[message_bridge_node-20] [INFO] [1779267645.121391267] [message_bridge]: ✅ Message bridge node 初始化完成
+[websocket_client_node-19] [INFO] [1779267645.121478476] [websocket_client]: 📥 正在从机器人获取动作库列表...
+[websocket_client_node-19] [INFO] [1779267645.122765043] [websocket_client]: 收到动作库列表响应: {'accid': 'HU_D04_01_289', 'title': 'response_get_atomic_motion_list', 'guid': 'cfd49e56-1a4c-46ff-a5a4-a8cf1a528f87', 'timestamp': 4036383, 'data': {'result': 'success', 'motion_list': [{'motion_index': 0, 'motion_name_cn': '静止站立', 'motion_name_en': 'stand'}, {'motion_index': 1, 'motion_name_cn': '指引请这边走', 'motion_name_en': 'this_way_please'}, {'motion_index': 2, 'motion_name_cn': '鞠躬', 'motion_name_en': 'bow'}, {'motion_index': 3, 'motion_name_cn': '挥手（你好/拜拜）', 'motion_name_en': 'wave_greet_bye'}, {'motion_index': 4, 'motion_name_cn': '点头', 'motion_name_en': 'nod'}, {'motion_index': 5, 'motion_name_cn': '摇头', 'motion_name_en': 'shake_head'}, {'motion_index': 6, 'motion_name_cn': '谢幕', 'motion_name_en': 'curtain_bow'}, {'motion_index': 7, 'motion_name_cn': '连续飞吻', 'motion_name_en': 'blow_kisses_multi'}, {'motion_index': 8, 'motion_name_cn': '左手侧比心', 'motion_name_en': 'left_hand_side_heart'}, {'motion_index': 9, 'motion_name_cn': '右手侧比心', 'motion_name_en': 'right_hand_side_heart'}, {'motion_index': 10, 'motion_name_cn': '双手比心', 'motion_name_en': 'hand_heart'}, {'motion_index': 11, 'motion_name_cn': '与人击掌', 'motion_name_en': 'high_five'}, {'motion_index': 12, 'motion_name_cn': '鼓掌', 'motion_name_en': 'clap'}, {'motion_index': 13, 'motion_name_cn': '热场舞', 'motion_name_en': 'warm_up_dance'}, {'motion_index': 14, 'motion_name_cn': '展臂舞', 'motion_name_en': 'swag_dance'}, {'motion_index': 15, 'motion_name_cn': '女团舞1', 'motion_name_en': 'idol_dance_1'}, {'motion_index': 16, 'motion_name_cn': '女团舞2', 'motion_name_en': 'idol_dance_2'}, {'motion_index': 17, 'motion_name_cn': '助力舞', 'motion_name_en': 'power_up_dance'}, {'motion_index': 18, 'motion_name_cn': '握手', 'motion_name_en': 'shake_hands'}, {'motion_index': 19, 'motion_name_cn': '上抬手介绍', 'motion_name_en': 'raise_and_introduce'}, {'motion_index': 20, 'motion_name_cn': '随手比划40s', 'motion_name_en': 'casual_gesture_1'}, {'motion_index': 21, 'motion_name_cn': '随手比划10s', 'motion_name_en': 'casual_gesture_2'}, {'motion_index': 22, 'motion_name_cn': '拍照', 'motion_name_en': 'take_a_photo'}], 'count': 23}}
+[websocket_client_node-19] [INFO] [1779267645.123037938] [websocket_client]: 📋 从机器人获取到 23 个动作
+[message_bridge_node-20] [INFO] [1779267645.127895954] [message_bridge]: 消息桥接节点启动
+[websocket_client_node-19] [INFO] [1779267645.131632268] [websocket_client]: ✅ 已更新 /home/ubuntu/humanoid_ws/install/humanoid_locomotion/share/humanoid_locomotion/config/gestures.yaml，共 23 个动作
+[websocket_client_node-19] [INFO] [1779267645.136429969] [websocket_client]: ✅ 已加载 2 个动作时长提示
+[websocket_client_node-19] [INFO] [1779267645.136856306] [websocket_client]: 📤 已通知 data_integration 热重载动作库
+[navigation_state_manager_recoverable-16] [INFO] [1779267645.170195354] [navigation_state_manager]: 导航状态管理器启动完成 - 负责导航执行和状态管理
+[navigation_state_manager_recoverable-16] [INFO] [1779267645.170681206] [navigation_state_manager]: 位置容差: 0.15m, 方向容差: 0.3rad
+[INFO] [rviz2-23]: process started with pid [413961]
+[data_integration_node_recoverable-18] [INFO] [1779267645.247162838] [data_integration_node]: 🔄 收到动作库更新通知 (action=reload)，正在热重载...
+[data_integration_node_recoverable-18] [INFO] [1779267645.248734436] [data_integration_node]: ✅ 已从 YAML 动态加载 5 个动作
+[data_integration_node_recoverable-18] [INFO] [1779267645.249089017] [data_integration_node]: 📤 动作库热重载完成，已推送 5 个动作
+[INFO] [hdl_global_localization_node-24]: process started with pid [413971]
+[websocket_client_node-19] [INFO] [1779267645.514717765] [websocket_client]: 🔄 机器人状态变更: Unknown -> ZeroTorque
+[websocket_server_node-17] [INFO] [1779267645.787752680] [websocket_server]: ✅ 定时任务设置完成
+[websocket_server_node-17] [INFO] [1779267645.788239854] [websocket_server]: 🚀 完整WebSocket服务器启动完成
+[websocket_server_node-17] [INFO] [1779267645.788638175] [websocket_server]: 📡 服务器地址: ws://0.0.0.0:8765
+[websocket_server_node-17] [INFO] [1779267645.789036190] [websocket_server]: 📊 协议版本: 2.0
+[dynamic_waypoints_manager-15] [INFO] [1779267646.080828760] [dynamic_waypoints_manager]:  发布路点数据
+[navigation_state_manager_recoverable-16] [INFO] [1779267646.081296422] [navigation_state_manager]: 收到路点数据更新，共 24 个点位
+[lifecycle_manager-22] [INFO] [1779267646.222515020] [lifecycle_manager_map]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-22] [INFO] [1779267646.222573672] [lifecycle_manager_map]: [34m[1mConfiguring map_server[0m[0m
+[map_server-12] [INFO] [1779267646.223031932] [map_server]: Configuring
+[map_server-12] [INFO] [1779267646.223106485] [map_io]: Loading yaml file: /home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.yaml
+[map_server-12] [INFO] [1779267646.224460040] [map_io]: resolution: 0.05
+[map_server-12] [INFO] [1779267646.224472257] [map_io]: origin[0]: -6.648
+[map_server-12] [INFO] [1779267646.224476658] [map_io]: origin[1]: -13.571
+[map_server-12] [INFO] [1779267646.224478591] [map_io]: origin[2]: 0
+[map_server-12] [INFO] [1779267646.224480778] [map_io]: free_thresh: 0.196
+[map_server-12] [INFO] [1779267646.224482523] [map_io]: occupied_thresh: 0.65
+[map_server-12] [INFO] [1779267646.224485363] [map_io]: mode: trinary
+[map_server-12] [INFO] [1779267646.224488104] [map_io]: negate: 0
+[map_server-12] [INFO] [1779267646.227135017] [map_io]: Loading image_file: /home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.pgm
+[map_server-12] [INFO] [1779267646.235739415] [map_io]: Read map /home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.pgm: 673 X 799 map @ 0.05 m/cell
+[lifecycle_manager-22] [INFO] [1779267646.241236588] [lifecycle_manager_map]: [34m[1mActivating map_server[0m[0m
+[map_server-12] [INFO] [1779267646.241933594] [map_server]: Activating
+[map_server-12] [INFO] [1779267646.242592919] [map_server]: Creating bond (map_server) to lifecycle manager.
+[lifecycle_manager-22] [INFO] [1779267646.350434311] [lifecycle_manager_map]: Server map_server connected with bond.
+[lifecycle_manager-22] [INFO] [1779267646.350960969] [lifecycle_manager_map]: [34m[1mManaged nodes are active[0m[0m
+[lifecycle_manager-22] [INFO] [1779267646.351008998] [lifecycle_manager_map]: [34m[1mCreating bond timer...[0m[0m
+[INFO] [component_container_mt-25]: process started with pid [414214]
+[INFO] [lidar_localization_node-26]: process started with pid [414219]
+[facial_driver-21] [INFO] [1779267646.752057545] [facial_driver]: 📚 成功加载表情库，共 30 个动作
+[facial_driver-21] [INFO] [1779267646.754437417] [facial_driver]: 🔍 先终止眼部循环和嘴部动作循环...
+[facial_driver-21] [INFO] [1779267646.754672204] [facial_driver]: Serial Out: !stop
+[data_integration_node_recoverable-18] [INFO] [1779267646.804385111] [data_integration_node]: 📤 已触发初始动作库和表情库同步到服务器
+[websocket_server_node-17] [INFO] [1779267646.805281270] [websocket_server]: 🍭 收到面部表情库更新
+[facial_driver-21] [INFO] [1779267646.855301565] [facial_driver]: Serial Out: !stop
+[facial_driver-21] [INFO] [1779267646.955773665] [facial_driver]: ✅ 强制终止眼部循环（发送1次终止指令）
+[facial_driver-21] [INFO] [1779267646.956085616] [facial_driver]: Serial Out: ?stop
+[facial_driver-21] [INFO] [1779267647.056476625] [facial_driver]: ✅ 强制终止嘴部循环（发送1次终止指令）
+[facial_driver-21] [INFO] [1779267647.056713559] [facial_driver]: Serial Out: $DGL:1!
+[dynamic_waypoints_manager-15] [INFO] [1779267647.081257459] [dynamic_waypoints_manager]:  发布路点数据
+[navigation_state_manager_recoverable-16] [INFO] [1779267647.082292770] [navigation_state_manager]: 收到路点数据更新，共 24 个点位
+[facial_driver-21] [INFO] [1779267647.157502243] [facial_driver]: 🔄 眼部强制复位（眼球居中+正常睁眼）
+[facial_driver-21] [INFO] [1779267647.157804677] [facial_driver]: 🎬 执行表情: idle
+[facial_driver-21] [INFO] [1779267647.258662719] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[wait_for_tf-11] [WARN] [1779267647.339946140] [wait_for_localization_tf]: TF not ready: map_ground->base_footprint: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rviz2-23] [ERROR] [1779267647.504803110] [rviz2]: rviz/glsl120/indexed_8bit_image.vert
+[rviz2-23] rviz/glsl120/indexed_8bit_image.frag
+[rviz2-23]  GLSL link result : 
+[rviz2-23] active samplers with a different type refer to the same texture image unit
+[facial_driver-21] [INFO] [1779267647.759372426] [facial_driver]: Serial Out: !normal_start
+[component_container_mt-25] [INFO] [1779267647.817458199] [hdl_bootstrap_container]: Load Library: /home/ubuntu/humanoid_ws/install/hdl_localization/lib/libhdl_localization_lib.so
+[component_container_mt-25] [INFO] [1779267647.895046247] [hdl_bootstrap_container]: Found class: rclcpp_components::NodeFactoryTemplate<hdl_localization::GlobalmapServerNodelet>
+[component_container_mt-25] [INFO] [1779267647.895092570] [hdl_bootstrap_container]: Instantiate class: rclcpp_components::NodeFactoryTemplate<hdl_localization::GlobalmapServerNodelet>
+[component_container_mt-25] 
+[component_container_mt-25] initialize_params
+[component_container_mt-25] 
+[component_container_mt-25] 
+[component_container_mt-25] /home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall_localization_grounded.pcd
+[component_container_mt-25] 
+[INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/BootstrapGlobalmapServerNodelet' in container '/hdl_bootstrap_container'
+[component_container_mt-25] [INFO] [1779267647.968689568] [hdl_bootstrap_container]: Found class: rclcpp_components::NodeFactoryTemplate<hdl_localization::GlobalmapServerNodelet>
+[component_container_mt-25] [INFO] [1779267647.968736786] [hdl_bootstrap_container]: Found class: rclcpp_components::NodeFactoryTemplate<hdl_localization::HdlLocalizationNodelet>
+[component_container_mt-25] [INFO] [1779267647.968740930] [hdl_bootstrap_container]: Instantiate class: rclcpp_components::NodeFactoryTemplate<hdl_localization::HdlLocalizationNodelet>
+[component_container_mt-25] [INFO] [1779267647.982086010] [BootstrapHdlLocalizationNodelet]: wait for global localization services
+[dynamic_waypoints_manager-15] [INFO] [1779267648.080829970] [dynamic_waypoints_manager]:  发布路点数据
+[navigation_state_manager_recoverable-16] [INFO] [1779267648.083140499] [navigation_state_manager]: 收到路点数据更新，共 24 个点位
+[INFO] [lifecycle_manager-27]: process started with pid [414492]
+[lifecycle_manager-27] [INFO] [1779267648.473261046] [lifecycle_manager_ndt]: Creating
+[lifecycle_manager-27] [INFO] [1779267648.475932587] [lifecycle_manager_ndt]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[facial_driver-21] [INFO] [1779267648.660110377] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[facial_driver-21] [INFO] [1779267648.660384528] [facial_driver]: Serial Out: #DGM:1!\n
+[INFO] [robot_realpose_publisher-28]: process started with pid [414575]
+[lifecycle_manager-27] [INFO] [1779267648.825900577] [lifecycle_manager_ndt]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-27] [INFO] [1779267648.825970366] [lifecycle_manager_ndt]: [34m[1mConfiguring lidar_localization[0m[0m
+[lidar_localization_node-26] [INFO] [1779267648.827888489] [lidar_localization]: Configuring
+[lidar_localization_node-26] [INFO] [1779267648.827989090] [lidar_localization]: initializeParameters
+[lidar_localization_node-26] [INFO] [1779267648.828033875] [lidar_localization]: global_frame_id: map
+[lidar_localization_node-26] [INFO] [1779267648.828037801] [lidar_localization]: odom_frame_id: odom
+[lidar_localization_node-26] [INFO] [1779267648.828043381] [lidar_localization]: base_frame_id: odom
+[lidar_localization_node-26] [INFO] [1779267648.828046291] [lidar_localization]: registration_method: NDT_OMP
+[lidar_localization_node-26] [INFO] [1779267648.828049342] [lidar_localization]: ndt_resolution: 1.000000
+[lidar_localization_node-26] [INFO] [1779267648.828053905] [lidar_localization]: ndt_step_size: 0.100000
+[lidar_localization_node-26] [INFO] [1779267648.828058156] [lidar_localization]: ndt_num_threads: 8
+[lidar_localization_node-26] [INFO] [1779267648.828061176] [lidar_localization]: transform_epsilon: 0.010000
+[lidar_localization_node-26] [INFO] [1779267648.828064477] [lidar_localization]: voxel_leaf_size: 0.200000
+[lidar_localization_node-26] [INFO] [1779267648.828067357] [lidar_localization]: scan_max_range: 100.000000
+[lidar_localization_node-26] [INFO] [1779267648.828073596] [lidar_localization]: scan_min_range: 1.000000
+[lidar_localization_node-26] [INFO] [1779267648.828076601] [lidar_localization]: scan_period: 0.100000
+[lidar_localization_node-26] [INFO] [1779267648.828079599] [lidar_localization]: use_pcd_map: 1
+[lidar_localization_node-26] [INFO] [1779267648.828082255] [lidar_localization]: map_path: /home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd
+[lidar_localization_node-26] [INFO] [1779267648.828085335] [lidar_localization]: set_initial_pose: 0
+[lidar_localization_node-26] [INFO] [1779267648.828088227] [lidar_localization]: use_odom: 0
+[lidar_localization_node-26] [INFO] [1779267648.828090990] [lidar_localization]: use_imu: 0
+[lidar_localization_node-26] [INFO] [1779267648.828095441] [lidar_localization]: enable_debug: 1
+[lidar_localization_node-26] [INFO] [1779267648.828098141] [lidar_localization]: force_2d_pose: 1
+[lidar_localization_node-26] [INFO] [1779267648.828100662] [lidar_localization]: force_2d_fixed_z: 1
+[lidar_localization_node-26] [INFO] [1779267648.828103048] [lidar_localization]: force_2d_z: 0.000000
+[lidar_localization_node-26] [INFO] [1779267648.828105757] [lidar_localization]: republish_last_good_tf_on_failure: 1
+[lidar_localization_node-26] [INFO] [1779267648.828108479] [lidar_localization]: max_last_good_tf_age_sec: 3.000000
+[lidar_localization_node-26] [INFO] [1779267648.828113144] [lidar_localization]: initializePubSub
+[lidar_localization_node-26] [INFO] [1779267648.839856270] [lidar_localization]: initializePubSub end
+[lidar_localization_node-26] [INFO] [1779267648.839921913] [lidar_localization]: initializeRegistration
+[lidar_localization_node-26] [INFO] [1779267648.840874893] [lidar_localization]: initializeRegistration end
+[lidar_localization_node-26] [INFO] [1779267648.840901360] [lidar_localization]: Configuring end
+[lidar_localization_node-26] [INFO] [1779267648.843877542] [lidar_localization]: Activating
+[lifecycle_manager-27] [INFO] [1779267648.843637513] [lifecycle_manager_ndt]: [34m[1mActivating lidar_localization[0m[0m
+[facial_driver-21] [INFO] [1779267648.860912492] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[component_container_mt-25] [WARN] [1779267648.983728604] [BootstrapHdlLocalizationNodelet]: Waiting for SetGlobalMap service
+[dynamic_waypoints_manager-15] [INFO] [1779267649.080795286] [dynamic_waypoints_manager]:  发布路点数据
+[navigation_state_manager_recoverable-16] [INFO] [1779267649.081192099] [navigation_state_manager]: 收到路点数据更新，共 24 个点位
+[INFO] [hdl_bootstrap_to_initialpose-29]: process started with pid [414647]
+[robot_realpose_publisher-28] [INFO] [1779267649.333470853] [robot_realpose_publisher]: robot_realpose_publisher started: map -> base_footprint, publish to /robot_realpose
+[robot_realpose_publisher-28] [WARN] [1779267649.425441140] [robot_realpose_publisher]: Failed to get TF map->base_footprint: "map" passed to lookupTransform argument target_frame does not exist. 
+[component_container_mt-25] [INFO] [1779267649.691261667] [BootstrapHdlLocalizationNodelet]: create registration method for localization
+[component_container_mt-25] [INFO] [1779267649.691296937] [BootstrapHdlLocalizationNodelet]: NDT_OMP is selected
+[INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/BootstrapHdlLocalizationNodelet' in container '/hdl_bootstrap_container'
+[component_container_mt-25] [INFO] [1779267649.691422709] [BootstrapHdlLocalizationNodelet]: search_method DIRECT7 is selected
+[component_container_mt-25] [INFO] [1779267649.691429275] [BootstrapHdlLocalizationNodelet]: create registration method for fallback during relocalization
+[component_container_mt-25] [INFO] [1779267649.691432212] [BootstrapHdlLocalizationNodelet]: NDT_OMP is selected
+[component_container_mt-25] [INFO] [1779267649.691439091] [BootstrapHdlLocalizationNodelet]: search_method DIRECT7 is selected
+[component_container_mt-25] [INFO] [1779267649.706800157] [BootstrapHdlLocalizationNodelet]: globalmap received!
+[component_container_mt-25] [INFO] [1779267649.749181468] [BootstrapHdlLocalizationNodelet]: set globalmap for global localization!
+[component_container_mt-25] [WARN] [1779267649.774093655] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267649.780960367] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267649.789240874] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[data_integration_node_recoverable-18] [INFO] [1779267649.795786553] [data_integration_node]: 📊 系统状态 - 可用数据: 5/7 | 活跃订阅: 0 | 客户端数: 0
+[hdl_bootstrap_to_initialpose-29] [INFO] [1779267649.878045436] [hdl_bootstrap_to_initialpose]: waiting for HDL relocalization from /hdl_bootstrap/odom, then publishing /initialpose
+[dynamic_waypoints_manager-15] [INFO] [1779267650.082216799] [dynamic_waypoints_manager]:  发布路点数据
+[dynamic_waypoints_manager-15] [INFO] [1779267650.082529228] [dynamic_waypoints_manager]: 本地加载点位已完成初始同步，共 24 个点位
+[navigation_state_manager_recoverable-16] [INFO] [1779267650.085742827] [navigation_state_manager]: 收到路点数据更新，共 24 个点位
+[component_container_mt-25] [WARN] [1779267650.162292819] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267650.169574657] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267650.183373300] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267650.194009472] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267650.259413758] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267650.691160047] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267650.698599705] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267650.714920501] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267650.723487262] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267650.742071306] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267650.830008612] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267650.917960032] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267651.008961657] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267651.107285980] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267651.264108692] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267651.385130011] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267651.417782271] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[robot_realpose_publisher-28] [WARN] [1779267651.425801789] [robot_realpose_publisher]: Failed to get TF map->base_footprint: "map" passed to lookupTransform argument target_frame does not exist. 
+[component_container_mt-25] [WARN] [1779267651.542003822] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267651.615387191] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267651.708798373] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267651.810164084] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267651.864729584] [BootstrapHdlLocalizationNodelet]: globalmap has not been set in hdl_global_localization yet
+[hdl_bootstrap_to_initialpose-29] [INFO] [1779267651.864940939] [hdl_bootstrap_to_initialpose]: calling HDL /relocalize attempt 1
+[component_container_mt-25] [WARN] [1779267651.917696930] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [INFO] [1779267652.003697098] [BootstrapHdlLocalizationNodelet]: globalmap set for global localization
+[component_container_mt-25] [WARN] [1779267652.005858171] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[hdl_bootstrap_to_initialpose-29] [INFO] [1779267652.066635924] [hdl_bootstrap_to_initialpose]: HDL /relocalize service call completed
+[component_container_mt-25] [WARN] [1779267652.109588160] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267652.209021487] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267652.315482100] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[lidar_localization_node-26] [INFO] [1779267652.409724728] [lidar_localization]: Map Size 4068088
+[component_container_mt-25] [WARN] [1779267652.415047729] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[lidar_localization_node-26] [INFO] [1779267652.418961503] [lidar_localization]: PCD Map transformed to ROS standard frame (Z-up)
+[component_container_mt-25] [WARN] [1779267652.512683251] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[wait_for_tf-11] [WARN] [1779267652.539856761] [wait_for_localization_tf]: TF not ready: map_ground->base_footprint: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[lidar_localization_node-26] [INFO] [1779267652.547328753] [lidar_localization]: Initial Map Published
+[component_container_mt-25] [WARN] [1779267652.608671069] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[lidar_localization_node-26] [INFO] [1779267652.662034109] [lidar_localization]: Activating end
+[lifecycle_manager-27] [INFO] [1779267652.667564683] [lifecycle_manager_ndt]: [34m[1mManaged nodes are active[0m[0m
+[component_container_mt-25] [WARN] [1779267652.710391244] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267652.810078635] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267652.930658617] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267653.019651422] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267653.114495320] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267653.216040775] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267653.311770188] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267653.412498149] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[robot_realpose_publisher-28] [WARN] [1779267653.428453209] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[component_container_mt-25] [WARN] [1779267653.516538537] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267653.627156003] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267653.712123728] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267653.809866403] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267653.917871962] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267654.010022411] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267654.125347702] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267654.205492158] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267654.326144194] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267654.423587548] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267654.511417482] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267654.608062262] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267654.708250994] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267654.814451078] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267654.909262138] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267655.026813583] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267655.108249662] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267655.209441124] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267655.333963519] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267655.410976795] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267655.515841691] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[robot_realpose_publisher-28] [WARN] [1779267655.525374140] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[component_container_mt-25] [WARN] [1779267655.610644988] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267655.717850844] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267655.819256042] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267655.928152265] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267656.010053355] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267656.123593845] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267656.211566485] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267656.311392220] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267656.409819309] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267656.509925984] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267656.608722515] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267656.710602095] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267656.808385511] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267656.908927201] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267657.021750505] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267657.111369021] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267657.208376307] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267657.309011775] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267657.429712526] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267657.521976239] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[robot_realpose_publisher-28] [WARN] [1779267657.526324554] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[wait_for_tf-11] [WARN] [1779267657.541515276] [wait_for_localization_tf]: TF not ready: map_ground->base_footprint: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[component_container_mt-25] [WARN] [1779267657.622455909] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267657.727191490] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267657.821921554] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267657.927549550] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267658.013682773] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[hdl_bootstrap_to_initialpose-29] [INFO] [1779267658.065153021] [hdl_bootstrap_to_initialpose]: calling HDL /relocalize attempt 2
+[component_container_mt-25] [INFO] [1779267658.070689960] [BootstrapHdlLocalizationNodelet]: global localization height-filtered scan points: 14320 z=[0, inf]
+[component_container_mt-25] [WARN] [1779267658.120947676] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[hdl_global_localization_node-24] valid solutions:1976
+[component_container_mt-25] [INFO] [1779267658.154206684] [BootstrapHdlLocalizationNodelet]: Global localization candidates: returned=10 requested=10 fitness_threshold=0.12 min_margin=0.1 ambiguous_max_fitness=0.045 query_points=14320
+[component_container_mt-25] [INFO] [1779267658.311656399] [BootstrapHdlLocalizationNodelet]: Global localization candidate[0] trans=(24.3978, 16.2835, 0.437764) error=0.144105 inlier=0.989978 ndt_converged=1 ndt_fitness=0.0352663
+[component_container_mt-25] [INFO] [1779267658.462529902] [BootstrapHdlLocalizationNodelet]: Global localization candidate[1] trans=(23.9484, 15.6249, 0.898511) error=0.158989 inlier=0.978285 ndt_converged=1 ndt_fitness=0.0289948
+[component_container_mt-25] [INFO] [1779267658.599463108] [BootstrapHdlLocalizationNodelet]: Global localization candidate[2] trans=(20.8228, 16.126, 0.326605) error=0.169273 inlier=0.966036 ndt_converged=1 ndt_fitness=0.034273
+[component_container_mt-25] [INFO] [1779267658.755058350] [BootstrapHdlLocalizationNodelet]: Global localization candidate[3] trans=(25.4085, 18.2423, 0.179713) error=0.159274 inlier=0.961024 ndt_converged=1 ndt_fitness=0.038504
+[component_container_mt-25] [INFO] [1779267658.799370854] [BootstrapHdlLocalizationNodelet]: Global localization candidate[4] trans=(4.71498, 10.7416, 0.0366142) error=0.15279 inlier=0.917595 ndt_converged=1 ndt_fitness=0.0921296
+[component_container_mt-25] [INFO] [1779267658.936589249] [BootstrapHdlLocalizationNodelet]: Global localization candidate[5] trans=(19.9241, 15.9025, 0.586787) error=0.13208 inlier=0.910913 ndt_converged=1 ndt_fitness=0.075565
+[component_container_mt-25] [INFO] [1779267659.068054362] [BootstrapHdlLocalizationNodelet]: Global localization candidate[6] trans=(21.3771, 15.3906, 0.513593) error=0.135881 inlier=0.903118 ndt_converged=1 ndt_fitness=0.0118674
+[component_container_mt-25] [INFO] [1779267659.182746165] [BootstrapHdlLocalizationNodelet]: Global localization candidate[7] trans=(-0.825618, 1.52687, 0.284455) error=0.161349 inlier=0.894209 ndt_converged=1 ndt_fitness=0.1419
+[component_container_mt-25] [INFO] [1779267659.288059740] [BootstrapHdlLocalizationNodelet]: Global localization candidate[8] trans=(24.2237, 18.1883, 0.352317) error=0.189855 inlier=0.886971 ndt_converged=1 ndt_fitness=0.556882
+[component_container_mt-25] [INFO] [1779267659.422433915] [BootstrapHdlLocalizationNodelet]: Global localization candidate[9] trans=(21.7706, 15.672, -0.431044) error=0.156077 inlier=0.884744 ndt_converged=1 ndt_fitness=0.173068
+[component_container_mt-25] [INFO] [1779267659.422569549] [BootstrapHdlLocalizationNodelet]: Best global localization candidate[6] fitness=0.0118674 error=0.135881 inlier=0.903118 pose=(22.1593, 16.35, yaw=3.12726) accepted_candidates=7
+[component_container_mt-25] [INFO] [1779267659.422577432] [BootstrapHdlLocalizationNodelet]: Second global localization candidate[1] fitness=0.0289948 margin=0.0171274
+[component_container_mt-25] [WARN] [1779267659.422586041] [BootstrapHdlLocalizationNodelet]: global localization result has ambiguous fitness margin 0.0171274 < 0.1; deferring acceptance to consistency gate 3 repeatable results instead of rejecting by single-frame score best_fitness=0.0118674 confident_threshold=0.045
+[component_container_mt-25] [WARN] [1779267659.422603127] [BootstrapHdlLocalizationNodelet]: hold global localization result until it is repeatable: consistent=1/3 window=5 xy_tol=0.8 yaw_tol=0.35
+[component_container_mt-25] [WARN] [1779267659.425016966] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267659.432018539] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267659.438618475] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[hdl_bootstrap_to_initialpose-29] [INFO] [1779267659.464480767] [hdl_bootstrap_to_initialpose]: HDL /relocalize service call completed
+[component_container_mt-25] [WARN] [1779267659.519886181] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267659.611313778] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[robot_realpose_publisher-28] [WARN] [1779267659.625392723] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[component_container_mt-25] [WARN] [1779267659.722873043] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267659.812199873] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267659.919029983] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267660.013773583] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267660.130860813] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267660.212852063] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267660.313267280] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267660.409408898] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267660.523486292] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267660.607960818] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267660.719866612] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267660.816563239] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267660.906412826] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267661.013213191] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267661.116684119] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267661.224399667] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267661.318290442] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267661.408077236] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267661.509619371] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267661.610069031] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[robot_realpose_publisher-28] [WARN] [1779267661.628367835] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[component_container_mt-25] [WARN] [1779267661.711437634] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267661.808455638] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267661.906941724] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267662.014337225] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267662.118572234] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267662.208675879] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267662.315631743] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267662.415946079] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267662.520701363] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267662.623165829] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267662.708415350] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[wait_for_tf-11] [WARN] [1779267662.739989813] [wait_for_localization_tf]: TF not ready: map_ground->base_footprint: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[component_container_mt-25] [WARN] [1779267662.814131569] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267662.926124092] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267663.011279382] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267663.128476750] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267663.210554459] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267663.307719721] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267663.409719788] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267663.511455208] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267663.615209594] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[robot_realpose_publisher-28] [WARN] [1779267663.627183007] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[component_container_mt-25] [WARN] [1779267663.724961386] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267663.810160022] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267663.920370831] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267664.012287795] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267664.120230994] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267664.219350839] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[hdl_bootstrap_to_initialpose-29] [INFO] [1779267664.265770917] [hdl_bootstrap_to_initialpose]: calling HDL /relocalize attempt 3
+[component_container_mt-25] [INFO] [1779267664.271014572] [BootstrapHdlLocalizationNodelet]: global localization height-filtered scan points: 15082 z=[0, inf]
+[component_container_mt-25] [WARN] [1779267664.322336319] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[hdl_global_localization_node-24] valid solutions:1975
+[component_container_mt-25] [INFO] [1779267664.353901921] [BootstrapHdlLocalizationNodelet]: Global localization candidates: returned=10 requested=10 fitness_threshold=0.12 min_margin=0.1 ambiguous_max_fitness=0.045 query_points=15082
+[component_container_mt-25] [INFO] [1779267664.526410305] [BootstrapHdlLocalizationNodelet]: Global localization candidate[0] trans=(21.963, 16.102, 0.568236) error=0.141333 inlier=0.991767 ndt_converged=1 ndt_fitness=0.0116025
+[component_container_mt-25] [INFO] [1779267664.689490299] [BootstrapHdlLocalizationNodelet]: Global localization candidate[1] trans=(26.2507, 15.5959, 0.687672) error=0.161392 inlier=0.959385 ndt_converged=1 ndt_fitness=0.0569874
+[component_container_mt-25] [INFO] [1779267664.815799414] [BootstrapHdlLocalizationNodelet]: Global localization candidate[2] trans=(6.72936, 18.246, 1.05437) error=0.160772 inlier=0.943469 ndt_converged=1 ndt_fitness=0.181843
+[component_container_mt-25] [INFO] [1779267664.976181758] [BootstrapHdlLocalizationNodelet]: Global localization candidate[3] trans=(-1.98268, -1.55991, 0.307269) error=0.159581 inlier=0.936334 ndt_converged=1 ndt_fitness=0.0801327
+[component_container_mt-25] [INFO] [1779267665.100624226] [BootstrapHdlLocalizationNodelet]: Global localization candidate[4] trans=(4.49422, 17.5782, 0.699978) error=0.151182 inlier=0.926454 ndt_converged=1 ndt_fitness=0.0924982
+[component_container_mt-25] [INFO] [1779267665.211544933] [BootstrapHdlLocalizationNodelet]: Global localization candidate[5] trans=(3.98689, 17.0777, 1.02737) error=0.158703 inlier=0.913831 ndt_converged=1 ndt_fitness=0.0964385
+[component_container_mt-25] [INFO] [1779267665.339842988] [BootstrapHdlLocalizationNodelet]: Global localization candidate[6] trans=(7.29506, 17.908, 1.16792) error=0.159453 inlier=0.913282 ndt_converged=1 ndt_fitness=0.260704
+[component_container_mt-25] [INFO] [1779267665.455911464] [BootstrapHdlLocalizationNodelet]: Global localization candidate[7] trans=(-0.0944505, 1.67215, 0.417615) error=0.153012 inlier=0.909989 ndt_converged=1 ndt_fitness=0.145975
+[component_container_mt-25] [INFO] [1779267665.587325294] [BootstrapHdlLocalizationNodelet]: Global localization candidate[8] trans=(22.2789, 16.0917, 0.597296) error=0.130169 inlier=0.904501 ndt_converged=1 ndt_fitness=0.0120915
+[component_container_mt-25] [INFO] [1779267665.672716396] [BootstrapHdlLocalizationNodelet]: Global localization candidate[9] trans=(3.03144, 14.4307, 0.930729) error=0.156881 inlier=0.89517 ndt_converged=1 ndt_fitness=0.137698
+[component_container_mt-25] [INFO] [1779267665.672770338] [BootstrapHdlLocalizationNodelet]: Best global localization candidate[0] fitness=0.0116025 error=0.141333 inlier=0.991767 pose=(22.3341, 16.3248, yaw=3.12226) accepted_candidates=6
+[component_container_mt-25] [INFO] [1779267665.672776091] [BootstrapHdlLocalizationNodelet]: Second global localization candidate[8] fitness=0.0120915 margin=0.000488918
+[component_container_mt-25] [WARN] [1779267665.672781253] [BootstrapHdlLocalizationNodelet]: global localization result has ambiguous fitness margin 0.000488918 < 0.1; deferring acceptance to consistency gate 3 repeatable results instead of rejecting by single-frame score best_fitness=0.0116025 confident_threshold=0.045
+[component_container_mt-25] [WARN] [1779267665.672790303] [BootstrapHdlLocalizationNodelet]: hold global localization result until it is repeatable: consistent=2/3 window=5 xy_tol=0.8 yaw_tol=0.35
+[component_container_mt-25] [WARN] [1779267665.675186119] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267665.681444178] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267665.690581515] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267665.696433630] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267665.722430915] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[robot_realpose_publisher-28] [WARN] [1779267665.725695525] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[component_container_mt-25] [WARN] [1779267665.813635010] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[hdl_bootstrap_to_initialpose-29] [INFO] [1779267665.864666611] [hdl_bootstrap_to_initialpose]: HDL /relocalize service call completed
+[component_container_mt-25] [WARN] [1779267665.925708511] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267666.012204598] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267666.123899571] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267666.216125207] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267666.326195783] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267666.414335359] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267666.511665638] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267666.610294571] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267666.712858685] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267666.827021259] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267666.912273307] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267667.007578888] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267667.112174675] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267667.207502232] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267667.311774697] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267667.411288102] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267667.512557028] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267667.608804404] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267667.716397453] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267667.809977020] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[robot_realpose_publisher-28] [WARN] [1779267667.825830921] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[component_container_mt-25] [WARN] [1779267667.925538357] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[wait_for_tf-11] [WARN] [1779267667.939593678] [wait_for_localization_tf]: TF not ready: map_ground->base_footprint: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[component_container_mt-25] [WARN] [1779267668.009614757] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267668.109216418] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267668.221681093] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267668.311042659] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267668.417531246] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267668.524357278] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267668.618068777] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267668.723115845] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267668.816947382] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267668.911951155] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267669.017123979] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267669.123486898] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267669.213060507] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267669.308387676] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267669.410682435] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267669.508536739] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267669.636179814] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267669.718340279] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267669.810606403] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267669.908920381] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[robot_realpose_publisher-28] [WARN] [1779267669.925434742] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[component_container_mt-25] [WARN] [1779267670.011205694] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267670.108232897] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267670.208682218] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267670.309666762] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[component_container_mt-25] [WARN] [1779267670.410866647] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[hdl_bootstrap_to_initialpose-29] [INFO] [1779267670.464582546] [hdl_bootstrap_to_initialpose]: calling HDL /relocalize attempt 4
+[component_container_mt-25] [INFO] [1779267670.469946197] [BootstrapHdlLocalizationNodelet]: global localization height-filtered scan points: 14871 z=[0, inf]
+[component_container_mt-25] [WARN] [1779267670.523141210] [BootstrapHdlLocalizationNodelet]: waiting for initial pose input or global relocalization!!
+[hdl_global_localization_node-24] valid solutions:1981
+[component_container_mt-25] [INFO] [1779267670.597532755] [BootstrapHdlLocalizationNodelet]: Global localization candidates: returned=10 requested=10 fitness_threshold=0.12 min_margin=0.1 ambiguous_max_fitness=0.045 query_points=14871
+[component_container_mt-25] [INFO] [1779267670.772474581] [BootstrapHdlLocalizationNodelet]: Global localization candidate[0] trans=(21.5199, 15.5875, 0.390493) error=0.152507 inlier=0.966812 ndt_converged=1 ndt_fitness=0.0341767
+[component_container_mt-25] [INFO] [1779267670.940605747] [BootstrapHdlLocalizationNodelet]: Global localization candidate[1] trans=(27.3887, 17.3151, 1.21628) error=0.156591 inlier=0.959195 ndt_converged=1 ndt_fitness=0.0454839
+[component_container_mt-25] [INFO] [1779267671.108046517] [BootstrapHdlLocalizationNodelet]: Global localization candidate[2] trans=(24.4508, 16.8974, 1.169) error=0.159725 inlier=0.949946 ndt_converged=1 ndt_fitness=0.0354234
+[component_container_mt-25] [INFO] [1779267671.263764356] [BootstrapHdlLocalizationNodelet]: Global localization candidate[3] trans=(25.4761, 17.5825, -0.130579) error=0.15932 inlier=0.94124 ndt_converged=1 ndt_fitness=0.0377651
+[component_container_mt-25] [INFO] [1779267671.425126563] [BootstrapHdlLocalizationNodelet]: Global localization candidate[4] trans=(4.53827, 18.0653, 0.585949) error=0.143878 inlier=0.939608 ndt_converged=1 ndt_fitness=0.0942175
+[component_container_mt-25] [INFO] [1779267671.587463054] [BootstrapHdlLocalizationNodelet]: Global localization candidate[5] trans=(25.6474, 15.1667, 0.872479) error=0.15825 inlier=0.913493 ndt_converged=1 ndt_fitness=0.045905
+[component_container_mt-25] [INFO] [1779267671.749888856] [BootstrapHdlLocalizationNodelet]: Global localization candidate[6] trans=(5.05476, 16.2388, 0.630014) error=0.147701 inlier=0.90914 ndt_converged=1 ndt_fitness=0.150634
+[component_container_mt-25] [INFO] [1779267671.890530558] [BootstrapHdlLocalizationNodelet]: Global localization candidate[7] trans=(-0.0603619, 4.39845, -0.0249624) error=0.149391 inlier=0.900979 ndt_converged=1 ndt_fitness=0.208608
+[robot_realpose_publisher-28] [WARN] [1779267671.934114670] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[component_container_mt-25] [INFO] [1779267672.034696308] [BootstrapHdlLocalizationNodelet]: Global localization candidate[8] trans=(21.2374, 15.9919, 0.946786) error=0.164891 inlier=0.900979 ndt_converged=1 ndt_fitness=0.0265052
+[component_container_mt-25] [INFO] [1779267672.192341862] [BootstrapHdlLocalizationNodelet]: Global localization candidate[9] trans=(0.504948, 1.55501, 0.779804) error=0.157493 inlier=0.898259 ndt_converged=1 ndt_fitness=0.200516
+[component_container_mt-25] [INFO] [1779267672.192398832] [BootstrapHdlLocalizationNodelet]: discard global localization candidate[1] outside XY bounds, pose=(27.3571, 17.3996) bounds x=[-6.675, 26.325] y=[-12.819, 26.231]
+[component_container_mt-25] [INFO] [1779267672.192408204] [BootstrapHdlLocalizationNodelet]: Best global localization candidate[8] fitness=0.0265052 error=0.164891 inlier=0.900979 pose=(21.6435, 16.6808, yaw=-3.09749) accepted_candidates=6
+[component_container_mt-25] [INFO] [1779267672.192413046] [BootstrapHdlLocalizationNodelet]: Second global localization candidate[0] fitness=0.0341767 margin=0.00767146
+[component_container_mt-25] [WARN] [1779267672.192418512] [BootstrapHdlLocalizationNodelet]: global localization result has ambiguous fitness margin 0.00767146 < 0.1; deferring acceptance to consistency gate 3 repeatable results instead of rejecting by single-frame score best_fitness=0.0265052 confident_threshold=0.045
+[hdl_bootstrap_to_initialpose-29] [INFO] [1779267672.267992620] [hdl_bootstrap_to_initialpose]: HDL /relocalize service call completed
+[component_container_mt-25] [INFO] [1779267672.766443576] [BootstrapHdlLocalizationNodelet]: global localization result passed post-accept scan matching validation
+[hdl_bootstrap_to_initialpose-29] [INFO] [1779267672.873855844] [hdl_bootstrap_to_initialpose]: prepared A initial pose from HDL bootstrap: map->odom=(22.180, 16.394, yaw=3.124)
+[lidar_localization_node-26] [INFO] [1779267673.064583562] [lidar_localization]: initialPoseReceived
+[component_container_mt-25] [INFO] [1779267673.130610813] [BootstrapHdlLocalizationNodelet]: initial pose received!!
+[wait_for_tf-11] [WARN] [1779267673.143600778] [wait_for_localization_tf]: TF not ready: map_ground->base_footprint: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[component_container_mt-25] [INFO] [1779267673.540839075] [BootstrapHdlLocalizationNodelet]: initial pose received!!
+[lidar_localization_node-26] [INFO] [1779267673.892194135] [lidar_localization]: initialPoseReceived end
+[component_container_mt-25] [INFO] [1779267673.894634991] [BootstrapHdlLocalizationNodelet]: initial pose received!!
+[robot_realpose_publisher-28] [WARN] [1779267674.025476316] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Lookup would require extrapolation into the past.  Requested time 1779267673.888106 but the earliest data is at time 1779267673.891891, when looking up transform from frame [base_footprint] to frame [map]
+[robot_realpose_publisher-28] [INFO] [1779267674.126577411] [robot_realpose_publisher]: TF ready: map->base_footprint
+[component_container_mt-25] [INFO] [1779267674.269428875] [BootstrapHdlLocalizationNodelet]: initial pose received!!
+[lidar_localization_node-26] [INFO] [1779267674.469310976] [lidar_localization]: initialPoseReceived
+[lidar_localization_node-26] [INFO] [1779267674.527362077] [lidar_localization]: initialPoseReceived end
+[wait_for_tf-11] [INFO] [1779267674.539728836] [wait_for_localization_tf]: TF ready: map_ground->base_footprint; dependent nodes may start
+[lidar_localization_node-26] [INFO] [1779267674.664954413] [lidar_localization]: initialPoseReceived
+[component_container_mt-25] [INFO] [1779267674.705765565] [BootstrapHdlLocalizationNodelet]: initial pose received!!
+[lidar_localization_node-26] [INFO] [1779267674.716686502] [lidar_localization]: initialPoseReceived end
+[INFO] [wait_for_tf-11]: process has finished cleanly [pid 412784]
+[INFO] [planner_server-30]: process started with pid [417259]
+[INFO] [controller_server-31]: process started with pid [417260]
+[INFO] [behavior_server-32]: process started with pid [417261]
+[INFO] [bt_navigator-33]: process started with pid [417262]
+[controller_server-31] [INFO] [1779267675.022220381] [controller_server]: 
+[controller_server-31] 	controller_server lifecycle node launched. 
+[controller_server-31] 	Waiting on external lifecycle transitions to activate
+[controller_server-31] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[behavior_server-32] [INFO] [1779267675.027172995] [behavior_server]: 
+[behavior_server-32] 	behavior_server lifecycle node launched. 
+[behavior_server-32] 	Waiting on external lifecycle transitions to activate
+[behavior_server-32] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-30] [INFO] [1779267675.035347436] [planner_server]: 
+[planner_server-30] 	planner_server lifecycle node launched. 
+[planner_server-30] 	Waiting on external lifecycle transitions to activate
+[planner_server-30] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-30] [INFO] [1779267675.043638834] [planner_server]: Creating
+[bt_navigator-33] [INFO] [1779267675.044890328] [bt_navigator]: 
+[bt_navigator-33] 	bt_navigator lifecycle node launched. 
+[bt_navigator-33] 	Waiting on external lifecycle transitions to activate
+[bt_navigator-33] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[bt_navigator-33] [INFO] [1779267675.046828756] [bt_navigator]: Creating
+[controller_server-31] [INFO] [1779267675.048297623] [controller_server]: Creating controller server
+[planner_server-30] [INFO] [1779267675.050417382] [global_costmap.global_costmap]: 
+[planner_server-30] 	global_costmap lifecycle node launched. 
+[planner_server-30] 	Waiting on external lifecycle transitions to activate
+[planner_server-30] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-31] [INFO] [1779267675.055917844] [local_costmap.local_costmap]: 
+[controller_server-31] 	local_costmap lifecycle node launched. 
+[controller_server-31] 	Waiting on external lifecycle transitions to activate
+[controller_server-31] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-30] [INFO] [1779267675.056283850] [global_costmap.global_costmap]: Creating Costmap
+[controller_server-31] [INFO] [1779267675.056636236] [local_costmap.local_costmap]: Creating Costmap
+[lidar_localization_node-26] [INFO] [1779267675.097518296] [lidar_localization]: initialPoseReceived
+[component_container_mt-25] [INFO] [1779267675.123727075] [BootstrapHdlLocalizationNodelet]: initial pose received!!
+[lidar_localization_node-26] [INFO] [1779267675.179282021] [lidar_localization]: initialPoseReceived end
+[lidar_localization_node-26] [INFO] [1779267675.464517861] [lidar_localization]: initialPoseReceived
+[lidar_localization_node-26] [INFO] [1779267675.522239243] [lidar_localization]: initialPoseReceived end
+[component_container_mt-25] [INFO] [1779267675.587742716] [BootstrapHdlLocalizationNodelet]: initial pose received!!
+[lidar_localization_node-26] [INFO] [1779267675.864395943] [lidar_localization]: initialPoseReceived
+[hdl_bootstrap_to_initialpose-29] [INFO] [1779267675.864574629] [hdl_bootstrap_to_initialpose]: finished publishing bootstrap /initialpose
+[hdl_bootstrap_to_initialpose-29] [INFO] [1779267675.864764986] [hdl_bootstrap_to_initialpose]: bootstrap initial pose published; exiting helper node
+[lidar_localization_node-26] [INFO] [1779267675.908617080] [lidar_localization]: initialPoseReceived end
+[component_container_mt-25] [INFO] [1779267675.913126001] [BootstrapHdlLocalizationNodelet]: initial pose received!!
+[INFO] [hdl_bootstrap_to_initialpose-29]: process has finished cleanly [pid 414647]
+[INFO] [launch.user]: HDL bootstrap finished; stopping bootstrap localization nodes
+[INFO] [component_container_mt-25]: sending signal 'SIGINT' to process[component_container_mt-25]
+[INFO] [hdl_global_localization_node-24]: sending signal 'SIGINT' to process[hdl_global_localization_node-24]
+[component_container_mt-25] [INFO] [1779267676.024880710] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [hdl_global_localization_node-24]: process has finished cleanly [pid 413971]
+[INFO] [component_container_mt-25]: process has finished cleanly [pid 414214]
+[INFO] [lifecycle_manager-34]: process started with pid [417654]
+[lifecycle_manager-34] [INFO] [1779267678.007304483] [lifecycle_manager_navigation]: Creating
+[lifecycle_manager-34] [INFO] [1779267678.013288269] [lifecycle_manager_navigation]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[lifecycle_manager-34] [INFO] [1779267678.126987200] [lifecycle_manager_navigation]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-34] [INFO] [1779267678.127025260] [lifecycle_manager_navigation]: [34m[1mConfiguring planner_server[0m[0m
+[planner_server-30] [INFO] [1779267678.127237364] [planner_server]: Configuring
+[planner_server-30] [INFO] [1779267678.127265398] [global_costmap.global_costmap]: Configuring
+[planner_server-30] [INFO] [1779267678.148521064] [global_costmap.global_costmap]: Using plugin "static_layer"
+[planner_server-30] [INFO] [1779267678.155077565] [global_costmap.global_costmap]: Subscribing to the map topic (/map) with transient local durability
+[planner_server-30] [INFO] [1779267678.157947091] [global_costmap.global_costmap]: Initialized plugin "static_layer"
+[planner_server-30] [INFO] [1779267678.157969711] [global_costmap.global_costmap]: Using plugin "obstacle_layer"
+[planner_server-30] [INFO] [1779267678.158864426] [global_costmap.global_costmap]: Subscribed to Topics: pointcloud periodic_clearing
+[planner_server-30] [INFO] [1779267678.165236005] [global_costmap.global_costmap]: Initialized plugin "obstacle_layer"
+[planner_server-30] [INFO] [1779267678.165261606] [global_costmap.global_costmap]: Using plugin "inflation_layer"
+[planner_server-30] [INFO] [1779267678.165571151] [global_costmap.global_costmap]: Initialized plugin "inflation_layer"
+[planner_server-30] [INFO] [1779267678.194752695] [global_costmap.global_costmap]: StaticLayer: Resizing costmap to 673 X 799 at 0.050000 m/pix
+[planner_server-30] [INFO] [1779267678.207319044] [planner_server]: Created global planner plugin GridBased of type nav2_smac_planner::SmacPlanner2D
+[planner_server-30] [INFO] [1779267678.207371401] [planner_server]: Configuring GridBased of type SmacPlanner2D
+[planner_server-30] [ERROR] [1779267678.208068593] [planner_server]: Inflation layer either not found or inflation is not set sufficiently for optimized non-circular collision checking capabilities. It is HIGHLY recommended to set the inflation radius to be at MINIMUM half of the robot's largest cross-section. See github.com/ros-planning/navigation2/tree/main/nav2_smac_planner#potential-fields for full instructions. This will substantially impact run-time performance.
+[planner_server-30] [INFO] [1779267678.209932770] [planner_server]: Configured plugin GridBased of type SmacPlanner2D with tolerance 0.50, maximum iterations 1000000, max on approach iterations 1000, and not allowing unknown traversal.
+[planner_server-30] [INFO] [1779267678.209978247] [planner_server]: Planner Server has GridBased  planners available.
+[lifecycle_manager-34] [INFO] [1779267678.224617551] [lifecycle_manager_navigation]: [34m[1mConfiguring controller_server[0m[0m
+[controller_server-31] [INFO] [1779267678.224856288] [controller_server]: Configuring controller interface
+[controller_server-31] [INFO] [1779267678.224878597] [controller_server]: getting progress checker plugins..
+[controller_server-31] [INFO] [1779267678.225048566] [controller_server]: getting goal checker plugins..
+[controller_server-31] [INFO] [1779267678.225092158] [controller_server]: Controller frequency set to 8.0000Hz
+[controller_server-31] [INFO] [1779267678.225115640] [local_costmap.local_costmap]: Configuring
+[controller_server-31] [INFO] [1779267678.239098895] [local_costmap.local_costmap]: Using plugin "static_layer"
+[controller_server-31] [INFO] [1779267678.243107653] [local_costmap.local_costmap]: Subscribing to the map topic (/map) with transient local durability
+[controller_server-31] [INFO] [1779267678.248273249] [local_costmap.local_costmap]: Initialized plugin "static_layer"
+[controller_server-31] [INFO] [1779267678.248296636] [local_costmap.local_costmap]: Using plugin "voxel_layer"
+[controller_server-31] [INFO] [1779267678.249260799] [local_costmap.local_costmap]: Subscribed to Topics: pointcloud clearing_3d
+[controller_server-31] [INFO] [1779267678.262483719] [local_costmap.local_costmap]: Initialized plugin "voxel_layer"
+[controller_server-31] [INFO] [1779267678.262513879] [local_costmap.local_costmap]: Using plugin "inflation_layer"
+[controller_server-31] [INFO] [1779267678.263193987] [local_costmap.local_costmap]: Initialized plugin "inflation_layer"
+[controller_server-31] [INFO] [1779267678.282647290] [local_costmap.local_costmap]: StaticLayer: Resizing static layer to 673 X 799 at 0.050000 m/pix
+[controller_server-31] [INFO] [1779267678.283502322] [controller_server]: Created progress_checker : progress_checker of type nav2_controller::SimpleProgressChecker
+[controller_server-31] [INFO] [1779267678.283859601] [controller_server]: Controller Server has progress_checker  progress checkers available.
+[controller_server-31] [INFO] [1779267678.284763589] [controller_server]: Created goal checker : xy_goal_checker of type nav2_controller::PositionGoalChecker
+[controller_server-31] [INFO] [1779267678.285871072] [controller_server]: Created goal checker : general_goal_checker of type nav2_controller::SimpleGoalChecker
+[controller_server-31] [INFO] [1779267678.286172684] [controller_server]: Controller Server has xy_goal_checker general_goal_checker  goal checkers available.
+[controller_server-31] [INFO] [1779267678.287932267] [controller_server]: Created controller : FollowPath of type nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController
+[controller_server-31] [INFO] [1779267678.292968678] [controller_server]: Controller Server has FollowPath  controllers available.
+[lifecycle_manager-34] [INFO] [1779267678.301251357] [lifecycle_manager_navigation]: [34m[1mConfiguring behavior_server[0m[0m
+[behavior_server-32] [INFO] [1779267678.301509469] [behavior_server]: Configuring
+[behavior_server-32] [INFO] [1779267678.307525294] [behavior_server]: Creating behavior plugin spin of type nav2_behaviors::Spin
+[behavior_server-32] [INFO] [1779267678.310202956] [behavior_server]: Creating behavior plugin wait of type nav2_behaviors::Wait
+[behavior_server-32] [INFO] [1779267678.320645111] [behavior_server]: Configuring spin
+[behavior_server-32] [INFO] [1779267678.333603560] [behavior_server]: Configuring wait
+[lifecycle_manager-34] [INFO] [1779267678.342738080] [lifecycle_manager_navigation]: [34m[1mConfiguring bt_navigator[0m[0m
+[bt_navigator-33] [INFO] [1779267678.342968624] [bt_navigator]: Configuring
+[bt_navigator-33] [INFO] [1779267678.357760677] [bt_navigator]: Creating navigator id navigate_to_pose of type nav2_bt_navigator::NavigateToPoseNavigator
+[bt_navigator-33] [WARN] [1779267678.368160355] [bt_navigator]: Error_code parameters were not set. Using default values of: follow_path_error_code compute_path_error_code
+[bt_navigator-33] Make sure these match your BT and there are not other sources of error codes youreported to your application
+[bt_navigator-33] [INFO] [1779267678.484294262] [bt_navigator]: Creating navigator id navigate_through_poses of type nav2_bt_navigator::NavigateThroughPosesNavigator
+[lifecycle_manager-34] [INFO] [1779267678.506925065] [lifecycle_manager_navigation]: [34m[1mActivating planner_server[0m[0m
+[planner_server-30] [INFO] [1779267678.507085010] [planner_server]: Activating
+[planner_server-30] [INFO] [1779267678.507122118] [global_costmap.global_costmap]: Activating
+[planner_server-30] [INFO] [1779267678.507130586] [global_costmap.global_costmap]: Checking transform
+[planner_server-30] [INFO] [1779267678.507259270] [global_costmap.global_costmap]: start
+[planner_server-30] [INFO] [1779267678.759664405] [planner_server]: Activating plugin GridBased of type SmacPlanner2D
+[planner_server-30] [INFO] [1779267678.761545342] [planner_server]: Creating bond (planner_server) to lifecycle manager.
+[lifecycle_manager-34] [INFO] [1779267678.768188556] [lifecycle_manager_navigation]: [34m[1mActivating controller_server[0m[0m
+[controller_server-31] [INFO] [1779267678.768691953] [controller_server]: Activating
+[controller_server-31] [INFO] [1779267678.768732732] [local_costmap.local_costmap]: Activating
+[controller_server-31] [INFO] [1779267678.768753585] [local_costmap.local_costmap]: Checking transform
+[controller_server-31] [INFO] [1779267678.768895561] [local_costmap.local_costmap]: start
+[controller_server-31] [INFO] [1779267679.020786807] [controller_server]: Activating controller: FollowPath of type regulated_pure_pursuit_controller::RegulatedPurePursuitController
+[controller_server-31] [INFO] [1779267679.020864604] [controller_server]: Creating bond (controller_server) to lifecycle manager.
+[lifecycle_manager-34] [INFO] [1779267679.252260103] [lifecycle_manager_navigation]: [34m[1mActivating behavior_server[0m[0m
+[behavior_server-32] [INFO] [1779267679.252605124] [behavior_server]: Activating
+[behavior_server-32] [INFO] [1779267679.252632650] [behavior_server]: Activating spin
+[behavior_server-32] [INFO] [1779267679.252644012] [behavior_server]: Activating wait
+[behavior_server-32] [INFO] [1779267679.252662674] [behavior_server]: Creating bond (behavior_server) to lifecycle manager.
+[lifecycle_manager-34] [INFO] [1779267679.257089816] [lifecycle_manager_navigation]: [34m[1mActivating bt_navigator[0m[0m
+[bt_navigator-33] [INFO] [1779267679.257245503] [bt_navigator]: Activating
+[bt_navigator-33] [INFO] [1779267679.322402612] [bt_navigator]: Creating bond (bt_navigator) to lifecycle manager.
+[lifecycle_manager-34] [INFO] [1779267679.326892637] [lifecycle_manager_navigation]: [34m[1mManaged nodes are active[0m[0m
+[data_integration_node_recoverable-18] [INFO] [1779267684.799475626] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779267705.787952448] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779267719.795307679] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779267754.799519478] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779267765.788468885] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779267784.799782038] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779267819.794978466] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779267825.788623491] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779267854.796604126] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779267884.796907971] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779267885.787930548] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779267919.794380259] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779267945.788921536] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779267949.795084942] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779267984.796423676] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268005.787836229] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779268014.797039633] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779268049.794480286] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268065.788031750] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779268084.796315163] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779268114.796907663] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268125.788291080] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779268144.799889811] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779268179.794470285] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268185.788260406] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779268214.796325540] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779268244.797235408] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268245.787958579] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779268274.799275159] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268305.787895609] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779268309.795015245] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779268344.797103157] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268365.787947914] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779268374.800360762] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779268409.794360956] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268425.788085256] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[websocket_server_node-17] [INFO] [1779268437.723377790] [websocket_server]: 🔗 客户端连接: client_1779268437722_b4d5be9f (IP: 127.0.0.1)
+[websocket_server_node-17] [INFO] [1779268437.724342269] [websocket_server]: ✅ 发送连接确认给 client_1779268437722_b4d5be9f
+[websocket_server_node-17] [INFO] [1779268437.725130233] [websocket_server]: 🤖 已向 client_1779268437722_b4d5be9f 推送动作库
+[websocket_server_node-17] [INFO] [1779268437.725759649] [websocket_server]: 🎭 已向 client_1779268437722_b4d5be9f 推送面部表情库
+[websocket_server_node-17] [INFO] [1779268437.726136851] [websocket_server]: 📊 发送初始业务数据给 client_1779268437722_b4d5be9f
+[websocket_server_node-17] [INFO] [1779268437.762303291] [websocket_server]: 📨 收到消息: subscription system_status from client_1779268437722_b4d5be9f
+[websocket_server_node-17] [INFO] [1779268437.763022740] [websocket_server]: 📋 转发订阅请求: system_status
+[websocket_server_node-17] [INFO] [1779268437.763472849] [websocket_server]: 📨 收到消息: request gesture_list from client_1779268437722_b4d5be9f
+[websocket_server_node-17] [INFO] [1779268437.763903467] [websocket_server]: 📤 转发数据请求: gesture_list from client_1779268437722_b4d5be9f
+[websocket_server_node-17] [INFO] [1779268437.764141081] [websocket_server]: 📨 收到消息: request facial_gesture_list from client_1779268437722_b4d5be9f
+[websocket_server_node-17] [INFO] [1779268437.764492715] [websocket_server]: 📤 转发数据请求: facial_gesture_list from client_1779268437722_b4d5be9f
+[data_integration_node_recoverable-18] [INFO] [1779268437.766239115] [data_integration_node]: ✅ 已响应数据请求: gesture_list -> client_1779268437722_b4d5be9f
+[data_integration_node_recoverable-18] [INFO] [1779268437.766617456] [data_integration_node]: ✅ 客户端 client_1779268437722_b4d5be9f 订阅了: ['robot_pose', 'navigation_status', 'navigation_command_result', 'system_status', 'robot_speed']
+[data_integration_node_recoverable-18] [INFO] [1779268437.767429043] [data_integration_node]: ✅ 已响应数据请求: facial_gesture_list -> client_1779268437722_b4d5be9f
+[data_integration_node_recoverable-18] [INFO] [1779268439.794478863] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779268469.794667951] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [ERROR] [1779268471.414168923] [websocket_server]: ❌ 处理客户端连接错误 client_1779268437722_b4d5be9f: no close frame received or sent
+[websocket_server_node-17] [INFO] [1779268471.414889080] [websocket_server]: 📉 已发送退订请求: client_1779268437722_b4d5be9f -> ['robot_pose', 'navigation_status', 'navigation_command_result', 'system_status', 'robot_speed']
+[websocket_server_node-17] [INFO] [1779268471.415206972] [websocket_server]: 🧹 清理客户端资源完成: client_1779268437722_b4d5be9f
+[websocket_server_node-17] [INFO] [1779268471.415568330] [websocket_server]: 🔌 客户端 client_1779268437722_b4d5be9f 已断开连接
+[data_integration_node_recoverable-18] [INFO] [1779268471.415719551] [data_integration_node]: ✅ 客户端 client_1779268437722_b4d5be9f 取消订阅: ['robot_pose', 'navigation_status', 'navigation_command_result', 'system_status', 'robot_speed']
+[websocket_server_node-17] [INFO] [1779268477.035792985] [websocket_server]: 🔗 客户端连接: client_1779268477035_d19c4ce7 (IP: 127.0.0.1)
+[websocket_server_node-17] [INFO] [1779268477.037041240] [websocket_server]: ✅ 发送连接确认给 client_1779268477035_d19c4ce7
+[websocket_server_node-17] [INFO] [1779268477.037549887] [websocket_server]: 🤖 已向 client_1779268477035_d19c4ce7 推送动作库
+[websocket_server_node-17] [INFO] [1779268477.038160925] [websocket_server]: 🎭 已向 client_1779268477035_d19c4ce7 推送面部表情库
+[websocket_server_node-17] [INFO] [1779268477.038662366] [websocket_server]: 📊 发送初始业务数据给 client_1779268477035_d19c4ce7
+[websocket_server_node-17] [INFO] [1779268477.076109551] [websocket_server]: 📨 收到消息: subscription system_status from client_1779268477035_d19c4ce7
+[websocket_server_node-17] [INFO] [1779268477.076824856] [websocket_server]: 📋 转发订阅请求: system_status
+[data_integration_node_recoverable-18] [INFO] [1779268477.077084871] [data_integration_node]: ✅ 客户端 client_1779268477035_d19c4ce7 订阅了: ['robot_pose', 'navigation_status', 'navigation_command_result', 'system_status', 'robot_speed']
+[websocket_server_node-17] [INFO] [1779268477.077222786] [websocket_server]: 📨 收到消息: request gesture_list from client_1779268477035_d19c4ce7
+[data_integration_node_recoverable-18] [INFO] [1779268477.078062410] [data_integration_node]: ✅ 已响应数据请求: gesture_list -> client_1779268477035_d19c4ce7
+[websocket_server_node-17] [INFO] [1779268477.078568611] [websocket_server]: 📤 转发数据请求: gesture_list from client_1779268477035_d19c4ce7
+[websocket_server_node-17] [INFO] [1779268477.078885609] [websocket_server]: 📨 收到消息: request facial_gesture_list from client_1779268477035_d19c4ce7
+[websocket_server_node-17] [INFO] [1779268477.079394759] [websocket_server]: 📤 转发数据请求: facial_gesture_list from client_1779268477035_d19c4ce7
+[data_integration_node_recoverable-18] [INFO] [1779268477.079772106] [data_integration_node]: ✅ 已响应数据请求: facial_gesture_list -> client_1779268477035_d19c4ce7
+[websocket_server_node-17] [INFO] [1779268485.788081279] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[websocket_server_node-17] [INFO] [1779268486.320135394] [websocket_server]: 📉 已发送退订请求: client_1779268477035_d19c4ce7 -> ['robot_pose', 'navigation_status', 'navigation_command_result', 'system_status', 'robot_speed']
+[websocket_server_node-17] [INFO] [1779268486.320384250] [websocket_server]: 🧹 清理客户端资源完成: client_1779268477035_d19c4ce7
+[websocket_server_node-17] [INFO] [1779268486.320635871] [websocket_server]: 🔌 客户端 client_1779268477035_d19c4ce7 已断开连接
+[data_integration_node_recoverable-18] [INFO] [1779268486.320631674] [data_integration_node]: ✅ 客户端 client_1779268477035_d19c4ce7 取消订阅: ['robot_pose', 'navigation_status', 'navigation_command_result', 'system_status', 'robot_speed']
+[data_integration_node_recoverable-18] [INFO] [1779268504.799555709] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779268539.795012427] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268545.788007017] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779268574.795784459] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779268604.801145734] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268605.788341240] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[websocket_server_node-17] [INFO] [1779268631.454473993] [websocket_server]: 🔗 客户端连接: client_1779268631454_352ccc3f (IP: 127.0.0.1)
+[websocket_server_node-17] [INFO] [1779268631.454974429] [websocket_server]: ✅ 发送连接确认给 client_1779268631454_352ccc3f
+[websocket_server_node-17] [INFO] [1779268631.455366348] [websocket_server]: 🤖 已向 client_1779268631454_352ccc3f 推送动作库
+[websocket_server_node-17] [INFO] [1779268631.455791851] [websocket_server]: 🎭 已向 client_1779268631454_352ccc3f 推送面部表情库
+[websocket_server_node-17] [INFO] [1779268631.456096285] [websocket_server]: 📊 发送初始业务数据给 client_1779268631454_352ccc3f
+[websocket_server_node-17] [INFO] [1779268631.485887711] [websocket_server]: 📨 收到消息: subscription system_status from client_1779268631454_352ccc3f
+[websocket_server_node-17] [INFO] [1779268631.486686200] [websocket_server]: 📋 转发订阅请求: system_status
+[websocket_server_node-17] [INFO] [1779268631.487192317] [websocket_server]: 📨 收到消息: request gesture_list from client_1779268631454_352ccc3f
+[websocket_server_node-17] [INFO] [1779268631.487765764] [websocket_server]: 📤 转发数据请求: gesture_list from client_1779268631454_352ccc3f
+[data_integration_node_recoverable-18] [INFO] [1779268631.487816967] [data_integration_node]: ✅ 客户端 client_1779268631454_352ccc3f 订阅了: ['robot_pose', 'navigation_status', 'navigation_command_result', 'system_status', 'robot_speed']
+[websocket_server_node-17] [INFO] [1779268631.488057744] [websocket_server]: 📨 收到消息: request facial_gesture_list from client_1779268631454_352ccc3f
+[data_integration_node_recoverable-18] [INFO] [1779268631.488624429] [data_integration_node]: ✅ 已响应数据请求: gesture_list -> client_1779268631454_352ccc3f
+[data_integration_node_recoverable-18] [INFO] [1779268631.489127762] [data_integration_node]: ✅ 已响应数据请求: facial_gesture_list -> client_1779268631454_352ccc3f
+[websocket_server_node-17] [INFO] [1779268631.489676897] [websocket_server]: 📤 转发数据请求: facial_gesture_list from client_1779268631454_352ccc3f
+[websocket_server_node-17] [INFO] [1779268632.305412160] [websocket_server]: 📉 已发送退订请求: client_1779268631454_352ccc3f -> ['robot_pose', 'navigation_status', 'navigation_command_result', 'system_status', 'robot_speed']
+[websocket_server_node-17] [INFO] [1779268632.305760904] [websocket_server]: 🧹 清理客户端资源完成: client_1779268631454_352ccc3f
+[data_integration_node_recoverable-18] [INFO] [1779268632.306078364] [data_integration_node]: ✅ 客户端 client_1779268631454_352ccc3f 取消订阅: ['robot_pose', 'navigation_status', 'navigation_command_result', 'system_status', 'robot_speed']
+[websocket_server_node-17] [INFO] [1779268632.306122962] [websocket_server]: 🔌 客户端 client_1779268631454_352ccc3f 已断开连接
+[data_integration_node_recoverable-18] [INFO] [1779268639.794802182] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268665.788087406] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779268674.797597230] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779268704.799695907] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268725.787928979] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779268739.794897372] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779268769.795698879] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268785.788070047] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779268804.799665026] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779268839.797311053] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268845.788014716] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779268874.796510850] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779268904.799896197] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268905.788124274] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779268939.794694977] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779268965.788258392] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779268969.796035395] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779269004.800827894] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779269025.788014118] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779269039.794937268] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779269047.119096058] [websocket_server]: 🔗 客户端连接: client_1779269047118_727a7c19 (IP: 127.0.0.1)
+[websocket_server_node-17] [INFO] [1779269047.119620951] [websocket_server]: ✅ 发送连接确认给 client_1779269047118_727a7c19
+[websocket_server_node-17] [INFO] [1779269047.120038603] [websocket_server]: 🤖 已向 client_1779269047118_727a7c19 推送动作库
+[websocket_server_node-17] [INFO] [1779269047.120489327] [websocket_server]: 🎭 已向 client_1779269047118_727a7c19 推送面部表情库
+[websocket_server_node-17] [INFO] [1779269047.120795506] [websocket_server]: 📊 发送初始业务数据给 client_1779269047118_727a7c19
+[websocket_server_node-17] [INFO] [1779269047.157665519] [websocket_server]: 📨 收到消息: subscription system_status from client_1779269047118_727a7c19
+[websocket_server_node-17] [INFO] [1779269047.158462880] [websocket_server]: 📋 转发订阅请求: system_status
+[data_integration_node_recoverable-18] [INFO] [1779269047.159562955] [data_integration_node]: ✅ 客户端 client_1779269047118_727a7c19 订阅了: ['robot_pose', 'navigation_status', 'navigation_command_result', 'system_status', 'robot_speed']
+[websocket_server_node-17] [INFO] [1779269047.162927626] [websocket_server]: 📨 收到消息: request gesture_list from client_1779269047118_727a7c19
+[websocket_server_node-17] [INFO] [1779269047.163423431] [websocket_server]: 📤 转发数据请求: gesture_list from client_1779269047118_727a7c19
+[websocket_server_node-17] [INFO] [1779269047.163870528] [websocket_server]: 📨 收到消息: request facial_gesture_list from client_1779269047118_727a7c19
+[websocket_server_node-17] [INFO] [1779269047.164188065] [websocket_server]: 📤 转发数据请求: facial_gesture_list from client_1779269047118_727a7c19
+[data_integration_node_recoverable-18] [INFO] [1779269047.169285709] [data_integration_node]: ✅ 已响应数据请求: gesture_list -> client_1779269047118_727a7c19
+[data_integration_node_recoverable-18] [INFO] [1779269047.171078545] [data_integration_node]: ✅ 已响应数据请求: facial_gesture_list -> client_1779269047118_727a7c19
+[data_integration_node_recoverable-18] [INFO] [1779269052.102780852] [data_integration_node]: ✅ 客户端 client_1779269047118_727a7c19 取消订阅: ['robot_pose', 'navigation_status', 'navigation_command_result', 'system_status', 'robot_speed']
+[websocket_server_node-17] [INFO] [1779269052.103941312] [websocket_server]: 📉 已发送退订请求: client_1779269047118_727a7c19 -> ['robot_pose', 'navigation_status', 'navigation_command_result', 'system_status', 'robot_speed']
+[websocket_server_node-17] [INFO] [1779269052.105042017] [websocket_server]: 🧹 清理客户端资源完成: client_1779269047118_727a7c19
+[websocket_server_node-17] [INFO] [1779269052.105359481] [websocket_server]: 🔌 客户端 client_1779269047118_727a7c19 已断开连接
+[websocket_server_node-17] [INFO] [1779269062.396333678] [websocket_server]: 🔗 客户端连接: client_1779269062393_8e0f514d (IP: 127.0.0.1)
+[websocket_server_node-17] [INFO] [1779269062.397131533] [websocket_server]: ✅ 发送连接确认给 client_1779269062393_8e0f514d
+[websocket_server_node-17] [INFO] [1779269062.397897129] [websocket_server]: 🤖 已向 client_1779269062393_8e0f514d 推送动作库
+[websocket_server_node-17] [INFO] [1779269062.398623181] [websocket_server]: 🎭 已向 client_1779269062393_8e0f514d 推送面部表情库
+[websocket_server_node-17] [INFO] [1779269062.399162517] [websocket_server]: 📊 发送初始业务数据给 client_1779269062393_8e0f514d
+[websocket_server_node-17] [INFO] [1779269062.400018157] [websocket_server]: 📨 收到消息: command robot_control from client_1779269062393_8e0f514d
+[websocket_server_node-17] [ERROR] [1779269062.400845225] [websocket_server]: ❌ 处理机器人控制命令错误: received 1000 (OK) 指令发送完成; then sent 1000 (OK) 指令发送完成
+[websocket_client_node-19] [INFO] [1779269062.401003222] [websocket_client]: 📥 客户端收到执行动作指令: nod
+[websocket_server_node-17] [ERROR] [1779269062.401493259] [websocket_server]: ❌ 发送错误消息错误: received 1000 (OK) 指令发送完成; then sent 1000 (OK) 指令发送完成
+[websocket_server_node-17] [INFO] [1779269062.401949914] [websocket_server]: 🧹 清理客户端资源完成: client_1779269062393_8e0f514d
+[websocket_client_node-19] [INFO] [1779269062.401962432] [websocket_client]: ������ 准备开始执行动作: nod
+[websocket_client_node-19] [INFO] [1779269062.402174508] [websocket_client]: ➡️ 切换至动作库模式 (Mode: 1)...
+[websocket_server_node-17] [INFO] [1779269062.402374311] [websocket_server]: 🔌 客户端 client_1779269062393_8e0f514d 已断开连接
+[websocket_server_node-17] [INFO] [1779269062.403760689] [websocket_server]: 🔗 客户端连接: client_1779269062403_2872a57e (IP: 127.0.0.1)
+[websocket_client_node-19] [INFO] [1779269062.403995624] [websocket_client]: 收到动作引擎切换响应: {'accid': 'HU_D04_01_289', 'title': 'response_set_motion_engine', 'guid': 'b68e58fe-bbab-459c-9969-1790995d901c', 'timestamp': 1779269062402, 'data': {'result': 'fail_invalid_mode'}}
+[websocket_client_node-19] [INFO] [1779269062.404278347] [websocket_client]: ������ 切动作库模式响应: {'accid': 'HU_D04_01_289', 'title': 'response_set_motion_engine', 'guid': 'b68e58fe-bbab-459c-9969-1790995d901c', 'timestamp': 1779269062402, 'data': {'result': 'fail_invalid_mode'}}
+[websocket_server_node-17] [INFO] [1779269062.404310402] [websocket_server]: ✅ 发送连接确认给 client_1779269062403_2872a57e
+[websocket_client_node-19] [ERROR] [1779269062.404500624] [websocket_client]: ❌ 切换动作库模式失败！
+[websocket_server_node-17] [INFO] [1779269062.404864444] [websocket_server]: 🤖 已向 client_1779269062403_2872a57e 推送动作库
+[websocket_server_node-17] [INFO] [1779269062.405507596] [websocket_server]: 🎭 已向 client_1779269062403_2872a57e 推送面部表情库
+[websocket_server_node-17] [INFO] [1779269062.406061231] [websocket_server]: 📊 发送初始业务数据给 client_1779269062403_2872a57e
+[websocket_server_node-17] [INFO] [1779269062.407926580] [websocket_server]: 📨 收到消息: command facial_control from client_1779269062403_2872a57e
+[websocket_server_node-17] [INFO] [1779269062.408407872] [websocket_server]: ✅ [Facial] 已转发指令ID cmd_facial_1779269062401: 'talk'
+[websocket_server_node-17] [ERROR] [1779269062.409050851] [websocket_server]: ❌ 处理面部控制命令错误: received 1000 (OK) 指令发送完成; then sent 1000 (OK) 指令发送完成
+[websocket_server_node-17] [ERROR] [1779269062.409452455] [websocket_server]: ❌ 发送错误消息错误: received 1000 (OK) 指令发送完成; then sent 1000 (OK) 指令发送完成
+[facial_driver-21] [INFO] [1779269062.409453538] [facial_driver]: 🛑 收到新指令，中断当前动作: talk
+[websocket_server_node-17] [INFO] [1779269062.409857877] [websocket_server]: 🧹 清理客户端资源完成: client_1779269062403_2872a57e
+[websocket_server_node-17] [INFO] [1779269062.410270110] [websocket_server]: 🔌 客户端 client_1779269062403_2872a57e 已断开连接
+[websocket_client_node-19] [INFO] [1779269062.906918657] [websocket_client]: ➡️ 退出动作模式，切回行走模式 (Mode: 0)...
+[facial_driver-21] [ERROR] [1779269062.909992599] [facial_driver]: ❌ 节点运行异常: (5, 'Input/output error')
+[facial_driver-21] [INFO] [1779269062.910880992] [facial_driver]: 🛑 开始优雅关闭...
+[facial_driver-21] [INFO] [1779269062.911053357] [facial_driver]: 🔍 先终止眼部循环和嘴部动作循环...
+[facial_driver-21] [ERROR] [1779269062.911258354] [facial_driver]: ❌ 串口发送失败: write failed: [Errno 5] Input/output error
+[facial_driver-21] [ERROR] [1779269063.011706484] [facial_driver]: ❌ 串口发送失败: write failed: [Errno 5] Input/output error
+[facial_driver-21] [INFO] [1779269063.112213212] [facial_driver]: ✅ 强制终止眼部循环（发送1次终止指令）
+[facial_driver-21] [ERROR] [1779269063.112497331] [facial_driver]: ❌ 串口发送失败: write failed: [Errno 5] Input/output error
+[facial_driver-21] [INFO] [1779269063.213078040] [facial_driver]: ✅ 强制终止嘴部循环（发送1次终止指令）
+[facial_driver-21] [ERROR] [1779269063.213385117] [facial_driver]: ❌ 串口发送失败: write failed: [Errno 5] Input/output error
+[facial_driver-21] [INFO] [1779269063.313962070] [facial_driver]: 🔄 眼部强制复位（眼球居中+正常睁眼）
+[facial_driver-21] [INFO] [1779269063.314207818] [facial_driver]: 🎬 执行表情: sleeping
+[facial_driver-21] [ERROR] [1779269063.314393292] [facial_driver]: ❌ 关闭串口失败: (5, 'Input/output error')
+[facial_driver-21] [INFO] [1779269063.330129975] [facial_driver]: ✅ 节点已正常退出
+[INFO] [facial_driver-21]: process has finished cleanly [pid 413587]
+[websocket_client_node-19] [INFO] [1779269064.928438119] [websocket_client]: 收到动作引擎切换响应: {'accid': 'HU_D04_01_289', 'title': 'response_set_motion_engine', 'guid': '59a1e9be-8c84-4eb9-9963-c85e3751e08a', 'timestamp': 1779269062906, 'data': {'result': 'fail_timeout'}}
+[websocket_client_node-19] [INFO] [1779269064.928854599] [websocket_client]: 切回行走模式响应: {'accid': 'HU_D04_01_289', 'title': 'response_set_motion_engine', 'guid': '59a1e9be-8c84-4eb9-9963-c85e3751e08a', 'timestamp': 1779269062906, 'data': {'result': 'fail_timeout'}}
+[websocket_client_node-19] [WARN] [1779269064.929159372] [websocket_client]: ⚠️ 切回行走模式失败，请注意机器人状态。
+[websocket_client_node-19] [INFO] [1779269064.929633191] [websocket_client]: 📤 动作结果已发布: nod, status=failed, result=enter_menu_failed, walk_ready=False
+[data_integration_node_recoverable-18] [INFO] [1779269064.930819493] [data_integration_node]: 📤 立即推送动作结果: nod, status=failed
+[websocket_server_node-17] [INFO] [1779269071.087006012] [websocket_server]: 🔗 客户端连接: client_1779269071086_d12cc668 (IP: 127.0.0.1)
+[websocket_server_node-17] [INFO] [1779269071.087452648] [websocket_server]: ✅ 发送连接确认给 client_1779269071086_d12cc668
+[websocket_server_node-17] [INFO] [1779269071.087833257] [websocket_server]: 🤖 已向 client_1779269071086_d12cc668 推送动作库
+[websocket_server_node-17] [INFO] [1779269071.088248488] [websocket_server]: 🎭 已向 client_1779269071086_d12cc668 推送面部表情库
+[websocket_server_node-17] [INFO] [1779269071.088517410] [websocket_server]: 📊 发送初始业务数据给 client_1779269071086_d12cc668
+[websocket_server_node-17] [INFO] [1779269071.089039017] [websocket_server]: 📨 收到消息: command facial_control from client_1779269071086_d12cc668
+[websocket_server_node-17] [INFO] [1779269071.089294291] [websocket_server]: ✅ [Facial] 已转发指令ID cmd_facial_1779269071085: 'idle'
+[websocket_server_node-17] [ERROR] [1779269071.089689832] [websocket_server]: ❌ 处理面部控制命令错误: received 1000 (OK) 指令发送完成; then sent 1000 (OK) 指令发送完成
+[websocket_server_node-17] [ERROR] [1779269071.089946496] [websocket_server]: ❌ 发送错误消息错误: received 1000 (OK) 指令发送完成; then sent 1000 (OK) 指令发送完成
+[websocket_server_node-17] [INFO] [1779269071.090195015] [websocket_server]: 🧹 清理客户端资源完成: client_1779269071086_d12cc668
+[websocket_server_node-17] [INFO] [1779269071.090431669] [websocket_server]: 🔌 客户端 client_1779269071086_d12cc668 已断开连接
+[data_integration_node_recoverable-18] [INFO] [1779269074.796121812] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779269085.788192180] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779269095.796700905] [data_integration_node]: 🧹 清理过期数据: action_result
+[data_integration_node_recoverable-18] [INFO] [1779269104.799240027] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node_recoverable-18] [INFO] [1779269134.799319833] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1779269145.788125821] [websocket_server]: 📊 服务器状态 - 客户端: 0 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node_recoverable-18] [INFO] [1779269169.794362450] [data_integration_node]: 📊 系统状态 - 可用数据: 6/7 | 活跃订阅: 0 | 客户端数: 0

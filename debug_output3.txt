@@ -1,0 +1,494 @@
+[INFO] [launch]: All log files can be found below /home/ubuntu/.ros/log/2026-05-15-16-14-59-845547-ubuntu-148869
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [148961]
+[INFO] [joint_state_publisher-2]: process started with pid [148962]
+[robot_state_publisher-1] [INFO] [1778832900.185339767] [robot_state_publisher]: Robot initialized
+[joint_state_publisher-2] [INFO] [1778832900.472215684] [joint_state_publisher]: Waiting for robot_description to be published on the robot_description topic...
+[joint_state_publisher-2] [INFO] [1778832900.609446629] [joint_state_publisher]: Got description, configuring robot
+[INFO] [rslidar_sdk_node-3]: process started with pid [149709]
+[INFO] [fastlio_mapping-4]: process started with pid [149710]
+[INFO] [static_transform_publisher-5]: process started with pid [149711]
+[INFO] [static_transform_publisher-6]: process started with pid [149712]
+[INFO] [static_transform_publisher-7]: process started with pid [149713]
+[INFO] [static_transform_publisher-8]: process started with pid [149714]
+[INFO] [static_transform_publisher-9]: process started with pid [149715]
+[INFO] [point_cloud_filter_node-10]: process started with pid [149716]
+[INFO] [wait_for_tf-11]: process started with pid [149717]
+[rslidar_sdk_node-3] [1m[35m********************************************************[0m
+[rslidar_sdk_node-3] [1m[35m**********                                    **********[0m
+[rslidar_sdk_node-3] [1m[35m**********    RSLidar_SDK Version: v1.5.18     **********[0m
+[rslidar_sdk_node-3] [1m[35m**********                                    **********[0m
+[rslidar_sdk_node-3] [1m[35m********************************************************[0m
+[static_transform_publisher-7] [WARN] [1778832906.204753786] []: Old-style arguments are deprecated; see --help for new-style arguments
+[static_transform_publisher-6] [WARN] [1778832906.211442705] []: Old-style arguments are deprecated; see --help for new-style arguments
+[wait_for_tf-11] Traceback (most recent call last):
+[wait_for_tf-11]   File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 397, in from_name
+[wait_for_tf-11]     return next(cls.discover(name=name))
+[wait_for_tf-11]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[wait_for_tf-11] StopIteration
+[wait_for_tf-11] 
+[wait_for_tf-11] During handling of the above exception, another exception occurred:
+[wait_for_tf-11] 
+[wait_for_tf-11] Traceback (most recent call last):
+[wait_for_tf-11]   File "/home/ubuntu/humanoid_ws/install/humanoid_navigation2/lib/humanoid_navigation2/wait_for_tf", line 33, in <module>
+[wait_for_tf-11]     sys.exit(load_entry_point('humanoid-navigation2', 'console_scripts', 'wait_for_tf')())
+[wait_for_tf-11]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[wait_for_tf-11]   File "/home/ubuntu/humanoid_ws/install/humanoid_navigation2/lib/humanoid_navigation2/wait_for_tf", line 22, in importlib_load_entry_point
+[wait_for_tf-11]     for entry_point in distribution(dist_name).entry_points
+[wait_for_tf-11]                        ^^^^^^^^^^^^^^^^^^^^^^^
+[wait_for_tf-11]   File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 862, in distribution
+[wait_for_tf-11]     return Distribution.from_name(distribution_name)
+[wait_for_tf-11]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[wait_for_tf-11]   File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 399, in from_name
+[wait_for_tf-11]     raise PackageNotFoundError(name)
+[wait_for_tf-11] importlib.metadata.PackageNotFoundError: No package metadata was found for humanoid-navigation2
+[static_transform_publisher-6] [INFO] [1778832906.351258564] [tf_map_to_ground]: Spinning until stopped - publishing transform
+[static_transform_publisher-6] translation: ('0.000000', '0.000000', '-1.215000')
+[static_transform_publisher-6] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-6] from 'map' to 'map_ground'
+[static_transform_publisher-7] [INFO] [1778832906.365457436] [tf_odom_to_ground]: Spinning until stopped - publishing transform
+[static_transform_publisher-7] translation: ('0.000000', '0.000000', '-1.215000')
+[static_transform_publisher-7] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-7] from 'odom' to 'odom_ground'
+[static_transform_publisher-8] [INFO] [1778832906.367810972] [tf_body_to_base_footprint]: Spinning until stopped - publishing transform
+[static_transform_publisher-8] translation: ('0.004000', '1.215000', '0.072000')
+[static_transform_publisher-8] rotation: ('0.500000', '0.500000', '-0.500000', '0.500000')
+[static_transform_publisher-8] from 'body' to 'base_footprint'
+[ERROR] [wait_for_tf-11]: process has died [pid 149717, exit code 1, cmd '/home/ubuntu/humanoid_ws/install/humanoid_navigation2/lib/humanoid_navigation2/wait_for_tf --ros-args -r __node:=wait_for_localization_tf --params-file /tmp/launch_params__fyu8zex --params-file /tmp/launch_params_lg9u6_78'].
+[static_transform_publisher-9] [INFO] [1778832906.381247068] [tf_base_footprint_to_clearing_lidar]: Spinning until stopped - publishing transform
+[static_transform_publisher-9] translation: ('0.000000', '0.000000', '1.215000')
+[static_transform_publisher-9] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-9] from 'base_footprint' to 'clearing_lidar'
+[INFO] [planner_server-12]: process started with pid [149840]
+[INFO] [controller_server-13]: process started with pid [149841]
+[INFO] [behavior_server-14]: process started with pid [149842]
+[INFO] [bt_navigator-15]: process started with pid [149843]
+[point_cloud_filter_node-10] [INFO] [1778832906.385171369] [point_cloud_filter_node]: 点云滤波线程数: 4
+[rslidar_sdk_node-3] [1m[32m--------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32mConfig loaded from PATH:[0m
+[rslidar_sdk_node-3] [1m[32m/home/ubuntu/humanoid_ws/src/rslidar_sdk/config/config.yaml[0m
+[rslidar_sdk_node-3] [1m[32m--------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32mReceive Packets From : Online LiDAR[0m
+[rslidar_sdk_node-3] [1m[32mMsop Port: 6699[0m
+[rslidar_sdk_node-3] [1m[32mDifop Port: 7788[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Driver Parameters [0m
+[rslidar_sdk_node-3] [32minput type: ONLINE_LIDAR[0m
+[rslidar_sdk_node-3] [32mlidar_type: RSAIRY[0m
+[rslidar_sdk_node-3] [32mframe_id: rslidar[0m
+[rslidar_sdk_node-3] [32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Input Parameters [0m
+[rslidar_sdk_node-3] [32mmsop_port: 6699[0m
+[rslidar_sdk_node-3] [32mdifop_port: 7788[0m
+[rslidar_sdk_node-3] [32mimu_port: 6688[0m
+[rslidar_sdk_node-3] [32muser_layer_bytes: 0[0m
+[rslidar_sdk_node-3] [32mtail_layer_bytes: 0[0m
+[rslidar_sdk_node-3] [32mhost_address: 0.0.0.0[0m
+[rslidar_sdk_node-3] [32mgroup_address: 0.0.0.0[0m
+[rslidar_sdk_node-3] [32msocket_recv_buf: 106496[0m
+[rslidar_sdk_node-3] [32mpcap_path: /home/robosense/lidar.pcap[0m
+[rslidar_sdk_node-3] [32mpcap_rate: 1[0m
+[rslidar_sdk_node-3] [32mpcap_repeat: 1[0m
+[rslidar_sdk_node-3] [32muse_vlan: 0[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Decoder Parameters [0m
+[rslidar_sdk_node-3] [32mmin_distance: 0.1[0m
+[rslidar_sdk_node-3] [32mmax_distance: 60[0m
+[rslidar_sdk_node-3] [32muse_lidar_clock: 0[0m
+[rslidar_sdk_node-3] [32mdense_points: 0[0m
+[rslidar_sdk_node-3] [32mts_first_point: 1[0m
+[rslidar_sdk_node-3] [32mwait_for_difop: 1[0m
+[rslidar_sdk_node-3] [32mconfig_from_file: 0[0m
+[rslidar_sdk_node-3] [32mangle_path: [0m
+[rslidar_sdk_node-3] [32mstart_angle: 0[0m
+[rslidar_sdk_node-3] [32mend_angle: 360[0m
+[rslidar_sdk_node-3] [32msplit_frame_mode: 1[0m
+[rslidar_sdk_node-3] [32msplit_angle: 0[0m
+[rslidar_sdk_node-3] [32mnum_blks_split: 0[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Transform Parameters [0m
+[rslidar_sdk_node-3] [32mx: 0[0m
+[rslidar_sdk_node-3] [32my: 0[0m
+[rslidar_sdk_node-3] [32mz: 0[0m
+[rslidar_sdk_node-3] [32mroll: 0[0m
+[rslidar_sdk_node-3] [32mpitch: 0[0m
+[rslidar_sdk_node-3] [32myaw: 0[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[36m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[36mSend PointCloud To : ROS[0m
+[rslidar_sdk_node-3] [1m[36mPointCloud Topic: /airy_points[0m
+[rslidar_sdk_node-3] [1m[36m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [WARN] [1778832906.387979654] [rcl.logging_rosout]: Publisher already registered for node name: 'rslidar_sdk_node'. If this is due to multiple nodes with the same name then all logs for the logger named 'rslidar_sdk_node' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[point_cloud_filter_node-10] [INFO] [1778832906.391386032] [point_cloud_filter_node]: 高性能点云滤波节点已启动
+[point_cloud_filter_node-10]   输入话题: /fast_lio/cloud_registered
+[point_cloud_filter_node-10]   高程图输出: /airy_points_for_elevation
+[point_cloud_filter_node-10]   导航输出: /airy_points_filtered
+[point_cloud_filter_node-10]   启用滤波: SOR=是, 高度连续=是, 密度=是, 运动检测=是
+[rslidar_sdk_node-3] [1m[37mRoboSense-LiDAR-Driver is running.....[0m
+[static_transform_publisher-5] [INFO] [1778832906.395039208] [tf_odom_to_camera_init]: Spinning until stopped - publishing transform
+[static_transform_publisher-5] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-5] rotation: ('-0.500000', '-0.500000', '0.500000', '0.500000')
+[static_transform_publisher-5] from 'odom' to 'camera_init'
+[controller_server-13] [INFO] [1778832906.806116710] [controller_server]: 
+[controller_server-13] 	controller_server lifecycle node launched. 
+[controller_server-13] 	Waiting on external lifecycle transitions to activate
+[controller_server-13] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[bt_navigator-15] [INFO] [1778832906.806144069] [bt_navigator]: 
+[bt_navigator-15] 	bt_navigator lifecycle node launched. 
+[bt_navigator-15] 	Waiting on external lifecycle transitions to activate
+[bt_navigator-15] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[fastlio_mapping-4] [INFO] [1778832906.807181405] [fast_lio_node]: p_pre->lidar_type 5
+[behavior_server-14] [INFO] [1778832906.810405912] [behavior_server]: 
+[behavior_server-14] 	behavior_server lifecycle node launched. 
+[behavior_server-14] 	Waiting on external lifecycle transitions to activate
+[behavior_server-14] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-12] [INFO] [1778832906.811022551] [planner_server]: 
+[planner_server-12] 	planner_server lifecycle node launched. 
+[planner_server-12] 	Waiting on external lifecycle transitions to activate
+[planner_server-12] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[fastlio_mapping-4] [INFO] [1778832906.818554604] [fast_lio_node]: Node init finished.
+[fastlio_mapping-4] [INFO] [1778832906.818668701] [fast_lio_node]: Starting LaserMappingNode with MultiThreadedExecutor (4 Threads)...
+[bt_navigator-15] [INFO] [1778832906.818945486] [bt_navigator]: Creating
+[planner_server-12] [INFO] [1778832906.818950268] [planner_server]: Creating
+[controller_server-13] [INFO] [1778832906.822822575] [controller_server]: Creating controller server
+[planner_server-12] [INFO] [1778832906.826359927] [global_costmap.global_costmap]: 
+[planner_server-12] 	global_costmap lifecycle node launched. 
+[planner_server-12] 	Waiting on external lifecycle transitions to activate
+[planner_server-12] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-12] [INFO] [1778832906.830127630] [global_costmap.global_costmap]: Creating Costmap
+[controller_server-13] [INFO] [1778832906.830420404] [local_costmap.local_costmap]: 
+[controller_server-13] 	local_costmap lifecycle node launched. 
+[controller_server-13] 	Waiting on external lifecycle transitions to activate
+[controller_server-13] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-13] [INFO] [1778832906.831090692] [local_costmap.local_costmap]: Creating Costmap
+[INFO] [map_server-16]: process started with pid [150038]
+[map_server-16] [INFO] [1778832907.365974245] [map_server]: 
+[map_server-16] 	map_server lifecycle node launched. 
+[map_server-16] 	Waiting on external lifecycle transitions to activate
+[map_server-16] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[map_server-16] [INFO] [1778832907.366049800] [map_server]: Creating
+[fastlio_mapping-4] [WARN] [1778832907.397502994] [fast_lio_node]: No point, skip this scan!
+[fastlio_mapping-4] 
+[fastlio_mapping-4] [INFO] [1778832907.511190381] [fast_lio_node]: Initialize the map kdtree
+[INFO] [periodic_clearing_publisher-17]: process started with pid [150282]
+[INFO] [periodic_clearing_3d_publisher-18]: process started with pid [150287]
+[periodic_clearing_3d_publisher-18] Traceback (most recent call last):
+[periodic_clearing_3d_publisher-18]   File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 397, in from_name
+[periodic_clearing_3d_publisher-18]     return next(cls.discover(name=name))
+[periodic_clearing_3d_publisher-18]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[periodic_clearing_3d_publisher-18] StopIteration
+[periodic_clearing_3d_publisher-18] 
+[periodic_clearing_3d_publisher-18] During handling of the above exception, another exception occurred:
+[periodic_clearing_3d_publisher-18] 
+[periodic_clearing_3d_publisher-18] Traceback (most recent call last):
+[periodic_clearing_3d_publisher-18]   File "/home/ubuntu/humanoid_ws/install/humanoid_navigation2/lib/humanoid_navigation2/periodic_clearing_3d_publisher", line 33, in <module>
+[periodic_clearing_3d_publisher-18]     sys.exit(load_entry_point('humanoid-navigation2', 'console_scripts', 'periodic_clearing_3d_publisher')())
+[periodic_clearing_3d_publisher-18]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[periodic_clearing_3d_publisher-18]   File "/home/ubuntu/humanoid_ws/install/humanoid_navigation2/lib/humanoid_navigation2/periodic_clearing_3d_publisher", line 22, in importlib_load_entry_point
+[periodic_clearing_3d_publisher-18]     for entry_point in distribution(dist_name).entry_points
+[periodic_clearing_3d_publisher-18]                        ^^^^^^^^^^^^^^^^^^^^^^^
+[periodic_clearing_3d_publisher-18]   File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 862, in distribution
+[periodic_clearing_3d_publisher-18]     return Distribution.from_name(distribution_name)
+[periodic_clearing_3d_publisher-18]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[periodic_clearing_3d_publisher-18]   File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 399, in from_name
+[periodic_clearing_3d_publisher-18]     raise PackageNotFoundError(name)
+[periodic_clearing_3d_publisher-18] importlib.metadata.PackageNotFoundError: No package metadata was found for humanoid-navigation2
+[periodic_clearing_publisher-17] Traceback (most recent call last):
+[periodic_clearing_publisher-17]   File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 397, in from_name
+[periodic_clearing_publisher-17]     return next(cls.discover(name=name))
+[periodic_clearing_publisher-17]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[periodic_clearing_publisher-17] StopIteration
+[periodic_clearing_publisher-17] 
+[periodic_clearing_publisher-17] During handling of the above exception, another exception occurred:
+[periodic_clearing_publisher-17] 
+[periodic_clearing_publisher-17] Traceback (most recent call last):
+[periodic_clearing_publisher-17]   File "/home/ubuntu/humanoid_ws/install/humanoid_navigation2/lib/humanoid_navigation2/periodic_clearing_publisher", line 33, in <module>
+[periodic_clearing_publisher-17]     sys.exit(load_entry_point('humanoid-navigation2', 'console_scripts', 'periodic_clearing_publisher')())
+[periodic_clearing_publisher-17]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[periodic_clearing_publisher-17]   File "/home/ubuntu/humanoid_ws/install/humanoid_navigation2/lib/humanoid_navigation2/periodic_clearing_publisher", line 22, in importlib_load_entry_point
+[periodic_clearing_publisher-17]     for entry_point in distribution(dist_name).entry_points
+[periodic_clearing_publisher-17]                        ^^^^^^^^^^^^^^^^^^^^^^^
+[periodic_clearing_publisher-17]   File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 862, in distribution
+[periodic_clearing_publisher-17]     return Distribution.from_name(distribution_name)
+[periodic_clearing_publisher-17]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[periodic_clearing_publisher-17]   File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 399, in from_name
+[periodic_clearing_publisher-17]     raise PackageNotFoundError(name)
+[periodic_clearing_publisher-17] importlib.metadata.PackageNotFoundError: No package metadata was found for humanoid-navigation2
+[ERROR] [periodic_clearing_3d_publisher-18]: process has died [pid 150287, exit code 1, cmd '/home/ubuntu/humanoid_ws/install/humanoid_navigation2/lib/humanoid_navigation2/periodic_clearing_3d_publisher --ros-args -r __node:=periodic_clearing_3d_publisher --params-file /home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/config/nav2_params_xy_yaw.yaml --params-file /tmp/launch_params_gqsb50d0'].
+[ERROR] [periodic_clearing_publisher-17]: process has died [pid 150282, exit code 1, cmd '/home/ubuntu/humanoid_ws/install/humanoid_navigation2/lib/humanoid_navigation2/periodic_clearing_publisher --ros-args -r __node:=periodic_clearing_publisher --params-file /home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/config/nav2_params_xy_yaw.yaml --params-file /tmp/launch_params_6l__fi9m'].
+[INFO] [dynamic_waypoints_manager-19]: process started with pid [150525]
+[INFO] [navigation_state_manager-20]: process started with pid [150527]
+[INFO] [websocket_server_node-21]: process started with pid [150529]
+[INFO] [data_integration_node-22]: process started with pid [150533]
+[INFO] [websocket_client_node-23]: process started with pid [150534]
+[INFO] [message_bridge_node-24]: process started with pid [150535]
+[INFO] [facial_driver-25]: process started with pid [150536]
+[INFO] [lifecycle_manager-26]: process started with pid [150538]
+[INFO] [lifecycle_manager-27]: process started with pid [150670]
+[lifecycle_manager-26] [INFO] [1778832909.402778561] [lifecycle_manager_map]: Creating
+[lifecycle_manager-26] [INFO] [1778832909.420331807] [lifecycle_manager_map]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[lifecycle_manager-26] [INFO] [1778832909.826765155] [lifecycle_manager_map]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-26] [INFO] [1778832909.826820760] [lifecycle_manager_map]: [34m[1mConfiguring map_server[0m[0m
+[lifecycle_manager-27] [INFO] [1778832909.828642624] [lifecycle_manager_navigation]: Creating
+[map_server-16] [INFO] [1778832909.830407141] [map_server]: Configuring
+[map_server-16] [INFO] [1778832909.830489096] [map_io]: Loading yaml file: /home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.yaml
+[map_server-16] [INFO] [1778832909.831519958] [map_io]: resolution: 0.05
+[map_server-16] [INFO] [1778832909.831535731] [map_io]: origin[0]: -6.675
+[map_server-16] [INFO] [1778832909.831540288] [map_io]: origin[1]: -12.819
+[map_server-16] [INFO] [1778832909.831542240] [map_io]: origin[2]: 0
+[map_server-16] [INFO] [1778832909.831544306] [map_io]: free_thresh: 0.196
+[map_server-16] [INFO] [1778832909.831546078] [map_io]: occupied_thresh: 0.65
+[map_server-16] [INFO] [1778832909.831548867] [map_io]: mode: trinary
+[map_server-16] [INFO] [1778832909.831552494] [map_io]: negate: 0
+[lifecycle_manager-27] [INFO] [1778832909.833036213] [lifecycle_manager_navigation]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[map_server-16] [INFO] [1778832909.834482256] [map_io]: Loading image_file: /home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.pgm
+[map_server-16] [INFO] [1778832909.852799662] [map_io]: Read map /home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.pgm: 660 X 781 map @ 0.05 m/cell
+[lifecycle_manager-26] [INFO] [1778832909.952282574] [lifecycle_manager_map]: [34m[1mActivating map_server[0m[0m
+[map_server-16] [INFO] [1778832909.952607265] [map_server]: Activating
+[map_server-16] [INFO] [1778832909.953492915] [map_server]: Creating bond (map_server) to lifecycle manager.
+[message_bridge_node-24] [INFO] [1778832910.053710058] [message_bridge]: 更新率: 10.0Hz, 缓冲区大小: 1000
+[message_bridge_node-24] [INFO] [1778832910.054000259] [message_bridge]: ✅ Message bridge node 初始化完成
+[lifecycle_manager-26] [INFO] [1778832910.060620200] [lifecycle_manager_map]: Server map_server connected with bond.
+[lifecycle_manager-26] [INFO] [1778832910.060652444] [lifecycle_manager_map]: [34m[1mManaged nodes are active[0m[0m
+[lifecycle_manager-26] [INFO] [1778832910.060657690] [lifecycle_manager_map]: [34m[1mCreating bond timer...[0m[0m
+[dynamic_waypoints_manager-19] [INFO] [1778832910.084480821] [dynamic_waypoints_manager]: 数据持久化已启用，文件路径: /home/ubuntu/humanoid_ws/install/humanoid_navigation/share/humanoid_navigation/data/dynamic_waypoints.json
+[dynamic_waypoints_manager-19] [INFO] [1778832910.086559756] [dynamic_waypoints_manager]: 从文件加载点位数据完成，共 4 个点位，0 个序列
+[dynamic_waypoints_manager-19] [INFO] [1778832910.086896757] [dynamic_waypoints_manager]: 动态路点管理器启动完成 - 仅负责路点管理
+[dynamic_waypoints_manager-19] [INFO] [1778832910.087187330] [dynamic_waypoints_manager]: 动态路点管理器启动成功
+[websocket_client_node-23] [INFO] [1778832910.091488226] [websocket_client]: ROS组件初始化完成
+[websocket_client_node-23] [INFO] [1778832910.092824327] [websocket_client]: WebSocket客户端启动，连接服务器: ws://10.192.1.2:5000
+[data_integration_node-22] [INFO] [1778832910.093246122] [data_integration_node]: ✅ ROS通信接口设置完成
+[websocket_client_node-23] [INFO] [1778832910.093365578] [websocket_client]: 尝试连接机器人服务器...
+[data_integration_node-22] [INFO] [1778832910.093906560] [data_integration_node]: ✅ 定时任务设置完成
+[data_integration_node-22] [INFO] [1778832910.097399693] [data_integration_node]: ✅ 已从 YAML 动态加载 5 个动作
+[message_bridge_node-24] [INFO] [1778832910.098724303] [message_bridge]: 消息桥接节点启动
+[websocket_server_node-21] [INFO] [1778832910.099209387] [websocket_server]: ✅ 完整ROS通信接口设置完成
+[websocket_server_node-21] [INFO] [1778832910.100774841] [websocket_server]: ✅ 开始启动WebSocket服务器: 0.0.0.0:8765
+[websocket_server_node-21] [INFO] [1778832910.100998007] [websocket_server]: 🔄 创建WebSocket服务器实例...
+[navigation_state_manager-20] [INFO] [1778832910.103186901] [navigation_state_manager]: 导航状态管理器启动完成 - 负责导航执行和状态管理
+[navigation_state_manager-20] [INFO] [1778832910.103577212] [navigation_state_manager]: 位置容差: 0.15m, 方向容差: 0.3rad
+[data_integration_node-22] [INFO] [1778832910.108263948] [data_integration_node]: ✅ 已独立加载 30 个面部表情
+[data_integration_node-22] [INFO] [1778832910.108572084] [data_integration_node]: 🎯 统一数据整合节点启动完成
+[data_integration_node-22] [INFO] [1778832910.108819876] [data_integration_node]: 📊 协议版本: 2.0
+[data_integration_node-22] [INFO] [1778832910.109124435] [data_integration_node]: 🔄 支持的数据类型: ['robot_pose', 'navigation_status', 'navigation_path', 'system_status', 'gesture_list', 'facial_gesture_list']
+[data_integration_node-22] [INFO] [1778832910.109491314] [data_integration_node]: 🚀 启动统一数据整合节点主循环...
+[INFO] [rviz2-28]: process started with pid [150867]
+[websocket_client_node-23] [INFO] [1778832910.108413134] [websocket_client]: 已连接到机器人本体WebSocket服务器
+[websocket_client_node-23] [INFO] [1778832910.108703663] [websocket_client]: 📥 正在从机器人获取动作库列表...
+[websocket_server_node-21] [INFO] [1778832910.109049782] [websocket_server]: ✅ WebSocket服务器启动成功: 0.0.0.0:8765
+[websocket_server_node-21] [INFO] [1778832910.109278878] [websocket_server]: 🔄 WebSocket服务器正在运行...
+[facial_driver-25] [INFO] [1778832910.110233744] [facial_driver]: ✅ 已连接到仿生头模块: /dev/ttyUSB0
+[websocket_client_node-23] [INFO] [1778832910.113357467] [websocket_client]: 收到动作库列表响应: {'accid': 'HU_D04_01_233', 'title': 'response_get_atomic_motion_list', 'guid': '7e085f2b-afc7-4699-8338-29140607406c', 'timestamp': 1227006, 'data': {'result': 'success', 'motion_list': [{'motion_index': 0, 'motion_name_cn': '静止站立', 'motion_name_en': 'stand'}, {'motion_index': 1, 'motion_name_cn': '指引请这边走', 'motion_name_en': 'this_way_please'}, {'motion_index': 2, 'motion_name_cn': '鞠躬', 'motion_name_en': 'bow'}, {'motion_index': 3, 'motion_name_cn': '挥手（你好/拜拜）', 'motion_name_en': 'wave_greet_bye'}, {'motion_index': 4, 'motion_name_cn': '点头', 'motion_name_en': 'nod'}, {'motion_index': 5, 'motion_name_cn': '摇头', 'motion_name_en': 'shake_head'}, {'motion_index': 6, 'motion_name_cn': '谢幕', 'motion_name_en': 'curtain_bow'}, {'motion_index': 7, 'motion_name_cn': '连续飞吻', 'motion_name_en': 'blow_kisses_multi'}, {'motion_index': 8, 'motion_name_cn': '左手侧比心', 'motion_name_en': 'left_hand_side_heart'}, {'motion_index': 9, 'motion_name_cn': '右手侧比心', 'motion_name_en': 'right_hand_side_heart'}, {'motion_index': 10, 'motion_name_cn': '双手比心', 'motion_name_en': 'hand_heart'}, {'motion_index': 11, 'motion_name_cn': '与人击掌', 'motion_name_en': 'high_five'}, {'motion_index': 12, 'motion_name_cn': '鼓掌', 'motion_name_en': 'clap'}, {'motion_index': 13, 'motion_name_cn': '热场舞', 'motion_name_en': 'warm_up_dance'}, {'motion_index': 14, 'motion_name_cn': '展臂舞', 'motion_name_en': 'swag_dance'}, {'motion_index': 15, 'motion_name_cn': '女团舞1', 'motion_name_en': 'idol_dance_1'}, {'motion_index': 16, 'motion_name_cn': '女团舞2', 'motion_name_en': 'idol_dance_2'}, {'motion_index': 17, 'motion_name_cn': '助力舞', 'motion_name_en': 'power_up_dance'}, {'motion_index': 18, 'motion_name_cn': '握手', 'motion_name_en': 'shake_hands'}, {'motion_index': 19, 'motion_name_cn': '上抬手介绍', 'motion_name_en': 'raise_and_introduce'}, {'motion_index': 20, 'motion_name_cn': '随手比划40s', 'motion_name_en': 'casual_gesture_1'}, {'motion_index': 21, 'motion_name_cn': '随手比划10s', 'motion_name_en': 'casual_gesture_2'}, {'motion_index': 22, 'motion_name_cn': '拍照', 'motion_name_en': 'take_a_photo'}], 'count': 23}}
+[websocket_client_node-23] [INFO] [1778832910.113782674] [websocket_client]: 📋 从机器人获取到 23 个动作
+[websocket_client_node-23] [INFO] [1778832910.122263544] [websocket_client]: ✅ 已更新 /home/ubuntu/humanoid_ws/install/humanoid_locomotion/share/humanoid_locomotion/config/gestures.yaml，共 23 个动作
+[websocket_client_node-23] [INFO] [1778832910.122697598] [websocket_client]: 📤 已通知 data_integration 热重载动作库
+[data_integration_node-22] [INFO] [1778832910.123072802] [data_integration_node]: 🔄 收到动作库更新通知 (action=reload)，正在热重载...
+[data_integration_node-22] [INFO] [1778832910.124997099] [data_integration_node]: ✅ 已从 YAML 动态加载 5 个动作
+[data_integration_node-22] [INFO] [1778832910.125417048] [data_integration_node]: 📤 动作库热重载完成，已推送 5 个动作
+[websocket_client_node-23] [INFO] [1778832910.298312137] [websocket_client]: 🔄 机器人状态变更: Unknown -> ZeroTorque
+[lifecycle_manager-27] [INFO] [1778832911.018649310] [lifecycle_manager_navigation]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-27] [INFO] [1778832911.018691614] [lifecycle_manager_navigation]: [34m[1mConfiguring planner_server[0m[0m
+[planner_server-12] [INFO] [1778832911.018994969] [planner_server]: Configuring
+[planner_server-12] [INFO] [1778832911.019023714] [global_costmap.global_costmap]: Configuring
+[planner_server-12] [INFO] [1778832911.028342365] [global_costmap.global_costmap]: Using plugin "static_layer"
+[planner_server-12] [INFO] [1778832911.034149282] [global_costmap.global_costmap]: Subscribing to the map topic (/map) with transient local durability
+[planner_server-12] [INFO] [1778832911.035835768] [global_costmap.global_costmap]: Initialized plugin "static_layer"
+[planner_server-12] [INFO] [1778832911.035862466] [global_costmap.global_costmap]: Using plugin "obstacle_layer"
+[planner_server-12] [INFO] [1778832911.036922145] [global_costmap.global_costmap]: Subscribed to Topics: pointcloud periodic_clearing
+[planner_server-12] [INFO] [1778832911.045467960] [global_costmap.global_costmap]: Initialized plugin "obstacle_layer"
+[planner_server-12] [INFO] [1778832911.045508734] [global_costmap.global_costmap]: Using plugin "inflation_layer"
+[planner_server-12] [INFO] [1778832911.045816261] [global_costmap.global_costmap]: Initialized plugin "inflation_layer"
+[planner_server-12] [INFO] [1778832911.073798052] [global_costmap.global_costmap]: StaticLayer: Resizing costmap to 660 X 781 at 0.050000 m/pix
+[planner_server-12] [INFO] [1778832911.083117013] [planner_server]: Created global planner plugin GridBased of type nav2_smac_planner::SmacPlanner2D
+[planner_server-12] [INFO] [1778832911.083180905] [planner_server]: Configuring GridBased of type SmacPlanner2D
+[planner_server-12] [ERROR] [1778832911.083568747] [planner_server]: Inflation layer either not found or inflation is not set sufficiently for optimized non-circular collision checking capabilities. It is HIGHLY recommended to set the inflation radius to be at MINIMUM half of the robot's largest cross-section. See github.com/ros-planning/navigation2/tree/main/nav2_smac_planner#potential-fields for full instructions. This will substantially impact run-time performance.
+[planner_server-12] [INFO] [1778832911.086878141] [planner_server]: Configured plugin GridBased of type SmacPlanner2D with tolerance 0.50, maximum iterations 1000000, max on approach iterations 1000, and not allowing unknown traversal.
+[planner_server-12] [INFO] [1778832911.086993368] [planner_server]: Planner Server has GridBased  planners available.
+[lifecycle_manager-27] [INFO] [1778832911.098600087] [lifecycle_manager_navigation]: [34m[1mConfiguring controller_server[0m[0m
+[controller_server-13] [INFO] [1778832911.098799954] [controller_server]: Configuring controller interface
+[controller_server-13] [INFO] [1778832911.098817893] [controller_server]: getting progress checker plugins..
+[controller_server-13] [INFO] [1778832911.099053386] [controller_server]: getting goal checker plugins..
+[controller_server-13] [INFO] [1778832911.099137858] [controller_server]: Controller frequency set to 8.0000Hz
+[controller_server-13] [INFO] [1778832911.099169118] [local_costmap.local_costmap]: Configuring
+[websocket_server_node-21] [INFO] [1778832911.101282000] [websocket_server]: ✅ 定时任务设置完成
+[websocket_server_node-21] [INFO] [1778832911.101491833] [websocket_server]: 🚀 完整WebSocket服务器启动完成
+[websocket_server_node-21] [INFO] [1778832911.101670284] [websocket_server]: 📡 服务器地址: ws://0.0.0.0:8765
+[websocket_server_node-21] [INFO] [1778832911.101844652] [websocket_server]: 📊 协议版本: 2.0
+[controller_server-13] [INFO] [1778832911.107678171] [local_costmap.local_costmap]: Using plugin "static_layer"
+[controller_server-13] [INFO] [1778832911.113412175] [local_costmap.local_costmap]: Subscribing to the map topic (/map) with transient local durability
+[controller_server-13] [INFO] [1778832911.116143400] [local_costmap.local_costmap]: Initialized plugin "static_layer"
+[controller_server-13] [INFO] [1778832911.116174739] [local_costmap.local_costmap]: Using plugin "voxel_layer"
+[controller_server-13] [INFO] [1778832911.116612887] [local_costmap.local_costmap]: Subscribed to Topics: pointcloud clearing_3d
+[controller_server-13] [INFO] [1778832911.132466671] [local_costmap.local_costmap]: Initialized plugin "voxel_layer"
+[controller_server-13] [INFO] [1778832911.132504159] [local_costmap.local_costmap]: Using plugin "inflation_layer"
+[controller_server-13] [INFO] [1778832911.133831137] [local_costmap.local_costmap]: Initialized plugin "inflation_layer"
+[controller_server-13] [INFO] [1778832911.154578552] [local_costmap.local_costmap]: StaticLayer: Resizing static layer to 660 X 781 at 0.050000 m/pix
+[controller_server-13] [INFO] [1778832911.155514553] [controller_server]: Created progress_checker : progress_checker of type nav2_controller::SimpleProgressChecker
+[controller_server-13] [INFO] [1778832911.156135214] [controller_server]: Controller Server has progress_checker  progress checkers available.
+[controller_server-13] [INFO] [1778832911.156996315] [controller_server]: Created goal checker : xy_goal_checker of type nav2_controller::PositionGoalChecker
+[controller_server-13] [INFO] [1778832911.158710152] [controller_server]: Created goal checker : general_goal_checker of type nav2_controller::SimpleGoalChecker
+[controller_server-13] [INFO] [1778832911.158975520] [controller_server]: Controller Server has xy_goal_checker general_goal_checker  goal checkers available.
+[controller_server-13] [INFO] [1778832911.166419206] [controller_server]: Created controller : FollowPath of type nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController
+[controller_server-13] [INFO] [1778832911.172279380] [controller_server]: Controller Server has FollowPath  controllers available.
+[INFO] [lidar_localization_node-29]: process started with pid [151051]
+[lifecycle_manager-27] [INFO] [1778832911.184973085] [lifecycle_manager_navigation]: [34m[1mConfiguring behavior_server[0m[0m
+[behavior_server-14] [INFO] [1778832911.185472384] [behavior_server]: Configuring
+[behavior_server-14] [INFO] [1778832911.199530504] [behavior_server]: Creating behavior plugin spin of type nav2_behaviors::Spin
+[behavior_server-14] [INFO] [1778832911.202276725] [behavior_server]: Creating behavior plugin wait of type nav2_behaviors::Wait
+[behavior_server-14] [INFO] [1778832911.213276973] [behavior_server]: Configuring spin
+[behavior_server-14] [INFO] [1778832911.222411387] [behavior_server]: Configuring wait
+[lifecycle_manager-27] [INFO] [1778832911.233970446] [lifecycle_manager_navigation]: [34m[1mConfiguring bt_navigator[0m[0m
+[bt_navigator-15] [INFO] [1778832911.236040619] [bt_navigator]: Configuring
+[bt_navigator-15] [INFO] [1778832911.246178372] [bt_navigator]: Creating navigator id navigate_to_pose of type nav2_bt_navigator::NavigateToPoseNavigator
+[bt_navigator-15] [WARN] [1778832911.253461994] [bt_navigator]: Error_code parameters were not set. Using default values of: follow_path_error_code compute_path_error_code
+[bt_navigator-15] Make sure these match your BT and there are not other sources of error codes youreported to your application
+[bt_navigator-15] [INFO] [1778832911.374921965] [bt_navigator]: Creating navigator id navigate_through_poses of type nav2_bt_navigator::NavigateThroughPosesNavigator
+[lifecycle_manager-27] [INFO] [1778832911.414808848] [lifecycle_manager_navigation]: [34m[1mActivating planner_server[0m[0m
+[planner_server-12] [INFO] [1778832911.415564286] [planner_server]: Activating
+[planner_server-12] [INFO] [1778832911.415595830] [global_costmap.global_costmap]: Activating
+[planner_server-12] [INFO] [1778832911.415602666] [global_costmap.global_costmap]: Checking transform
+[planner_server-12] [INFO] [1778832911.415646265] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map_ground to become available, tf error: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[websocket_server_node-21] [INFO] [1778832911.762772878] [websocket_server]: 🔗 客户端连接: client_1778832911760_fb795758 (IP: 127.0.0.1)
+[websocket_server_node-21] [INFO] [1778832911.763317822] [websocket_server]: ✅ 发送连接确认给 client_1778832911760_fb795758
+[websocket_server_node-21] [INFO] [1778832911.763683093] [websocket_server]: 🤖 已向 client_1778832911760_fb795758 推送动作库
+[websocket_server_node-21] [INFO] [1778832911.763949324] [websocket_server]: 📊 发送初始业务数据给 client_1778832911760_fb795758
+[websocket_server_node-21] [INFO] [1778832911.781991400] [websocket_server]: 📨 收到消息: subscription system_status from client_1778832911760_fb795758
+[websocket_server_node-21] [INFO] [1778832911.782543083] [websocket_server]: 📋 转发订阅请求: system_status
+[websocket_server_node-21] [INFO] [1778832911.782812113] [websocket_server]: 📨 收到消息: request gesture_list from client_1778832911760_fb795758
+[websocket_server_node-21] [INFO] [1778832911.783077204] [websocket_server]: 📤 转发数据请求: gesture_list from client_1778832911760_fb795758
+[websocket_server_node-21] [INFO] [1778832911.783245240] [websocket_server]: 📨 收到消息: request facial_gesture_list from client_1778832911760_fb795758
+[websocket_server_node-21] [INFO] [1778832911.783499746] [websocket_server]: 📤 转发数据请求: facial_gesture_list from client_1778832911760_fb795758
+[data_integration_node-22] [INFO] [1778832911.785548866] [data_integration_node]: ✅ 客户端 client_1778832911760_fb795758 订阅了: ['robot_pose', 'navigation_status', 'navigation_command_result', 'system_status', 'robot_speed']
+[data_integration_node-22] [INFO] [1778832911.790272229] [data_integration_node]: ✅ 已响应数据请求: gesture_list -> client_1778832911760_fb795758
+[data_integration_node-22] [INFO] [1778832911.794298191] [data_integration_node]: ✅ 已响应数据请求: facial_gesture_list -> client_1778832911760_fb795758
+[planner_server-12] [INFO] [1778832911.917978429] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map_ground to become available, tf error: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[data_integration_node-22] [INFO] [1778832912.109977900] [data_integration_node]: 📤 已触发初始动作库和表情库同步到服务器
+[websocket_server_node-21] [INFO] [1778832912.114037973] [websocket_server]: 🍭 收到面部表情库更新
+[facial_driver-25] [INFO] [1778832912.119235515] [facial_driver]: 📚 成功加载表情库，共 30 个动作
+[facial_driver-25] [INFO] [1778832912.123668203] [facial_driver]: 🔍 先终止眼部循环和嘴部动作循环...
+[facial_driver-25] [INFO] [1778832912.123945873] [facial_driver]: Serial Out: !stop
+[rviz2-28] [ERROR] [1778832912.180159609] [rviz2]: rviz/glsl120/indexed_8bit_image.vert
+[rviz2-28] rviz/glsl120/indexed_8bit_image.frag
+[rviz2-28]  GLSL link result : 
+[rviz2-28] active samplers with a different type refer to the same texture image unit
+[facial_driver-25] [INFO] [1778832912.224535085] [facial_driver]: Serial Out: !stop
+[facial_driver-25] [INFO] [1778832912.325074317] [facial_driver]: ✅ 强制终止眼部循环（发送1次终止指令）
+[facial_driver-25] [INFO] [1778832912.325379816] [facial_driver]: Serial Out: ?stop
+[planner_server-12] [INFO] [1778832912.415696809] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map_ground to become available, tf error: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[facial_driver-25] [INFO] [1778832912.425860358] [facial_driver]: ✅ 强制终止嘴部循环（发送1次终止指令）
+[facial_driver-25] [INFO] [1778832912.426119769] [facial_driver]: Serial Out: $DGL:1!
+[facial_driver-25] [INFO] [1778832912.526556937] [facial_driver]: 🔄 眼部强制复位（眼球居中+正常睁眼）
+[facial_driver-25] [INFO] [1778832912.526781410] [facial_driver]: 🎬 执行表情: idle
+[facial_driver-25] [INFO] [1778832912.627674126] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[planner_server-12] [INFO] [1778832912.915711642] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map_ground to become available, tf error: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[facial_driver-25] [INFO] [1778832913.128588422] [facial_driver]: Serial Out: !normal_start
+[INFO] [lifecycle_manager-30]: process started with pid [151300]
+[planner_server-12] [INFO] [1778832913.415701649] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map_ground to become available, tf error: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[lifecycle_manager-30] [INFO] [1778832913.598561823] [lifecycle_manager_ndt]: Creating
+[lifecycle_manager-30] [INFO] [1778832913.605710099] [lifecycle_manager_ndt]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[INFO] [robot_realpose_publisher-31]: process started with pid [151374]
+[robot_realpose_publisher-31] Traceback (most recent call last):
+[robot_realpose_publisher-31]   File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 397, in from_name
+[robot_realpose_publisher-31]     return next(cls.discover(name=name))
+[robot_realpose_publisher-31]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[robot_realpose_publisher-31] StopIteration
+[robot_realpose_publisher-31] 
+[robot_realpose_publisher-31] During handling of the above exception, another exception occurred:
+[robot_realpose_publisher-31] 
+[robot_realpose_publisher-31] Traceback (most recent call last):
+[robot_realpose_publisher-31]   File "/home/ubuntu/humanoid_ws/install/humanoid_navigation2/lib/humanoid_navigation2/robot_realpose_publisher", line 33, in <module>
+[robot_realpose_publisher-31]     sys.exit(load_entry_point('humanoid-navigation2', 'console_scripts', 'robot_realpose_publisher')())
+[robot_realpose_publisher-31]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[robot_realpose_publisher-31]   File "/home/ubuntu/humanoid_ws/install/humanoid_navigation2/lib/humanoid_navigation2/robot_realpose_publisher", line 22, in importlib_load_entry_point
+[robot_realpose_publisher-31]     for entry_point in distribution(dist_name).entry_points
+[robot_realpose_publisher-31]                        ^^^^^^^^^^^^^^^^^^^^^^^
+[robot_realpose_publisher-31]   File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 862, in distribution
+[robot_realpose_publisher-31]     return Distribution.from_name(distribution_name)
+[robot_realpose_publisher-31]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[robot_realpose_publisher-31]   File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 399, in from_name
+[robot_realpose_publisher-31]     raise PackageNotFoundError(name)
+[robot_realpose_publisher-31] importlib.metadata.PackageNotFoundError: No package metadata was found for humanoid-navigation2
+[ERROR] [robot_realpose_publisher-31]: process has died [pid 151374, exit code 1, cmd '/home/ubuntu/humanoid_ws/install/humanoid_navigation2/lib/humanoid_navigation2/robot_realpose_publisher --ros-args -r __node:=robot_realpose_publisher --params-file /tmp/launch_params_b2cwyznb --params-file /tmp/launch_params_6rmg96a9'].
+[planner_server-12] [INFO] [1778832913.915688874] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map_ground to become available, tf error: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[facial_driver-25] [INFO] [1778832914.029532351] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[facial_driver-25] [INFO] [1778832914.030083844] [facial_driver]: Serial Out: #DGM:1!\n
+[lifecycle_manager-30] [INFO] [1778832914.034813324] [lifecycle_manager_ndt]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-30] [INFO] [1778832914.034865070] [lifecycle_manager_ndt]: [34m[1mConfiguring lidar_localization[0m[0m
+[lidar_localization_node-29] [INFO] [1778832914.187311458] [lidar_localization]: Configuring
+[lidar_localization_node-29] [INFO] [1778832914.187429349] [lidar_localization]: initializeParameters
+[lidar_localization_node-29] [INFO] [1778832914.187471454] [lidar_localization]: global_frame_id: map
+[lidar_localization_node-29] [INFO] [1778832914.187476931] [lidar_localization]: odom_frame_id: odom
+[lidar_localization_node-29] [INFO] [1778832914.187483118] [lidar_localization]: base_frame_id: odom
+[lidar_localization_node-29] [INFO] [1778832914.187486885] [lidar_localization]: registration_method: NDT_OMP
+[lidar_localization_node-29] [INFO] [1778832914.187490629] [lidar_localization]: ndt_resolution: 1.000000
+[lidar_localization_node-29] [INFO] [1778832914.187496621] [lidar_localization]: ndt_step_size: 0.100000
+[lidar_localization_node-29] [INFO] [1778832914.187502174] [lidar_localization]: ndt_num_threads: 8
+[lidar_localization_node-29] [INFO] [1778832914.187506539] [lidar_localization]: transform_epsilon: 0.010000
+[lidar_localization_node-29] [INFO] [1778832914.187511214] [lidar_localization]: voxel_leaf_size: 0.200000
+[lidar_localization_node-29] [INFO] [1778832914.187515763] [lidar_localization]: scan_max_range: 100.000000
+[lidar_localization_node-29] [INFO] [1778832914.187523884] [lidar_localization]: scan_min_range: 1.000000
+[lidar_localization_node-29] [INFO] [1778832914.187528294] [lidar_localization]: scan_period: 0.100000
+[lidar_localization_node-29] [INFO] [1778832914.187532686] [lidar_localization]: use_pcd_map: 1
+[lidar_localization_node-29] [INFO] [1778832914.187536666] [lidar_localization]: map_path: /home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd
+[lidar_localization_node-29] [INFO] [1778832914.187540928] [lidar_localization]: map_topic: /localization_pcd_map
+[lidar_localization_node-29] [INFO] [1778832914.187545128] [lidar_localization]: set_initial_pose: 1
+[lidar_localization_node-29] [INFO] [1778832914.187548633] [lidar_localization]: use_odom: 0
+[lidar_localization_node-29] [INFO] [1778832914.187554434] [lidar_localization]: use_imu: 0
+[lidar_localization_node-29] [INFO] [1778832914.187558078] [lidar_localization]: publish_tf_2d: 1
+[lidar_localization_node-29] [INFO] [1778832914.187561553] [lidar_localization]: enable_debug: 1
+[lidar_localization_node-29] [INFO] [1778832914.187566918] [lidar_localization]: initializePubSub
+[lidar_localization_node-29] [INFO] [1778832914.202607127] [lidar_localization]: use_pcd_map is true; skip PointCloud2 map subscription on '/localization_pcd_map'
+[lidar_localization_node-29] [INFO] [1778832914.205537391] [lidar_localization]: initializePubSub end
+[lidar_localization_node-29] [INFO] [1778832914.205565134] [lidar_localization]: initializeRegistration
+[lidar_localization_node-29] [INFO] [1778832914.206194468] [lidar_localization]: initializeRegistration end
+[lidar_localization_node-29] [INFO] [1778832914.206208531] [lidar_localization]: Configuring end
+[lifecycle_manager-30] [INFO] [1778832914.206600402] [lifecycle_manager_ndt]: [34m[1mActivating lidar_localization[0m[0m
+[lidar_localization_node-29] [INFO] [1778832914.206696166] [lidar_localization]: Activating
+[lidar_localization_node-29] [INFO] [1778832914.206724231] [lidar_localization]: initialPoseReceived
+[lidar_localization_node-29] [INFO] [1778832914.206884376] [lidar_localization]: initialPoseReceived end
+[facial_driver-25] [INFO] [1778832914.231374925] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[planner_server-12] [INFO] [1778832914.415711261] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map_ground to become available, tf error: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-12] [INFO] [1778832914.915712129] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map_ground to become available, tf error: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[data_integration_node-22] [INFO] [1778832915.094185388] [data_integration_node]: 📊 系统状态 - 可用数据: 4/6 | 活跃订阅: 0 | 客户端数: 0
+[planner_server-12] [INFO] [1778832915.415692792] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map_ground to become available, tf error: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-12] [INFO] [1778832915.915705929] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map_ground to become available, tf error: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-12] [INFO] [1778832916.415705006] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map_ground to become available, tf error: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[lidar_localization_node-29] [INFO] [1778832916.666870545] [lidar_localization]: Map Size 3267778
+[lidar_localization_node-29] [INFO] [1778832916.674312511] [lidar_localization]: PCD Map transformed to ROS standard frame (Z-up)
+[lidar_localization_node-29] [INFO] [1778832916.777450629] [lidar_localization]: Initial Map Published
+[lidar_localization_node-29] [INFO] [1778832916.864797787] [lidar_localization]: Activating end
+[planner_server-12] [INFO] [1778832916.915694934] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map_ground to become available, tf error: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-12] [INFO] [1778832917.415721002] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map_ground to become available, tf error: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-12] [INFO] [1778832917.915871846] [global_costmap.global_costmap]: start
+[lifecycle_manager-30] [INFO] [1778832917.964058000] [lifecycle_manager_ndt]: [34m[1mManaged nodes are active[0m[0m
+[planner_server-12] [INFO] [1778832918.168758363] [planner_server]: Activating plugin GridBased of type SmacPlanner2D
+[planner_server-12] [INFO] [1778832918.170961602] [planner_server]: Creating bond (planner_server) to lifecycle manager.
+[lifecycle_manager-27] [INFO] [1778832918.175759295] [lifecycle_manager_navigation]: [34m[1mActivating controller_server[0m[0m
+[controller_server-13] [INFO] [1778832918.175930488] [controller_server]: Activating
+[controller_server-13] [INFO] [1778832918.175957023] [local_costmap.local_costmap]: Activating
+[controller_server-13] [INFO] [1778832918.175972864] [local_costmap.local_costmap]: Checking transform
+[controller_server-13] [INFO] [1778832918.176061325] [local_costmap.local_costmap]: start
+[controller_server-13] [INFO] [1778832918.427626379] [controller_server]: Activating controller: FollowPath of type regulated_pure_pursuit_controller::RegulatedPurePursuitController
+[controller_server-13] [INFO] [1778832918.427688290] [controller_server]: Creating bond (controller_server) to lifecycle manager.
+[lifecycle_manager-27] [INFO] [1778832918.431526857] [lifecycle_manager_navigation]: [34m[1mActivating behavior_server[0m[0m
+[behavior_server-14] [INFO] [1778832918.431710278] [behavior_server]: Activating
+[behavior_server-14] [INFO] [1778832918.431731938] [behavior_server]: Activating spin
+[behavior_server-14] [INFO] [1778832918.431739846] [behavior_server]: Activating wait
+[behavior_server-14] [INFO] [1778832918.431750039] [behavior_server]: Creating bond (behavior_server) to lifecycle manager.
+[lifecycle_manager-27] [INFO] [1778832918.434724813] [lifecycle_manager_navigation]: [34m[1mActivating bt_navigator[0m[0m
+[bt_navigator-15] [INFO] [1778832918.434941749] [bt_navigator]: Activating
+[bt_navigator-15] [INFO] [1778832918.582832922] [bt_navigator]: Creating bond (bt_navigator) to lifecycle manager.
+[lifecycle_manager-27] [INFO] [1778832918.585524545] [lifecycle_manager_navigation]: [34m[1mManaged nodes are active[0m[0m
+[lidar_localization_node-29] [INFO] [1778832928.056182090] [lidar_localization]: initialPoseReceived
+[lidar_localization_node-29] [WARN] [1778832928.056214722] [lidar_localization]: initialpose_frame_id does not match global_frame_id

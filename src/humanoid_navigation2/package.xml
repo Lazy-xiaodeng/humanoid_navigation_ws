@@ -16,9 +16,12 @@
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
   <depend>geometry_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>nav2_msgs</depend>
+  <depend>rcl_interfaces</depend>
+  <exec_depend>python3-numpy</exec_depend>
 
   <!-- ===== Grid Map（costmap 插件依赖）===== -->
   <depend>grid_map_costmap_2d</depend>
@@ -28,6 +31,7 @@
   <depend>nav2_controller</depend>
   <depend>nav2_planner</depend>
   <depend>nav2_bt_navigator</depend>
+  <depend>nav2_behavior_tree</depend>
   <depend>nav2_behaviors</depend>
   <depend>nav2_lifecycle_manager</depend>
   <depend>nav2_costmap_2d</depend>
@@ -45,9 +49,13 @@
 
   <!-- ===== 你拆分出的独立功能包 ===== -->
   <depend>humanoid_point_cloud_filter</depend>
+  <depend>humanoid_nav2_bt_nodes</depend>
   <depend>elevation_mapping_opencl</depend>
   <depend>humanoid_terrain_analyzer</depend>
   <depend>lidar_localization</depend>
+  <depend>lidar_localization_ros2</depend>
+  <depend>hdl_localization</depend>
+  <depend>hdl_global_localization</depend>
 
   <!-- ===== 测试 ===== -->
   <test_depend>ament_copyright</test_depend>

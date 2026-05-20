@@ -88,7 +88,7 @@ class DynamicWaypointsManager(Node):
         # ========== 参数声明 ==========
         self.declare_parameters(namespace='', parameters=[
             ('data_storage.enabled', True),
-            ('data_storage.file_path', '/home/ubuntu/humanoid_ws/install/humanoid_navigation/share/humanoid_navigation/data/dynamic_waypoints.json'),
+            ('data_storage.file_path', '/home/ubuntu/humanoid_ws/data/dynamic_waypoints.json'),
             ('data_storage.auto_save_interval', 300.0),
         ])
         
@@ -107,6 +107,14 @@ class DynamicWaypointsManager(Node):
         
         # ========== 数据持久化 ==========
         self.setup_data_persistence()
+
+        self.initial_waypoints_publish_count = 0
+        self.initial_waypoints_publish_max = 5
+        self.initial_waypoints_publish_timer = None
+        if self.get_total_waypoints_count() > 0 or self.navigation_sequences:
+            self.initial_waypoints_publish_timer = self.create_timer(
+                1.0, self.publish_initial_waypoints_data
+            )
         
         self.get_logger().info("动态路点管理器启动完成 - 仅负责路点管理")
     
@@ -568,6 +576,22 @@ class DynamicWaypointsManager(Node):
         except Exception as e:
             self.get_logger().error(f'发布路点数据错误: {e}')
 
+    def publish_initial_waypoints_data(self):
+        """启动后把本地加载的点位同步给导航状态管理器。"""
+        try:
+            self.publish_waypoints_data(update_type="initial_load")
+            self.initial_waypoints_publish_count += 1
+
+            if self.initial_waypoints_publish_count >= self.initial_waypoints_publish_max:
+                if self.initial_waypoints_publish_timer is not None:
+                    self.initial_waypoints_publish_timer.cancel()
+                    self.initial_waypoints_publish_timer = None
+                self.get_logger().info(
+                    f"本地加载点位已完成初始同步，共 {self.get_total_waypoints_count()} 个点位"
+                )
+        except Exception as e:
+            self.get_logger().error(f"发布初始点位数据错误: {e}")
+
     def create_unified_message(self, message_type: str, data_type: str, 
                          source: str, destination: str, data: Dict) -> Dict:
         """创建统一格式消息"""
@@ -650,7 +674,7 @@ class DynamicWaypointsManager(Node):
                 self.get_logger().error(f"设置数据持久化失败: {e}")
                 # 设置默认值以确保功能可用
                 self.data_storage_enabled = True
-                self.storage_file_path = os.path.expanduser('~/humanoid_ws/src/humanoid_navigation/data/dynamic_waypoints.json')
+                self.storage_file_path = os.path.expanduser('~/humanoid_ws/data/dynamic_waypoints.json')
 
     def save_waypoints_data(self):
         """保存点位数据"""

@@ -34,7 +34,7 @@ message_protocol:
     version: "1.0"
     
     # 支持的消息类型 - 修正的列表格式
-    supported_messages: ["heartbeat", "navigation_goal", "emergency_stop", "velocity_command", "action_command", "point_management", "robot_status", "imu_data", "joint_states"]
+    supported_messages: ["heartbeat", "navigation_goal", "emergency_stop", "velocity_command", "action_command", "point_management", "robot_status", "imu_data", "joint_states", "initial_pose"]
     
     # 数据格式验证
     validation_strict_mode: true

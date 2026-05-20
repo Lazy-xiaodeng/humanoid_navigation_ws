@@ -1,0 +1,678 @@
+0.016,ros=1778662859.172542,monitor_start,nav drift monitor started
+0.569,ros=1778662859.724955,nav_status,{"current_state": "idle", "detailed_state": "IDLE", "navigation_mode": null, "sequence_id": null, "current_waypoint_index": 0, "total_waypoints": 0, "is_active": false, "recovery_active": false, "obstacle_blocked": false, "block_reported": false}
+79.426,ros=1778662938.582365,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662938", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+79.537,ros=1778662938.693856,nav_status,{"current_state": "completed", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662938", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+79.638,ros=1778662938.794559,nav_status,{"current_state": "idle", "detailed_state": "EXECUTING", "navigation_mode": null, "sequence_id": null, "current_waypoint_index": 0, "total_waypoints": 0, "is_active": false, "recovery_active": false, "obstacle_blocked": false, "block_reported": false}
+92.094,ros=1778662951.249996,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+92.138,ros=1778662951.294568,nav_status,{"current_state": "executing", "detailed_state": "RECOVERING", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": true, "obstacle_blocked": false, "block_reported": false}
+92.146,ros=1778662951.302142,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+92.628,ros=1778662951.784220,map_odom_jump,dxy=0.569 dyaw=0.025 x=16.191 y=15.522 yaw=-2.917
+92.638,ros=1778662951.794535,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+92.645,ros=1778662951.801758,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+93.138,ros=1778662952.294164,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+93.147,ros=1778662952.302980,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+93.228,ros=1778662952.384241,map_odom_jump,dxy=0.404 dyaw=0.020 x=16.437 y=15.204 yaw=-2.937
+93.428,ros=1778662952.584391,map_odom_jump,dxy=0.358 dyaw=0.016 x=16.219 y=15.488 yaw=-2.921
+93.628,ros=1778662952.784352,map_odom_jump,dxy=0.425 dyaw=0.019 x=15.928 y=15.797 yaw=-2.902
+93.638,ros=1778662952.794183,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+93.645,ros=1778662952.801285,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+93.828,ros=1778662952.984318,map_odom_jump,dxy=0.275 dyaw=0.013 x=16.103 y=15.585 yaw=-2.915
+94.138,ros=1778662953.294362,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+94.145,ros=1778662953.301496,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+94.228,ros=1778662953.384173,map_odom_jump,dxy=0.355 dyaw=0.018 x=16.315 y=15.441 yaw=-2.926
+94.628,ros=1778662953.784313,map_odom_jump,dxy=0.387 dyaw=0.020 x=15.990 y=15.902 yaw=-2.897
+94.638,ros=1778662953.794173,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+94.646,ros=1778662953.802440,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+95.138,ros=1778662954.294273,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+95.145,ros=1778662954.301898,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+95.228,ros=1778662954.384576,map_odom_jump,dxy=0.425 dyaw=0.022 x=16.081 y=15.688 yaw=-2.912
+95.629,ros=1778662954.785692,map_odom_jump,dxy=0.545 dyaw=0.028 x=15.798 y=15.999 yaw=-2.890
+95.638,ros=1778662954.794378,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+95.646,ros=1778662954.802106,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+96.138,ros=1778662955.294137,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+96.145,ros=1778662955.301681,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+96.228,ros=1778662955.384351,map_odom_jump,dxy=0.358 dyaw=0.018 x=15.985 y=15.812 yaw=-2.904
+96.628,ros=1778662955.784599,map_odom_jump,dxy=0.493 dyaw=0.026 x=15.634 y=16.138 yaw=-2.880
+96.638,ros=1778662955.794199,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+96.647,ros=1778662955.803139,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+97.138,ros=1778662956.294341,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+97.147,ros=1778662956.303870,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+97.228,ros=1778662956.384877,map_odom_jump,dxy=0.548 dyaw=0.024 x=16.004 y=15.793 yaw=-2.902
+97.428,ros=1778662956.584363,map_odom_jump,dxy=0.212 dyaw=0.012 x=16.168 y=15.658 yaw=-2.914
+97.628,ros=1778662956.784473,map_odom_jump,dxy=0.711 dyaw=0.033 x=15.637 y=16.131 yaw=-2.881
+97.638,ros=1778662956.794114,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+97.645,ros=1778662956.801398,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+98.138,ros=1778662957.294056,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+98.145,ros=1778662957.301187,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+98.228,ros=1778662957.384238,map_odom_jump,dxy=0.939 dyaw=0.039 x=16.330 y=15.502 yaw=-2.922
+98.428,ros=1778662957.584223,map_odom_jump,dxy=0.527 dyaw=0.024 x=16.720 y=15.148 yaw=-2.946
+98.628,ros=1778662957.784317,map_odom_jump,dxy=0.464 dyaw=0.026 x=16.355 y=15.435 yaw=-2.921
+98.638,ros=1778662957.794296,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+98.646,ros=1778662957.802789,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+98.830,ros=1778662957.986441,map_odom_jump,dxy=0.708 dyaw=0.029 x=15.823 y=15.901 yaw=-2.891
+99.138,ros=1778662958.294363,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+99.145,ros=1778662958.301546,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+99.228,ros=1778662958.384290,map_odom_jump,dxy=0.538 dyaw=0.022 x=16.276 y=15.559 yaw=-2.920
+99.428,ros=1778662958.584273,map_odom_jump,dxy=0.609 dyaw=0.025 x=16.732 y=15.154 yaw=-2.945
+99.628,ros=1778662958.784197,map_odom_jump,dxy=0.724 dyaw=0.032 x=16.189 y=15.633 yaw=-2.913
+99.638,ros=1778662958.794270,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+99.645,ros=1778662958.801365,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+99.829,ros=1778662958.985225,map_odom_jump,dxy=0.387 dyaw=0.014 x=15.907 y=15.899 yaw=-2.898
+100.138,ros=1778662959.294159,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+100.147,ros=1778662959.303433,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+100.228,ros=1778662959.384542,map_odom_jump,dxy=0.901 dyaw=0.036 x=16.642 y=15.212 yaw=-2.941
+100.429,ros=1778662959.585121,map_odom_jump,dxy=0.738 dyaw=0.031 x=17.191 y=14.718 yaw=-2.971
+100.628,ros=1778662959.784169,map_odom_jump,dxy=0.475 dyaw=0.021 x=16.845 y=15.044 yaw=-2.951
+100.639,ros=1778662959.795591,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+100.645,ros=1778662959.801614,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+100.828,ros=1778662959.984171,map_odom_jump,dxy=0.871 dyaw=0.036 x=16.192 y=15.620 yaw=-2.915
+101.028,ros=1778662960.184217,map_odom_jump,dxy=0.528 dyaw=0.021 x=15.802 y=15.976 yaw=-2.894
+101.139,ros=1778662960.295589,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+101.146,ros=1778662960.302726,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+101.228,ros=1778662960.384104,map_odom_jump,dxy=0.860 dyaw=0.036 x=16.429 y=15.387 yaw=-2.929
+101.428,ros=1778662960.584190,map_odom_jump,dxy=0.605 dyaw=0.024 x=16.882 y=14.987 yaw=-2.953
+101.628,ros=1778662960.784390,map_odom_jump,dxy=0.492 dyaw=0.021 x=16.515 y=15.315 yaw=-2.932
+101.638,ros=1778662960.794313,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+101.645,ros=1778662960.801840,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+101.828,ros=1778662960.984194,map_odom_jump,dxy=0.729 dyaw=0.028 x=15.957 y=15.783 yaw=-2.904
+102.028,ros=1778662961.184374,map_odom_jump,dxy=0.571 dyaw=0.022 x=15.527 y=16.159 yaw=-2.882
+102.138,ros=1778662961.294025,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+102.148,ros=1778662961.304218,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+102.228,ros=1778662961.384200,map_odom_jump,dxy=1.013 dyaw=0.040 x=16.308 y=15.514 yaw=-2.922
+102.428,ros=1778662961.584443,map_odom_jump,dxy=0.664 dyaw=0.026 x=16.796 y=15.063 yaw=-2.948
+102.628,ros=1778662961.784168,map_odom_jump,dxy=0.455 dyaw=0.020 x=16.470 y=15.381 yaw=-2.928
+102.638,ros=1778662961.793990,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+102.645,ros=1778662961.801538,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+102.831,ros=1778662961.986945,map_odom_jump,dxy=0.493 dyaw=0.019 x=15.999 y=15.524 yaw=-2.909
+103.028,ros=1778662962.184228,map_odom_jump,dxy=0.883 dyaw=0.030 x=15.449 y=16.215 yaw=-2.879
+103.138,ros=1778662962.294224,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+103.145,ros=1778662962.301733,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+103.228,ros=1778662962.384283,map_odom_jump,dxy=1.064 dyaw=0.043 x=16.259 y=15.525 yaw=-2.921
+103.628,ros=1778662962.784178,map_odom_jump,dxy=0.441 dyaw=0.016 x=16.697 y=15.191 yaw=-2.941
+103.647,ros=1778662962.802941,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+103.648,ros=1778662962.804239,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+103.828,ros=1778662962.984232,map_odom_jump,dxy=0.595 dyaw=0.023 x=16.206 y=15.526 yaw=-2.918
+104.029,ros=1778662963.185616,map_odom_jump,dxy=0.715 dyaw=0.029 x=15.580 y=15.872 yaw=-2.888
+104.138,ros=1778662963.294854,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+104.147,ros=1778662963.303698,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+104.228,ros=1778662963.384258,map_odom_jump,dxy=0.873 dyaw=0.035 x=16.245 y=15.305 yaw=-2.924
+104.432,ros=1778662963.588479,map_odom_jump,dxy=0.477 dyaw=0.017 x=16.600 y=14.986 yaw=-2.941
+104.628,ros=1778662963.784161,map_odom_jump,dxy=0.546 dyaw=0.021 x=17.003 y=14.618 yaw=-2.962
+104.638,ros=1778662963.794091,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+104.646,ros=1778662963.802673,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+104.828,ros=1778662963.984206,map_odom_jump,dxy=0.867 dyaw=0.033 x=16.362 y=15.202 yaw=-2.929
+105.028,ros=1778662964.184302,map_odom_jump,dxy=0.529 dyaw=0.022 x=15.942 y=15.524 yaw=-2.907
+105.138,ros=1778662964.294251,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+105.145,ros=1778662964.301808,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+105.228,ros=1778662964.384214,map_odom_jump,dxy=0.939 dyaw=0.036 x=16.682 y=14.946 yaw=-2.944
+105.428,ros=1778662964.584238,map_odom_jump,dxy=0.372 dyaw=0.014 x=16.924 y=14.664 yaw=-2.958
+105.628,ros=1778662964.784273,map_odom_jump,dxy=0.439 dyaw=0.017 x=17.281 y=14.408 yaw=-2.974
+105.638,ros=1778662964.794161,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+105.648,ros=1778662964.804589,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+105.828,ros=1778662964.984276,map_odom_jump,dxy=0.242 dyaw=0.003 x=17.302 y=14.649 yaw=-2.971
+106.029,ros=1778662965.185530,map_odom_jump,dxy=1.044 dyaw=0.043 x=16.416 y=15.202 yaw=-2.928
+106.138,ros=1778662965.294220,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+106.145,ros=1778662965.301820,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+106.228,ros=1778662965.384302,map_odom_jump,dxy=0.408 dyaw=0.015 x=16.718 y=14.926 yaw=-2.943
+106.428,ros=1778662965.584403,map_odom_jump,dxy=0.646 dyaw=0.027 x=17.289 y=14.625 yaw=-2.969
+106.630,ros=1778662965.785968,map_odom_jump,dxy=0.666 dyaw=0.024 x=17.805 y=14.204 yaw=-2.994
+106.640,ros=1778662965.796491,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+106.646,ros=1778662965.802531,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+106.828,ros=1778662965.984244,map_odom_jump,dxy=0.856 dyaw=0.034 x=17.104 y=14.694 yaw=-2.959
+107.028,ros=1778662966.184165,map_odom_jump,dxy=0.660 dyaw=0.026 x=16.537 y=15.032 yaw=-2.933
+107.138,ros=1778662966.294132,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+107.145,ros=1778662966.301318,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+107.229,ros=1778662966.385348,map_odom_jump,dxy=0.666 dyaw=0.021 x=16.063 y=15.500 yaw=-2.913
+107.428,ros=1778662966.584122,map_odom_jump,dxy=0.540 dyaw=0.020 x=16.454 y=15.128 yaw=-2.933
+107.628,ros=1778662966.784222,map_odom_jump,dxy=1.888 dyaw=0.070 x=18.008 y=14.057 yaw=-3.002
+107.642,ros=1778662966.798388,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+107.646,ros=1778662966.802169,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+107.828,ros=1778662966.984426,map_odom_jump,dxy=1.287 dyaw=0.049 x=16.932 y=14.762 yaw=-2.953
+108.138,ros=1778662967.294307,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+108.145,ros=1778662967.301767,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+108.228,ros=1778662967.384295,map_odom_jump,dxy=1.933 dyaw=0.065 x=15.525 y=15.851 yaw=-2.889
+108.428,ros=1778662967.584239,map_odom_jump,dxy=1.614 dyaw=0.060 x=16.873 y=14.963 yaw=-2.949
+108.628,ros=1778662967.784625,map_odom_jump,dxy=1.396 dyaw=0.050 x=17.970 y=14.101 yaw=-2.999
+108.639,ros=1778662967.794987,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+108.646,ros=1778662967.802647,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+108.828,ros=1778662967.984765,map_odom_jump,dxy=1.065 dyaw=0.039 x=17.089 y=14.698 yaw=-2.960
+109.029,ros=1778662968.185559,map_odom_jump,dxy=1.174 dyaw=0.040 x=16.213 y=15.481 yaw=-2.919
+109.139,ros=1778662968.294975,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+109.150,ros=1778662968.306112,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+109.228,ros=1778662968.384082,map_odom_jump,dxy=0.748 dyaw=0.027 x=15.608 y=15.920 yaw=-2.893
+109.428,ros=1778662968.584130,map_odom_jump,dxy=0.622 dyaw=0.020 x=16.024 y=15.457 yaw=-2.912
+109.628,ros=1778662968.784251,map_odom_jump,dxy=1.019 dyaw=0.038 x=16.925 y=14.982 yaw=-2.950
+109.639,ros=1778662968.795214,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+109.646,ros=1778662968.802472,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+109.828,ros=1778662968.984209,map_odom_jump,dxy=0.749 dyaw=0.027 x=17.512 y=14.516 yaw=-2.977
+110.028,ros=1778662969.184348,map_odom_jump,dxy=1.484 dyaw=0.053 x=16.335 y=15.420 yaw=-2.925
+110.138,ros=1778662969.294499,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+110.155,ros=1778662969.311266,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+110.230,ros=1778662969.386303,map_odom_jump,dxy=0.501 dyaw=0.018 x=15.919 y=15.699 yaw=-2.907
+110.428,ros=1778662969.584258,map_odom_jump,dxy=0.774 dyaw=0.028 x=16.530 y=15.223 yaw=-2.935
+110.628,ros=1778662969.784100,map_odom_jump,dxy=0.345 dyaw=0.012 x=16.814 y=15.027 yaw=-2.947
+110.642,ros=1778662969.798750,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": true}
+110.655,ros=1778662969.811726,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+110.828,ros=1778662969.984248,map_odom_jump,dxy=0.587 dyaw=0.021 x=17.272 y=14.659 yaw=-2.968
+111.028,ros=1778662970.184170,map_odom_jump,dxy=0.937 dyaw=0.033 x=16.541 y=15.246 yaw=-2.935
+111.041,ros=1778662970.197228,nav_status,{"current_state": "completed", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778662951", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+111.138,ros=1778662970.294396,nav_status,{"current_state": "idle", "detailed_state": "EXECUTING", "navigation_mode": null, "sequence_id": null, "current_waypoint_index": 0, "total_waypoints": 0, "is_active": false, "recovery_active": false, "obstacle_blocked": false, "block_reported": false}
+111.228,ros=1778662970.384251,map_odom_jump,dxy=1.133 dyaw=0.049 x=15.432 y=15.478 yaw=-2.886
+111.428,ros=1778662970.584208,map_odom_jump,dxy=0.457 dyaw=0.019 x=15.804 y=15.744 yaw=-2.905
+111.628,ros=1778662970.784249,map_odom_jump,dxy=1.100 dyaw=0.038 x=16.709 y=15.119 yaw=-2.942
+112.028,ros=1778662971.184151,map_odom_jump,dxy=0.328 dyaw=0.012 x=16.378 y=15.332 yaw=-2.928
+112.633,ros=1778662971.789774,map_odom_jump,dxy=0.453 dyaw=0.010 x=16.083 y=15.548 yaw=-2.915
+112.828,ros=1778662971.984182,map_odom_jump,dxy=0.384 dyaw=0.012 x=16.398 y=15.329 yaw=-2.927
+113.028,ros=1778662972.184264,map_odom_jump,dxy=0.905 dyaw=0.032 x=15.639 y=15.822 yaw=-2.895
+113.228,ros=1778662972.384236,map_odom_jump,dxy=0.640 dyaw=0.022 x=16.170 y=15.464 yaw=-2.917
+113.430,ros=1778662972.586572,map_odom_jump,dxy=0.564 dyaw=0.020 x=16.632 y=15.141 yaw=-2.937
+113.628,ros=1778662972.784119,map_odom_jump,dxy=0.726 dyaw=0.025 x=16.040 y=15.561 yaw=-2.912
+116.828,ros=1778662975.984239,map_odom_jump,dxy=0.220 dyaw=0.008 x=16.030 y=15.575 yaw=-2.912
+120.428,ros=1778662979.584196,map_odom_jump,dxy=0.267 dyaw=0.009 x=15.851 y=15.698 yaw=-2.904
+120.628,ros=1778662979.784203,map_odom_jump,dxy=0.224 dyaw=0.008 x=16.038 y=15.574 yaw=-2.912
+123.828,ros=1778662982.984227,map_odom_jump,dxy=0.215 dyaw=0.007 x=16.168 y=15.486 yaw=-2.917
+124.431,ros=1778662983.587368,map_odom_jump,dxy=0.293 dyaw=0.010 x=16.283 y=15.393 yaw=-2.922
+130.228,ros=1778662989.384259,map_odom_jump,dxy=0.261 dyaw=0.009 x=16.324 y=15.367 yaw=-2.924
+142.228,ros=1778663001.384112,map_odom_jump,dxy=0.209 dyaw=0.007 x=16.243 y=15.419 yaw=-2.921
+142.428,ros=1778663001.584224,map_odom_jump,dxy=0.201 dyaw=0.006 x=16.406 y=15.301 yaw=-2.927
+143.228,ros=1778663002.384205,map_odom_jump,dxy=0.277 dyaw=0.009 x=15.995 y=15.620 yaw=-2.910
+143.628,ros=1778663002.784152,map_odom_jump,dxy=0.247 dyaw=0.009 x=16.061 y=15.571 yaw=-2.913
+144.628,ros=1778663003.784153,map_odom_jump,dxy=0.234 dyaw=0.008 x=15.937 y=15.660 yaw=-2.908
+150.100,ros=1778663009.256476,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+150.138,ros=1778663009.294560,nav_status,{"current_state": "executing", "detailed_state": "RECOVERING", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": true, "obstacle_blocked": false, "block_reported": false}
+150.141,ros=1778663009.297720,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+150.629,ros=1778663009.785154,map_odom_jump,dxy=0.307 dyaw=0.010 x=15.951 y=15.630 yaw=-2.909
+150.638,ros=1778663009.794854,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+150.641,ros=1778663009.797518,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+150.828,ros=1778663009.984183,map_odom_jump,dxy=0.354 dyaw=0.014 x=16.242 y=15.429 yaw=-2.923
+151.028,ros=1778663010.184226,map_odom_jump,dxy=0.599 dyaw=0.021 x=15.766 y=15.792 yaw=-2.901
+151.138,ros=1778663010.294287,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+151.143,ros=1778663010.299159,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+151.228,ros=1778663010.384402,map_odom_jump,dxy=0.558 dyaw=0.019 x=16.226 y=15.477 yaw=-2.920
+151.428,ros=1778663010.584147,map_odom_jump,dxy=0.921 dyaw=0.033 x=16.972 y=14.938 yaw=-2.953
+151.628,ros=1778663010.784318,map_odom_jump,dxy=0.430 dyaw=0.017 x=16.730 y=14.583 yaw=-2.936
+151.638,ros=1778663010.794349,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+151.642,ros=1778663010.798429,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+151.828,ros=1778663010.984601,map_odom_jump,dxy=0.724 dyaw=0.023 x=16.112 y=14.961 yaw=-2.913
+152.028,ros=1778663011.184238,map_odom_jump,dxy=0.547 dyaw=0.019 x=15.691 y=15.311 yaw=-2.894
+152.138,ros=1778663011.294111,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+152.141,ros=1778663011.297369,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+152.228,ros=1778663011.384301,map_odom_jump,dxy=0.411 dyaw=0.015 x=15.952 y=15.629 yaw=-2.909
+152.428,ros=1778663011.584213,map_odom_jump,dxy=0.628 dyaw=0.021 x=16.490 y=15.305 yaw=-2.930
+152.629,ros=1778663011.785393,map_odom_jump,dxy=0.255 dyaw=0.006 x=16.284 y=15.456 yaw=-2.924
+152.638,ros=1778663011.793945,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+152.641,ros=1778663011.797756,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+152.828,ros=1778663011.984264,map_odom_jump,dxy=1.201 dyaw=0.051 x=15.108 y=15.702 yaw=-2.873
+152.828,ros=1778663011.984879,map_base_jump,dxy=0.477 dyaw=0.015 x=-0.059 y=-9.614 yaw=-1.630
+153.028,ros=1778663012.184220,map_odom_jump,dxy=1.833 dyaw=0.049 x=13.794 y=16.979 yaw=-2.823
+153.138,ros=1778663012.294426,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+153.142,ros=1778663012.297957,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+153.228,ros=1778663012.384134,map_odom_jump,dxy=2.201 dyaw=0.063 x=15.442 y=15.520 yaw=-2.886
+153.428,ros=1778663012.584169,map_odom_jump,dxy=0.811 dyaw=0.036 x=16.251 y=15.468 yaw=-2.922
+153.628,ros=1778663012.784810,map_odom_jump,dxy=1.974 dyaw=0.056 x=17.688 y=14.115 yaw=-2.977
+153.638,ros=1778663012.794284,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+153.641,ros=1778663012.797352,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+153.828,ros=1778663012.984113,map_odom_jump,dxy=1.860 dyaw=0.058 x=16.172 y=15.193 yaw=-2.919
+154.028,ros=1778663013.184568,map_odom_jump,dxy=1.646 dyaw=0.049 x=14.922 y=16.264 yaw=-2.870
+154.138,ros=1778663013.294532,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+154.141,ros=1778663013.297752,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+154.228,ros=1778663013.384300,map_odom_jump,dxy=0.898 dyaw=0.022 x=15.489 y=15.567 yaw=-2.892
+154.429,ros=1778663013.585191,map_odom_jump,dxy=1.156 dyaw=0.045 x=16.469 y=14.954 yaw=-2.937
+154.630,ros=1778663013.786128,map_odom_jump,dxy=0.991 dyaw=0.028 x=17.263 y=14.361 yaw=-2.965
+154.639,ros=1778663013.794996,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+154.641,ros=1778663013.797873,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+154.828,ros=1778663013.984340,map_odom_jump,dxy=1.052 dyaw=0.037 x=16.428 y=15.001 yaw=-2.928
+155.028,ros=1778663014.184138,map_odom_jump,dxy=1.392 dyaw=0.046 x=15.249 y=15.741 yaw=-2.883
+155.138,ros=1778663014.294449,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+155.141,ros=1778663014.297783,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+155.228,ros=1778663014.384276,map_odom_jump,dxy=1.487 dyaw=0.043 x=13.993 y=16.537 yaw=-2.840
+155.428,ros=1778663014.584135,map_odom_jump,dxy=2.268 dyaw=0.072 x=16.047 y=15.574 yaw=-2.912
+155.628,ros=1778663014.784106,map_odom_jump,dxy=0.819 dyaw=0.014 x=16.489 y=14.885 yaw=-2.926
+155.638,ros=1778663014.794132,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+155.642,ros=1778663014.798849,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+155.829,ros=1778663014.984989,map_odom_jump,dxy=2.152 dyaw=0.066 x=14.643 y=15.989 yaw=-2.860
+156.029,ros=1778663015.185623,map_odom_jump,dxy=0.247 dyaw=0.011 x=14.870 y=15.894 yaw=-2.871
+156.138,ros=1778663015.294520,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+156.142,ros=1778663015.297931,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+156.228,ros=1778663015.384158,map_odom_jump,dxy=1.385 dyaw=0.040 x=13.853 y=16.835 yaw=-2.831
+156.428,ros=1778663015.584130,map_odom_jump,dxy=1.200 dyaw=0.040 x=14.891 y=16.232 yaw=-2.871
+156.628,ros=1778663015.784164,map_odom_jump,dxy=0.902 dyaw=0.030 x=15.663 y=15.764 yaw=-2.901
+156.640,ros=1778663015.796915,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+156.646,ros=1778663015.802684,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+156.828,ros=1778663015.984160,map_odom_jump,dxy=0.788 dyaw=0.028 x=14.885 y=15.893 yaw=-2.873
+157.028,ros=1778663016.184167,map_odom_jump,dxy=0.635 dyaw=0.015 x=14.524 y=16.416 yaw=-2.858
+157.138,ros=1778663016.294231,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+157.142,ros=1778663016.298087,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+157.228,ros=1778663016.384119,map_odom_jump,dxy=0.286 dyaw=0.008 x=14.283 y=16.570 yaw=-2.851
+157.428,ros=1778663016.584283,map_odom_jump,dxy=1.210 dyaw=0.039 x=15.304 y=15.920 yaw=-2.890
+157.628,ros=1778663016.784154,map_odom_jump,dxy=0.791 dyaw=0.025 x=15.971 y=15.496 yaw=-2.915
+157.639,ros=1778663016.795029,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+157.642,ros=1778663016.798051,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+157.828,ros=1778663016.984811,map_odom_jump,dxy=0.806 dyaw=0.028 x=15.312 y=15.960 yaw=-2.888
+158.028,ros=1778663017.184820,map_odom_jump,dxy=3.276 dyaw=0.105 x=12.283 y=17.208 yaw=-2.782
+158.140,ros=1778663017.295945,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+158.144,ros=1778663017.300000,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+158.179,ros=1778663017.335682,nav_status,{"current_state": "completed", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663009", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+158.228,ros=1778663017.384248,map_odom_jump,dxy=1.969 dyaw=0.085 x=13.952 y=16.163 yaw=-2.867
+158.228,ros=1778663017.384727,map_base_jump,dxy=0.755 dyaw=0.169 x=-1.371 y=-11.395 yaw=-2.428
+158.428,ros=1778663017.584149,map_odom_jump,dxy=1.395 dyaw=0.026 x=15.318 y=15.880 yaw=-2.893
+158.428,ros=1778663017.584633,map_base_jump,dxy=0.598 dyaw=0.099 x=-0.778 y=-11.316 yaw=-2.527
+158.628,ros=1778663017.784183,map_odom_jump,dxy=0.461 dyaw=0.013 x=15.722 y=15.658 yaw=-2.906
+158.638,ros=1778663017.794865,nav_status,{"current_state": "idle", "detailed_state": "EXECUTING", "navigation_mode": null, "sequence_id": null, "current_waypoint_index": 0, "total_waypoints": 0, "is_active": false, "recovery_active": false, "obstacle_blocked": false, "block_reported": false}
+159.028,ros=1778663018.184170,map_odom_jump,dxy=1.164 dyaw=0.035 x=14.867 y=16.159 yaw=-2.876
+159.228,ros=1778663018.384109,map_odom_jump,dxy=1.108 dyaw=0.035 x=15.825 y=15.602 yaw=-2.911
+159.828,ros=1778663018.984203,map_odom_jump,dxy=0.258 dyaw=0.007 x=15.821 y=15.560 yaw=-2.911
+160.028,ros=1778663019.184605,map_odom_jump,dxy=0.273 dyaw=0.009 x=15.611 y=15.735 yaw=-2.903
+160.228,ros=1778663019.384177,map_odom_jump,dxy=0.257 dyaw=0.007 x=15.831 y=15.603 yaw=-2.910
+162.429,ros=1778663021.585269,map_odom_jump,dxy=0.301 dyaw=0.010 x=15.633 y=15.706 yaw=-2.903
+162.628,ros=1778663021.784126,map_odom_jump,dxy=0.400 dyaw=0.013 x=15.960 y=15.478 yaw=-2.917
+202.629,ros=1778663061.785755,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+202.638,ros=1778663061.794222,nav_status,{"current_state": "executing", "detailed_state": "RECOVERING", "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": true, "obstacle_blocked": false, "block_reported": false}
+202.641,ros=1778663061.797054,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+203.028,ros=1778663062.184148,map_odom_jump,dxy=0.414 dyaw=0.014 x=15.581 y=15.743 yaw=-2.902
+203.139,ros=1778663062.295072,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+203.141,ros=1778663062.297581,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+203.228,ros=1778663062.384115,map_odom_jump,dxy=0.806 dyaw=0.026 x=14.902 y=16.176 yaw=-2.876
+203.638,ros=1778663062.794645,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+203.641,ros=1778663062.797135,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+203.828,ros=1778663062.984268,map_odom_jump,dxy=0.784 dyaw=0.023 x=15.726 y=15.749 yaw=-2.904
+204.028,ros=1778663063.184194,map_odom_jump,dxy=1.077 dyaw=0.036 x=14.819 y=16.331 yaw=-2.868
+204.138,ros=1778663063.294562,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+204.140,ros=1778663063.296888,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+204.228,ros=1778663063.384263,map_odom_jump,dxy=0.492 dyaw=0.013 x=14.374 y=16.541 yaw=-2.855
+204.428,ros=1778663063.584376,map_odom_jump,dxy=0.204 dyaw=0.008 x=14.547 y=16.433 yaw=-2.863
+204.628,ros=1778663063.784364,map_odom_jump,dxy=1.027 dyaw=0.031 x=15.475 y=15.994 yaw=-2.894
+204.638,ros=1778663063.794152,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+204.641,ros=1778663063.797727,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+204.828,ros=1778663063.984406,map_odom_jump,dxy=0.529 dyaw=0.015 x=15.926 y=15.718 yaw=-2.908
+205.028,ros=1778663064.184165,map_odom_jump,dxy=0.248 dyaw=0.005 x=16.146 y=15.604 yaw=-2.914
+205.138,ros=1778663064.294117,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+205.141,ros=1778663064.296932,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+205.228,ros=1778663064.384221,map_odom_jump,dxy=0.444 dyaw=0.013 x=15.748 y=15.802 yaw=-2.901
+205.628,ros=1778663064.784585,map_odom_jump,dxy=0.975 dyaw=0.029 x=16.451 y=15.342 yaw=-2.929
+205.638,ros=1778663064.794293,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+205.641,ros=1778663064.797162,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+205.830,ros=1778663064.986389,map_odom_jump,dxy=0.774 dyaw=0.022 x=17.099 y=14.918 yaw=-2.951
+206.028,ros=1778663065.184470,map_odom_jump,dxy=0.509 dyaw=0.013 x=17.525 y=14.639 yaw=-2.964
+206.138,ros=1778663065.294327,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+206.141,ros=1778663065.297606,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+206.228,ros=1778663065.384127,map_odom_jump,dxy=0.726 dyaw=0.022 x=16.911 y=15.026 yaw=-2.941
+206.638,ros=1778663065.794178,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+206.641,ros=1778663065.797477,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+206.828,ros=1778663065.984204,map_odom_jump,dxy=0.696 dyaw=0.019 x=17.374 y=14.664 yaw=-2.963
+207.028,ros=1778663066.184219,map_odom_jump,dxy=0.999 dyaw=0.028 x=18.171 y=14.063 yaw=-2.991
+207.139,ros=1778663066.295569,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+207.142,ros=1778663066.298120,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+207.228,ros=1778663066.384074,map_odom_jump,dxy=0.593 dyaw=0.016 x=17.616 y=14.270 yaw=-2.975
+207.428,ros=1778663066.584100,map_odom_jump,dxy=1.015 dyaw=0.029 x=16.789 y=14.859 yaw=-2.945
+207.628,ros=1778663066.784246,map_odom_jump,dxy=0.759 dyaw=0.022 x=16.160 y=15.285 yaw=-2.923
+207.638,ros=1778663066.794357,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+207.641,ros=1778663066.796952,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+207.828,ros=1778663066.984263,map_odom_jump,dxy=1.592 dyaw=0.047 x=17.535 y=14.481 yaw=-2.971
+208.028,ros=1778663067.184168,map_odom_jump,dxy=0.426 dyaw=0.015 x=17.214 y=14.761 yaw=-2.956
+208.138,ros=1778663067.294571,nav_status,{"current_state": "executing", "detailed_state": "BLOCKED_BY_OBSTACLE", "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": 0, "total_waypoints": 1, "is_active": true, "recovery_active": false, "obstacle_blocked": true, "block_reported": false}
+208.141,ros=1778663067.296937,nav_status,{"current_state": "executing", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+208.228,ros=1778663067.384178,map_odom_jump,dxy=1.398 dyaw=0.044 x=18.123 y=13.698 yaw=-2.999
+208.428,ros=1778663067.584102,map_odom_jump,dxy=1.202 dyaw=0.035 x=17.176 y=14.439 yaw=-2.964
+208.487,ros=1778663067.643110,nav_status,{"current_state": "completed", "detailed_state": null, "navigation_mode": "multi_point", "sequence_id": "multi_1778663061", "current_waypoint_index": null, "total_waypoints": null, "is_active": null, "recovery_active": null, "obstacle_blocked": null, "block_reported": null}
+208.628,ros=1778663067.784253,map_odom_jump,dxy=1.307 dyaw=0.040 x=16.132 y=15.225 yaw=-2.924
+208.640,ros=1778663067.796213,nav_status,{"current_state": "idle", "detailed_state": "EXECUTING", "navigation_mode": null, "sequence_id": null, "current_waypoint_index": 0, "total_waypoints": 0, "is_active": false, "recovery_active": false, "obstacle_blocked": false, "block_reported": false}
+208.830,ros=1778663067.986113,map_odom_jump,dxy=1.428 dyaw=0.043 x=17.287 y=14.384 yaw=-2.968
+209.028,ros=1778663068.184142,map_odom_jump,dxy=0.667 dyaw=0.016 x=17.920 y=14.174 yaw=-2.983
+209.228,ros=1778663068.384115,map_odom_jump,dxy=0.433 dyaw=0.013 x=17.576 y=14.436 yaw=-2.970
+209.428,ros=1778663068.584794,map_odom_jump,dxy=0.745 dyaw=0.014 x=16.867 y=14.665 yaw=-2.956
+209.628,ros=1778663068.784535,map_odom_jump,dxy=0.424 dyaw=0.014 x=17.185 y=14.384 yaw=-2.970
+209.828,ros=1778663068.984111,map_odom_jump,dxy=0.209 dyaw=0.005 x=17.375 y=14.299 yaw=-2.975
+210.028,ros=1778663069.184231,map_odom_jump,dxy=0.362 dyaw=0.013 x=17.292 y=14.651 yaw=-2.963
+210.228,ros=1778663069.384396,map_odom_jump,dxy=0.572 dyaw=0.019 x=17.592 y=14.163 yaw=-2.981
+210.429,ros=1778663069.585607,map_odom_jump,dxy=0.669 dyaw=0.016 x=17.024 y=14.517 yaw=-2.966
+210.628,ros=1778663069.784399,map_odom_jump,dxy=0.809 dyaw=0.022 x=17.663 y=14.020 yaw=-2.988
+210.828,ros=1778663069.984241,map_odom_jump,dxy=0.852 dyaw=0.027 x=17.034 y=14.594 yaw=-2.961
+211.028,ros=1778663070.184338,map_odom_jump,dxy=0.257 dyaw=0.008 x=17.235 y=14.434 yaw=-2.969
+212.028,ros=1778663071.184696,map_odom_jump,dxy=0.573 dyaw=0.018 x=17.105 y=14.780 yaw=-2.958
+212.229,ros=1778663071.385179,map_odom_jump,dxy=0.507 dyaw=0.015 x=17.319 y=14.320 yaw=-2.973
+212.630,ros=1778663071.786577,map_odom_jump,dxy=0.659 dyaw=0.022 x=17.059 y=14.815 yaw=-2.956
+212.828,ros=1778663071.984096,map_odom_jump,dxy=0.948 dyaw=0.030 x=17.640 y=14.066 yaw=-2.986
+213.028,ros=1778663072.184362,map_odom_jump,dxy=0.371 dyaw=0.011 x=17.348 y=14.294 yaw=-2.975
+214.029,ros=1778663073.185190,map_odom_jump,dxy=0.384 dyaw=0.012 x=17.072 y=14.557 yaw=-2.962
+214.230,ros=1778663073.386024,map_odom_jump,dxy=0.547 dyaw=0.017 x=17.466 y=14.177 yaw=-2.980
+214.828,ros=1778663073.984260,map_odom_jump,dxy=0.614 dyaw=0.020 x=17.124 y=14.760 yaw=-2.959
+215.228,ros=1778663074.384801,map_odom_jump,dxy=0.680 dyaw=0.021 x=17.388 y=14.243 yaw=-2.977
+216.028,ros=1778663075.184336,map_odom_jump,dxy=0.506 dyaw=0.016 x=17.156 y=14.739 yaw=-2.959
+216.228,ros=1778663075.384566,map_odom_jump,dxy=0.692 dyaw=0.022 x=17.522 y=14.152 yaw=-2.982
+216.628,ros=1778663075.784142,map_odom_jump,dxy=0.661 dyaw=0.023 x=17.034 y=14.807 yaw=-2.955
+216.829,ros=1778663075.985406,map_odom_jump,dxy=0.614 dyaw=0.019 x=17.351 y=14.282 yaw=-2.974
+217.628,ros=1778663076.784310,map_odom_jump,dxy=0.220 dyaw=0.009 x=17.216 y=14.386 yaw=-2.969
+218.229,ros=1778663077.385831,map_odom_jump,dxy=0.485 dyaw=0.015 x=17.209 y=14.699 yaw=-2.961
+218.628,ros=1778663077.784254,map_odom_jump,dxy=0.504 dyaw=0.016 x=17.496 y=14.187 yaw=-2.980
+219.028,ros=1778663078.184108,map_odom_jump,dxy=0.700 dyaw=0.023 x=17.029 y=14.815 yaw=-2.955
+219.228,ros=1778663078.384803,map_odom_jump,dxy=0.635 dyaw=0.021 x=17.360 y=14.273 yaw=-2.975
+219.429,ros=1778663078.585250,map_odom_jump,dxy=0.527 dyaw=0.017 x=17.117 y=14.740 yaw=-2.958
+219.628,ros=1778663078.784205,map_odom_jump,dxy=0.725 dyaw=0.023 x=17.529 y=14.145 yaw=-2.982
+219.830,ros=1778663078.986655,map_odom_jump,dxy=0.868 dyaw=0.027 x=17.009 y=14.839 yaw=-2.954
+220.428,ros=1778663079.584707,map_odom_jump,dxy=0.423 dyaw=0.015 x=17.256 y=14.338 yaw=-2.974
+221.028,ros=1778663080.184358,map_odom_jump,dxy=0.720 dyaw=0.023 x=16.986 y=14.855 yaw=-2.953
+221.429,ros=1778663080.585127,map_odom_jump,dxy=0.401 dyaw=0.014 x=17.254 y=14.359 yaw=-2.973
+221.828,ros=1778663080.984363,map_odom_jump,dxy=0.750 dyaw=0.024 x=16.978 y=14.862 yaw=-2.953
+222.028,ros=1778663081.184651,map_odom_jump,dxy=0.656 dyaw=0.021 x=17.327 y=14.306 yaw=-2.974
+222.233,ros=1778663081.389690,map_odom_jump,dxy=0.578 dyaw=0.019 x=17.043 y=14.811 yaw=-2.955
+222.628,ros=1778663081.784293,map_odom_jump,dxy=0.658 dyaw=0.021 x=17.336 y=14.296 yaw=-2.974
+223.229,ros=1778663082.385415,map_odom_jump,dxy=0.300 dyaw=0.009 x=17.298 y=14.321 yaw=-2.973
+223.628,ros=1778663082.784367,map_odom_jump,dxy=0.663 dyaw=0.023 x=16.949 y=14.886 yaw=-2.951
+223.828,ros=1778663082.984268,map_odom_jump,dxy=0.395 dyaw=0.012 x=17.124 y=14.531 yaw=-2.964
+224.028,ros=1778663083.184268,map_odom_jump,dxy=0.405 dyaw=0.013 x=17.402 y=14.236 yaw=-2.977
+224.828,ros=1778663083.984156,map_odom_jump,dxy=0.227 dyaw=0.008 x=17.560 y=14.088 yaw=-2.984
+225.228,ros=1778663084.384281,map_odom_jump,dxy=0.713 dyaw=0.023 x=17.078 y=14.780 yaw=-2.957
+225.629,ros=1778663084.785258,map_odom_jump,dxy=0.594 dyaw=0.019 x=17.446 y=14.200 yaw=-2.980
+225.828,ros=1778663084.984494,map_odom_jump,dxy=0.523 dyaw=0.017 x=17.240 y=14.681 yaw=-2.963
+226.028,ros=1778663085.184190,map_odom_jump,dxy=0.597 dyaw=0.019 x=17.524 y=14.157 yaw=-2.981
+226.631,ros=1778663085.787887,map_odom_jump,dxy=0.299 dyaw=0.009 x=17.738 y=13.972 yaw=-2.991
+226.828,ros=1778663085.984235,map_odom_jump,dxy=1.139 dyaw=0.037 x=17.018 y=14.855 yaw=-2.954
+227.028,ros=1778663086.184194,map_odom_jump,dxy=0.773 dyaw=0.025 x=17.444 y=14.210 yaw=-2.980
+228.029,ros=1778663087.185283,map_odom_jump,dxy=0.617 dyaw=0.020 x=17.108 y=14.552 yaw=-2.964
+228.428,ros=1778663087.584325,map_odom_jump,dxy=0.475 dyaw=0.017 x=17.455 y=14.199 yaw=-2.981
+228.631,ros=1778663087.787836,map_odom_jump,dxy=0.511 dyaw=0.018 x=17.087 y=14.554 yaw=-2.963
+228.828,ros=1778663087.984820,map_odom_jump,dxy=0.601 dyaw=0.020 x=17.523 y=14.142 yaw=-2.983
+229.028,ros=1778663088.184342,map_odom_jump,dxy=0.573 dyaw=0.019 x=17.108 y=14.537 yaw=-2.964
+229.429,ros=1778663088.585725,map_odom_jump,dxy=0.556 dyaw=0.019 x=17.545 y=14.123 yaw=-2.985
+229.629,ros=1778663088.785413,map_odom_jump,dxy=0.568 dyaw=0.019 x=17.140 y=14.522 yaw=-2.965
+229.829,ros=1778663088.985111,map_odom_jump,dxy=0.529 dyaw=0.017 x=17.514 y=14.147 yaw=-2.982
+230.229,ros=1778663089.385437,map_odom_jump,dxy=0.573 dyaw=0.018 x=17.117 y=14.534 yaw=-2.965
+230.428,ros=1778663089.584627,map_odom_jump,dxy=0.726 dyaw=0.025 x=17.645 y=14.037 yaw=-2.990
+230.629,ros=1778663089.785122,map_odom_jump,dxy=0.725 dyaw=0.025 x=17.113 y=14.530 yaw=-2.964
+231.028,ros=1778663090.184551,map_odom_jump,dxy=0.676 dyaw=0.022 x=17.628 y=14.056 yaw=-2.987
+231.229,ros=1778663090.385257,map_odom_jump,dxy=0.218 dyaw=0.007 x=17.459 y=14.194 yaw=-2.980
+232.228,ros=1778663091.384437,map_odom_jump,dxy=0.484 dyaw=0.016 x=17.146 y=14.508 yaw=-2.966
+232.431,ros=1778663091.587790,map_odom_jump,dxy=0.613 dyaw=0.022 x=17.586 y=14.081 yaw=-2.987
+232.830,ros=1778663091.985953,map_odom_jump,dxy=0.600 dyaw=0.019 x=17.184 y=14.477 yaw=-2.967
+233.028,ros=1778663092.184439,map_odom_jump,dxy=0.437 dyaw=0.014 x=17.493 y=14.169 yaw=-2.981
+233.428,ros=1778663092.584419,map_odom_jump,dxy=0.478 dyaw=0.016 x=17.188 y=14.467 yaw=-2.967
+233.628,ros=1778663092.784238,map_odom_jump,dxy=0.603 dyaw=0.019 x=17.632 y=14.058 yaw=-2.987
+233.828,ros=1778663092.984309,map_odom_jump,dxy=0.710 dyaw=0.023 x=17.115 y=14.546 yaw=-2.964
+234.029,ros=1778663093.185350,map_odom_jump,dxy=0.466 dyaw=0.015 x=17.446 y=14.217 yaw=-2.979
+234.228,ros=1778663093.384904,map_odom_jump,dxy=0.425 dyaw=0.014 x=17.139 y=14.511 yaw=-2.965
+234.829,ros=1778663093.985747,map_odom_jump,dxy=0.616 dyaw=0.021 x=17.656 y=14.034 yaw=-2.988
+235.029,ros=1778663094.185367,map_odom_jump,dxy=0.669 dyaw=0.022 x=17.170 y=14.494 yaw=-2.967
+235.232,ros=1778663094.388248,map_odom_jump,dxy=0.432 dyaw=0.014 x=17.476 y=14.190 yaw=-2.980
+235.429,ros=1778663094.585211,map_odom_jump,dxy=0.439 dyaw=0.014 x=17.159 y=14.493 yaw=-2.966
+236.028,ros=1778663095.184334,map_odom_jump,dxy=0.669 dyaw=0.023 x=17.600 y=14.072 yaw=-2.987
+236.828,ros=1778663095.984367,map_odom_jump,dxy=0.362 dyaw=0.012 x=17.255 y=14.413 yaw=-2.970
+237.229,ros=1778663096.385545,map_odom_jump,dxy=0.399 dyaw=0.013 x=17.496 y=14.159 yaw=-2.982
+237.428,ros=1778663096.584840,map_odom_jump,dxy=0.406 dyaw=0.013 x=17.212 y=14.449 yaw=-2.968
+237.628,ros=1778663096.784299,map_odom_jump,dxy=0.528 dyaw=0.018 x=17.591 y=14.082 yaw=-2.986
+237.828,ros=1778663096.984141,map_odom_jump,dxy=0.608 dyaw=0.020 x=17.153 y=14.504 yaw=-2.966
+238.028,ros=1778663097.184385,map_odom_jump,dxy=0.566 dyaw=0.018 x=17.558 y=14.109 yaw=-2.984
+238.628,ros=1778663097.784408,map_odom_jump,dxy=0.404 dyaw=0.015 x=17.153 y=14.509 yaw=-2.966
+238.829,ros=1778663097.985739,map_odom_jump,dxy=0.426 dyaw=0.014 x=17.447 y=14.202 yaw=-2.980
+239.632,ros=1778663098.788370,map_odom_jump,dxy=0.398 dyaw=0.014 x=17.162 y=14.494 yaw=-2.967
+240.028,ros=1778663099.184103,map_odom_jump,dxy=0.562 dyaw=0.018 x=17.585 y=14.092 yaw=-2.985
+242.630,ros=1778663101.786694,map_odom_jump,dxy=0.504 dyaw=0.019 x=17.169 y=14.487 yaw=-2.966
+242.833,ros=1778663101.989710,map_odom_jump,dxy=0.534 dyaw=0.018 x=17.544 y=14.107 yaw=-2.985
+243.228,ros=1778663102.384367,map_odom_jump,dxy=0.653 dyaw=0.022 x=17.119 y=14.533 yaw=-2.964
+243.428,ros=1778663102.584249,map_odom_jump,dxy=0.547 dyaw=0.019 x=17.504 y=14.144 yaw=-2.984
+243.829,ros=1778663102.985428,map_odom_jump,dxy=0.577 dyaw=0.020 x=17.124 y=14.528 yaw=-2.964
+244.228,ros=1778663103.384793,map_odom_jump,dxy=0.269 dyaw=0.008 x=17.068 y=14.792 yaw=-2.957
+244.629,ros=1778663103.785185,map_odom_jump,dxy=0.623 dyaw=0.022 x=17.438 y=14.207 yaw=-2.980
+244.830,ros=1778663103.986275,map_odom_jump,dxy=0.513 dyaw=0.018 x=17.074 y=14.568 yaw=-2.962
+245.230,ros=1778663104.386322,map_odom_jump,dxy=0.518 dyaw=0.018 x=17.588 y=14.076 yaw=-2.986
+245.428,ros=1778663104.584202,map_odom_jump,dxy=0.480 dyaw=0.016 x=17.257 y=14.424 yaw=-2.970
+245.828,ros=1778663104.984456,map_odom_jump,dxy=0.600 dyaw=0.021 x=17.592 y=14.072 yaw=-2.987
+246.228,ros=1778663105.384528,map_odom_jump,dxy=0.869 dyaw=0.030 x=17.019 y=14.839 yaw=-2.954
+246.628,ros=1778663105.784625,map_odom_jump,dxy=0.941 dyaw=0.031 x=17.705 y=13.989 yaw=-2.990
+246.830,ros=1778663105.986560,map_odom_jump,dxy=0.713 dyaw=0.023 x=17.184 y=14.474 yaw=-2.967
+247.029,ros=1778663106.185687,map_odom_jump,dxy=0.420 dyaw=0.014 x=17.477 y=14.173 yaw=-2.981
+247.629,ros=1778663106.785065,map_odom_jump,dxy=0.225 dyaw=0.009 x=17.471 y=14.184 yaw=-2.981
+248.029,ros=1778663107.185431,map_odom_jump,dxy=0.616 dyaw=0.020 x=17.154 y=14.503 yaw=-2.966
+248.228,ros=1778663107.384544,map_odom_jump,dxy=0.609 dyaw=0.020 x=17.591 y=14.078 yaw=-2.986
+249.028,ros=1778663108.184375,map_odom_jump,dxy=0.540 dyaw=0.018 x=17.096 y=14.549 yaw=-2.964
+249.228,ros=1778663108.384319,map_odom_jump,dxy=0.524 dyaw=0.018 x=17.475 y=14.188 yaw=-2.982
+249.429,ros=1778663108.585133,map_odom_jump,dxy=0.263 dyaw=0.010 x=17.299 y=14.382 yaw=-2.972
+249.629,ros=1778663108.785111,map_odom_jump,dxy=0.456 dyaw=0.014 x=17.614 y=14.053 yaw=-2.986
+250.628,ros=1778663109.784467,map_odom_jump,dxy=0.379 dyaw=0.014 x=17.234 y=14.450 yaw=-2.969
+251.430,ros=1778663110.586347,map_odom_jump,dxy=0.281 dyaw=0.011 x=17.441 y=14.204 yaw=-2.981
+251.828,ros=1778663110.984870,map_odom_jump,dxy=0.521 dyaw=0.017 x=17.175 y=14.477 yaw=-2.967
+252.631,ros=1778663111.786994,map_odom_jump,dxy=0.577 dyaw=0.019 x=17.640 y=14.052 yaw=-2.988
+252.828,ros=1778663111.984777,map_odom_jump,dxy=0.580 dyaw=0.020 x=17.214 y=14.446 yaw=-2.968
+253.029,ros=1778663112.185087,map_odom_jump,dxy=0.356 dyaw=0.012 x=17.469 y=14.198 yaw=-2.980
+253.228,ros=1778663112.384588,map_odom_jump,dxy=0.310 dyaw=0.011 x=17.265 y=14.431 yaw=-2.970
+253.429,ros=1778663112.585049,map_odom_jump,dxy=0.336 dyaw=0.012 x=17.478 y=14.171 yaw=-2.982
+253.628,ros=1778663112.784323,map_odom_jump,dxy=0.477 dyaw=0.017 x=17.136 y=14.503 yaw=-2.965
+254.029,ros=1778663113.184975,map_odom_jump,dxy=0.605 dyaw=0.020 x=17.547 y=14.125 yaw=-2.983
+254.629,ros=1778663113.784909,map_odom_jump,dxy=0.455 dyaw=0.016 x=17.076 y=14.542 yaw=-2.963
+255.028,ros=1778663114.184690,map_odom_jump,dxy=0.383 dyaw=0.012 x=17.417 y=14.221 yaw=-2.978
+255.228,ros=1778663114.384349,map_odom_jump,dxy=0.620 dyaw=0.019 x=17.104 y=14.757 yaw=-2.958
+255.630,ros=1778663114.786633,map_odom_jump,dxy=0.648 dyaw=0.021 x=17.459 y=14.195 yaw=-2.980
+255.828,ros=1778663114.984303,map_odom_jump,dxy=0.657 dyaw=0.021 x=17.111 y=14.752 yaw=-2.958
+256.028,ros=1778663115.184699,map_odom_jump,dxy=0.775 dyaw=0.024 x=17.563 y=14.123 yaw=-2.983
+256.429,ros=1778663115.584963,map_odom_jump,dxy=0.442 dyaw=0.014 x=17.197 y=14.455 yaw=-2.967
+256.628,ros=1778663115.784162,map_odom_jump,dxy=0.456 dyaw=0.015 x=17.527 y=14.141 yaw=-2.982
+257.028,ros=1778663116.184782,map_odom_jump,dxy=0.572 dyaw=0.018 x=17.264 y=14.655 yaw=-2.963
+257.228,ros=1778663116.384625,map_odom_jump,dxy=0.533 dyaw=0.017 x=17.497 y=14.176 yaw=-2.980
+258.028,ros=1778663117.184498,map_odom_jump,dxy=0.577 dyaw=0.019 x=17.129 y=14.738 yaw=-2.959
+258.228,ros=1778663117.384439,map_odom_jump,dxy=0.661 dyaw=0.021 x=17.481 y=14.178 yaw=-2.980
+258.629,ros=1778663117.785636,map_odom_jump,dxy=0.662 dyaw=0.022 x=17.095 y=14.782 yaw=-2.957
+258.829,ros=1778663117.985321,map_odom_jump,dxy=0.842 dyaw=0.027 x=17.587 y=14.099 yaw=-2.984
+259.629,ros=1778663118.784991,map_odom_jump,dxy=0.591 dyaw=0.021 x=17.073 y=14.554 yaw=-2.963
+259.828,ros=1778663118.984303,map_odom_jump,dxy=0.457 dyaw=0.014 x=17.394 y=14.229 yaw=-2.977
+260.628,ros=1778663119.784362,map_odom_jump,dxy=0.791 dyaw=0.027 x=17.118 y=14.749 yaw=-2.958
+260.832,ros=1778663119.988288,map_odom_jump,dxy=0.547 dyaw=0.017 x=17.363 y=14.260 yaw=-2.976
+261.028,ros=1778663120.184190,map_odom_jump,dxy=0.643 dyaw=0.020 x=17.032 y=14.812 yaw=-2.955
+261.229,ros=1778663120.385830,map_odom_jump,dxy=0.869 dyaw=0.027 x=17.562 y=14.123 yaw=-2.983
+261.428,ros=1778663120.584252,map_odom_jump,dxy=0.219 dyaw=0.004 x=17.376 y=14.239 yaw=-2.978
+261.629,ros=1778663120.785676,map_odom_jump,dxy=0.649 dyaw=0.023 x=17.050 y=14.800 yaw=-2.956
+261.832,ros=1778663120.988572,map_odom_jump,dxy=0.317 dyaw=0.010 x=17.150 y=14.500 yaw=-2.966
+262.029,ros=1778663121.185271,map_odom_jump,dxy=0.263 dyaw=0.008 x=17.104 y=14.759 yaw=-2.958
+262.228,ros=1778663121.384722,map_odom_jump,dxy=0.795 dyaw=0.026 x=17.561 y=14.109 yaw=-2.983
+262.628,ros=1778663121.784275,map_odom_jump,dxy=0.396 dyaw=0.014 x=17.145 y=14.489 yaw=-2.966
+263.031,ros=1778663122.187775,map_odom_jump,dxy=0.267 dyaw=0.008 x=17.098 y=14.770 yaw=-2.958
+263.229,ros=1778663122.385165,map_odom_jump,dxy=0.604 dyaw=0.019 x=17.390 y=14.240 yaw=-2.977
+263.829,ros=1778663122.985679,map_odom_jump,dxy=0.532 dyaw=0.017 x=17.082 y=14.558 yaw=-2.963
+264.028,ros=1778663123.184648,map_odom_jump,dxy=0.749 dyaw=0.024 x=17.630 y=14.048 yaw=-2.987
+264.229,ros=1778663123.385320,map_odom_jump,dxy=0.231 dyaw=0.008 x=17.451 y=14.194 yaw=-2.979
+265.029,ros=1778663124.185384,map_odom_jump,dxy=0.702 dyaw=0.023 x=17.067 y=14.775 yaw=-2.957
+265.228,ros=1778663124.384869,map_odom_jump,dxy=0.833 dyaw=0.027 x=17.569 y=14.111 yaw=-2.984
+265.828,ros=1778663124.984401,map_odom_jump,dxy=0.615 dyaw=0.020 x=17.090 y=14.763 yaw=-2.957
+266.228,ros=1778663125.384212,map_odom_jump,dxy=0.422 dyaw=0.013 x=17.288 y=14.411 yaw=-2.970
+266.428,ros=1778663125.584379,map_odom_jump,dxy=0.233 dyaw=0.009 x=17.419 y=14.219 yaw=-2.979
+266.828,ros=1778663125.984209,map_odom_jump,dxy=0.722 dyaw=0.023 x=17.118 y=14.746 yaw=-2.959
+267.028,ros=1778663126.184713,map_odom_jump,dxy=0.546 dyaw=0.017 x=17.364 y=14.259 yaw=-2.976
+267.828,ros=1778663126.984670,map_odom_jump,dxy=0.612 dyaw=0.020 x=17.058 y=14.788 yaw=-2.956
+268.028,ros=1778663127.184188,map_odom_jump,dxy=0.838 dyaw=0.027 x=17.564 y=14.120 yaw=-2.983
+268.231,ros=1778663127.387002,map_odom_jump,dxy=0.830 dyaw=0.026 x=17.066 y=14.784 yaw=-2.957
+269.028,ros=1778663128.184519,map_odom_jump,dxy=0.922 dyaw=0.029 x=17.632 y=14.057 yaw=-2.986
+269.229,ros=1778663128.385342,map_odom_jump,dxy=0.929 dyaw=0.029 x=17.071 y=14.798 yaw=-2.957
+269.629,ros=1778663128.784929,map_odom_jump,dxy=0.629 dyaw=0.020 x=17.416 y=14.206 yaw=-2.978
+270.229,ros=1778663129.385294,map_odom_jump,dxy=0.900 dyaw=0.029 x=17.018 y=14.823 yaw=-2.955
+270.428,ros=1778663129.584306,map_odom_jump,dxy=0.642 dyaw=0.022 x=17.350 y=14.274 yaw=-2.977
+271.029,ros=1778663130.185267,map_odom_jump,dxy=0.707 dyaw=0.023 x=17.111 y=14.753 yaw=-2.958
+271.229,ros=1778663130.385434,map_odom_jump,dxy=0.624 dyaw=0.020 x=17.419 y=14.209 yaw=-2.978
+271.828,ros=1778663130.984089,map_odom_jump,dxy=0.459 dyaw=0.015 x=17.121 y=14.506 yaw=-2.965
+272.029,ros=1778663131.185143,map_odom_jump,dxy=0.441 dyaw=0.014 x=17.435 y=14.196 yaw=-2.979
+272.228,ros=1778663131.384805,map_odom_jump,dxy=0.684 dyaw=0.022 x=17.075 y=14.777 yaw=-2.957
+272.828,ros=1778663131.984653,map_odom_jump,dxy=0.913 dyaw=0.029 x=17.612 y=14.087 yaw=-2.985
+273.033,ros=1778663132.189072,map_odom_jump,dxy=0.853 dyaw=0.027 x=17.099 y=14.768 yaw=-2.958
+273.232,ros=1778663132.388804,map_odom_jump,dxy=0.290 dyaw=0.008 x=17.152 y=14.482 yaw=-2.966
+273.428,ros=1778663132.584253,map_odom_jump,dxy=0.529 dyaw=0.018 x=17.535 y=14.116 yaw=-2.984
+273.828,ros=1778663132.984366,map_odom_jump,dxy=0.746 dyaw=0.024 x=17.063 y=14.782 yaw=-2.957
+274.028,ros=1778663133.184316,map_odom_jump,dxy=0.699 dyaw=0.023 x=17.455 y=14.202 yaw=-2.980
+274.228,ros=1778663133.384505,map_odom_jump,dxy=0.660 dyaw=0.022 x=17.102 y=14.760 yaw=-2.958
+274.628,ros=1778663133.784618,map_odom_jump,dxy=0.640 dyaw=0.021 x=17.461 y=14.183 yaw=-2.980
+275.029,ros=1778663134.185796,map_odom_jump,dxy=0.589 dyaw=0.018 x=17.143 y=14.497 yaw=-2.965
+275.428,ros=1778663134.584792,map_odom_jump,dxy=0.591 dyaw=0.021 x=17.574 y=14.084 yaw=-2.986
+275.831,ros=1778663134.987482,map_odom_jump,dxy=0.684 dyaw=0.022 x=17.096 y=14.764 yaw=-2.958
+276.028,ros=1778663135.184288,map_odom_jump,dxy=0.924 dyaw=0.030 x=17.663 y=14.035 yaw=-2.988
+276.428,ros=1778663135.584160,map_odom_jump,dxy=0.286 dyaw=0.007 x=17.369 y=14.270 yaw=-2.978
+276.629,ros=1778663135.785708,map_odom_jump,dxy=0.591 dyaw=0.020 x=17.080 y=14.786 yaw=-2.957
+277.029,ros=1778663136.185667,map_odom_jump,dxy=0.829 dyaw=0.026 x=17.571 y=14.110 yaw=-2.983
+277.228,ros=1778663136.384685,map_odom_jump,dxy=0.787 dyaw=0.025 x=17.117 y=14.752 yaw=-2.959
+277.428,ros=1778663136.584370,map_odom_jump,dxy=0.592 dyaw=0.021 x=17.395 y=14.229 yaw=-2.979
+277.631,ros=1778663136.787015,map_odom_jump,dxy=0.602 dyaw=0.021 x=17.114 y=14.761 yaw=-2.958
+277.829,ros=1778663136.984975,map_odom_jump,dxy=0.632 dyaw=0.021 x=17.437 y=14.218 yaw=-2.979
+279.828,ros=1778663138.984420,map_odom_jump,dxy=0.509 dyaw=0.016 x=17.173 y=14.496 yaw=-2.967
+280.028,ros=1778663139.184303,map_odom_jump,dxy=0.379 dyaw=0.011 x=17.432 y=14.220 yaw=-2.978
+280.631,ros=1778663139.787468,map_odom_jump,dxy=0.651 dyaw=0.022 x=17.099 y=14.760 yaw=-2.958
+280.829,ros=1778663139.985114,map_odom_jump,dxy=0.599 dyaw=0.019 x=17.392 y=14.237 yaw=-2.977
+281.228,ros=1778663140.384599,map_odom_jump,dxy=0.827 dyaw=0.027 x=17.049 y=14.802 yaw=-2.956
+281.429,ros=1778663140.585098,map_odom_jump,dxy=0.725 dyaw=0.025 x=17.448 y=14.196 yaw=-2.981
+281.628,ros=1778663140.784316,map_odom_jump,dxy=0.392 dyaw=0.014 x=17.177 y=14.480 yaw=-2.967
+282.029,ros=1778663141.185633,map_odom_jump,dxy=0.553 dyaw=0.018 x=17.526 y=14.123 yaw=-2.983
+282.228,ros=1778663141.384149,map_odom_jump,dxy=0.780 dyaw=0.025 x=17.095 y=14.774 yaw=-2.957
+282.628,ros=1778663141.784233,map_odom_jump,dxy=0.590 dyaw=0.019 x=17.391 y=14.256 yaw=-2.977
+282.830,ros=1778663141.985921,map_odom_jump,dxy=0.579 dyaw=0.018 x=17.104 y=14.759 yaw=-2.958
+283.028,ros=1778663142.184215,map_odom_jump,dxy=0.773 dyaw=0.025 x=17.555 y=14.131 yaw=-2.983
+283.228,ros=1778663142.384217,map_odom_jump,dxy=0.818 dyaw=0.026 x=17.069 y=14.788 yaw=-2.957
+283.628,ros=1778663142.784374,map_odom_jump,dxy=0.215 dyaw=0.005 x=17.134 y=14.514 yaw=-2.965
+283.828,ros=1778663142.984201,map_odom_jump,dxy=0.394 dyaw=0.012 x=16.976 y=14.874 yaw=-2.953
+284.229,ros=1778663143.384915,map_odom_jump,dxy=0.929 dyaw=0.030 x=17.647 y=14.057 yaw=-2.986
+284.429,ros=1778663143.585431,map_odom_jump,dxy=0.652 dyaw=0.021 x=17.156 y=14.486 yaw=-2.966
+284.628,ros=1778663143.784294,map_odom_jump,dxy=0.553 dyaw=0.018 x=17.559 y=14.109 yaw=-2.983
+285.028,ros=1778663144.184267,map_odom_jump,dxy=0.742 dyaw=0.024 x=17.065 y=14.783 yaw=-2.957
+285.231,ros=1778663144.387485,map_odom_jump,dxy=0.822 dyaw=0.026 x=17.560 y=14.126 yaw=-2.983
+285.828,ros=1778663144.984448,map_odom_jump,dxy=0.580 dyaw=0.018 x=17.091 y=14.782 yaw=-2.958
+286.028,ros=1778663145.184223,map_odom_jump,dxy=0.648 dyaw=0.021 x=17.434 y=14.231 yaw=-2.978
+286.228,ros=1778663145.384161,map_odom_jump,dxy=0.397 dyaw=0.013 x=17.146 y=14.504 yaw=-2.965
+286.428,ros=1778663145.584307,map_odom_jump,dxy=0.209 dyaw=0.005 x=17.172 y=14.711 yaw=-2.961
+286.629,ros=1778663145.785372,map_odom_jump,dxy=0.637 dyaw=0.020 x=17.506 y=14.170 yaw=-2.980
+286.828,ros=1778663145.984543,map_odom_jump,dxy=0.747 dyaw=0.023 x=17.074 y=14.780 yaw=-2.957
+287.228,ros=1778663146.384707,map_odom_jump,dxy=0.843 dyaw=0.027 x=17.571 y=14.130 yaw=-2.983
+288.829,ros=1778663147.985589,map_odom_jump,dxy=0.491 dyaw=0.016 x=17.162 y=14.473 yaw=-2.966
+289.031,ros=1778663148.187143,map_odom_jump,dxy=0.308 dyaw=0.009 x=17.075 y=14.768 yaw=-2.957
+289.228,ros=1778663148.384342,map_odom_jump,dxy=0.836 dyaw=0.027 x=17.582 y=14.104 yaw=-2.984
+289.428,ros=1778663148.584229,map_odom_jump,dxy=0.271 dyaw=0.007 x=17.363 y=14.264 yaw=-2.977
+289.628,ros=1778663148.784415,map_odom_jump,dxy=0.575 dyaw=0.020 x=17.085 y=14.767 yaw=-2.957
+289.828,ros=1778663148.984320,map_odom_jump,dxy=0.705 dyaw=0.023 x=17.467 y=14.175 yaw=-2.980
+290.028,ros=1778663149.184196,map_odom_jump,dxy=0.707 dyaw=0.023 x=17.092 y=14.774 yaw=-2.958
+290.228,ros=1778663149.384276,map_odom_jump,dxy=0.698 dyaw=0.022 x=17.458 y=14.180 yaw=-2.980
+290.829,ros=1778663149.984994,map_odom_jump,dxy=0.443 dyaw=0.014 x=17.147 y=14.492 yaw=-2.966
+291.029,ros=1778663150.185211,map_odom_jump,dxy=0.514 dyaw=0.016 x=17.520 y=14.139 yaw=-2.982
+291.228,ros=1778663150.384240,map_odom_jump,dxy=0.799 dyaw=0.026 x=17.059 y=14.791 yaw=-2.956
+291.428,ros=1778663150.584271,map_odom_jump,dxy=0.749 dyaw=0.026 x=17.469 y=14.164 yaw=-2.983
+292.029,ros=1778663151.185255,map_odom_jump,dxy=0.760 dyaw=0.025 x=17.105 y=14.756 yaw=-2.958
+292.228,ros=1778663151.384537,map_odom_jump,dxy=0.759 dyaw=0.024 x=17.543 y=14.136 yaw=-2.983
+292.629,ros=1778663151.784919,map_odom_jump,dxy=0.661 dyaw=0.023 x=17.084 y=14.774 yaw=-2.957
+292.828,ros=1778663151.984674,map_odom_jump,dxy=0.856 dyaw=0.027 x=17.598 y=14.089 yaw=-2.985
+293.028,ros=1778663152.184881,map_odom_jump,dxy=0.807 dyaw=0.026 x=17.126 y=14.743 yaw=-2.959
+293.229,ros=1778663152.385647,map_odom_jump,dxy=0.351 dyaw=0.010 x=17.264 y=14.421 yaw=-2.969
+293.428,ros=1778663152.584299,map_odom_jump,dxy=0.235 dyaw=0.009 x=17.399 y=14.229 yaw=-2.979
+293.828,ros=1778663152.984210,map_odom_jump,dxy=0.632 dyaw=0.020 x=17.075 y=14.779 yaw=-2.957
+294.029,ros=1778663153.184972,map_odom_jump,dxy=0.657 dyaw=0.021 x=17.414 y=14.216 yaw=-2.978
+294.628,ros=1778663153.784418,map_odom_jump,dxy=0.643 dyaw=0.023 x=17.060 y=14.791 yaw=-2.956
+294.828,ros=1778663153.984196,map_odom_jump,dxy=0.719 dyaw=0.024 x=17.459 y=14.193 yaw=-2.980
+295.228,ros=1778663154.384103,map_odom_jump,dxy=0.338 dyaw=0.011 x=17.184 y=14.457 yaw=-2.967
+295.428,ros=1778663154.584836,map_odom_jump,dxy=0.487 dyaw=0.017 x=17.525 y=14.110 yaw=-2.985
+295.629,ros=1778663154.785851,map_odom_jump,dxy=0.784 dyaw=0.027 x=17.093 y=14.764 yaw=-2.958
+295.828,ros=1778663154.984309,map_odom_jump,dxy=0.734 dyaw=0.024 x=17.491 y=14.148 yaw=-2.982
+296.028,ros=1778663155.184205,map_odom_jump,dxy=0.730 dyaw=0.024 x=17.097 y=14.762 yaw=-2.958
+296.431,ros=1778663155.587145,map_odom_jump,dxy=0.540 dyaw=0.017 x=17.491 y=14.249 yaw=-2.979
+296.828,ros=1778663155.984326,map_odom_jump,dxy=0.210 dyaw=0.006 x=17.422 y=14.215 yaw=-2.980
+298.228,ros=1778663157.384399,map_odom_jump,dxy=0.797 dyaw=0.028 x=17.012 y=14.854 yaw=-2.954
+298.628,ros=1778663157.784620,map_odom_jump,dxy=0.770 dyaw=0.027 x=17.452 y=14.185 yaw=-2.981
+299.828,ros=1778663158.984323,map_odom_jump,dxy=0.613 dyaw=0.021 x=17.061 y=14.584 yaw=-2.962
+300.028,ros=1778663159.184724,map_odom_jump,dxy=0.663 dyaw=0.021 x=17.549 y=14.134 yaw=-2.983
+301.428,ros=1778663160.584367,map_odom_jump,dxy=0.407 dyaw=0.013 x=17.251 y=14.424 yaw=-2.970
+301.628,ros=1778663160.784785,map_odom_jump,dxy=0.492 dyaw=0.017 x=17.610 y=14.088 yaw=-2.987
+301.828,ros=1778663160.984506,map_odom_jump,dxy=0.783 dyaw=0.027 x=17.012 y=14.593 yaw=-2.961
+302.428,ros=1778663161.584390,map_odom_jump,dxy=0.563 dyaw=0.020 x=17.486 y=14.154 yaw=-2.983
+302.828,ros=1778663161.984282,map_odom_jump,dxy=0.932 dyaw=0.031 x=16.949 y=14.885 yaw=-2.952
+303.028,ros=1778663162.184227,map_odom_jump,dxy=0.911 dyaw=0.031 x=17.484 y=14.149 yaw=-2.982
+303.429,ros=1778663162.585023,map_odom_jump,dxy=0.362 dyaw=0.012 x=17.174 y=14.452 yaw=-2.967
+303.628,ros=1778663162.784165,map_odom_jump,dxy=0.539 dyaw=0.018 x=17.563 y=14.078 yaw=-2.985
+304.228,ros=1778663163.384212,map_odom_jump,dxy=0.806 dyaw=0.027 x=17.031 y=14.795 yaw=-2.955
+304.628,ros=1778663163.784317,map_odom_jump,dxy=0.759 dyaw=0.026 x=17.461 y=14.184 yaw=-2.980
+305.228,ros=1778663164.384320,map_odom_jump,dxy=0.554 dyaw=0.019 x=17.061 y=14.558 yaw=-2.962
+305.628,ros=1778663164.784109,map_odom_jump,dxy=0.564 dyaw=0.018 x=17.547 y=14.110 yaw=-2.983
+306.228,ros=1778663165.384326,map_odom_jump,dxy=0.734 dyaw=0.024 x=17.011 y=14.835 yaw=-2.954
+306.428,ros=1778663165.584291,map_odom_jump,dxy=0.523 dyaw=0.016 x=17.295 y=14.396 yaw=-2.970
+306.628,ros=1778663165.784189,map_odom_jump,dxy=0.206 dyaw=0.006 x=17.128 y=14.518 yaw=-2.964
+306.828,ros=1778663165.984266,map_odom_jump,dxy=0.664 dyaw=0.022 x=17.613 y=14.065 yaw=-2.986
+307.028,ros=1778663166.184205,map_odom_jump,dxy=0.260 dyaw=0.008 x=17.401 y=14.216 yaw=-2.978
+308.028,ros=1778663167.184479,map_odom_jump,dxy=0.723 dyaw=0.024 x=17.072 y=14.560 yaw=-2.962
+308.228,ros=1778663167.384228,map_odom_jump,dxy=0.719 dyaw=0.024 x=17.597 y=14.068 yaw=-2.986
+309.028,ros=1778663168.184281,map_odom_jump,dxy=0.463 dyaw=0.016 x=17.179 y=14.475 yaw=-2.966
+309.628,ros=1778663168.784333,map_odom_jump,dxy=0.731 dyaw=0.024 x=17.636 y=14.032 yaw=-2.988
+310.028,ros=1778663169.184379,map_odom_jump,dxy=0.240 dyaw=0.007 x=17.364 y=14.268 yaw=-2.978
+310.828,ros=1778663169.984257,map_odom_jump,dxy=0.481 dyaw=0.017 x=17.149 y=14.483 yaw=-2.966
+311.028,ros=1778663170.184214,map_odom_jump,dxy=0.470 dyaw=0.015 x=17.486 y=14.155 yaw=-2.982
+311.228,ros=1778663170.384271,map_odom_jump,dxy=0.592 dyaw=0.019 x=17.066 y=14.572 yaw=-2.962
+311.428,ros=1778663170.584439,map_odom_jump,dxy=0.707 dyaw=0.024 x=17.575 y=14.082 yaw=-2.987
+312.029,ros=1778663171.185836,map_odom_jump,dxy=0.616 dyaw=0.021 x=17.082 y=14.549 yaw=-2.963
+312.228,ros=1778663171.384428,map_odom_jump,dxy=0.596 dyaw=0.020 x=17.503 y=14.128 yaw=-2.983
+312.629,ros=1778663171.785282,map_odom_jump,dxy=0.796 dyaw=0.028 x=16.976 y=14.862 yaw=-2.953
+312.828,ros=1778663171.984311,map_odom_jump,dxy=0.799 dyaw=0.026 x=17.435 y=14.208 yaw=-2.979
+313.828,ros=1778663172.984509,map_odom_jump,dxy=0.506 dyaw=0.017 x=17.083 y=14.539 yaw=-2.963
+314.028,ros=1778663173.184340,map_odom_jump,dxy=0.693 dyaw=0.023 x=17.592 y=14.070 yaw=-2.986
+314.228,ros=1778663173.384754,map_odom_jump,dxy=0.257 dyaw=0.008 x=17.396 y=14.235 yaw=-2.978
+315.028,ros=1778663174.184136,map_odom_jump,dxy=0.611 dyaw=0.020 x=17.119 y=14.516 yaw=-2.964
+315.228,ros=1778663174.384210,map_odom_jump,dxy=0.396 dyaw=0.014 x=17.389 y=14.226 yaw=-2.978
+315.428,ros=1778663174.584336,map_odom_jump,dxy=0.371 dyaw=0.013 x=17.135 y=14.497 yaw=-2.965
+315.628,ros=1778663174.784299,map_odom_jump,dxy=0.535 dyaw=0.017 x=17.525 y=14.130 yaw=-2.983
+316.228,ros=1778663175.384750,map_odom_jump,dxy=0.582 dyaw=0.019 x=17.069 y=14.567 yaw=-2.962
+316.428,ros=1778663175.584592,map_odom_jump,dxy=0.645 dyaw=0.022 x=17.537 y=14.124 yaw=-2.985
+317.028,ros=1778663176.184850,map_odom_jump,dxy=0.585 dyaw=0.020 x=17.106 y=14.521 yaw=-2.964
+317.428,ros=1778663176.584412,map_odom_jump,dxy=0.509 dyaw=0.018 x=17.443 y=14.192 yaw=-2.981
+320.428,ros=1778663179.584332,map_odom_jump,dxy=0.432 dyaw=0.015 x=17.146 y=14.503 yaw=-2.965
+320.828,ros=1778663179.984226,map_odom_jump,dxy=0.283 dyaw=0.009 x=17.397 y=14.228 yaw=-2.977
+321.428,ros=1778663180.584293,map_odom_jump,dxy=0.517 dyaw=0.018 x=17.104 y=14.536 yaw=-2.964
+321.628,ros=1778663180.784183,map_odom_jump,dxy=0.533 dyaw=0.017 x=17.484 y=14.163 yaw=-2.980
+322.228,ros=1778663181.384587,map_odom_jump,dxy=0.852 dyaw=0.030 x=16.962 y=14.867 yaw=-2.952
+322.628,ros=1778663181.784372,map_odom_jump,dxy=0.806 dyaw=0.028 x=17.479 y=14.167 yaw=-2.981
+322.828,ros=1778663181.984123,map_odom_jump,dxy=0.489 dyaw=0.016 x=17.131 y=14.510 yaw=-2.965
+323.428,ros=1778663182.584232,map_odom_jump,dxy=0.714 dyaw=0.025 x=17.587 y=14.062 yaw=-2.987
+324.028,ros=1778663183.184139,map_odom_jump,dxy=0.681 dyaw=0.022 x=17.021 y=14.602 yaw=-2.960
+324.230,ros=1778663183.386908,map_odom_jump,dxy=0.851 dyaw=0.028 x=17.648 y=14.027 yaw=-2.988
+325.628,ros=1778663184.784535,map_odom_jump,dxy=0.474 dyaw=0.017 x=17.051 y=14.582 yaw=-2.962
+325.829,ros=1778663184.985563,map_odom_jump,dxy=0.744 dyaw=0.024 x=17.593 y=14.072 yaw=-2.986
+326.228,ros=1778663185.384829,map_odom_jump,dxy=0.662 dyaw=0.022 x=17.068 y=14.550 yaw=-2.963
+326.628,ros=1778663185.784307,map_odom_jump,dxy=0.674 dyaw=0.022 x=17.658 y=14.013 yaw=-2.989
+326.828,ros=1778663185.984375,map_odom_jump,dxy=0.877 dyaw=0.029 x=17.005 y=14.599 yaw=-2.960
+327.028,ros=1778663186.184317,map_odom_jump,dxy=0.805 dyaw=0.026 x=17.597 y=14.053 yaw=-2.986
+327.828,ros=1778663186.984188,map_odom_jump,dxy=0.612 dyaw=0.020 x=17.034 y=14.589 yaw=-2.961
+328.029,ros=1778663187.185198,map_odom_jump,dxy=0.833 dyaw=0.027 x=17.645 y=14.024 yaw=-2.988
+328.228,ros=1778663187.384290,map_odom_jump,dxy=0.720 dyaw=0.023 x=17.123 y=14.519 yaw=-2.965
+328.428,ros=1778663187.584134,map_odom_jump,dxy=0.374 dyaw=0.014 x=17.377 y=14.245 yaw=-2.979
+329.628,ros=1778663188.784152,map_odom_jump,dxy=0.582 dyaw=0.021 x=17.038 y=14.573 yaw=-2.962
+329.828,ros=1778663188.984768,map_odom_jump,dxy=0.556 dyaw=0.018 x=17.450 y=14.200 yaw=-2.980
+330.428,ros=1778663189.584249,map_odom_jump,dxy=0.286 dyaw=0.008 x=17.410 y=14.222 yaw=-2.980
+331.428,ros=1778663190.584885,map_odom_jump,dxy=0.278 dyaw=0.007 x=17.331 y=14.291 yaw=-2.977
+331.628,ros=1778663190.784309,map_odom_jump,dxy=0.382 dyaw=0.014 x=17.065 y=14.566 yaw=-2.962
+331.828,ros=1778663190.984288,map_odom_jump,dxy=0.691 dyaw=0.023 x=17.571 y=14.096 yaw=-2.985
+332.028,ros=1778663191.184179,map_odom_jump,dxy=1.024 dyaw=0.034 x=16.930 y=14.894 yaw=-2.951
+332.228,ros=1778663191.384363,map_odom_jump,dxy=1.133 dyaw=0.038 x=17.662 y=14.028 yaw=-2.988
+332.428,ros=1778663191.584664,map_odom_jump,dxy=0.278 dyaw=0.007 x=17.444 y=14.200 yaw=-2.981
+332.828,ros=1778663191.984370,map_odom_jump,dxy=0.626 dyaw=0.021 x=17.033 y=14.581 yaw=-2.961
+333.028,ros=1778663192.184307,map_odom_jump,dxy=0.574 dyaw=0.020 x=17.453 y=14.191 yaw=-2.981
+334.028,ros=1778663193.184263,map_odom_jump,dxy=0.612 dyaw=0.021 x=17.069 y=14.553 yaw=-2.962
+334.228,ros=1778663193.384120,map_odom_jump,dxy=0.565 dyaw=0.020 x=17.481 y=14.167 yaw=-2.982
+335.028,ros=1778663194.184241,map_odom_jump,dxy=0.991 dyaw=0.033 x=16.934 y=14.886 yaw=-2.952
+335.228,ros=1778663194.384161,map_odom_jump,dxy=1.021 dyaw=0.034 x=17.572 y=14.090 yaw=-2.985
+335.828,ros=1778663194.984154,map_odom_jump,dxy=0.429 dyaw=0.014 x=17.106 y=14.528 yaw=-2.964
+336.028,ros=1778663195.184222,map_odom_jump,dxy=0.493 dyaw=0.018 x=17.455 y=14.180 yaw=-2.981
+336.228,ros=1778663195.384264,map_odom_jump,dxy=0.458 dyaw=0.016 x=17.132 y=14.504 yaw=-2.965
+336.428,ros=1778663195.584214,map_odom_jump,dxy=0.558 dyaw=0.020 x=17.527 y=14.110 yaw=-2.985
+336.628,ros=1778663195.784323,map_odom_jump,dxy=0.600 dyaw=0.021 x=17.101 y=14.533 yaw=-2.964
+336.828,ros=1778663195.984340,map_odom_jump,dxy=0.580 dyaw=0.020 x=17.518 y=14.129 yaw=-2.983
+338.028,ros=1778663197.184285,map_odom_jump,dxy=0.635 dyaw=0.021 x=17.085 y=14.549 yaw=-2.963
+338.429,ros=1778663197.585765,map_odom_jump,dxy=0.546 dyaw=0.019 x=17.383 y=14.236 yaw=-2.979
+339.030,ros=1778663198.186410,map_odom_jump,dxy=0.770 dyaw=0.026 x=16.991 y=14.850 yaw=-2.953
+339.228,ros=1778663198.384225,map_odom_jump,dxy=0.259 dyaw=0.008 x=17.021 y=14.593 yaw=-2.961
+339.428,ros=1778663198.584341,map_odom_jump,dxy=0.707 dyaw=0.024 x=17.540 y=14.112 yaw=-2.985
+340.028,ros=1778663199.184392,map_odom_jump,dxy=0.615 dyaw=0.021 x=17.080 y=14.555 yaw=-2.963
+340.428,ros=1778663199.584334,map_odom_jump,dxy=0.574 dyaw=0.021 x=17.475 y=14.152 yaw=-2.983
+340.628,ros=1778663199.784328,map_odom_jump,dxy=0.382 dyaw=0.015 x=17.222 y=14.439 yaw=-2.968
+340.828,ros=1778663199.984306,map_odom_jump,dxy=0.454 dyaw=0.015 x=17.529 y=14.106 yaw=-2.984
+341.228,ros=1778663200.384466,map_odom_jump,dxy=0.212 dyaw=0.007 x=17.382 y=14.248 yaw=-2.978
+341.428,ros=1778663200.584226,map_odom_jump,dxy=0.227 dyaw=0.008 x=17.549 y=14.095 yaw=-2.986
+341.828,ros=1778663200.984757,map_odom_jump,dxy=0.524 dyaw=0.018 x=17.153 y=14.493 yaw=-2.966
+342.028,ros=1778663201.184161,map_odom_jump,dxy=0.577 dyaw=0.020 x=17.565 y=14.089 yaw=-2.985
+342.428,ros=1778663201.584265,map_odom_jump,dxy=0.466 dyaw=0.017 x=17.181 y=14.476 yaw=-2.967
+342.628,ros=1778663201.784404,map_odom_jump,dxy=0.413 dyaw=0.013 x=16.991 y=14.844 yaw=-2.954
+342.828,ros=1778663201.984444,map_odom_jump,dxy=0.346 dyaw=0.011 x=17.135 y=14.528 yaw=-2.965
+343.028,ros=1778663202.184405,map_odom_jump,dxy=0.723 dyaw=0.024 x=17.656 y=14.026 yaw=-2.989
+343.830,ros=1778663202.986854,map_odom_jump,dxy=0.430 dyaw=0.015 x=17.246 y=14.435 yaw=-2.969
+344.028,ros=1778663203.184299,map_odom_jump,dxy=0.545 dyaw=0.019 x=17.628 y=14.047 yaw=-2.987
+344.228,ros=1778663203.384591,map_odom_jump,dxy=1.012 dyaw=0.034 x=16.995 y=14.836 yaw=-2.954
+344.628,ros=1778663203.784259,map_odom_jump,dxy=0.866 dyaw=0.030 x=17.507 y=14.136 yaw=-2.983
+345.028,ros=1778663204.184160,map_odom_jump,dxy=0.227 dyaw=0.007 x=17.442 y=14.193 yaw=-2.980
+345.428,ros=1778663204.584472,map_odom_jump,dxy=0.515 dyaw=0.017 x=17.166 y=14.473 yaw=-2.967
+345.628,ros=1778663204.784247,map_odom_jump,dxy=0.606 dyaw=0.020 x=17.604 y=14.055 yaw=-2.987
+345.745,ros=1778663204.901200,monitor_stop,nav drift monitor stopped

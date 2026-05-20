@@ -35,9 +35,7 @@ def generate_launch_description():
                 pkg_humanoid_navigation, 'config', 'waypoints.yaml'
             ]),
             'data_storage.enabled': True,
-            'data_storage.file_path': PathJoinSubstitution([
-                pkg_humanoid_navigation, 'data', 'dynamic_waypoints.json'
-            ]),
+            'data_storage.file_path': '/home/ubuntu/humanoid_ws/data/dynamic_waypoints.json',
             'navigation.position_tolerance': 0.15,
             'navigation.orientation_tolerance': 0.2,
             'navigation.default_frame_id': 'map'
@@ -47,7 +45,7 @@ def generate_launch_description():
     # 2. 导航状态管理器节点 (负责监听 Nav2 进度并生成 JSON 状态)
     navigation_state_node = Node(
         package='humanoid_navigation',
-        executable='navigation_state_manager', 
+        executable='navigation_state_manager_recoverable', 
         name='navigation_state_manager',
         output='screen',
         parameters=[{
@@ -55,7 +53,9 @@ def generate_launch_description():
             'update_frequency': 10.0,
             'position_tolerance': 0.15,
             'publish_tf': True,
-            'default_frame_id': 'map'
+            'default_frame_id': 'map',
+            'auto_pause_on_localization_recovery': True,
+            'localization_recovery_status_topic': '/localization/recovery_status'
         }]
     )
     

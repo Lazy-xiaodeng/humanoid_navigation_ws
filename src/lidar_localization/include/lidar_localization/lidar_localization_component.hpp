@@ -41,6 +41,7 @@
 
 // ROS2消息类型
 #include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -121,6 +122,9 @@ public:
   void initializeParameters();   ///< 初始化ROS参数
   void initializePubSub();      ///< 初始化发布者和订阅者
   void initializeRegistration(); ///< 初始化配准算法
+  void applyPlanarPoseConstraint(geometry_msgs::msg::Pose & pose) const;
+  Eigen::Matrix4f applyPlanarTransformConstraint(const Eigen::Matrix4f & transform) const;
+  bool publishLastGoodTransformIfFresh(const char * reject_reason);
 
   // ========== 消息回调函数 ==========
   void initialPoseReceived(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg);  ///< 初始位姿回调
@@ -161,9 +165,12 @@ public:
   geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr corrent_pose_with_cov_stamped_ptr_;  ///< 当前位姿
   nav_msgs::msg::Path::SharedPtr path_ptr_;            ///< 路径数据
   sensor_msgs::msg::PointCloud2::ConstSharedPtr last_scan_ptr_;  ///< 最后一次扫描数据
+  geometry_msgs::msg::TransformStamped last_good_transform_;  ///< 最后一次可信定位TF
 
   bool map_recieved_{false};         ///< 标记是否已接收地图
   bool initialpose_recieved_{false}; ///< 标记是否已接收初始位姿
+  bool has_last_good_transform_{false}; ///< 是否已有可信定位TF
+  rclcpp::Time last_good_transform_time_{0, 0, RCL_ROS_TIME}; ///< 最后可信TF发布时间
 
   // ========== ROS参数 ==========
   std::string global_frame_id_;   ///< 全局坐标系ID（如"map"）
@@ -193,6 +200,11 @@ public:
   double last_odom_received_time_; ///< 上次里程计时间戳
   bool use_imu_{false};           ///< 是否使用IMU
   bool enable_debug_{false};      ///< 是否启用调试输出
+  bool force_2d_pose_{false};     ///< 是否将发布给导航的位姿约束到2D平面
+  bool force_2d_fixed_z_{true};   ///< 2D约束时是否固定Z坐标
+  double force_2d_z_{0.0};        ///< 2D约束时使用的固定Z坐标
+  bool republish_last_good_tf_on_failure_{true}; ///< 定位短暂失败时是否重发最后可信TF
+  double max_last_good_tf_age_sec_{3.0}; ///< 最后可信TF可重发的最大时长
 
   int ndt_num_threads_;           ///< OMP线程数
   int ndt_max_iterations_;        ///< 配准最大迭代次数

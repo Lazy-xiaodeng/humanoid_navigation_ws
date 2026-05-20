@@ -86,11 +86,9 @@
 
       # 是否启动时自动设置初始位姿（用于重定位）。
       # 如果为 true，机器人启动时会假设自己在 initial_pose_x/y/z 的位置。
-      # ★★★ 关键修复：根据PCD点云密度分析，使用密度最高点作为初始位置 ★★★
-      # 密度最高点: (1.0, 1.0)，有18296个点，NDT匹配效果最好
       set_initial_pose: true
-      initial_pose_x: 1.0       # ★ 使用点云密度最高点的X坐标
-      initial_pose_y: 1.0       # ★ 使用点云密度最高点的Y坐标
+      initial_pose_x: 0.0
+      initial_pose_y: 0.0
       initial_pose_z: 0.0       # ★ 地面高度
       initial_pose_qx: 0.0      # 初始四元数 X
       initial_pose_qy: 0.0      # 初始四元数 Y
@@ -104,3 +102,17 @@
       use_imu: false            # 是否使用 IMU 去畸变（如果雷达转速慢，无需开启）
       enable_debug: true        # 是否在终端打印调试信息（匹配时间、得分等）
 
+      # ==========================================
+      # 导航输出约束
+      # ==========================================
+      # NDT 可以内部做 3D 匹配，但发布给 Nav2 的 map -> odom 只保留 XY+yaw。
+      # 玻璃门/反光区域容易让 3D 匹配的 Z 被拉飞；导航只需要平面位姿，
+      # 因此固定 Z，避免 RViz/TF 中机器人上天或下地。
+      force_2d_pose: true
+      force_2d_fixed_z: true
+      force_2d_z: 0.0
+
+      # 短时间 NDT 退化时，重发最后一个可信 map->odom，避免 Nav2 立刻因为 TF 断档失败。
+      # 超过该时间仍不能匹配，应停车并触发重定位，而不是继续延长旧 TF。
+      republish_last_good_tf_on_failure: true
+      max_last_good_tf_age_sec: 3.0

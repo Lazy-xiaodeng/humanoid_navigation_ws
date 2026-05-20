@@ -30,6 +30,7 @@ CLEARING_RANGE_MAX = 5.0
 CLEARING_RANGE_STEP = 0.50
 
 BASE_HEIGHT_LAYERS = [
+    
     0.05,
     0.08,
     0.10,
@@ -71,6 +72,9 @@ class LidarHeightClearing3DPublisher(Node):
         self.publish_rate_hz = float(
             self.declare_parameter("publish_rate_hz", PUBLISH_RATE_HZ).value
         )
+        self.publish_static_tf_enabled = bool(
+            self.declare_parameter("publish_static_tf", True).value
+        )
 
         sensor_qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -80,7 +84,8 @@ class LidarHeightClearing3DPublisher(Node):
         )
 
         self.static_tf_broadcaster = StaticTransformBroadcaster(self)
-        self.publish_static_tf()
+        if self.publish_static_tf_enabled:
+            self.publish_static_tf()
 
         self.pub = self.create_publisher(PointCloud2, self.output_topic, sensor_qos)
         self.clearing_points = self.build_clearing_points()
@@ -97,6 +102,9 @@ class LidarHeightClearing3DPublisher(Node):
         )
         self.get_logger().info(
             f"lidar origin          : x={self.lidar_x}, y={self.lidar_y}, z={self.lidar_z}"
+        )
+        self.get_logger().info(
+            f"publish static tf     : {self.publish_static_tf_enabled}"
         )
         self.get_logger().info(
             f"clearing range        : {CLEARING_RANGE_MIN} ~ {CLEARING_RANGE_MAX}, "

@@ -28,8 +28,10 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     
     pkg_nav2 = get_package_share_directory('humanoid_navigation2')
-    default_save_path = os.path.join(pkg_nav2, 'pcd', 'hall.pcd')
-    slam_mapping_file = os.path.join(pkg_nav2, 'config', 'slam_toolbox_mapping.yaml')
+    default_save_path = os.path.expanduser('~/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd')
+    pcd_map_file = LaunchConfiguration('pcd_map_file', default=default_save_path)
+    default_slam_mapping_file = os.path.join(pkg_nav2, 'config', 'slam_toolbox_fastlio_raster.yaml')
+    slam_mapping_file = LaunchConfiguration('slam_mapping_file', default=default_slam_mapping_file)
     
     pkg_share = get_package_share_directory('humanoid_description')
     xacro_file = os.path.join(pkg_share, 'urdf', 'humanoid_robot.urdf.xacro')
@@ -73,8 +75,8 @@ def generate_launch_description():
             fast_lio_params,
             {
                 'use_sim_time': use_sim_time,
-                'pcd_save_en': True,  # 开启保存PCD
-                'map_file_path': default_save_path,  # 保存路径
+                'pcd_save.pcd_save_en': True,  # 开启保存PCD
+                'map_file_path': pcd_map_file,  # 保存路径
                 'pcd_save.interval': -1  # 退出时保存
             }
         ],
@@ -180,6 +182,8 @@ def generate_launch_description():
     # =========================================================================
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
+        DeclareLaunchArgument('pcd_map_file', default_value=default_save_path),
+        DeclareLaunchArgument('slam_mapping_file', default_value=default_slam_mapping_file),
         
         # 1. 机器人描述
         robot_state_publisher_node,

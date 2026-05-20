@@ -1,0 +1,504 @@
+[INFO] [launch]: All log files can be found below /home/ubuntu/.ros/log/2026-05-13-23-09-03-545162-ubuntu-840830
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [840905]
+[INFO] [joint_state_publisher-2]: process started with pid [840906]
+[robot_state_publisher-1] [INFO] [1778684943.854512283] [robot_state_publisher]: Robot initialized
+[joint_state_publisher-2] [INFO] [1778684944.174548394] [joint_state_publisher]: Waiting for robot_description to be published on the robot_description topic...
+[joint_state_publisher-2] [INFO] [1778684944.624905112] [joint_state_publisher]: Got description, configuring robot
+[37;1m2026-05-13 23:09:10.028 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[INFO] [rslidar_sdk_node-3]: process started with pid [841668]
+[INFO] [fastlio_mapping-4]: process started with pid [841669]
+[INFO] [static_transform_publisher-5]: process started with pid [841670]
+[INFO] [static_transform_publisher-6]: process started with pid [841671]
+[INFO] [static_transform_publisher-7]: process started with pid [841672]
+[INFO] [static_transform_publisher-8]: process started with pid [841673]
+[INFO] [static_transform_publisher-9]: process started with pid [841674]
+[INFO] [point_cloud_filter_node-10]: process started with pid [841675]
+[INFO] [hdl_global_localization_node-11]: process started with pid [841676]
+[INFO] [imu_transformer-12]: process started with pid [841682]
+[INFO] [component_container_mt-13]: process started with pid [841683]
+[static_transform_publisher-6] [WARN] [1778684950.148276577] []: Old-style arguments are deprecated; see --help for new-style arguments
+[static_transform_publisher-7] [WARN] [1778684950.148412596] []: Old-style arguments are deprecated; see --help for new-style arguments
+[rslidar_sdk_node-3] [1m[35m********************************************************[0m
+[rslidar_sdk_node-3] [1m[35m**********                                    **********[0m
+[rslidar_sdk_node-3] [1m[35m**********    RSLidar_SDK Version: v1.5.18     **********[0m
+[rslidar_sdk_node-3] [1m[35m**********                                    **********[0m
+[rslidar_sdk_node-3] [1m[35m********************************************************[0m
+[point_cloud_filter_node-10] [37;1m2026-05-13 23:09:10.474 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[rslidar_sdk_node-3] [37;1m2026-05-13 23:09:10.475 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[component_container_mt-13] [37;1m2026-05-13 23:09:10.476 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[hdl_global_localization_node-11] [37;1m2026-05-13 23:09:10.482 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[point_cloud_filter_node-10] [INFO] [1778684950.495869097] [point_cloud_filter_node]: 点云滤波线程数: 4
+[static_transform_publisher-8] [INFO] [1778684950.496399953] [tf_body_to_base_footprint]: Spinning until stopped - publishing transform
+[static_transform_publisher-8] translation: ('0.004000', '1.215000', '0.072000')
+[static_transform_publisher-8] rotation: ('0.500000', '0.500000', '-0.500000', '0.500000')
+[static_transform_publisher-8] from 'body' to 'base_footprint'
+[static_transform_publisher-6] [INFO] [1778684950.498035395] [tf_map_to_ground]: Spinning until stopped - publishing transform
+[static_transform_publisher-6] translation: ('0.000000', '0.000000', '-1.215000')
+[static_transform_publisher-6] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-6] from 'map' to 'map_ground'
+[static_transform_publisher-9] [INFO] [1778684950.498089648] [tf_base_footprint_to_clearing_lidar]: Spinning until stopped - publishing transform
+[static_transform_publisher-9] translation: ('0.000000', '0.000000', '1.215000')
+[static_transform_publisher-9] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-9] from 'base_footprint' to 'clearing_lidar'
+[imu_transformer-12] [37;1m2026-05-13 23:09:10.498 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[hdl_global_localization_node-11] [INFO] [1778684950.501650949] [hdl_global_localization.global_localization_node]: global localization downsample resolutions: map=0.5 query=0.5
+[point_cloud_filter_node-10] [INFO] [1778684950.504604642] [point_cloud_filter_node]: 高性能点云滤波节点已启动
+[point_cloud_filter_node-10]   输入话题: /fast_lio/cloud_registered
+[point_cloud_filter_node-10]   高程图输出: /airy_points_for_elevation
+[point_cloud_filter_node-10]   导航输出: /airy_points_filtered
+[point_cloud_filter_node-10]   启用滤波: SOR=是, 高度连续=是, 密度=是, 运动检测=是
+[static_transform_publisher-5] [INFO] [1778684950.506112874] [tf_odom_to_camera_init]: Spinning until stopped - publishing transform
+[static_transform_publisher-5] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-5] rotation: ('-0.500000', '-0.500000', '0.500000', '0.500000')
+[static_transform_publisher-5] from 'odom' to 'camera_init'
+[rslidar_sdk_node-3] [1m[32m--------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32mConfig loaded from PATH:[0m
+[rslidar_sdk_node-3] [1m[32m/home/ubuntu/humanoid_ws/src/rslidar_sdk/config/config.yaml[0m
+[rslidar_sdk_node-3] [1m[32m--------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32mReceive Packets From : Online LiDAR[0m
+[rslidar_sdk_node-3] [1m[32mMsop Port: 6699[0m
+[rslidar_sdk_node-3] [1m[32mDifop Port: 7788[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Driver Parameters [0m
+[rslidar_sdk_node-3] [32minput type: ONLINE_LIDAR[0m
+[rslidar_sdk_node-3] [32mlidar_type: RSAIRY[0m
+[rslidar_sdk_node-3] [32mframe_id: rslidar[0m
+[rslidar_sdk_node-3] [32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Input Parameters [0m
+[rslidar_sdk_node-3] [32mmsop_port: 6699[0m
+[rslidar_sdk_node-3] [32mdifop_port: 7788[0m
+[rslidar_sdk_node-3] [32mimu_port: 6688[0m
+[rslidar_sdk_node-3] [32muser_layer_bytes: 0[0m
+[rslidar_sdk_node-3] [32mtail_layer_bytes: 0[0m
+[rslidar_sdk_node-3] [32mhost_address: 0.0.0.0[0m
+[rslidar_sdk_node-3] [32mgroup_address: 0.0.0.0[0m
+[rslidar_sdk_node-3] [32msocket_recv_buf: 106496[0m
+[rslidar_sdk_node-3] [32mpcap_path: /home/robosense/lidar.pcap[0m
+[rslidar_sdk_node-3] [32mpcap_rate: 1[0m
+[rslidar_sdk_node-3] [32mpcap_repeat: 1[0m
+[rslidar_sdk_node-3] [32muse_vlan: 0[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Decoder Parameters [0m
+[rslidar_sdk_node-3] [32mmin_distance: 0.1[0m
+[rslidar_sdk_node-3] [32mmax_distance: 60[0m
+[rslidar_sdk_node-3] [32muse_lidar_clock: 0[0m
+[rslidar_sdk_node-3] [32mdense_points: 0[0m
+[rslidar_sdk_node-3] [32mts_first_point: 1[0m
+[rslidar_sdk_node-3] [32mwait_for_difop: 1[0m
+[rslidar_sdk_node-3] [32mconfig_from_file: 0[0m
+[rslidar_sdk_node-3] [32mangle_path: [0m
+[rslidar_sdk_node-3] [32mstart_angle: 0[0m
+[rslidar_sdk_node-3] [32mend_angle: 360[0m
+[rslidar_sdk_node-3] [32msplit_frame_mode: 1[0m
+[rslidar_sdk_node-3] [32msplit_angle: 0[0m
+[rslidar_sdk_node-3] [32mnum_blks_split: 0[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Transform Parameters [0m
+[rslidar_sdk_node-3] [32mx: 0[0m
+[rslidar_sdk_node-3] [32my: 0[0m
+[rslidar_sdk_node-3] [32mz: 0[0m
+[rslidar_sdk_node-3] [32mroll: 0[0m
+[rslidar_sdk_node-3] [32mpitch: 0[0m
+[rslidar_sdk_node-3] [32myaw: 0[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[fastlio_mapping-4] [INFO] [1778684950.507831571] [fast_lio_node]: p_pre->lidar_type 5
+[rslidar_sdk_node-3] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[36m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[36mSend PointCloud To : ROS[0m
+[rslidar_sdk_node-3] [1m[36mPointCloud Topic: /airy_points[0m
+[rslidar_sdk_node-3] [1m[36m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [WARN] [1778684950.508456496] [rcl.logging_rosout]: Publisher already registered for node name: 'rslidar_sdk_node'. If this is due to multiple nodes with the same name then all logs for the logger named 'rslidar_sdk_node' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[static_transform_publisher-7] [INFO] [1778684950.512181692] [tf_odom_to_ground]: Spinning until stopped - publishing transform
+[static_transform_publisher-7] translation: ('0.000000', '0.000000', '-1.215000')
+[static_transform_publisher-7] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-7] from 'odom' to 'odom_ground'
+[rslidar_sdk_node-3] [1m[37mRoboSense-LiDAR-Driver is running.....[0m
+[fastlio_mapping-4] [INFO] [1778684950.519652273] [fast_lio_node]: Node init finished.
+[fastlio_mapping-4] [INFO] [1778684950.519755920] [fast_lio_node]: Starting LaserMappingNode with MultiThreadedExecutor (4 Threads)...
+[imu_transformer-12] [INFO] [1778684950.611118813] [imu_transformer]: IMU坐标转换: /airy_imu → /imu_standard
+[imu_transformer-12] [INFO] [1778684950.611696617] [imu_transformer]:   旋转矩阵: R_body_to_standard = [[0,0,-1],[1,0,0],[0,-1,0]]
+[component_container_mt-13] [INFO] [1778684950.628496069] [hdl_container]: Load Library: /home/ubuntu/humanoid_ws/install/hdl_localization/lib/libhdl_localization_lib.so
+[component_container_mt-13] [INFO] [1778684950.689277349] [hdl_container]: Found class: rclcpp_components::NodeFactoryTemplate<hdl_localization::GlobalmapServerNodelet>
+[component_container_mt-13] [INFO] [1778684950.689347003] [hdl_container]: Instantiate class: rclcpp_components::NodeFactoryTemplate<hdl_localization::GlobalmapServerNodelet>
+[component_container_mt-13] 
+[component_container_mt-13] initialize_params
+[component_container_mt-13] 
+[component_container_mt-13] 
+[component_container_mt-13] /home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall_localization_grounded.pcd
+[component_container_mt-13] 
+[INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/GlobalmapServerNodelet' in container '/hdl_container'
+[component_container_mt-13] [INFO] [1778684950.802665052] [hdl_container]: Found class: rclcpp_components::NodeFactoryTemplate<hdl_localization::GlobalmapServerNodelet>
+[component_container_mt-13] [INFO] [1778684950.802691570] [hdl_container]: Found class: rclcpp_components::NodeFactoryTemplate<hdl_localization::HdlLocalizationNodelet>
+[component_container_mt-13] [INFO] [1778684950.802694663] [hdl_container]: Instantiate class: rclcpp_components::NodeFactoryTemplate<hdl_localization::HdlLocalizationNodelet>
+[component_container_mt-13] [INFO] [1778684950.823104652] [HdlLocalizationNodelet]: wait for global localization services
+[component_container_mt-13] [INFO] [1778684950.826078746] [HdlLocalizationNodelet]: create registration method for localization
+[component_container_mt-13] [INFO] [1778684950.826107273] [HdlLocalizationNodelet]: NDT_OMP is selected
+[component_container_mt-13] [INFO] [1778684950.826717377] [HdlLocalizationNodelet]: search_method DIRECT7 is selected
+[component_container_mt-13] [INFO] [1778684950.826727283] [HdlLocalizationNodelet]: create registration method for fallback during relocalization
+[component_container_mt-13] [INFO] [1778684950.826730667] [HdlLocalizationNodelet]: NDT_OMP is selected
+[component_container_mt-13] [INFO] [1778684950.826739371] [HdlLocalizationNodelet]: search_method DIRECT7 is selected
+[INFO] [launch_ros.actions.load_composable_nodes]: Loaded node '/HdlLocalizationNodelet' in container '/hdl_container'
+[INFO] [map_server-14]: process started with pid [842021]
+[map_server-14] [INFO] [1778684951.360889568] [map_server]: 
+[map_server-14] 	map_server lifecycle node launched. 
+[map_server-14] 	Waiting on external lifecycle transitions to activate
+[map_server-14] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[map_server-14] [INFO] [1778684951.360964750] [map_server]: Creating
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[component_container_mt-13] [INFO] [1778684951.835607756] [HdlLocalizationNodelet]: globalmap received!
+[component_container_mt-13] [INFO] [1778684951.857955547] [HdlLocalizationNodelet]: set globalmap for global localization!
+[hdl_global_localization_node-11] [INFO] [1778684951.911221063] [hdl_global_localization.global_localization_node]: Global Map Received
+[hdl_global_localization_node-11] [INFO] [1778684951.927013910] [hdl_global_localization.global_localization_node]: Normal Estimation: Radius(1)
+[hdl_global_localization_node-11] [INFO] [1778684951.951402598] [hdl_global_localization.global_localization_node]: FPFH Extraction: Search Radius(3)
+[INFO] [periodic_clearing_publisher-15]: process started with pid [842153]
+[INFO] [periodic_clearing_3d_publisher-16]: process started with pid [842154]
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[INFO] [dynamic_waypoints_manager-17]: process started with pid [842237]
+[INFO] [navigation_state_manager-18]: process started with pid [842238]
+[INFO] [websocket_server_node-19]: process started with pid [842239]
+[INFO] [data_integration_node-20]: process started with pid [842240]
+[INFO] [websocket_client_node-21]: process started with pid [842241]
+[INFO] [message_bridge_node-22]: process started with pid [842242]
+[INFO] [facial_driver-23]: process started with pid [842243]
+[periodic_clearing_publisher-15] [37;1m2026-05-13 23:09:12.950 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[periodic_clearing_3d_publisher-16] [37;1m2026-05-13 23:09:12.988 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[INFO] [lifecycle_manager-24]: process started with pid [842295]
+[periodic_clearing_3d_publisher-16] [INFO] [1778684953.157880271] [periodic_clearing_3d_publisher]: periodic_clearing_3d_publisher started.
+[periodic_clearing_3d_publisher-16] [INFO] [1778684953.158572308] [periodic_clearing_3d_publisher]: input_points_topic        : /fast_lio/cloud_registered
+[periodic_clearing_3d_publisher-16] [INFO] [1778684953.159803107] [periodic_clearing_3d_publisher]: output_clearing_cloud     : /clearing_cloud_3d
+[periodic_clearing_3d_publisher-16] [INFO] [1778684953.160172557] [periodic_clearing_3d_publisher]: target_frame              : base_footprint
+[periodic_clearing_3d_publisher-16] [INFO] [1778684953.160486450] [periodic_clearing_3d_publisher]: angle_min_deg             : -180.0
+[periodic_clearing_3d_publisher-16] [INFO] [1778684953.160809213] [periodic_clearing_3d_publisher]: angle_max_deg             : 180.0
+[periodic_clearing_3d_publisher-16] [INFO] [1778684953.161543638] [periodic_clearing_3d_publisher]: angle_increment_deg       : 1.0
+[periodic_clearing_3d_publisher-16] [INFO] [1778684953.162159320] [periodic_clearing_3d_publisher]: bin_count                 : 361
+[periodic_clearing_3d_publisher-16] [INFO] [1778684953.162775152] [periodic_clearing_3d_publisher]: clearing_range            : 0.3 ~ 5.0, step=0.5
+[periodic_clearing_3d_publisher-16] [INFO] [1778684953.163395758] [periodic_clearing_3d_publisher]: clearing_height_layers    : [0.05, 0.08, 0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5, 1.7]
+[periodic_clearing_3d_publisher-16] [INFO] [1778684953.164165185] [periodic_clearing_3d_publisher]: max_publish_rate_hz       : 2.0
+[periodic_clearing_3d_publisher-16] [INFO] [1778684953.164766861] [periodic_clearing_3d_publisher]: precomputed clearing_points : 39710
+[hdl_global_localization_node-11] [INFO] [1778684953.311911130] [hdl_global_localization.global_localization_node]: RANSAC params: voxel_based=1 max_corr=0.8 similarity=0.5 randomness=3 max_iterations=80000 matching_budget=2000 min_inlier=0.12
+[lifecycle_manager-24] [INFO] [1778684953.354657545] [lifecycle_manager_map]: Creating
+[lifecycle_manager-24] [INFO] [1778684953.363297238] [lifecycle_manager_map]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[hdl_global_localization_node-11] [INFO] [1778684953.384650942] [hdl_global_localization.global_localization_node]: DONE
+[component_container_mt-13] [INFO] [1778684953.385851947] [HdlLocalizationNodelet]: globalmap set for global localization
+[dynamic_waypoints_manager-17] [37;1m2026-05-13 23:09:13.412 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[facial_driver-23] [37;1m2026-05-13 23:09:13.456 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[websocket_server_node-19] [37;1m2026-05-13 23:09:13.465 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[websocket_client_node-21] [37;1m2026-05-13 23:09:13.513 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[message_bridge_node-22] [37;1m2026-05-13 23:09:13.514 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[dynamic_waypoints_manager-17] [INFO] [1778684953.527739772] [dynamic_waypoints_manager]: 数据持久化已启用，文件路径: /home/ubuntu/humanoid_ws/install/humanoid_navigation/share/humanoid_navigation/data/dynamic_waypoints.json
+[data_integration_node-20] [37;1m2026-05-13 23:09:13.528 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[dynamic_waypoints_manager-17] [INFO] [1778684953.528878448] [dynamic_waypoints_manager]: 从文件加载点位数据完成，共 10 个点位，0 个序列
+[dynamic_waypoints_manager-17] [INFO] [1778684953.529077363] [dynamic_waypoints_manager]: 动态路点管理器启动完成 - 仅负责路点管理
+[dynamic_waypoints_manager-17] [INFO] [1778684953.529228974] [dynamic_waypoints_manager]: 动态路点管理器启动成功
+[websocket_server_node-19] [INFO] [1778684953.534333764] [websocket_server]: ✅ 完整ROS通信接口设置完成
+[websocket_server_node-19] [INFO] [1778684953.535277453] [websocket_server]: 🔄 创建WebSocket服务器实例...
+[websocket_server_node-19] [INFO] [1778684953.535684772] [websocket_server]: ✅ 开始启动WebSocket服务器: 0.0.0.0:8765
+[websocket_server_node-19] [INFO] [1778684953.549879149] [websocket_server]: ✅ WebSocket服务器启动成功: 0.0.0.0:8765
+[websocket_server_node-19] [INFO] [1778684953.550109377] [websocket_server]: 🔄 WebSocket服务器正在运行...
+[facial_driver-23] [ERROR] [1778684953.578492576] [facial_driver]: ❌ 头部串口连接失败: [Errno 2] could not open port /dev/ttyUSB0: [Errno 2] No such file or directory: '/dev/ttyUSB0'
+[facial_driver-23] [INFO] [1778684953.584590962] [facial_driver]: 📚 成功加载表情库，共 30 个动作
+[facial_driver-23] [INFO] [1778684953.586140024] [facial_driver]: 🔍 先终止眼部循环和嘴部动作循环...
+[facial_driver-23] [ERROR] [1778684953.586290641] [facial_driver]: ❌ 串口未连接，无法发送指令
+[lifecycle_manager-24] [INFO] [1778684953.593606353] [lifecycle_manager_map]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-24] [INFO] [1778684953.593662825] [lifecycle_manager_map]: [34m[1mConfiguring map_server[0m[0m
+[map_server-14] [INFO] [1778684953.594577345] [map_server]: Configuring
+[map_server-14] [INFO] [1778684953.594747302] [map_io]: Loading yaml file: /home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.yaml
+[map_server-14] [INFO] [1778684953.595449002] [map_io]: resolution: 0.05
+[map_server-14] [INFO] [1778684953.595458785] [map_io]: origin[0]: -6.675
+[map_server-14] [INFO] [1778684953.595462482] [map_io]: origin[1]: -12.819
+[map_server-14] [INFO] [1778684953.595464456] [map_io]: origin[2]: 0
+[map_server-14] [INFO] [1778684953.595466747] [map_io]: free_thresh: 0.196
+[map_server-14] [INFO] [1778684953.595468587] [map_io]: occupied_thresh: 0.65
+[map_server-14] [INFO] [1778684953.595471086] [map_io]: mode: trinary
+[map_server-14] [INFO] [1778684953.595473812] [map_io]: negate: 0
+[map_server-14] [INFO] [1778684953.598282146] [map_io]: Loading image_file: /home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.pgm
+[map_server-14] [INFO] [1778684953.607369583] [map_io]: Read map /home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.pgm: 660 X 781 map @ 0.05 m/cell
+[facial_driver-23] [ERROR] [1778684953.686986560] [facial_driver]: ❌ 串口未连接，无法发送指令
+[navigation_state_manager-18] [37;1m2026-05-13 23:09:13.700 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[facial_driver-23] [INFO] [1778684953.787893434] [facial_driver]: ✅ 强制终止眼部循环（发送1次终止指令）
+[facial_driver-23] [ERROR] [1778684953.788276259] [facial_driver]: ❌ 串口未连接，无法发送指令
+[INFO] [rviz2-25]: process started with pid [842550]
+[lifecycle_manager-24] [INFO] [1778684953.822965800] [lifecycle_manager_map]: [34m[1mActivating map_server[0m[0m
+[map_server-14] [INFO] [1778684953.823340317] [map_server]: Activating
+[map_server-14] [INFO] [1778684953.823833238] [map_server]: Creating bond (map_server) to lifecycle manager.
+[periodic_clearing_publisher-15] [INFO] [1778684953.837189422] [periodic_clearing_publisher]: 全向暴力 clearing_scan 节点已启动
+[periodic_clearing_publisher-15] [INFO] [1778684953.837609938] [periodic_clearing_publisher]: output topic      : /clearing_scan
+[periodic_clearing_publisher-15] [INFO] [1778684953.837944448] [periodic_clearing_publisher]: target frame      : base_footprint
+[periodic_clearing_publisher-15] [INFO] [1778684953.838262408] [periodic_clearing_publisher]: angle range       : -180.0 ~ 180.0 deg
+[periodic_clearing_publisher-15] [INFO] [1778684953.838574441] [periodic_clearing_publisher]: angle increment   : 1.0 deg
+[periodic_clearing_publisher-15] [INFO] [1778684953.838908629] [periodic_clearing_publisher]: scan size         : 361
+[periodic_clearing_publisher-15] [INFO] [1778684953.839240468] [periodic_clearing_publisher]: range             : 0.05 ~ 8.0 m
+[periodic_clearing_publisher-15] [INFO] [1778684953.839572918] [periodic_clearing_publisher]: publish rate      : 2.0 Hz
+[periodic_clearing_publisher-15] [INFO] [1778684953.839918111] [periodic_clearing_publisher]: clear mode        : range_max
+[message_bridge_node-22] [INFO] [1778684953.873265159] [message_bridge]: 更新率: 10.0Hz, 缓冲区大小: 1000
+[message_bridge_node-22] [INFO] [1778684953.873483175] [message_bridge]: ✅ Message bridge node 初始化完成
+[message_bridge_node-22] [INFO] [1778684953.879084531] [message_bridge]: 消息桥接节点启动
+[facial_driver-23] [INFO] [1778684953.888685187] [facial_driver]: ✅ 强制终止嘴部循环（发送1次终止指令）
+[facial_driver-23] [ERROR] [1778684953.888887548] [facial_driver]: ❌ 串口未连接，无法发送指令
+[data_integration_node-20] [INFO] [1778684953.896394379] [data_integration_node]: ✅ ROS通信接口设置完成
+[data_integration_node-20] [INFO] [1778684953.896783955] [data_integration_node]: ✅ 定时任务设置完成
+[websocket_client_node-21] [INFO] [1778684953.900332244] [websocket_client]: ROS组件初始化完成
+[websocket_client_node-21] [INFO] [1778684953.901503025] [websocket_client]: WebSocket客户端启动，连接服务器: ws://10.192.1.2:5000
+[websocket_client_node-21] [INFO] [1778684953.901962414] [websocket_client]: 尝试连接机器人服务器...
+[data_integration_node-20] [INFO] [1778684953.902152764] [data_integration_node]: ✅ 已从 YAML 动态加载 13 个动作
+[data_integration_node-20] [INFO] [1778684953.908903079] [data_integration_node]: ✅ 已独立加载 30 个面部表情
+[data_integration_node-20] [INFO] [1778684953.909844485] [data_integration_node]: 🎯 统一数据整合节点启动完成
+[data_integration_node-20] [INFO] [1778684953.910513261] [data_integration_node]: 📊 协议版本: 2.0
+[data_integration_node-20] [INFO] [1778684953.911057108] [data_integration_node]: 🔄 支持的数据类型: ['robot_pose', 'navigation_status', 'navigation_path', 'system_status', 'gesture_list', 'facial_gesture_list']
+[data_integration_node-20] [INFO] [1778684953.911547443] [data_integration_node]: 🚀 启动统一数据整合节点主循环...
+[navigation_state_manager-18] [INFO] [1778684953.920047330] [navigation_state_manager]: 导航状态管理器启动完成 - 负责导航执行和状态管理
+[navigation_state_manager-18] [INFO] [1778684953.920365910] [navigation_state_manager]: 位置容差: 0.15m, 方向容差: 0.3rad
+[lifecycle_manager-24] [INFO] [1778684953.939191012] [lifecycle_manager_map]: Server map_server connected with bond.
+[lifecycle_manager-24] [INFO] [1778684953.939238897] [lifecycle_manager_map]: [34m[1mManaged nodes are active[0m[0m
+[lifecycle_manager-24] [INFO] [1778684953.939247772] [lifecycle_manager_map]: [34m[1mCreating bond timer...[0m[0m
+[facial_driver-23] [INFO] [1778684953.989632835] [facial_driver]: 🔄 眼部强制复位（眼球居中+正常睁眼）
+[facial_driver-23] [INFO] [1778684953.990172160] [facial_driver]: 🎬 执行表情: idle
+[facial_driver-23] [INFO] [1778684954.091247674] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[websocket_server_node-19] [INFO] [1778684954.536534211] [websocket_server]: ✅ 定时任务设置完成
+[websocket_server_node-19] [INFO] [1778684954.537057059] [websocket_server]: 🚀 完整WebSocket服务器启动完成
+[websocket_server_node-19] [INFO] [1778684954.537492441] [websocket_server]: 📡 服务器地址: ws://0.0.0.0:8765
+[websocket_server_node-19] [INFO] [1778684954.537934882] [websocket_server]: 📊 协议版本: 2.0
+[facial_driver-23] [ERROR] [1778684954.592251667] [facial_driver]: ❌ 串口未连接，无法发送指令
+[facial_driver-23] [INFO] [1778684955.493323744] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[facial_driver-23] [ERROR] [1778684955.493777759] [facial_driver]: ❌ 串口未连接，无法发送指令
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[facial_driver-23] [INFO] [1778684955.694781688] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[data_integration_node-20] [INFO] [1778684955.911878774] [data_integration_node]: 📤 已触发初始动作库和表情库同步到服务器
+[websocket_server_node-19] [INFO] [1778684955.912898328] [websocket_server]: 🍭 收到面部表情库更新
+[INFO] [planner_server-26]: process started with pid [842856]
+[INFO] [controller_server-27]: process started with pid [842857]
+[INFO] [behavior_server-28]: process started with pid [842858]
+[INFO] [bt_navigator-29]: process started with pid [842859]
+[controller_server-27] [37;1m2026-05-13 23:09:16.332 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[planner_server-26] [37;1m2026-05-13 23:09:16.337 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[behavior_server-28] [37;1m2026-05-13 23:09:16.340 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[bt_navigator-29] [37;1m2026-05-13 23:09:16.342 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[websocket_server_node-19] [INFO] [1778684956.370366366] [websocket_server]: 🔗 客户端连接: client_1778684956369_49acd63f (IP: 127.0.0.1)
+[websocket_server_node-19] [INFO] [1778684956.371190990] [websocket_server]: ✅ 发送连接确认给 client_1778684956369_49acd63f
+[websocket_server_node-19] [INFO] [1778684956.371951780] [websocket_server]: 🤖 已向 client_1778684956369_49acd63f 推送动作库
+[websocket_server_node-19] [INFO] [1778684956.372778361] [websocket_server]: 🎭 已向 client_1778684956369_49acd63f 推送面部表情库
+[websocket_server_node-19] [INFO] [1778684956.373315462] [websocket_server]: 📊 发送初始业务数据给 client_1778684956369_49acd63f
+[websocket_server_node-19] [INFO] [1778684956.374135958] [websocket_server]: 📨 收到消息: subscription system_status from client_1778684956369_49acd63f
+[websocket_server_node-19] [INFO] [1778684956.374912353] [websocket_server]: 📋 转发订阅请求: system_status
+[data_integration_node-20] [INFO] [1778684956.374958601] [data_integration_node]: ✅ 客户端 client_1778684956369_49acd63f 订阅了: ['robot_pose', 'navigation_status', 'navigation_command_result', 'system_status', 'robot_speed']
+[websocket_server_node-19] [INFO] [1778684956.375995589] [websocket_server]: 📨 收到消息: request gesture_list from client_1778684956369_49acd63f
+[data_integration_node-20] [INFO] [1778684956.377003066] [data_integration_node]: ✅ 已响应数据请求: gesture_list -> client_1778684956369_49acd63f
+[websocket_server_node-19] [INFO] [1778684956.377113348] [websocket_server]: 📤 转发数据请求: gesture_list from client_1778684956369_49acd63f
+[websocket_server_node-19] [INFO] [1778684956.377554575] [websocket_server]: 📨 收到消息: request facial_gesture_list from client_1778684956369_49acd63f
+[data_integration_node-20] [INFO] [1778684956.378174870] [data_integration_node]: ✅ 已响应数据请求: facial_gesture_list -> client_1778684956369_49acd63f
+[websocket_server_node-19] [INFO] [1778684956.378781198] [websocket_server]: 📤 转发数据请求: facial_gesture_list from client_1778684956369_49acd63f
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[rviz2-25] [ERROR] [1778684956.622092431] [rviz2]: rviz/glsl120/indexed_8bit_image.vert
+[rviz2-25] rviz/glsl120/indexed_8bit_image.frag
+[rviz2-25]  GLSL link result : 
+[rviz2-25] active samplers with a different type refer to the same texture image unit
+[planner_server-26] [INFO] [1778684956.793669231] [planner_server]: 
+[planner_server-26] 	planner_server lifecycle node launched. 
+[planner_server-26] 	Waiting on external lifecycle transitions to activate
+[planner_server-26] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[behavior_server-28] [INFO] [1778684956.802570705] [behavior_server]: 
+[behavior_server-28] 	behavior_server lifecycle node launched. 
+[behavior_server-28] 	Waiting on external lifecycle transitions to activate
+[behavior_server-28] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[bt_navigator-29] [INFO] [1778684956.807502381] [bt_navigator]: 
+[bt_navigator-29] 	bt_navigator lifecycle node launched. 
+[bt_navigator-29] 	Waiting on external lifecycle transitions to activate
+[bt_navigator-29] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-27] [INFO] [1778684956.807867533] [controller_server]: 
+[controller_server-27] 	controller_server lifecycle node launched. 
+[controller_server-27] 	Waiting on external lifecycle transitions to activate
+[controller_server-27] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-26] [INFO] [1778684956.808042695] [planner_server]: Creating
+[bt_navigator-29] [INFO] [1778684956.809747745] [bt_navigator]: Creating
+[controller_server-27] [INFO] [1778684956.812144848] [controller_server]: Creating controller server
+[planner_server-26] [INFO] [1778684956.816124190] [global_costmap.global_costmap]: 
+[planner_server-26] 	global_costmap lifecycle node launched. 
+[planner_server-26] 	Waiting on external lifecycle transitions to activate
+[planner_server-26] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-26] [INFO] [1778684956.819735042] [global_costmap.global_costmap]: Creating Costmap
+[controller_server-27] [INFO] [1778684956.820175867] [local_costmap.local_costmap]: 
+[controller_server-27] 	local_costmap lifecycle node launched. 
+[controller_server-27] 	Waiting on external lifecycle transitions to activate
+[controller_server-27] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-27] [INFO] [1778684956.820877361] [local_costmap.local_costmap]: Creating Costmap
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[INFO] [robot_realpose_publisher-30]: process started with pid [843092]
+[robot_realpose_publisher-30] [37;1m2026-05-13 23:09:18.078 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[robot_realpose_publisher-30] [INFO] [1778684958.583144424] [robot_realpose_publisher]: robot_realpose_publisher started: map -> base_footprint, publish to /robot_realpose
+[robot_realpose_publisher-30] [WARN] [1778684958.673596573] [robot_realpose_publisher]: Failed to get TF map->base_footprint: "map" passed to lookupTransform argument target_frame does not exist. 
+[data_integration_node-20] [INFO] [1778684958.897930990] [data_integration_node]: 📊 系统状态 - 可用数据: 3/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_client_node-21] [ERROR] [1778684958.912255485] [websocket_client]: 连接机器人服务器失败: did not receive a valid HTTP response
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[robot_realpose_publisher-30] [WARN] [1778684960.774120636] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[INFO] [lifecycle_manager-31]: process started with pid [843552]
+[lifecycle_manager-31] [37;1m2026-05-13 23:09:22.367 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed init_port fastrtps_port7002: open_and_lock_file failed[34;1m -> Function [36mopen_port_internal[m
+[lifecycle_manager-31] [INFO] [1778684962.388817819] [lifecycle_manager_navigation]: Creating
+[lifecycle_manager-31] [INFO] [1778684962.397061396] [lifecycle_manager_navigation]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[robot_realpose_publisher-30] [WARN] [1778684962.875382039] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[lifecycle_manager-31] [INFO] [1778684963.032090412] [lifecycle_manager_navigation]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-31] [INFO] [1778684963.032128068] [lifecycle_manager_navigation]: [34m[1mConfiguring planner_server[0m[0m
+[planner_server-26] [INFO] [1778684963.032376957] [planner_server]: Configuring
+[planner_server-26] [INFO] [1778684963.032409023] [global_costmap.global_costmap]: Configuring
+[planner_server-26] [INFO] [1778684963.045164865] [global_costmap.global_costmap]: Using plugin "static_layer"
+[planner_server-26] [INFO] [1778684963.052575081] [global_costmap.global_costmap]: Subscribing to the map topic (/map) with transient local durability
+[planner_server-26] [INFO] [1778684963.054479138] [global_costmap.global_costmap]: Initialized plugin "static_layer"
+[planner_server-26] [INFO] [1778684963.054499965] [global_costmap.global_costmap]: Using plugin "obstacle_layer"
+[planner_server-26] [INFO] [1778684963.055421580] [global_costmap.global_costmap]: Subscribed to Topics: pointcloud periodic_clearing
+[planner_server-26] [INFO] [1778684963.061049403] [global_costmap.global_costmap]: Initialized plugin "obstacle_layer"
+[planner_server-26] [INFO] [1778684963.061080602] [global_costmap.global_costmap]: Using plugin "inflation_layer"
+[planner_server-26] [INFO] [1778684963.061459653] [global_costmap.global_costmap]: Initialized plugin "inflation_layer"
+[planner_server-26] [INFO] [1778684963.087891171] [global_costmap.global_costmap]: StaticLayer: Resizing costmap to 660 X 781 at 0.050000 m/pix
+[planner_server-26] [INFO] [1778684963.104105325] [planner_server]: Created global planner plugin GridBased of type nav2_smac_planner::SmacPlanner2D
+[planner_server-26] [INFO] [1778684963.104200852] [planner_server]: Configuring GridBased of type SmacPlanner2D
+[planner_server-26] [ERROR] [1778684963.105096542] [planner_server]: Inflation layer either not found or inflation is not set sufficiently for optimized non-circular collision checking capabilities. It is HIGHLY recommended to set the inflation radius to be at MINIMUM half of the robot's largest cross-section. See github.com/ros-planning/navigation2/tree/main/nav2_smac_planner#potential-fields for full instructions. This will substantially impact run-time performance.
+[planner_server-26] [INFO] [1778684963.107634757] [planner_server]: Configured plugin GridBased of type SmacPlanner2D with tolerance 0.60, maximum iterations 1000000, max on approach iterations 1000, and not allowing unknown traversal.
+[planner_server-26] [INFO] [1778684963.107674494] [planner_server]: Planner Server has GridBased  planners available.
+[lifecycle_manager-31] [INFO] [1778684963.125349094] [lifecycle_manager_navigation]: [34m[1mConfiguring controller_server[0m[0m
+[controller_server-27] [INFO] [1778684963.125661753] [controller_server]: Configuring controller interface
+[controller_server-27] [INFO] [1778684963.125683294] [controller_server]: getting progress checker plugins..
+[controller_server-27] [INFO] [1778684963.125869203] [controller_server]: getting goal checker plugins..
+[controller_server-27] [INFO] [1778684963.125932494] [controller_server]: Controller frequency set to 8.0000Hz
+[controller_server-27] [INFO] [1778684963.125961494] [local_costmap.local_costmap]: Configuring
+[controller_server-27] [INFO] [1778684963.135107641] [local_costmap.local_costmap]: Using plugin "static_layer"
+[controller_server-27] [INFO] [1778684963.137926199] [local_costmap.local_costmap]: Subscribing to the map topic (/map) with transient local durability
+[controller_server-27] [INFO] [1778684963.139704341] [local_costmap.local_costmap]: Initialized plugin "static_layer"
+[controller_server-27] [INFO] [1778684963.139737839] [local_costmap.local_costmap]: Using plugin "voxel_layer"
+[controller_server-27] [INFO] [1778684963.140304105] [local_costmap.local_costmap]: Subscribed to Topics: pointcloud clearing_3d
+[controller_server-27] [INFO] [1778684963.152814527] [local_costmap.local_costmap]: Initialized plugin "voxel_layer"
+[controller_server-27] [INFO] [1778684963.152843621] [local_costmap.local_costmap]: Using plugin "inflation_layer"
+[controller_server-27] [INFO] [1778684963.153227553] [local_costmap.local_costmap]: Initialized plugin "inflation_layer"
+[controller_server-27] [INFO] [1778684963.173159468] [local_costmap.local_costmap]: StaticLayer: Resizing static layer to 660 X 781 at 0.050000 m/pix
+[controller_server-27] [INFO] [1778684963.174322534] [controller_server]: Created progress_checker : progress_checker of type nav2_controller::SimpleProgressChecker
+[controller_server-27] [INFO] [1778684963.174953114] [controller_server]: Controller Server has progress_checker  progress checkers available.
+[controller_server-27] [INFO] [1778684963.175915544] [controller_server]: Created goal checker : xy_goal_checker of type nav2_controller::PositionGoalChecker
+[controller_server-27] [INFO] [1778684963.177103866] [controller_server]: Created goal checker : general_goal_checker of type nav2_controller::SimpleGoalChecker
+[controller_server-27] [INFO] [1778684963.177363720] [controller_server]: Controller Server has xy_goal_checker general_goal_checker  goal checkers available.
+[controller_server-27] [INFO] [1778684963.179307325] [controller_server]: Created controller : FollowPath of type nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController
+[controller_server-27] [INFO] [1778684963.184239761] [controller_server]: Controller Server has FollowPath  controllers available.
+[lifecycle_manager-31] [INFO] [1778684963.193444280] [lifecycle_manager_navigation]: [34m[1mConfiguring behavior_server[0m[0m
+[behavior_server-28] [INFO] [1778684963.193716936] [behavior_server]: Configuring
+[behavior_server-28] [INFO] [1778684963.199566128] [behavior_server]: Creating behavior plugin spin of type nav2_behaviors::Spin
+[behavior_server-28] [INFO] [1778684963.202207352] [behavior_server]: Creating behavior plugin wait of type nav2_behaviors::Wait
+[behavior_server-28] [INFO] [1778684963.206321465] [behavior_server]: Creating behavior plugin backup of type nav2_behaviors::BackUp
+[behavior_server-28] [INFO] [1778684963.229407776] [behavior_server]: Configuring spin
+[behavior_server-28] [INFO] [1778684963.239125329] [behavior_server]: Configuring wait
+[behavior_server-28] [INFO] [1778684963.246588200] [behavior_server]: Configuring backup
+[lifecycle_manager-31] [INFO] [1778684963.252352545] [lifecycle_manager_navigation]: [34m[1mConfiguring bt_navigator[0m[0m
+[bt_navigator-29] [INFO] [1778684963.252577332] [bt_navigator]: Configuring
+[bt_navigator-29] [INFO] [1778684963.258171921] [bt_navigator]: Creating navigator id navigate_to_pose of type nav2_bt_navigator::NavigateToPoseNavigator
+[bt_navigator-29] [WARN] [1778684963.264779923] [bt_navigator]: Error_code parameters were not set. Using default values of: follow_path_error_code compute_path_error_code
+[bt_navigator-29] Make sure these match your BT and there are not other sources of error codes youreported to your application
+[bt_navigator-29] [INFO] [1778684963.373610833] [bt_navigator]: Creating navigator id navigate_through_poses of type nav2_bt_navigator::NavigateThroughPosesNavigator
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[lifecycle_manager-31] [INFO] [1778684963.605166878] [lifecycle_manager_navigation]: [34m[1mActivating planner_server[0m[0m
+[planner_server-26] [INFO] [1778684963.605386177] [planner_server]: Activating
+[planner_server-26] [INFO] [1778684963.605414145] [global_costmap.global_costmap]: Activating
+[planner_server-26] [INFO] [1778684963.605420488] [global_costmap.global_costmap]: Checking transform
+[planner_server-26] [INFO] [1778684963.605459709] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[websocket_client_node-21] [INFO] [1778684963.917481215] [websocket_client]: 尝试连接机器人服务器...
+[planner_server-26] [INFO] [1778684964.105525778] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684964.605532357] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[robot_realpose_publisher-30] [WARN] [1778684964.874033641] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684965.105539925] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684965.605516475] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684966.105540783] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684966.605519197] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[robot_realpose_publisher-30] [WARN] [1778684966.874026631] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684967.105536112] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684967.605664853] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684968.105522686] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684968.605535561] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[robot_realpose_publisher-30] [WARN] [1778684968.874397696] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[websocket_client_node-21] [ERROR] [1778684968.919634922] [websocket_client]: 连接机器人服务器失败: did not receive a valid HTTP response
+[planner_server-26] [INFO] [1778684969.105555325] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684969.605516534] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684970.105539445] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684970.605713806] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[robot_realpose_publisher-30] [WARN] [1778684970.973593405] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684971.105535807] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684971.605551391] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684972.105546783] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684972.605533668] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[robot_realpose_publisher-30] [WARN] [1778684972.976127120] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684973.105520993] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684973.605539709] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[websocket_client_node-21] [INFO] [1778684973.925566182] [websocket_client]: 尝试连接机器人服务器...
+[planner_server-26] [INFO] [1778684974.105500766] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684974.605521758] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[robot_realpose_publisher-30] [WARN] [1778684974.974058572] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684975.105533945] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684975.605533155] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684976.105489583] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684976.605513435] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[robot_realpose_publisher-30] [WARN] [1778684977.073947972] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684977.105527477] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684977.605519132] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684978.105620030] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684978.605541913] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[websocket_client_node-21] [ERROR] [1778684978.927706812] [websocket_client]: 连接机器人服务器失败: did not receive a valid HTTP response
+[robot_realpose_publisher-30] [WARN] [1778684979.073894162] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684979.105547202] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684979.605550937] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684980.105562099] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684980.605565165] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684981.105560751] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[robot_realpose_publisher-30] [WARN] [1778684981.174006041] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684981.605544911] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684982.105533207] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684982.605531493] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684983.105571685] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[robot_realpose_publisher-30] [WARN] [1778684983.277229829] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684983.605528302] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[websocket_client_node-21] [INFO] [1778684983.933247925] [websocket_client]: 尝试连接机器人服务器...
+[planner_server-26] [INFO] [1778684984.105539027] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684984.605517310] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684985.105532788] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[robot_realpose_publisher-30] [WARN] [1778684985.374056041] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684985.605730053] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684986.105522913] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684986.605534375] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684987.105529045] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[robot_realpose_publisher-30] [WARN] [1778684987.474521589] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[rslidar_sdk_node-3] [1m[33mERRCODE_MSOPTIMEOUT[0m
+[planner_server-26] [INFO] [1778684987.605529096] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[planner_server-26] [INFO] [1778684988.105525859] [global_costmap.global_costmap]: Timed out waiting for transform from base_footprint to map to become available, tf error: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.

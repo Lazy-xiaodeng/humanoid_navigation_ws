@@ -1,0 +1,4 @@
+0.046,ros=1778663556.386914,monitor_start,nav drift monitor started
+0.283,ros=1778663556.623882,nav_status,{"current_state": "idle", "detailed_state": "IDLE", "navigation_mode": null, "sequence_id": null, "current_waypoint_index": 0, "total_waypoints": 0, "is_active": false, "recovery_active": false, "obstacle_blocked": false, "block_reported": false}
+57.046,ros=1778663613.387252,map_odom_jump,dxy=0.222 dyaw=0.008 x=0.131 y=-0.083 yaw=-0.031
+399.447,ros=1778663955.787661,monitor_stop,nav drift monitor stopped

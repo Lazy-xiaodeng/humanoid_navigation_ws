@@ -1,0 +1,550 @@
+#!/usr/bin/env python3
+"""
+Build a Nav2 2D occupancy map from a Fast-LIO mapping rosbag.
+
+The script uses Fast-LIO's registered per-scan cloud and odometry to perform
+2D ray tracing. This usually produces a better navigation map than projecting a
+static accumulated PCD because free space is recovered from sensor rays instead
+of guessed from point density.
+
+Important coordinate convention:
+  Fast-LIO camera_init/body in this workspace uses x-left, y-down, z-back.
+  Nav2 map/base_footprint uses x-forward, y-left, z-up.
+
+The default transform is therefore:
+  x_map = -z_fastlio
+  y_map =  x_fastlio
+  z_map = -y_fastlio
+"""
+
+from __future__ import annotations
+
+import argparse
+import math
+import re
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable
+
+import cv2
+import numpy as np
+import rclpy.serialization
+import rosbag2_py
+from rosidl_runtime_py.utilities import get_message
+from sensor_msgs_py import point_cloud2
+
+
+FASTLIO_TO_ROS = np.array(
+    [
+        [0.0, 0.0, -1.0],
+        [1.0, 0.0, 0.0],
+        [0.0, -1.0, 0.0],
+    ],
+    dtype=np.float32,
+)
+
+FREE = 254
+OCCUPIED = 0
+UNKNOWN = 205
+
+
+@dataclass(frozen=True)
+class MapSpec:
+    resolution: float
+    origin_x: float
+    origin_y: float
+    origin_theta: float
+    width: int
+    height: int
+
+
+def parse_simple_yaml(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
+def parse_origin(value: str) -> tuple[float, float, float]:
+    numbers = [float(x) for x in re.findall(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", value)]
+    if len(numbers) < 3:
+        raise ValueError(f"Could not parse origin: {value!r}")
+    return numbers[0], numbers[1], numbers[2]
+
+
+def read_pgm_header(path: Path) -> tuple[int, int]:
+    with path.open("rb") as f:
+        magic = f.readline().strip()
+        if magic not in (b"P5", b"P2"):
+            raise ValueError(f"Unsupported PGM magic {magic!r}: {path}")
+        tokens: list[bytes] = []
+        while len(tokens) < 3:
+            line = f.readline()
+            if not line:
+                raise ValueError(f"Incomplete PGM header: {path}")
+            tokens.extend(line.split(b"#", 1)[0].split())
+    return int(tokens[0]), int(tokens[1])
+
+
+def load_map_spec_from_yaml(path: Path) -> MapSpec:
+    values = parse_simple_yaml(path)
+    image_path = Path(values["image"])
+    if not image_path.is_absolute():
+        image_path = path.parent / image_path
+    width, height = read_pgm_header(image_path)
+    origin_x, origin_y, origin_theta = parse_origin(values["origin"])
+    return MapSpec(
+        resolution=float(values["resolution"]),
+        origin_x=origin_x,
+        origin_y=origin_y,
+        origin_theta=origin_theta,
+        width=width,
+        height=height,
+    )
+
+
+def open_reader(bag_uri: Path) -> rosbag2_py.SequentialReader:
+    reader = rosbag2_py.SequentialReader()
+    storage_options = rosbag2_py.StorageOptions(uri=str(bag_uri), storage_id="mcap")
+    converter_options = rosbag2_py.ConverterOptions(
+        input_serialization_format="cdr",
+        output_serialization_format="cdr",
+    )
+    reader.open(storage_options, converter_options)
+    return reader
+
+
+def topic_type_map(reader: rosbag2_py.SequentialReader) -> dict[str, str]:
+    return {topic.name: topic.type for topic in reader.get_all_topics_and_types()}
+
+
+def to_ros_xyz(xyz: np.ndarray, mode: str) -> np.ndarray:
+    if mode == "fastlio":
+        return (FASTLIO_TO_ROS @ xyz.T).T
+    if mode == "ros":
+        return xyz
+    raise ValueError(f"Unsupported coordinate mode: {mode}")
+
+
+def odom_position_to_ros(msg, mode: str) -> np.ndarray:
+    p = msg.pose.pose.position
+    xyz = np.array([[p.x, p.y, p.z]], dtype=np.float32)
+    return to_ros_xyz(xyz, mode)[0]
+
+
+def world_to_grid(xy: np.ndarray, spec: MapSpec) -> tuple[np.ndarray, np.ndarray]:
+    col = np.floor((xy[:, 0] - spec.origin_x) / spec.resolution).astype(np.int32)
+    row_from_bottom = np.floor((xy[:, 1] - spec.origin_y) / spec.resolution).astype(np.int32)
+    row = spec.height - 1 - row_from_bottom
+    return row, col
+
+
+def single_world_to_grid(x: float, y: float, spec: MapSpec) -> tuple[int, int]:
+    col = int(math.floor((x - spec.origin_x) / spec.resolution))
+    row_from_bottom = int(math.floor((y - spec.origin_y) / spec.resolution))
+    return spec.height - 1 - row_from_bottom, col
+
+
+def in_bounds(row: np.ndarray, col: np.ndarray, spec: MapSpec) -> np.ndarray:
+    return (row >= 0) & (row < spec.height) & (col >= 0) & (col < spec.width)
+
+
+def write_pgm(path: Path, image: np.ndarray) -> None:
+    image = np.asarray(image, dtype=np.uint8)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    header = f"P5\n# Generated by fastlio_bag_to_2d_map.py\n{image.shape[1]} {image.shape[0]}\n255\n"
+    with path.open("wb") as f:
+        f.write(header.encode("ascii"))
+        f.write(image.tobytes())
+
+
+def write_yaml(path: Path, image_name: str, spec: MapSpec) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(
+            [
+                f"image: {image_name}",
+                "mode: trinary",
+                f"resolution: {spec.resolution:.3f}",
+                f"origin: [{spec.origin_x:.6f}, {spec.origin_y:.6f}, {spec.origin_theta:.6f}]",
+                "negate: 0",
+                "occupied_thresh: 0.65",
+                "free_thresh: 0.196",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def find_nearest_pose(odom_times: np.ndarray, odom_positions: np.ndarray, stamp_ns: int, max_dt_ns: int):
+    idx = int(np.searchsorted(odom_times, stamp_ns))
+    candidates: list[int] = []
+    if idx < len(odom_times):
+        candidates.append(idx)
+    if idx > 0:
+        candidates.append(idx - 1)
+    if not candidates:
+        return None, None
+    best = min(candidates, key=lambda i: abs(int(odom_times[i]) - stamp_ns))
+    dt = abs(int(odom_times[best]) - stamp_ns)
+    if dt > max_dt_ns:
+        return None, dt
+    return odom_positions[best], dt
+
+
+def collect_odom(
+    bag_uri: Path,
+    odom_topic: str,
+    coordinate_mode: str,
+) -> tuple[np.ndarray, np.ndarray]:
+    reader = open_reader(bag_uri)
+    types = topic_type_map(reader)
+    if odom_topic not in types:
+        raise ValueError(f"Bag does not contain odom topic: {odom_topic}")
+
+    odom_msg_type = get_message(types[odom_topic])
+    times: list[int] = []
+    positions: list[np.ndarray] = []
+
+    while reader.has_next():
+        topic, data, stamp = reader.read_next()
+        if topic != odom_topic:
+            continue
+        msg = rclpy.serialization.deserialize_message(data, odom_msg_type)
+        times.append(int(stamp))
+        positions.append(odom_position_to_ros(msg, coordinate_mode))
+
+    if not times:
+        raise ValueError(f"No odom messages found on {odom_topic}")
+
+    order = np.argsort(np.asarray(times, dtype=np.int64))
+    return np.asarray(times, dtype=np.int64)[order], np.asarray(positions, dtype=np.float32)[order]
+
+
+def parse_height_band_edges(value: str) -> np.ndarray:
+    edges = np.array([float(item) for item in value.split(",") if item.strip()], dtype=np.float32)
+    if len(edges) < 2:
+        raise ValueError("--height-band-edges must contain at least two comma-separated values")
+    if np.any(np.diff(edges) <= 0.0):
+        raise ValueError("--height-band-edges must be strictly increasing")
+    if len(edges) > 8:
+        raise ValueError("At most 8 height bands are supported")
+    return edges
+
+
+def select_scan_endpoints(
+    cloud_msg,
+    origin: np.ndarray,
+    spec: MapSpec,
+    args: argparse.Namespace,
+    height_band_edges: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    points = point_cloud2.read_points_numpy(
+        cloud_msg,
+        field_names=("x", "y", "z"),
+        skip_nans=True,
+    )
+    if points.size == 0:
+        empty = np.empty(0, dtype=np.int32)
+        return empty, empty, empty, empty, empty.astype(np.uint8)
+    points = np.asarray(points, dtype=np.float32).reshape(-1, 3)
+    points = to_ros_xyz(points, args.coordinate_mode)
+
+    rel_xy = points[:, :2] - origin[:2]
+    ranges = np.linalg.norm(rel_xy, axis=1)
+    mask = (
+        (points[:, 2] >= args.min_z)
+        & (points[:, 2] <= args.max_z)
+        & (ranges >= args.min_range)
+        & (ranges <= args.max_range)
+    )
+    if not np.any(mask):
+        empty = np.empty(0, dtype=np.int32)
+        return empty, empty, empty, empty, empty.astype(np.uint8)
+
+    points = points[mask]
+    rel_xy = rel_xy[mask]
+    ranges = ranges[mask]
+
+    rows, cols = world_to_grid(points[:, :2], spec)
+    bounds = in_bounds(rows, cols, spec)
+    if not np.any(bounds):
+        empty = np.empty(0, dtype=np.int32)
+        return empty, empty, empty, empty, empty.astype(np.uint8)
+
+    rows = rows[bounds]
+    cols = cols[bounds]
+    z_values = points[bounds, 2]
+    rel_xy = rel_xy[bounds]
+    ranges = ranges[bounds]
+
+    height_band = np.searchsorted(height_band_edges, z_values, side="right") - 1
+    band_valid = (height_band >= 0) & (height_band < len(height_band_edges) - 1)
+    evidence_rows = rows[band_valid]
+    evidence_cols = cols[band_valid]
+    evidence_bits = (1 << height_band[band_valid]).astype(np.uint8)
+
+    # First collapse multiple vertical returns into 2D grid cells. Then select
+    # the nearest occupied cell per angular bin so free rays do not clear behind
+    # a nearer wall.
+    cell_key = rows.astype(np.int64) * spec.width + cols.astype(np.int64)
+    cell_order = np.argsort(ranges)
+    _, first_cell_order_idx = np.unique(cell_key[cell_order], return_index=True)
+    cell_selected = cell_order[first_cell_order_idx]
+
+    rows = rows[cell_selected]
+    cols = cols[cell_selected]
+    rel_xy = rel_xy[cell_selected]
+    ranges = ranges[cell_selected]
+
+    angles = np.arctan2(rel_xy[:, 1], rel_xy[:, 0])
+    angle_bins = np.floor((angles + math.pi) / (2.0 * math.pi) * args.angle_bins).astype(np.int32)
+    angle_bins = np.clip(angle_bins, 0, args.angle_bins - 1)
+
+    bin_order = np.argsort(ranges)
+    _, first_bin_order_idx = np.unique(angle_bins[bin_order], return_index=True)
+    selected = bin_order[first_bin_order_idx]
+    return rows[selected], cols[selected], evidence_rows, evidence_cols, evidence_bits
+
+
+def remove_small_components(mask: np.ndarray, min_cells: int) -> np.ndarray:
+    if min_cells <= 1:
+        return mask
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(mask.astype(np.uint8), 8)
+    keep = np.zeros(num, dtype=bool)
+    keep[1:] = stats[1:, cv2.CC_STAT_AREA] >= min_cells
+    return keep[labels]
+
+
+def morphology(mask: np.ndarray, close_cells: int, dilate_cells: int) -> np.ndarray:
+    out = mask.astype(np.uint8)
+    if close_cells > 0:
+        k = 2 * close_cells + 1
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+        out = cv2.morphologyEx(out, cv2.MORPH_CLOSE, kernel)
+    if dilate_cells > 0:
+        k = 2 * dilate_cells + 1
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+        out = cv2.dilate(out, kernel, iterations=1)
+    return out.astype(bool)
+
+
+def build_map(args: argparse.Namespace, spec: MapSpec) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, int]]:
+    odom_times, odom_positions = collect_odom(args.bag, args.odom_topic, args.coordinate_mode)
+    print(f"loaded odom poses: {len(odom_times):,}")
+    height_band_edges = parse_height_band_edges(args.height_band_edges)
+
+    reader = open_reader(args.bag)
+    types = topic_type_map(reader)
+    if args.cloud_topic not in types:
+        raise ValueError(f"Bag does not contain cloud topic: {args.cloud_topic}")
+    cloud_msg_type = get_message(types[args.cloud_topic])
+
+    free_counts = np.zeros((spec.height, spec.width), dtype=np.uint16)
+    occupied_counts = np.zeros((spec.height, spec.width), dtype=np.uint16)
+    height_bits = np.zeros((spec.height, spec.width), dtype=np.uint8)
+    frame_free = np.zeros((spec.height, spec.width), dtype=np.uint8)
+
+    max_dt_ns = int(args.max_pose_dt * 1e9)
+    processed = 0
+    skipped = 0
+    seen_clouds = 0
+    first_stamp: int | None = None
+
+    while reader.has_next():
+        topic, data, stamp = reader.read_next()
+        if topic != args.cloud_topic:
+            continue
+        seen_clouds += 1
+        if seen_clouds % args.frame_stride != 0:
+            continue
+        if first_stamp is None:
+            first_stamp = int(stamp)
+        rel_time = (int(stamp) - first_stamp) / 1e9
+        if rel_time < args.start_sec:
+            continue
+        if args.duration_sec > 0.0 and rel_time > args.start_sec + args.duration_sec:
+            break
+        if args.max_frames > 0 and processed >= args.max_frames:
+            break
+
+        origin, dt = find_nearest_pose(odom_times, odom_positions, int(stamp), max_dt_ns)
+        if origin is None:
+            skipped += 1
+            continue
+        origin_row, origin_col = single_world_to_grid(float(origin[0]), float(origin[1]), spec)
+        if not (0 <= origin_row < spec.height and 0 <= origin_col < spec.width):
+            skipped += 1
+            continue
+
+        cloud_msg = rclpy.serialization.deserialize_message(data, cloud_msg_type)
+        rows, cols, evidence_rows, evidence_cols, evidence_bits = select_scan_endpoints(
+            cloud_msg,
+            origin,
+            spec,
+            args,
+            height_band_edges,
+        )
+        if len(rows) == 0:
+            skipped += 1
+            continue
+
+        frame_free.fill(0)
+        for row, col in zip(rows.tolist(), cols.tolist()):
+            cv2.line(frame_free, (origin_col, origin_row), (col, row), 1, thickness=1)
+        frame_free[rows, cols] = 0
+        np.minimum(free_counts + frame_free, np.iinfo(np.uint16).max, out=free_counts)
+        np.add.at(occupied_counts, (rows, cols), 1)
+        if len(evidence_rows) > 0:
+            np.bitwise_or.at(height_bits, (evidence_rows, evidence_cols), evidence_bits)
+
+        processed += 1
+        if processed % args.progress_every == 0:
+            print(
+                f"processed {processed:,} frames, "
+                f"seen {seen_clouds:,} clouds, skipped {skipped:,}, "
+                f"last pose dt {0.0 if dt is None else dt / 1e6:.1f} ms"
+            )
+
+    stats = {
+        "seen_clouds": seen_clouds,
+        "processed_frames": processed,
+        "skipped_frames": skipped,
+    }
+    return free_counts, occupied_counts, height_bits, stats
+
+
+def make_output_image(
+    free_counts: np.ndarray,
+    occupied_counts: np.ndarray,
+    height_bits: np.ndarray,
+    args: argparse.Namespace,
+) -> np.ndarray:
+    known_free = free_counts >= args.min_free_observations
+    occupied = occupied_counts >= args.min_occupied_observations
+    occupied &= occupied_counts.astype(np.float32) >= (
+        free_counts.astype(np.float32) * args.occupied_vs_free_ratio
+    )
+    if args.min_height_bands > 1:
+        bit_counts = np.array([int(i).bit_count() for i in range(256)], dtype=np.uint8)
+        occupied &= bit_counts[height_bits] >= args.min_height_bands
+
+    occupied = remove_small_components(occupied, args.min_component_cells)
+    occupied = morphology(occupied, args.close_cells, args.dilate_cells)
+
+    image = np.full(free_counts.shape, UNKNOWN, dtype=np.uint8)
+    image[known_free] = FREE
+    image[occupied] = OCCUPIED
+    return image
+
+
+def parse_args(argv: Iterable[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("bag", type=Path, help="rosbag2 directory, e.g. /home/ubuntu/bags/hall_mapping")
+    parser.add_argument("output_yaml", type=Path)
+    parser.add_argument("--cloud-topic", default="/fast_lio/cloud_registered")
+    parser.add_argument("--odom-topic", default="/odom")
+    parser.add_argument(
+        "--coordinate-mode",
+        choices=("fastlio", "ros"),
+        default="fastlio",
+        help="Use 'fastlio' for x-left/y-down/z-back Fast-LIO frames.",
+    )
+    parser.add_argument("--base-map-yaml", type=Path, help="Use its resolution, origin, width and height.")
+    parser.add_argument("--resolution", type=float, default=0.05)
+    parser.add_argument("--origin-x", type=float)
+    parser.add_argument("--origin-y", type=float)
+    parser.add_argument("--width", type=int)
+    parser.add_argument("--height", type=int)
+    parser.add_argument("--start-sec", type=float, default=0.0)
+    parser.add_argument("--duration-sec", type=float, default=0.0)
+    parser.add_argument("--max-frames", type=int, default=0)
+    parser.add_argument("--frame-stride", type=int, default=1)
+    parser.add_argument("--max-pose-dt", type=float, default=0.20)
+    parser.add_argument("--min-z", type=float, default=0.12)
+    parser.add_argument("--max-z", type=float, default=2.20)
+    parser.add_argument(
+        "--height-band-edges",
+        default="0.20,0.75,1.30,1.85,2.40",
+        help="Comma-separated z edges for vertical wall evidence in ROS map frame.",
+    )
+    parser.add_argument(
+        "--min-height-bands",
+        type=int,
+        default=2,
+        help="Require occupied cells to have observations in at least this many height bands.",
+    )
+    parser.add_argument("--min-range", type=float, default=0.60)
+    parser.add_argument("--max-range", type=float, default=12.0)
+    parser.add_argument("--angle-bins", type=int, default=1080)
+    parser.add_argument("--min-free-observations", type=int, default=2)
+    parser.add_argument("--min-occupied-observations", type=int, default=3)
+    parser.add_argument("--occupied-vs-free-ratio", type=float, default=0.10)
+    parser.add_argument("--min-component-cells", type=int, default=6)
+    parser.add_argument("--close-cells", type=int, default=1)
+    parser.add_argument("--dilate-cells", type=int, default=1)
+    parser.add_argument("--progress-every", type=int, default=100)
+    args = parser.parse_args(list(argv))
+
+    if args.frame_stride <= 0:
+        parser.error("--frame-stride must be >= 1")
+    if args.angle_bins <= 0:
+        parser.error("--angle-bins must be >= 1")
+    return args
+
+
+def resolve_map_spec(args: argparse.Namespace) -> MapSpec:
+    if args.base_map_yaml:
+        return load_map_spec_from_yaml(args.base_map_yaml)
+    missing = [
+        name
+        for name in ("origin_x", "origin_y", "width", "height")
+        if getattr(args, name) is None
+    ]
+    if missing:
+        raise ValueError(
+            "Without --base-map-yaml, provide --origin-x, --origin-y, --width, and --height"
+        )
+    return MapSpec(
+        resolution=args.resolution,
+        origin_x=args.origin_x,
+        origin_y=args.origin_y,
+        origin_theta=0.0,
+        width=args.width,
+        height=args.height,
+    )
+
+
+def main(argv: Iterable[str] | None = None) -> int:
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    spec = resolve_map_spec(args)
+    print(
+        "map spec: "
+        f"{spec.width}x{spec.height}, res={spec.resolution}, "
+        f"origin=({spec.origin_x}, {spec.origin_y}, {spec.origin_theta})"
+    )
+    print(f"coordinate mode: {args.coordinate_mode}")
+
+    free_counts, occupied_counts, height_bits, stats = build_map(args, spec)
+    image = make_output_image(free_counts, occupied_counts, height_bits, args)
+
+    output_pgm = args.output_yaml.with_suffix(".pgm")
+    write_pgm(output_pgm, image)
+    write_yaml(args.output_yaml, output_pgm.name, spec)
+
+    unique, counts = np.unique(image, return_counts=True)
+    print("stats:", stats)
+    print("pixel counts:", dict(zip(unique.tolist(), counts.tolist())))
+    print(f"wrote: {args.output_yaml}")
+    print(f"wrote: {output_pgm}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

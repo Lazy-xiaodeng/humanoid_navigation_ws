@@ -1,0 +1,529 @@
+[INFO] [launch]: All log files can be found below /home/ubuntu/.ros/log/2026-05-15-18-05-09-674394-ubuntu-145221
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [145298]
+[INFO] [joint_state_publisher-2]: process started with pid [145299]
+[robot_state_publisher-1] [INFO] [1778839510.004824861] [robot_state_publisher]: Robot initialized
+[joint_state_publisher-2] [INFO] [1778839510.310568190] [joint_state_publisher]: Waiting for robot_description to be published on the robot_description topic...
+[joint_state_publisher-2] [INFO] [1778839510.526917207] [joint_state_publisher]: Got description, configuring robot
+[INFO] [rslidar_sdk_node-3]: process started with pid [146065]
+[INFO] [fastlio_mapping-4]: process started with pid [146066]
+[INFO] [static_transform_publisher-5]: process started with pid [146067]
+[INFO] [static_transform_publisher-6]: process started with pid [146068]
+[INFO] [static_transform_publisher-7]: process started with pid [146069]
+[INFO] [static_transform_publisher-8]: process started with pid [146070]
+[INFO] [static_transform_publisher-9]: process started with pid [146072]
+[INFO] [point_cloud_filter_node-10]: process started with pid [146073]
+[INFO] [wait_for_tf-11]: process started with pid [146074]
+[static_transform_publisher-6] [WARN] [1778839516.003460362] []: Old-style arguments are deprecated; see --help for new-style arguments
+[static_transform_publisher-7] [WARN] [1778839516.003487390] []: Old-style arguments are deprecated; see --help for new-style arguments
+[rslidar_sdk_node-3] [1m[35m********************************************************[0m
+[rslidar_sdk_node-3] [1m[35m**********                                    **********[0m
+[rslidar_sdk_node-3] [1m[35m**********    RSLidar_SDK Version: v1.5.18     **********[0m
+[rslidar_sdk_node-3] [1m[35m**********                                    **********[0m
+[rslidar_sdk_node-3] [1m[35m********************************************************[0m
+[static_transform_publisher-7] [INFO] [1778839516.147325180] [tf_odom_to_ground]: Spinning until stopped - publishing transform
+[static_transform_publisher-7] translation: ('0.000000', '0.000000', '-1.215000')
+[static_transform_publisher-7] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-7] from 'odom' to 'odom_ground'
+[point_cloud_filter_node-10] [INFO] [1778839516.165059900] [point_cloud_filter_node]: 点云滤波线程数: 4
+[static_transform_publisher-8] [INFO] [1778839516.166389011] [tf_body_to_base_footprint]: Spinning until stopped - publishing transform
+[static_transform_publisher-8] translation: ('0.004000', '1.215000', '0.072000')
+[static_transform_publisher-8] rotation: ('0.500000', '0.500000', '-0.500000', '0.500000')
+[static_transform_publisher-8] from 'body' to 'base_footprint'
+[point_cloud_filter_node-10] [INFO] [1778839516.169613617] [point_cloud_filter_node]: 高性能点云滤波节点已启动
+[point_cloud_filter_node-10]   输入话题: /fast_lio/cloud_registered
+[point_cloud_filter_node-10]   高程图输出: /airy_points_for_elevation
+[point_cloud_filter_node-10]   导航输出: /airy_points_filtered
+[point_cloud_filter_node-10]   启用滤波: SOR=是, 高度连续=是, 密度=是, 运动检测=是
+[static_transform_publisher-9] [INFO] [1778839516.176585380] [tf_base_footprint_to_clearing_lidar]: Spinning until stopped - publishing transform
+[static_transform_publisher-9] translation: ('0.000000', '0.000000', '1.215000')
+[static_transform_publisher-9] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-9] from 'base_footprint' to 'clearing_lidar'
+[static_transform_publisher-6] [INFO] [1778839516.179434956] [tf_map_to_ground]: Spinning until stopped - publishing transform
+[static_transform_publisher-6] translation: ('0.000000', '0.000000', '-1.215000')
+[static_transform_publisher-6] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-6] from 'map' to 'map_ground'
+[rslidar_sdk_node-3] [1m[32m--------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32mConfig loaded from PATH:[0m
+[rslidar_sdk_node-3] [1m[32m/home/ubuntu/humanoid_ws/src/rslidar_sdk/config/config.yaml[0m
+[rslidar_sdk_node-3] [1m[32m--------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32mReceive Packets From : Online LiDAR[0m
+[rslidar_sdk_node-3] [1m[32mMsop Port: 6699[0m
+[rslidar_sdk_node-3] [1m[32mDifop Port: 7788[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Driver Parameters [0m
+[rslidar_sdk_node-3] [32minput type: ONLINE_LIDAR[0m
+[rslidar_sdk_node-3] [32mlidar_type: RSAIRY[0m
+[rslidar_sdk_node-3] [32mframe_id: rslidar[0m
+[rslidar_sdk_node-3] [32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Input Parameters [0m
+[rslidar_sdk_node-3] [32mmsop_port: 6699[0m
+[rslidar_sdk_node-3] [32mdifop_port: 7788[0m
+[rslidar_sdk_node-3] [32mimu_port: 6688[0m
+[rslidar_sdk_node-3] [32muser_layer_bytes: 0[0m
+[rslidar_sdk_node-3] [32mtail_layer_bytes: 0[0m
+[rslidar_sdk_node-3] [32mhost_address: 0.0.0.0[0m
+[rslidar_sdk_node-3] [32mgroup_address: 0.0.0.0[0m
+[rslidar_sdk_node-3] [32msocket_recv_buf: 106496[0m
+[rslidar_sdk_node-3] [32mpcap_path: /home/robosense/lidar.pcap[0m
+[rslidar_sdk_node-3] [32mpcap_rate: 1[0m
+[rslidar_sdk_node-3] [32mpcap_repeat: 1[0m
+[rslidar_sdk_node-3] [32muse_vlan: 0[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Decoder Parameters [0m
+[rslidar_sdk_node-3] [32mmin_distance: 0.1[0m
+[rslidar_sdk_node-3] [32mmax_distance: 60[0m
+[rslidar_sdk_node-3] [32muse_lidar_clock: 0[0m
+[rslidar_sdk_node-3] [32mdense_points: 0[0m
+[rslidar_sdk_node-3] [32mts_first_point: 1[0m
+[rslidar_sdk_node-3] [32mwait_for_difop: 1[0m
+[rslidar_sdk_node-3] [32mconfig_from_file: 0[0m
+[rslidar_sdk_node-3] [32mangle_path: [0m
+[rslidar_sdk_node-3] [32mstart_angle: 0[0m
+[rslidar_sdk_node-3] [32mend_angle: 360[0m
+[rslidar_sdk_node-3] [32msplit_frame_mode: 1[0m
+[rslidar_sdk_node-3] [32msplit_angle: 0[0m
+[rslidar_sdk_node-3] [32mnum_blks_split: 0[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32m             RoboSense Transform Parameters [0m
+[rslidar_sdk_node-3] [32mx: 0[0m
+[rslidar_sdk_node-3] [32my: 0[0m
+[rslidar_sdk_node-3] [32mz: 0[0m
+[rslidar_sdk_node-3] [32mroll: 0[0m
+[rslidar_sdk_node-3] [32mpitch: 0[0m
+[rslidar_sdk_node-3] [32myaw: 0[0m
+[rslidar_sdk_node-3] [1m[32m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mOriginal receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[32mAfter setting: receive buffer size: 212992 bytes[0m
+[rslidar_sdk_node-3] [1m[36m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [1m[36mSend PointCloud To : ROS[0m
+[rslidar_sdk_node-3] [1m[36mPointCloud Topic: /airy_points[0m
+[rslidar_sdk_node-3] [1m[36m------------------------------------------------------[0m
+[rslidar_sdk_node-3] [WARN] [1778839516.191860709] [rcl.logging_rosout]: Publisher already registered for node name: 'rslidar_sdk_node'. If this is due to multiple nodes with the same name then all logs for the logger named 'rslidar_sdk_node' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[rslidar_sdk_node-3] [1m[37mRoboSense-LiDAR-Driver is running.....[0m
+[static_transform_publisher-5] [INFO] [1778839516.197739731] [tf_odom_to_camera_init]: Spinning until stopped - publishing transform
+[static_transform_publisher-5] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-5] rotation: ('-0.500000', '-0.500000', '0.500000', '0.500000')
+[static_transform_publisher-5] from 'odom' to 'camera_init'
+[fastlio_mapping-4] [INFO] [1778839516.316717400] [fast_lio_node]: p_pre->lidar_type 5
+[fastlio_mapping-4] [INFO] [1778839516.324840427] [fast_lio_node]: Node init finished.
+[fastlio_mapping-4] [INFO] [1778839516.324973728] [fast_lio_node]: Starting LaserMappingNode with MultiThreadedExecutor (4 Threads)...
+[wait_for_tf-11] [INFO] [1778839516.665595619] [wait_for_localization_tf]: waiting for TF map_ground->base_footprint before starting dependent nodes
+[wait_for_tf-11] [WARN] [1778839516.866715024] [wait_for_localization_tf]: TF not ready: map_ground->base_footprint: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[INFO] [map_server-12]: process started with pid [146360]
+[map_server-12] [INFO] [1778839517.209284456] [map_server]: 
+[map_server-12] 	map_server lifecycle node launched. 
+[map_server-12] 	Waiting on external lifecycle transitions to activate
+[map_server-12] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[map_server-12] [INFO] [1778839517.209410354] [map_server]: Creating
+[fastlio_mapping-4] [WARN] [1778839517.293791686] [fast_lio_node]: No point, skip this scan!
+[fastlio_mapping-4] 
+[fastlio_mapping-4] [INFO] [1778839517.403442211] [fast_lio_node]: Initialize the map kdtree
+[INFO] [periodic_clearing_publisher-13]: process started with pid [146588]
+[INFO] [periodic_clearing_3d_publisher-14]: process started with pid [146589]
+[periodic_clearing_publisher-13] [INFO] [1778839518.437706033] [periodic_clearing_publisher]: 全向暴力 clearing_scan 节点已启动
+[periodic_clearing_publisher-13] [INFO] [1778839518.437942230] [periodic_clearing_publisher]: output topic      : /clearing_scan
+[periodic_clearing_publisher-13] [INFO] [1778839518.438123103] [periodic_clearing_publisher]: target frame      : base_footprint
+[periodic_clearing_publisher-13] [INFO] [1778839518.438297223] [periodic_clearing_publisher]: angle range       : -180.0 ~ 180.0 deg
+[periodic_clearing_publisher-13] [INFO] [1778839518.438468591] [periodic_clearing_publisher]: angle increment   : 1.0 deg
+[periodic_clearing_publisher-13] [INFO] [1778839518.438643546] [periodic_clearing_publisher]: scan size         : 361
+[periodic_clearing_publisher-13] [INFO] [1778839518.438826135] [periodic_clearing_publisher]: range             : 0.05 ~ 8.0 m
+[periodic_clearing_publisher-13] [INFO] [1778839518.440081242] [periodic_clearing_publisher]: publish rate      : 2.0 Hz
+[periodic_clearing_publisher-13] [INFO] [1778839518.440351101] [periodic_clearing_publisher]: clear mode        : range_max
+[periodic_clearing_3d_publisher-14] [INFO] [1778839518.466183851] [periodic_clearing_3d_publisher]: periodic_clearing_3d_publisher started.
+[periodic_clearing_3d_publisher-14] [INFO] [1778839518.466597019] [periodic_clearing_3d_publisher]: input_points_topic        : /fast_lio/cloud_registered
+[periodic_clearing_3d_publisher-14] [INFO] [1778839518.466929537] [periodic_clearing_3d_publisher]: output_clearing_cloud     : /clearing_cloud_3d
+[periodic_clearing_3d_publisher-14] [INFO] [1778839518.467237894] [periodic_clearing_3d_publisher]: target_frame              : base_footprint
+[periodic_clearing_3d_publisher-14] [INFO] [1778839518.467554921] [periodic_clearing_3d_publisher]: angle_min_deg             : -180.0
+[periodic_clearing_3d_publisher-14] [INFO] [1778839518.467907195] [periodic_clearing_3d_publisher]: angle_max_deg             : 180.0
+[periodic_clearing_3d_publisher-14] [INFO] [1778839518.468219913] [periodic_clearing_3d_publisher]: angle_increment_deg       : 1.0
+[periodic_clearing_3d_publisher-14] [INFO] [1778839518.468539420] [periodic_clearing_3d_publisher]: bin_count                 : 361
+[periodic_clearing_3d_publisher-14] [INFO] [1778839518.468875509] [periodic_clearing_3d_publisher]: clearing_range            : 0.3 ~ 5.0, step=0.5
+[periodic_clearing_3d_publisher-14] [INFO] [1778839518.469216989] [periodic_clearing_3d_publisher]: clearing_height_layers    : [0.05, 0.08, 0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5, 1.7]
+[periodic_clearing_3d_publisher-14] [INFO] [1778839518.469616117] [periodic_clearing_3d_publisher]: max_publish_rate_hz       : 2.0
+[periodic_clearing_3d_publisher-14] [INFO] [1778839518.470063631] [periodic_clearing_3d_publisher]: precomputed clearing_points : 39710
+[INFO] [dynamic_waypoints_manager-15]: process started with pid [146850]
+[INFO] [navigation_state_manager-16]: process started with pid [146851]
+[INFO] [websocket_server_node-17]: process started with pid [146852]
+[INFO] [data_integration_node-18]: process started with pid [146853]
+[INFO] [websocket_client_node-19]: process started with pid [146854]
+[INFO] [message_bridge_node-20]: process started with pid [146855]
+[INFO] [facial_driver-21]: process started with pid [146856]
+[INFO] [lifecycle_manager-22]: process started with pid [146864]
+[lifecycle_manager-22] [INFO] [1778839519.192421904] [lifecycle_manager_map]: Creating
+[lifecycle_manager-22] [INFO] [1778839519.199627110] [lifecycle_manager_map]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[dynamic_waypoints_manager-15] [INFO] [1778839519.404313802] [dynamic_waypoints_manager]: 数据持久化已启用，文件路径: /home/ubuntu/humanoid_ws/install/humanoid_navigation/share/humanoid_navigation/data/dynamic_waypoints.json
+[dynamic_waypoints_manager-15] [INFO] [1778839519.405834271] [dynamic_waypoints_manager]: 从文件加载点位数据完成，共 4 个点位，0 个序列
+[dynamic_waypoints_manager-15] [INFO] [1778839519.406366047] [dynamic_waypoints_manager]: 动态路点管理器启动完成 - 仅负责路点管理
+[dynamic_waypoints_manager-15] [INFO] [1778839519.406514418] [dynamic_waypoints_manager]: 动态路点管理器启动成功
+[facial_driver-21] [INFO] [1778839519.774118671] [facial_driver]: ✅ 已连接到仿生头模块: /dev/ttyUSB0
+[message_bridge_node-20] [INFO] [1778839519.788200287] [message_bridge]: 更新率: 10.0Hz, 缓冲区大小: 1000
+[message_bridge_node-20] [INFO] [1778839519.788459464] [message_bridge]: ✅ Message bridge node 初始化完成
+[message_bridge_node-20] [INFO] [1778839519.793407943] [message_bridge]: 消息桥接节点启动
+[websocket_server_node-17] [INFO] [1778839519.794230033] [websocket_server]: ✅ 完整ROS通信接口设置完成
+[websocket_server_node-17] [INFO] [1778839519.795120645] [websocket_server]: ✅ 开始启动WebSocket服务器: 0.0.0.0:8765
+[websocket_server_node-17] [INFO] [1778839519.795291493] [websocket_server]: 🔄 创建WebSocket服务器实例...
+[websocket_server_node-17] [INFO] [1778839519.810440472] [websocket_server]: ✅ WebSocket服务器启动成功: 0.0.0.0:8765
+[websocket_server_node-17] [INFO] [1778839519.810712786] [websocket_server]: 🔄 WebSocket服务器正在运行...
+[data_integration_node-18] [INFO] [1778839519.825299511] [data_integration_node]: ✅ ROS通信接口设置完成
+[data_integration_node-18] [INFO] [1778839519.825565337] [data_integration_node]: ✅ 定时任务设置完成
+[data_integration_node-18] [INFO] [1778839519.829833703] [data_integration_node]: ✅ 已从 YAML 动态加载 5 个动作
+[data_integration_node-18] [INFO] [1778839519.836020437] [data_integration_node]: ✅ 已独立加载 30 个面部表情
+[data_integration_node-18] [INFO] [1778839519.836248087] [data_integration_node]: 🎯 统一数据整合节点启动完成
+[data_integration_node-18] [INFO] [1778839519.836447258] [data_integration_node]: 📊 协议版本: 2.0
+[data_integration_node-18] [INFO] [1778839519.836643681] [data_integration_node]: 🔄 支持的数据类型: ['robot_pose', 'navigation_status', 'navigation_path', 'system_status', 'gesture_list', 'facial_gesture_list']
+[data_integration_node-18] [INFO] [1778839519.836887926] [data_integration_node]: 🚀 启动统一数据整合节点主循环...
+[INFO] [rviz2-23]: process started with pid [147193]
+[websocket_client_node-19] [INFO] [1778839520.048974751] [websocket_client]: ROS组件初始化完成
+[websocket_client_node-19] [INFO] [1778839520.050399582] [websocket_client]: WebSocket客户端启动，连接服务器: ws://10.192.1.2:5000
+[websocket_client_node-19] [INFO] [1778839520.051181615] [websocket_client]: 尝试连接机器人服务器...
+[websocket_client_node-19] [INFO] [1778839520.061623521] [websocket_client]: 已连接到机器人本体WebSocket服务器
+[websocket_client_node-19] [INFO] [1778839520.061892061] [websocket_client]: 📥 正在从机器人获取动作库列表...
+[websocket_client_node-19] [INFO] [1778839520.066509361] [websocket_client]: 收到动作库列表响应: {'accid': 'HU_D04_01_233', 'title': 'response_get_atomic_motion_list', 'guid': '9f461e0c-8234-4c0c-8b0b-9cb8566625b8', 'timestamp': 1237913, 'data': {'result': 'success', 'motion_list': [{'motion_index': 0, 'motion_name_cn': '静止站立', 'motion_name_en': 'stand'}, {'motion_index': 1, 'motion_name_cn': '指引请这边走', 'motion_name_en': 'this_way_please'}, {'motion_index': 2, 'motion_name_cn': '鞠躬', 'motion_name_en': 'bow'}, {'motion_index': 3, 'motion_name_cn': '挥手（你好/拜拜）', 'motion_name_en': 'wave_greet_bye'}, {'motion_index': 4, 'motion_name_cn': '点头', 'motion_name_en': 'nod'}, {'motion_index': 5, 'motion_name_cn': '摇头', 'motion_name_en': 'shake_head'}, {'motion_index': 6, 'motion_name_cn': '谢幕', 'motion_name_en': 'curtain_bow'}, {'motion_index': 7, 'motion_name_cn': '连续飞吻', 'motion_name_en': 'blow_kisses_multi'}, {'motion_index': 8, 'motion_name_cn': '左手侧比心', 'motion_name_en': 'left_hand_side_heart'}, {'motion_index': 9, 'motion_name_cn': '右手侧比心', 'motion_name_en': 'right_hand_side_heart'}, {'motion_index': 10, 'motion_name_cn': '双手比心', 'motion_name_en': 'hand_heart'}, {'motion_index': 11, 'motion_name_cn': '与人击掌', 'motion_name_en': 'high_five'}, {'motion_index': 12, 'motion_name_cn': '鼓掌', 'motion_name_en': 'clap'}, {'motion_index': 13, 'motion_name_cn': '热场舞', 'motion_name_en': 'warm_up_dance'}, {'motion_index': 14, 'motion_name_cn': '展臂舞', 'motion_name_en': 'swag_dance'}, {'motion_index': 15, 'motion_name_cn': '女团舞1', 'motion_name_en': 'idol_dance_1'}, {'motion_index': 16, 'motion_name_cn': '女团舞2', 'motion_name_en': 'idol_dance_2'}, {'motion_index': 17, 'motion_name_cn': '助力舞', 'motion_name_en': 'power_up_dance'}, {'motion_index': 18, 'motion_name_cn': '握手', 'motion_name_en': 'shake_hands'}, {'motion_index': 19, 'motion_name_cn': '上抬手介绍', 'motion_name_en': 'raise_and_introduce'}, {'motion_index': 20, 'motion_name_cn': '随手比划40s', 'motion_name_en': 'casual_gesture_1'}, {'motion_index': 21, 'motion_name_cn': '随手比划10s', 'motion_name_en': 'casual_gesture_2'}, {'motion_index': 22, 'motion_name_cn': '拍照', 'motion_name_en': 'take_a_photo'}], 'count': 23}}
+[websocket_client_node-19] [INFO] [1778839520.066767090] [websocket_client]: 📋 从机器人获取到 23 个动作
+[websocket_client_node-19] [INFO] [1778839520.073354035] [websocket_client]: ✅ 已更新 /home/ubuntu/humanoid_ws/install/humanoid_locomotion/share/humanoid_locomotion/config/gestures.yaml，共 23 个动作
+[websocket_client_node-19] [INFO] [1778839520.073777751] [websocket_client]: 📤 已通知 data_integration 热重载动作库
+[data_integration_node-18] [INFO] [1778839520.074426424] [data_integration_node]: 🔄 收到动作库更新通知 (action=reload)，正在热重载...
+[data_integration_node-18] [INFO] [1778839520.077761046] [data_integration_node]: ✅ 已从 YAML 动态加载 5 个动作
+[data_integration_node-18] [INFO] [1778839520.078488681] [data_integration_node]: 📤 动作库热重载完成，已推送 5 个动作
+[websocket_client_node-19] [INFO] [1778839520.197613957] [websocket_client]: 🔄 机器人状态变更: Unknown -> ZeroTorque
+[navigation_state_manager-16] [INFO] [1778839520.419030371] [navigation_state_manager]: 导航状态管理器启动完成 - 负责导航执行和状态管理
+[navigation_state_manager-16] [INFO] [1778839520.419295932] [navigation_state_manager]: 位置容差: 0.15m, 方向容差: 0.3rad
+[websocket_server_node-17] [INFO] [1778839520.796014734] [websocket_server]: ✅ 定时任务设置完成
+[websocket_server_node-17] [INFO] [1778839520.796228686] [websocket_server]: 🚀 完整WebSocket服务器启动完成
+[websocket_server_node-17] [INFO] [1778839520.796399035] [websocket_server]: 📡 服务器地址: ws://0.0.0.0:8765
+[websocket_server_node-17] [INFO] [1778839520.796567961] [websocket_server]: 📊 协议版本: 2.0
+[INFO] [lidar_localization_node-24]: process started with pid [147364]
+[lifecycle_manager-22] [INFO] [1778839521.122589325] [lifecycle_manager_map]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-22] [INFO] [1778839521.122641919] [lifecycle_manager_map]: [34m[1mConfiguring map_server[0m[0m
+[map_server-12] [INFO] [1778839521.123106445] [map_server]: Configuring
+[map_server-12] [INFO] [1778839521.123169039] [map_io]: Loading yaml file: /home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.yaml
+[map_server-12] [INFO] [1778839521.123485853] [map_io]: resolution: 0.05
+[map_server-12] [INFO] [1778839521.123490730] [map_io]: origin[0]: -6.675
+[map_server-12] [INFO] [1778839521.123496830] [map_io]: origin[1]: -12.819
+[map_server-12] [INFO] [1778839521.123498418] [map_io]: origin[2]: 0
+[map_server-12] [INFO] [1778839521.123500156] [map_io]: free_thresh: 0.196
+[map_server-12] [INFO] [1778839521.123501678] [map_io]: occupied_thresh: 0.65
+[map_server-12] [INFO] [1778839521.123503886] [map_io]: mode: trinary
+[map_server-12] [INFO] [1778839521.123506354] [map_io]: negate: 0
+[map_server-12] [INFO] [1778839521.126297927] [map_io]: Loading image_file: /home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.pgm
+[map_server-12] [INFO] [1778839521.136642024] [map_io]: Read map /home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.pgm: 660 X 781 map @ 0.05 m/cell
+[lifecycle_manager-22] [INFO] [1778839521.145056933] [lifecycle_manager_map]: [34m[1mActivating map_server[0m[0m
+[map_server-12] [INFO] [1778839521.145174785] [map_server]: Activating
+[map_server-12] [INFO] [1778839521.145790275] [map_server]: Creating bond (map_server) to lifecycle manager.
+[lifecycle_manager-22] [INFO] [1778839521.251106572] [lifecycle_manager_map]: Server map_server connected with bond.
+[lifecycle_manager-22] [INFO] [1778839521.251157753] [lifecycle_manager_map]: [34m[1mManaged nodes are active[0m[0m
+[lifecycle_manager-22] [INFO] [1778839521.251164033] [lifecycle_manager_map]: [34m[1mCreating bond timer...[0m[0m
+[facial_driver-21] [INFO] [1778839521.780080521] [facial_driver]: 📚 成功加载表情库，共 30 个动作
+[facial_driver-21] [INFO] [1778839521.782527767] [facial_driver]: 🔍 先终止眼部循环和嘴部动作循环...
+[facial_driver-21] [INFO] [1778839521.782897874] [facial_driver]: Serial Out: !stop
+[data_integration_node-18] [INFO] [1778839521.838030064] [data_integration_node]: 📤 已触发初始动作库和表情库同步到服务器
+[websocket_server_node-17] [INFO] [1778839521.838743381] [websocket_server]: 🍭 收到面部表情库更新
+[wait_for_tf-11] [WARN] [1778839521.866794536] [wait_for_localization_tf]: TF not ready: map_ground->base_footprint: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[facial_driver-21] [INFO] [1778839521.883413785] [facial_driver]: Serial Out: !stop
+[facial_driver-21] [INFO] [1778839521.984352448] [facial_driver]: ✅ 强制终止眼部循环（发送1次终止指令）
+[facial_driver-21] [INFO] [1778839521.984673151] [facial_driver]: Serial Out: ?stop
+[facial_driver-21] [INFO] [1778839522.085258604] [facial_driver]: ✅ 强制终止嘴部循环（发送1次终止指令）
+[facial_driver-21] [INFO] [1778839522.085713166] [facial_driver]: Serial Out: $DGL:1!
+[facial_driver-21] [INFO] [1778839522.189476803] [facial_driver]: 🔄 眼部强制复位（眼球居中+正常睁眼）
+[facial_driver-21] [INFO] [1778839522.189759382] [facial_driver]: 🎬 执行表情: idle
+[facial_driver-21] [INFO] [1778839522.290362781] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[rviz2-23] [ERROR] [1778839522.484913332] [rviz2]: rviz/glsl120/indexed_8bit_image.vert
+[rviz2-23] rviz/glsl120/indexed_8bit_image.frag
+[rviz2-23]  GLSL link result : 
+[rviz2-23] active samplers with a different type refer to the same texture image unit
+[websocket_server_node-17] [INFO] [1778839522.522656431] [websocket_server]: 🔗 客户端连接: client_1778839522521_4b30a619 (IP: 127.0.0.1)
+[websocket_server_node-17] [INFO] [1778839522.523154752] [websocket_server]: ✅ 发送连接确认给 client_1778839522521_4b30a619
+[websocket_server_node-17] [INFO] [1778839522.523528919] [websocket_server]: 🤖 已向 client_1778839522521_4b30a619 推送动作库
+[websocket_server_node-17] [INFO] [1778839522.523906176] [websocket_server]: 🎭 已向 client_1778839522521_4b30a619 推送面部表情库
+[websocket_server_node-17] [INFO] [1778839522.524171816] [websocket_server]: 📊 发送初始业务数据给 client_1778839522521_4b30a619
+[websocket_server_node-17] [INFO] [1778839522.559700447] [websocket_server]: 📨 收到消息: subscription system_status from client_1778839522521_4b30a619
+[data_integration_node-18] [INFO] [1778839522.560720959] [data_integration_node]: ✅ 客户端 client_1778839522521_4b30a619 订阅了: ['robot_pose', 'navigation_status', 'navigation_command_result', 'system_status', 'robot_speed']
+[websocket_server_node-17] [INFO] [1778839522.561920283] [websocket_server]: 📋 转发订阅请求: system_status
+[websocket_server_node-17] [INFO] [1778839522.563587561] [websocket_server]: 📨 收到消息: request gesture_list from client_1778839522521_4b30a619
+[data_integration_node-18] [INFO] [1778839522.564619859] [data_integration_node]: ✅ 已响应数据请求: gesture_list -> client_1778839522521_4b30a619
+[websocket_server_node-17] [INFO] [1778839522.565254428] [websocket_server]: 📤 转发数据请求: gesture_list from client_1778839522521_4b30a619
+[websocket_server_node-17] [INFO] [1778839522.565607735] [websocket_server]: 📨 收到消息: request facial_gesture_list from client_1778839522521_4b30a619
+[data_integration_node-18] [INFO] [1778839522.566249789] [data_integration_node]: ✅ 已响应数据请求: facial_gesture_list -> client_1778839522521_4b30a619
+[websocket_server_node-17] [INFO] [1778839522.566621525] [websocket_server]: 📤 转发数据请求: facial_gesture_list from client_1778839522521_4b30a619
+[facial_driver-21] [INFO] [1778839522.790839689] [facial_driver]: Serial Out: !normal_start
+[INFO] [lifecycle_manager-25]: process started with pid [147624]
+[lifecycle_manager-25] [INFO] [1778839523.188537474] [lifecycle_manager_ndt]: Creating
+[lifecycle_manager-25] [INFO] [1778839523.193434731] [lifecycle_manager_ndt]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[INFO] [robot_realpose_publisher-26]: process started with pid [147679]
+[facial_driver-21] [INFO] [1778839523.691409312] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[facial_driver-21] [INFO] [1778839523.691662635] [facial_driver]: Serial Out: #DGM:1!\n
+[lifecycle_manager-25] [INFO] [1778839523.785087757] [lifecycle_manager_ndt]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-25] [INFO] [1778839523.785155432] [lifecycle_manager_ndt]: [34m[1mConfiguring lidar_localization[0m[0m
+[lidar_localization_node-24] [INFO] [1778839523.814436573] [lidar_localization]: Configuring
+[lidar_localization_node-24] [INFO] [1778839523.814849196] [lidar_localization]: initializeParameters
+[lidar_localization_node-24] [INFO] [1778839523.815083113] [lidar_localization]: global_frame_id: map
+[lidar_localization_node-24] [INFO] [1778839523.815089248] [lidar_localization]: odom_frame_id: odom
+[lidar_localization_node-24] [INFO] [1778839523.815091673] [lidar_localization]: base_frame_id: odom
+[lidar_localization_node-24] [INFO] [1778839523.815093716] [lidar_localization]: registration_method: NDT_OMP
+[lidar_localization_node-24] [INFO] [1778839523.815095692] [lidar_localization]: ndt_resolution: 1.000000
+[lidar_localization_node-24] [INFO] [1778839523.815099277] [lidar_localization]: ndt_step_size: 0.100000
+[lidar_localization_node-24] [INFO] [1778839523.815197956] [lidar_localization]: ndt_num_threads: 8
+[lidar_localization_node-24] [INFO] [1778839523.815312373] [lidar_localization]: transform_epsilon: 0.010000
+[lidar_localization_node-24] [INFO] [1778839523.815316387] [lidar_localization]: voxel_leaf_size: 0.200000
+[lidar_localization_node-24] [INFO] [1778839523.815318873] [lidar_localization]: scan_max_range: 100.000000
+[lidar_localization_node-24] [INFO] [1778839523.815321921] [lidar_localization]: scan_min_range: 1.000000
+[lidar_localization_node-24] [INFO] [1778839523.815323785] [lidar_localization]: scan_period: 0.100000
+[lidar_localization_node-24] [INFO] [1778839523.815325851] [lidar_localization]: use_pcd_map: 1
+[lidar_localization_node-24] [INFO] [1778839523.815327898] [lidar_localization]: map_path: /home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd
+[lidar_localization_node-24] [INFO] [1778839523.815349319] [lidar_localization]: set_initial_pose: 1
+[lidar_localization_node-24] [INFO] [1778839523.815352074] [lidar_localization]: use_odom: 0
+[lidar_localization_node-24] [INFO] [1778839523.815353909] [lidar_localization]: use_imu: 0
+[lidar_localization_node-24] [INFO] [1778839523.815355643] [lidar_localization]: enable_debug: 1
+[lidar_localization_node-24] [INFO] [1778839523.815361282] [lidar_localization]: initializePubSub
+[lidar_localization_node-24] [INFO] [1778839523.836996467] [lidar_localization]: initializePubSub end
+[lidar_localization_node-24] [INFO] [1778839523.837023879] [lidar_localization]: initializeRegistration
+[lidar_localization_node-24] [INFO] [1778839523.837592217] [lidar_localization]: initializeRegistration end
+[lidar_localization_node-24] [INFO] [1778839523.837602930] [lidar_localization]: Configuring end
+[lifecycle_manager-25] [INFO] [1778839523.837964374] [lifecycle_manager_ndt]: [34m[1mActivating lidar_localization[0m[0m
+[lidar_localization_node-24] [INFO] [1778839523.838045825] [lidar_localization]: Activating
+[lidar_localization_node-24] [INFO] [1778839523.838076605] [lidar_localization]: initialPoseReceived
+[lidar_localization_node-24] [INFO] [1778839523.838234498] [lidar_localization]: initialPoseReceived end
+[facial_driver-21] [INFO] [1778839523.894288006] [facial_driver]: ⏳ 延迟 0.1 秒（渐变过渡）
+[robot_realpose_publisher-26] [INFO] [1778839524.685379674] [robot_realpose_publisher]: robot_realpose_publisher started: map -> base_footprint, publish to /robot_realpose
+[robot_realpose_publisher-26] [WARN] [1778839524.775750580] [robot_realpose_publisher]: Failed to get TF map->base_footprint: "map" passed to lookupTransform argument target_frame does not exist. 
+[data_integration_node-18] [INFO] [1778839524.826351901] [data_integration_node]: 📊 系统状态 - 可用数据: 4/6 | 活跃订阅: 0 | 客户端数: 0
+[lidar_localization_node-24] [INFO] [1778839526.325406063] [lidar_localization]: Map Size 3267778
+[lidar_localization_node-24] [INFO] [1778839526.332036990] [lidar_localization]: PCD Map transformed to ROS standard frame (Z-up)
+[lidar_localization_node-24] [INFO] [1778839526.450343314] [lidar_localization]: Initial Map Published
+[lidar_localization_node-24] [INFO] [1778839526.530082708] [lidar_localization]: Activating end
+[robot_realpose_publisher-26] [WARN] [1778839526.775965465] [robot_realpose_publisher]: Failed to get TF map->base_footprint: Could not find a connection between 'map' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[wait_for_tf-11] [WARN] [1778839526.867192565] [wait_for_localization_tf]: TF not ready: map_ground->base_footprint: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[robot_realpose_publisher-26] [INFO] [1778839527.276249237] [robot_realpose_publisher]: TF ready: map->base_footprint
+[lifecycle_manager-25] [INFO] [1778839527.500758329] [lifecycle_manager_ndt]: [34m[1mManaged nodes are active[0m[0m
+[wait_for_tf-11] [INFO] [1778839527.666280602] [wait_for_localization_tf]: TF ready: map_ground->base_footprint; dependent nodes may start
+[INFO] [wait_for_tf-11]: process has finished cleanly [pid 146074]
+[INFO] [planner_server-27]: process started with pid [148166]
+[INFO] [controller_server-28]: process started with pid [148167]
+[INFO] [behavior_server-29]: process started with pid [148168]
+[INFO] [bt_navigator-30]: process started with pid [148169]
+[planner_server-27] [INFO] [1778839528.044906601] [planner_server]: 
+[planner_server-27] 	planner_server lifecycle node launched. 
+[planner_server-27] 	Waiting on external lifecycle transitions to activate
+[planner_server-27] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[behavior_server-29] [INFO] [1778839528.046432724] [behavior_server]: 
+[behavior_server-29] 	behavior_server lifecycle node launched. 
+[behavior_server-29] 	Waiting on external lifecycle transitions to activate
+[behavior_server-29] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-28] [INFO] [1778839528.050511197] [controller_server]: 
+[controller_server-28] 	controller_server lifecycle node launched. 
+[controller_server-28] 	Waiting on external lifecycle transitions to activate
+[controller_server-28] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-27] [INFO] [1778839528.056586702] [planner_server]: Creating
+[bt_navigator-30] [INFO] [1778839528.059790789] [bt_navigator]: 
+[bt_navigator-30] 	bt_navigator lifecycle node launched. 
+[bt_navigator-30] 	Waiting on external lifecycle transitions to activate
+[bt_navigator-30] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-28] [INFO] [1778839528.059891459] [controller_server]: Creating controller server
+[bt_navigator-30] [INFO] [1778839528.064706063] [bt_navigator]: Creating
+[controller_server-28] [INFO] [1778839528.069670262] [local_costmap.local_costmap]: 
+[controller_server-28] 	local_costmap lifecycle node launched. 
+[controller_server-28] 	Waiting on external lifecycle transitions to activate
+[controller_server-28] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-27] [INFO] [1778839528.070273550] [global_costmap.global_costmap]: 
+[planner_server-27] 	global_costmap lifecycle node launched. 
+[planner_server-27] 	Waiting on external lifecycle transitions to activate
+[planner_server-27] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-27] [INFO] [1778839528.073594555] [global_costmap.global_costmap]: Creating Costmap
+[controller_server-28] [INFO] [1778839528.073596631] [local_costmap.local_costmap]: Creating Costmap
+[INFO] [lifecycle_manager-31]: process started with pid [148529]
+[lifecycle_manager-31] [INFO] [1778839531.491133701] [lifecycle_manager_navigation]: Creating
+[lifecycle_manager-31] [INFO] [1778839531.496124702] [lifecycle_manager_navigation]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[lifecycle_manager-31] [INFO] [1778839531.997894543] [lifecycle_manager_navigation]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-31] [INFO] [1778839531.997934439] [lifecycle_manager_navigation]: [34m[1mConfiguring planner_server[0m[0m
+[planner_server-27] [INFO] [1778839531.998253923] [planner_server]: Configuring
+[planner_server-27] [INFO] [1778839531.998308449] [global_costmap.global_costmap]: Configuring
+[planner_server-27] [INFO] [1778839532.017849799] [global_costmap.global_costmap]: Using plugin "static_layer"
+[planner_server-27] [INFO] [1778839532.029073283] [global_costmap.global_costmap]: Subscribing to the map topic (/map) with transient local durability
+[planner_server-27] [INFO] [1778839532.031213319] [global_costmap.global_costmap]: Initialized plugin "static_layer"
+[planner_server-27] [INFO] [1778839532.031236596] [global_costmap.global_costmap]: Using plugin "obstacle_layer"
+[planner_server-27] [INFO] [1778839532.033445544] [global_costmap.global_costmap]: Subscribed to Topics: pointcloud periodic_clearing
+[planner_server-27] [INFO] [1778839532.039393045] [global_costmap.global_costmap]: Initialized plugin "obstacle_layer"
+[planner_server-27] [INFO] [1778839532.039422871] [global_costmap.global_costmap]: Using plugin "inflation_layer"
+[planner_server-27] [INFO] [1778839532.039735593] [global_costmap.global_costmap]: Initialized plugin "inflation_layer"
+[planner_server-27] [INFO] [1778839532.073910119] [global_costmap.global_costmap]: StaticLayer: Resizing costmap to 660 X 781 at 0.050000 m/pix
+[planner_server-27] [INFO] [1778839532.094146064] [planner_server]: Created global planner plugin GridBased of type nav2_smac_planner::SmacPlanner2D
+[planner_server-27] [INFO] [1778839532.094199153] [planner_server]: Configuring GridBased of type SmacPlanner2D
+[planner_server-27] [ERROR] [1778839532.094617341] [planner_server]: Inflation layer either not found or inflation is not set sufficiently for optimized non-circular collision checking capabilities. It is HIGHLY recommended to set the inflation radius to be at MINIMUM half of the robot's largest cross-section. See github.com/ros-planning/navigation2/tree/main/nav2_smac_planner#potential-fields for full instructions. This will substantially impact run-time performance.
+[planner_server-27] [INFO] [1778839532.096598858] [planner_server]: Configured plugin GridBased of type SmacPlanner2D with tolerance 0.50, maximum iterations 1000000, max on approach iterations 1000, and not allowing unknown traversal.
+[planner_server-27] [INFO] [1778839532.096637603] [planner_server]: Planner Server has GridBased  planners available.
+[lifecycle_manager-31] [INFO] [1778839532.115112683] [lifecycle_manager_navigation]: [34m[1mConfiguring controller_server[0m[0m
+[controller_server-28] [INFO] [1778839532.115346634] [controller_server]: Configuring controller interface
+[controller_server-28] [INFO] [1778839532.115367341] [controller_server]: getting progress checker plugins..
+[controller_server-28] [INFO] [1778839532.115582550] [controller_server]: getting goal checker plugins..
+[controller_server-28] [INFO] [1778839532.115920617] [controller_server]: Controller frequency set to 8.0000Hz
+[controller_server-28] [INFO] [1778839532.115960818] [local_costmap.local_costmap]: Configuring
+[controller_server-28] [INFO] [1778839532.127940985] [local_costmap.local_costmap]: Using plugin "static_layer"
+[controller_server-28] [INFO] [1778839532.131200375] [local_costmap.local_costmap]: Subscribing to the map topic (/map) with transient local durability
+[controller_server-28] [INFO] [1778839532.136217690] [local_costmap.local_costmap]: Initialized plugin "static_layer"
+[controller_server-28] [INFO] [1778839532.136248069] [local_costmap.local_costmap]: Using plugin "voxel_layer"
+[controller_server-28] [INFO] [1778839532.136951411] [local_costmap.local_costmap]: Subscribed to Topics: pointcloud clearing_3d
+[controller_server-28] [INFO] [1778839532.152928721] [local_costmap.local_costmap]: Initialized plugin "voxel_layer"
+[controller_server-28] [INFO] [1778839532.152956092] [local_costmap.local_costmap]: Using plugin "inflation_layer"
+[controller_server-28] [INFO] [1778839532.157278614] [local_costmap.local_costmap]: Initialized plugin "inflation_layer"
+[controller_server-28] [INFO] [1778839532.195286567] [local_costmap.local_costmap]: StaticLayer: Resizing static layer to 660 X 781 at 0.050000 m/pix
+[controller_server-28] [INFO] [1778839532.209184619] [controller_server]: Created progress_checker : progress_checker of type nav2_controller::SimpleProgressChecker
+[controller_server-28] [INFO] [1778839532.209694905] [controller_server]: Controller Server has progress_checker  progress checkers available.
+[controller_server-28] [INFO] [1778839532.210811107] [controller_server]: Created goal checker : xy_goal_checker of type nav2_controller::PositionGoalChecker
+[controller_server-28] [INFO] [1778839532.212844247] [controller_server]: Created goal checker : general_goal_checker of type nav2_controller::SimpleGoalChecker
+[controller_server-28] [INFO] [1778839532.213069366] [controller_server]: Controller Server has xy_goal_checker general_goal_checker  goal checkers available.
+[controller_server-28] [INFO] [1778839532.216240291] [controller_server]: Created controller : FollowPath of type nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController
+[controller_server-28] [INFO] [1778839532.221295541] [controller_server]: Controller Server has FollowPath  controllers available.
+[lifecycle_manager-31] [INFO] [1778839532.233690234] [lifecycle_manager_navigation]: [34m[1mConfiguring behavior_server[0m[0m
+[behavior_server-29] [INFO] [1778839532.233903757] [behavior_server]: Configuring
+[behavior_server-29] [INFO] [1778839532.242164331] [behavior_server]: Creating behavior plugin spin of type nav2_behaviors::Spin
+[behavior_server-29] [INFO] [1778839532.244769474] [behavior_server]: Creating behavior plugin wait of type nav2_behaviors::Wait
+[behavior_server-29] [INFO] [1778839532.257680660] [behavior_server]: Configuring spin
+[behavior_server-29] [INFO] [1778839532.269439152] [behavior_server]: Configuring wait
+[lifecycle_manager-31] [INFO] [1778839532.275714717] [lifecycle_manager_navigation]: [34m[1mConfiguring bt_navigator[0m[0m
+[bt_navigator-30] [INFO] [1778839532.275973209] [bt_navigator]: Configuring
+[bt_navigator-30] [INFO] [1778839532.289343007] [bt_navigator]: Creating navigator id navigate_to_pose of type nav2_bt_navigator::NavigateToPoseNavigator
+[bt_navigator-30] [WARN] [1778839532.297881135] [bt_navigator]: Error_code parameters were not set. Using default values of: follow_path_error_code compute_path_error_code
+[bt_navigator-30] Make sure these match your BT and there are not other sources of error codes youreported to your application
+[bt_navigator-30] [INFO] [1778839532.426481200] [bt_navigator]: Creating navigator id navigate_through_poses of type nav2_bt_navigator::NavigateThroughPosesNavigator
+[lifecycle_manager-31] [INFO] [1778839532.454587131] [lifecycle_manager_navigation]: [34m[1mActivating planner_server[0m[0m
+[planner_server-27] [INFO] [1778839532.456664084] [planner_server]: Activating
+[planner_server-27] [INFO] [1778839532.456695627] [global_costmap.global_costmap]: Activating
+[planner_server-27] [INFO] [1778839532.456701420] [global_costmap.global_costmap]: Checking transform
+[planner_server-27] [INFO] [1778839532.456801833] [global_costmap.global_costmap]: start
+[planner_server-27] [INFO] [1778839532.708526635] [planner_server]: Activating plugin GridBased of type SmacPlanner2D
+[planner_server-27] [INFO] [1778839532.710086080] [planner_server]: Creating bond (planner_server) to lifecycle manager.
+[lifecycle_manager-31] [INFO] [1778839532.714184044] [lifecycle_manager_navigation]: [34m[1mActivating controller_server[0m[0m
+[controller_server-28] [INFO] [1778839532.714381508] [controller_server]: Activating
+[controller_server-28] [INFO] [1778839532.714422462] [local_costmap.local_costmap]: Activating
+[controller_server-28] [INFO] [1778839532.714431627] [local_costmap.local_costmap]: Checking transform
+[controller_server-28] [INFO] [1778839532.714561571] [local_costmap.local_costmap]: start
+[controller_server-28] [INFO] [1778839532.968698656] [controller_server]: Activating controller: FollowPath of type regulated_pure_pursuit_controller::RegulatedPurePursuitController
+[controller_server-28] [INFO] [1778839532.968770104] [controller_server]: Creating bond (controller_server) to lifecycle manager.
+[lifecycle_manager-31] [INFO] [1778839532.972734878] [lifecycle_manager_navigation]: [34m[1mActivating behavior_server[0m[0m
+[behavior_server-29] [INFO] [1778839532.973286541] [behavior_server]: Activating
+[behavior_server-29] [INFO] [1778839532.973320276] [behavior_server]: Activating spin
+[behavior_server-29] [INFO] [1778839532.973333845] [behavior_server]: Activating wait
+[behavior_server-29] [INFO] [1778839532.973350831] [behavior_server]: Creating bond (behavior_server) to lifecycle manager.
+[lifecycle_manager-31] [INFO] [1778839532.977306143] [lifecycle_manager_navigation]: [34m[1mActivating bt_navigator[0m[0m
+[bt_navigator-30] [INFO] [1778839532.977611910] [bt_navigator]: Activating
+[bt_navigator-30] [INFO] [1778839533.078577827] [bt_navigator]: Creating bond (bt_navigator) to lifecycle manager.
+[lifecycle_manager-31] [INFO] [1778839533.082448568] [lifecycle_manager_navigation]: [34m[1mManaged nodes are active[0m[0m
+[data_integration_node-18] [INFO] [1778839554.829364417] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778839580.795866825] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778839584.830687090] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[data_integration_node-18] [INFO] [1778839619.826636249] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778839640.796743308] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778839654.829065434] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778839670.795949447] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778839684.831700209] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778839700.795920793] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778839700.796251057] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778839719.826276918] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778839730.796127902] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778839754.828828404] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778839760.795868209] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778839760.796153444] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778839784.829269243] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778839790.795836208] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778839814.830545322] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778839820.795852235] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778839820.796424632] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778839849.832101502] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778839850.795837597] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778839880.796980308] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778839880.797893136] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778839884.836569767] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778839910.795718078] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778839919.826422155] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778839940.795877362] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778839940.796201222] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778839954.828270197] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778839970.795893119] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778839984.832013530] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840000.796356163] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840000.797023450] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778840019.826244930] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840030.795844962] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778840054.833130543] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840060.796201799] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840060.797849277] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778840089.826468332] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840090.795839020] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840120.796764694] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840120.797905045] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778840124.831307968] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840150.795864404] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778840159.826395146] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840180.795831088] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840180.796435438] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778840194.829894836] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840210.796309702] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778840224.830318072] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840240.796197544] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840240.796785395] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778840259.828080748] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840270.795812155] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778840294.830124208] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840300.795883621] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840300.796623191] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778840324.831055712] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840330.796141455] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778840359.826378330] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840360.796672343] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840360.797618370] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[websocket_server_node-17] [INFO] [1778840390.795982913] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778840394.828394229] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840420.796129456] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840420.796732080] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778840424.828623967] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840450.796114751] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778840454.832846937] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840480.796177587] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840480.796792361] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778840489.826154384] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840510.796114722] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778840519.826675888] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840540.796097465] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840540.796436293] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778840554.829529869] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840570.795869372] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778840589.825950201] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840600.796039451] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840600.796425560] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778840619.827090554] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840630.796260145] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778840654.828440216] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840660.797111067] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840660.798528399] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778840684.833509372] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840690.795895536] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778840719.826737068] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840720.796056201] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840720.796384639] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[websocket_server_node-17] [INFO] [1778840750.795917808] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778840754.829715742] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840780.796656468] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840780.797686601] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778840784.831365751] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840810.795899465] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778840819.826005657] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840840.795831929] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840840.796131713] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778840849.826045068] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840870.795875608] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778840879.826070096] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840900.796064400] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[websocket_server_node-17] [INFO] [1778840900.796421489] [websocket_server]: 📊 服务器状态 - 客户端: 1 | 路点: 0 | 序列: 0 | 导航模式: 无
+[data_integration_node-18] [INFO] [1778840909.826588194] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0
+[websocket_server_node-17] [INFO] [1778840930.797195309] [websocket_server]: 🩺 发现 1 个不活跃客户端
+[data_integration_node-18] [INFO] [1778840944.827952752] [data_integration_node]: 📊 系统状态 - 可用数据: 5/6 | 活跃订阅: 0 | 客户端数: 0

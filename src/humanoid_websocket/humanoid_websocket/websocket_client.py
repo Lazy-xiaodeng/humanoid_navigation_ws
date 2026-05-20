@@ -6,8 +6,12 @@ WebSocket客户端节点
 """
 
 import asyncio
+import concurrent.futures
 import websockets
 import json
+import os
+import re
+import yaml
 import threading
 import rclpy
 from rclpy.node import Node
@@ -16,7 +20,7 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import JointState, Joy
 import time
 from enum import Enum
-import threading
+from ament_index_python.packages import get_package_share_directory
 
 class RobotState(Enum):
     """机器人状态枚举，用于跟踪当前控制模式"""
@@ -36,8 +40,14 @@ class HumanoidWebSocketClient(Node):
         # 声明参数：机器人本体的WebSocket服务器地址
         self.declare_parameter('robot_ws_server', 'ws://10.192.1.2:5000')
         self.declare_parameter('reconnect_interval', 5.0)
+        self.declare_parameter('default_motion_timeout', 25.0)
+        self.declare_parameter('motion_timeout_buffer', 8.0)
+        self.declare_parameter('max_motion_timeout', 90.0)
         self.robot_ws_server = self.get_parameter('robot_ws_server').value
         self.reconnect_interval = self.get_parameter('reconnect_interval').value
+        self.default_motion_timeout = float(self.get_parameter('default_motion_timeout').value)
+        self.motion_timeout_buffer = float(self.get_parameter('motion_timeout_buffer').value)
+        self.max_motion_timeout = float(self.get_parameter('max_motion_timeout').value)
         
         # 机器人状态管理
         self.robot_state = RobotState.UNKNOWN  # 初始状态
@@ -45,8 +55,13 @@ class HumanoidWebSocketClient(Node):
         self.response_events = {}  # 用于等待命令响应：guid -> Event
         self.current_motion_event = None
         self.current_motion_name = None
+        self.current_motion_result = None
+        self.current_motion_notify_data = {}
         self.motion_completion_events = {}  # 用于等待动作完成通知
-        self.accid = "HU_D04_01_233"  # 机器人序列号，需根据实际修改
+        self.motion_expected_durations = {}
+        self.gestures_yaml_path = self._get_gestures_yaml_path()
+        self.accid = "HU_D04_01_289"  # 机器人序列号，需根据实际修改
+        self._load_motion_expected_durations()
 
         # 设置数据发布器 - 将不同数据发布到不同话题
         self.setup_publishers()
@@ -87,6 +102,16 @@ class HumanoidWebSocketClient(Node):
         self.cmd_sub = self.create_subscription(
             String, '/app/robot_control', self.robot_control_callback, 10
         )
+
+        # 动作库 OTA 更新通知发布器
+        self.gesture_update_pub = self.create_publisher(
+            String, '/system/gesture_list_updated', 10
+        )
+
+        self.action_result_pub = self.create_publisher(
+            String, '/robot/action_result', 10
+        )
+
         self.get_logger().info('ROS组件初始化完成')
     
     async def wait_for_state(self, target_state, timeout=10.0):
@@ -166,15 +191,15 @@ class HumanoidWebSocketClient(Node):
     
     #测试用
     async def send_walk_vel_command(self, x=0.0, y=0.0, yaw=0.0):
-        """发送行走指令：现支持在 Walk 和 Menu 状态下直接调用"""
+        """发送行走指令：只有确认处于 Walk 状态时才下发到底层"""
 
-        #正在做动作时绝不下发速度指令
+        # 正在做动作或切换动作引擎时绝不下发速度指令
         if self.is_executing_motion:
             self.get_logger().debug("上半身正在执行动作，已在 ROS 端主动拦截速度指令", throttle_duration_sec=1.0)
             return
             
-        # 如果不是这两种状态，不允许走动
-        if self.robot_state not in [RobotState.WALK, RobotState.MENU]:
+        # Menu 下发速度在长动作未结束时会被底层拒绝，导航只允许 Walk。
+        if self.robot_state != RobotState.WALK:
             return
             
         # 安全限幅（协议要求）
@@ -244,7 +269,7 @@ class HumanoidWebSocketClient(Node):
 
             try:
                 if has_input:
-                    if self.robot_state not in [RobotState.WALK, RobotState.MENU]:
+                    if self.robot_state != RobotState.WALK:
                         self.get_logger().warn( f"⚠️ 拦截指令: 当前处于 {self.robot_state.value} 状态，无法行走！请先用遥控器切入 Walk 模式。",
                             throttle_duration_sec=2.0)  # 限制每2秒最多打印一次，防止刷屏
                         continue   
@@ -258,7 +283,7 @@ class HumanoidWebSocketClient(Node):
                         future.result(timeout=0.5)
                 else:
                     # 松开按键：发送 0 速度停车
-                    if self.robot_state in [RobotState.WALK, RobotState.MENU]:
+                    if self.robot_state == RobotState.WALK:
                         future = asyncio.run_coroutine_threadsafe(
                             self.send_walk_vel_command(0.0, 0.0, 0.0),
                             self.ws_loop
@@ -306,7 +331,11 @@ class HumanoidWebSocketClient(Node):
                     # 使用线程执行异步动作序列，防止阻塞 ROS 回调
                     threading.Thread(
                         target=self._run_motion_task, 
-                        args=(motion_name,), 
+                        args=(
+                            motion_name,
+                            cmd_data.get("client_id", ""),
+                            cmd_data.get("timestamp", time.time()),
+                        ), 
                         daemon=True
                     ).start()
                 else:
@@ -315,22 +344,123 @@ class HumanoidWebSocketClient(Node):
         except Exception as e:
             self.get_logger().error(f'❌ 解析机器人控制指令出错: {e}')
     
-    def _run_motion_task(self, motion_name):
+    def publish_action_result(
+        self,
+        motion_name: str,
+        status: str,
+        result_code: str,
+        message: str,
+        started_at: float,
+        completed_at: float,
+        client_id: str = "",
+        command_timestamp=None,
+        notify_data=None,
+        walk_ready: bool = False,
+    ):
+        """发布动作最终结果，供 APP 判断是否可以继续导航或下发新目标。"""
+        try:
+            payload = {
+                "event_type": "action_completed",
+                "action_type": "execute_gesture",
+                "gesture_id": motion_name,
+                "action_name": motion_name,
+                "status": status,
+                "result": result_code,
+                "message": message,
+                "client_id": client_id,
+                "command_timestamp": command_timestamp,
+                "started_at": started_at,
+                "completed_at": completed_at,
+                "duration": round(max(0.0, completed_at - started_at), 3),
+                "robot_state": self.robot_state.value,
+                "motion_busy": self.is_executing_motion,
+                "control_ready_for_navigation": walk_ready,
+                "notify_data": notify_data or {},
+                "timestamp": completed_at,
+            }
+            msg = String()
+            msg.data = json.dumps(payload, ensure_ascii=False)
+            self.action_result_pub.publish(msg)
+            self.get_logger().info(
+                f"📤 动作结果已发布: {motion_name}, status={status}, result={result_code}, "
+                f"walk_ready={walk_ready}"
+            )
+        except Exception as e:
+            self.get_logger().error(f"❌ 发布动作结果失败: {e}")
+
+    def _run_motion_task(self, motion_name, client_id="", command_timestamp=None):
         """在 ws_loop 上执行上半身动作序列（线程安全投递）"""
+        if self.is_executing_motion:
+            self.get_logger().warn(f"⚠️ 当前已有动作在执行，忽略新的动作请求: {motion_name}")
+            now = time.time()
+            self.publish_action_result(
+                motion_name=motion_name,
+                status="rejected",
+                result_code="motion_busy",
+                message="当前已有动作在执行，新的动作请求已忽略",
+                started_at=now,
+                completed_at=now,
+                client_id=client_id,
+                command_timestamp=command_timestamp,
+                walk_ready=(self.robot_state == RobotState.WALK and not self.is_executing_motion),
+            )
+            return
+
+        self.is_executing_motion = True
+        motion_timeout = self.get_motion_completion_timeout(motion_name)
+        task_timeout = motion_timeout + 20.0
+        started_at = time.time()
         future = asyncio.run_coroutine_threadsafe(
-            self.execute_upper_body_motion(motion_name),
+            self.execute_upper_body_motion(motion_name, client_id, command_timestamp),
             self.ws_loop
         )
         try:
-            future.result(timeout=30.0)  # 动作最长等 30 秒
+            future.result(timeout=task_timeout)
+        except concurrent.futures.TimeoutError:
+            self.get_logger().error(
+                f"❌ 动作执行线程等待超时: {motion_name}，timeout={task_timeout:.1f}s"
+            )
+            future.cancel()
+            self.is_executing_motion = False
+            now = time.time()
+            self.publish_action_result(
+                motion_name=motion_name,
+                status="timeout",
+                result_code="motion_task_timeout",
+                message=f"动作执行线程等待超时，timeout={task_timeout:.1f}s",
+                started_at=started_at,
+                completed_at=now,
+                client_id=client_id,
+                command_timestamp=command_timestamp,
+                walk_ready=(self.robot_state == RobotState.WALK and not self.is_executing_motion),
+            )
         except Exception as e:
             self.get_logger().error(f"❌ 动作执行异常: {e}")
             self.is_executing_motion = False  # 异常时也要释放锁
+            now = time.time()
+            self.publish_action_result(
+                motion_name=motion_name,
+                status="failed",
+                result_code="motion_task_exception",
+                message=str(e),
+                started_at=started_at,
+                completed_at=now,
+                client_id=client_id,
+                command_timestamp=command_timestamp,
+                walk_ready=(self.robot_state == RobotState.WALK and not self.is_executing_motion),
+            )
 
     
-    async def execute_upper_body_motion(self, motion_name: str):
+    async def execute_upper_body_motion(self, motion_name: str, client_id: str = "", command_timestamp=None):
         """执行上半身动作：切 Menu -> 发动作 -> 等待完成通知 -> 切 Walk"""
         self.get_logger().info(f"������ 准备开始执行动作: {motion_name}")
+        motion_timeout = self.get_motion_completion_timeout(motion_name)
+        started_at = time.time()
+        final_status = "failed"
+        result_code = "unknown"
+        result_message = "动作未完成"
+        notify_data = {}
+        walk_ready = False
 
         try:
             if self.robot_state != RobotState.MENU:
@@ -340,11 +470,15 @@ class HumanoidWebSocketClient(Node):
 
                 if not res_mode1 or res_mode1.get("data", {}).get("result") != "success":
                     self.get_logger().error("❌ 切换动作库模式失败！")
+                    result_code = "enter_menu_failed"
+                    result_message = "切换动作库模式失败"
                     return
 
                 ok = await self.wait_for_state(RobotState.MENU, timeout=3.0)
                 if not ok:
                     self.get_logger().error("❌ 未成功进入 Menu 模式，取消动作执行")
+                    result_code = "enter_menu_timeout"
+                    result_message = "未成功进入动作库模式"
                     return
 
                 # 等待引擎稳定
@@ -354,12 +488,12 @@ class HumanoidWebSocketClient(Node):
                 self.get_logger().info("ℹ️ 当前已处于 Menu 模式，跳过模式切换")
                 await asyncio.sleep(0.5)
 
-            self.is_executing_motion = True
-
             # 2. 注册当前动作等待事件
             completion_event = asyncio.Event()
             self.current_motion_event = completion_event
             self.current_motion_name = motion_name
+            self.current_motion_result = None
+            self.current_motion_notify_data = {}
 
             # 3. 下发动作
             self.get_logger().info(f"➡️ 下发动作指令: {motion_name}...")
@@ -368,6 +502,8 @@ class HumanoidWebSocketClient(Node):
 
             if not res_exec:
                 self.get_logger().error(f"❌ 动作 {motion_name} 下发失败：未收到响应")
+                result_code = "dispatch_no_response"
+                result_message = "动作下发失败：未收到响应"
                 return
 
             exec_result = res_exec.get("data", {}).get("result", "")
@@ -381,41 +517,255 @@ class HumanoidWebSocketClient(Node):
                 
                 if not res_exec:
                     self.get_logger().error(f"❌ 动作 {motion_name} 重试失败：未收到响应")
+                    result_code = "dispatch_retry_no_response"
+                    result_message = "动作重试下发失败：未收到响应"
                     return
 
                 exec_result = res_exec.get("data", {}).get("result", "")
 
             if exec_result != "success":
                 self.get_logger().error(f"❌ 动作 {motion_name} 下发失败，result={exec_result}, 完整响应={res_exec}")
+                result_code = exec_result or "dispatch_failed"
+                result_message = f"动作下发失败: {result_code}"
                 return
 
             self.get_logger().info("✅ 已下发动作，正在等待机器人完成通知...")
 
             try:
-                await asyncio.wait_for(completion_event.wait(), timeout=20.0)
-                self.get_logger().info(f"✅ 动作 {motion_name} 执行完成！")
+                await asyncio.wait_for(completion_event.wait(), timeout=motion_timeout)
+                notify_result = self.current_motion_result or "success"
+                notify_data = dict(self.current_motion_notify_data or {})
+                if notify_result == "success":
+                    final_status = "success"
+                    result_code = "success"
+                    result_message = "动作执行完成"
+                    self.get_logger().info(f"✅ 动作 {motion_name} 执行完成！")
+                else:
+                    final_status = "failed"
+                    result_code = notify_result
+                    result_message = f"动作底层反馈异常: {notify_result}"
+                    self.get_logger().warning(result_message)
             except asyncio.TimeoutError:
-                self.get_logger().error(f"❌ 动作 {motion_name} 执行超时！")
+                self.get_logger().error(
+                    f"❌ 动作 {motion_name} 执行超时！timeout={motion_timeout:.1f}s"
+                )
+                final_status = "timeout"
+                result_code = "motion_completion_timeout"
+                result_message = f"等待动作完成通知超时，timeout={motion_timeout:.1f}s"
 
         finally:
-            self.is_executing_motion = False
-            self.current_motion_event = None
-            self.current_motion_name = None
+            try:
+                self.current_motion_event = None
+                self.current_motion_name = None
+                self.current_motion_result = None
+                self.current_motion_notify_data = {}
 
-            # ✅ 给底层一点收尾时间
-            await asyncio.sleep(0.5)
+                # ✅ 给底层一点收尾时间
+                await asyncio.sleep(0.5)
 
-            if self.robot_state != RobotState.WALK:
-                self.get_logger().info("➡️ 退出动作模式，切回行走模式 (Mode: 0)...")
-                res_mode0 = await self.send_command("request_set_motion_engine", {"mode": 0})
-                self.get_logger().info(f"切回行走模式响应: {res_mode0}")
+                if self.robot_state != RobotState.WALK:
+                    self.get_logger().info("➡️ 退出动作模式，切回行走模式 (Mode: 0)...")
+                    res_mode0 = await self.send_command("request_set_motion_engine", {"mode": 0})
+                    self.get_logger().info(f"切回行走模式响应: {res_mode0}")
 
-                if res_mode0 and res_mode0.get("data", {}).get("result") == "success":
-                    await self.wait_for_state(RobotState.WALK, timeout=3.0)
-                    self.get_logger().info("✅ 已安全切回行走控制模式。")
+                    if res_mode0 and res_mode0.get("data", {}).get("result") == "success":
+                        if await self.wait_for_state(RobotState.WALK, timeout=3.0):
+                            self.get_logger().info("✅ 已安全切回行走控制模式。")
+                            walk_ready = True
+                        else:
+                            self.get_logger().warn("⚠️ 已请求切回行走模式，但未收到 Walk 状态确认。")
+                    else:
+                        self.get_logger().warn("⚠️ 切回行走模式失败，请注意机器人状态。")
                 else:
-                    self.get_logger().warn("⚠️ 切回行走模式失败，请注意机器人状态。")
-    
+                    walk_ready = True
+            finally:
+                self.is_executing_motion = False
+                walk_ready = walk_ready and self.robot_state == RobotState.WALK
+                self.publish_action_result(
+                    motion_name=motion_name,
+                    status=final_status,
+                    result_code=result_code,
+                    message=result_message,
+                    started_at=started_at,
+                    completed_at=time.time(),
+                    client_id=client_id,
+                    command_timestamp=command_timestamp,
+                    notify_data=notify_data,
+                    walk_ready=walk_ready,
+                )
+
+    async def fetch_gesture_list_from_robot(self):
+        """连接成功后从机器人拉取最新动作库列表，写入 YAML 并通知 data_integration 热重载"""
+        try:
+            self.get_logger().info("📥 正在从机器人获取动作库列表...")
+            response = await self.send_command("request_get_atomic_motion_list", {})
+
+            if not response:
+                self.get_logger().warn("⚠️ 获取动作库列表失败：无响应，保留现有 YAML")
+                return
+
+            data = response.get("data", {})
+            result = data.get("result", "")
+            if result not in ("success", ""):
+                self.get_logger().warn(f"⚠️ 获取动作库列表返回异常 result={result}，保留现有 YAML")
+                return
+
+            motion_items = self._extract_motion_items(data)
+            if not motion_items:
+                self.get_logger().warn("⚠️ 未能从响应中解析出动作列表，保留现有 YAML")
+                self.get_logger().info(f"原始响应 data: {json.dumps(data, ensure_ascii=False)}")
+                return
+
+            self.get_logger().info(f"📋 从机器人获取到 {len(motion_items)} 个动作")
+
+            yaml_path = os.path.join(
+                get_package_share_directory('humanoid_locomotion'),
+                'config', 'gestures.yaml'
+            )
+            self._update_gestures_yaml(yaml_path, motion_items)
+            self.gestures_yaml_path = yaml_path
+            self._load_motion_expected_durations()
+
+            msg = String()
+            msg.data = json.dumps({"action": "reload", "timestamp": time.time()})
+            self.gesture_update_pub.publish(msg)
+            self.get_logger().info("📤 已通知 data_integration 热重载动作库")
+
+        except Exception as e:
+            self.get_logger().error(f"❌ 获取动作库列表异常: {e}")
+
+    def _extract_motion_items(self, data: dict):
+        """从机器人响应 data 中提取动作条目列表 [{en_name, cn_name, index}, ...]"""
+        for key in ("motion_list", "motions", "atomic_motions", "atomic_motion_list", "list"):
+            motions = data.get(key)
+            if isinstance(motions, list) and motions:
+                items = []
+                for m in motions:
+                    if isinstance(m, str):
+                        items.append({"en_name": m, "cn_name": m, "index": len(items)})
+                    elif isinstance(m, dict):
+                        en = m.get("motion_name_en") or m.get("name") or m.get("motion_name") or ""
+                        cn = m.get("motion_name_cn") or m.get("name_cn") or en
+                        idx = m.get("motion_index") if "motion_index" in m else len(items)
+                        if en:
+                            items.append({"en_name": str(en), "cn_name": str(cn), "index": int(idx)})
+                if items:
+                    return items
+
+        if isinstance(data, list):
+            items = []
+            for m in data:
+                if isinstance(m, str):
+                    items.append({"en_name": m, "cn_name": m, "index": len(items)})
+                elif isinstance(m, dict):
+                    en = m.get("motion_name_en") or m.get("name") or ""
+                    cn = m.get("motion_name_cn") or m.get("name_cn") or en
+                    if en:
+                        items.append({"en_name": str(en), "cn_name": str(cn), "index": len(items)})
+            return items
+
+        return []
+
+    def _update_gestures_yaml(self, yaml_path: str, motion_items: list):
+        """用机器人返回的动作列表更新 YAML，保留已有动作的元数据"""
+        existing_actions = {}
+        if os.path.exists(yaml_path):
+            try:
+                with open(yaml_path, 'r', encoding='utf-8') as f:
+                    config = yaml.safe_load(f) or {}
+                existing_actions = config.get("actions", {}) or {}
+            except Exception:
+                pass
+
+        new_actions = {}
+        for item in motion_items:
+            key = item["en_name"]
+            if key in existing_actions and isinstance(existing_actions[key], dict):
+                # 保留已有元数据，只更新 id 和 name（机器人可能 OTA 了新名字）
+                entry = dict(existing_actions[key])
+                entry["id"] = item["index"]
+                if item["cn_name"]:
+                    entry["name"] = item["cn_name"]
+                new_actions[key] = entry
+            else:
+                new_actions[key] = {
+                    "id": item["index"],
+                    "name": item["cn_name"] or item["en_name"],
+                    "type": "upper_body",
+                    "description": ""
+                }
+
+        config = {
+            "metadata": {
+                "version": "ota",
+                "description": "逐际机器人上半身动作库 (OTA 自动更新)",
+                "author": "OTA Sync"
+            },
+            "actions": new_actions
+        }
+
+        with open(yaml_path, 'w', encoding='utf-8') as f:
+            yaml.dump(config, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+        self.get_logger().info(f"✅ 已更新 {yaml_path}，共 {len(new_actions)} 个动作")
+
+    def _get_gestures_yaml_path(self):
+        try:
+            return os.path.join(
+                get_package_share_directory('humanoid_locomotion'),
+                'config', 'gestures.yaml'
+            )
+        except Exception as e:
+            self.get_logger().warn(f"⚠️ 无法定位 gestures.yaml: {e}")
+            return None
+
+    def _load_motion_expected_durations(self):
+        """从动作库中解析动作预期时长，例如“随手比划40s”会解析为 40 秒。"""
+        self.motion_expected_durations = {}
+        if not self.gestures_yaml_path or not os.path.exists(self.gestures_yaml_path):
+            return
+
+        try:
+            with open(self.gestures_yaml_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f) or {}
+
+            actions = config.get("actions", {}) or {}
+            for motion_name, entry in actions.items():
+                duration = self._extract_motion_duration(motion_name, entry)
+                if duration is not None:
+                    self.motion_expected_durations[motion_name] = duration
+
+            if self.motion_expected_durations:
+                self.get_logger().info(
+                    f"✅ 已加载 {len(self.motion_expected_durations)} 个动作时长提示"
+                )
+        except Exception as e:
+            self.get_logger().warn(f"⚠️ 解析动作时长失败: {e}")
+
+    def _extract_motion_duration(self, motion_name, entry):
+        if not isinstance(entry, dict):
+            return None
+
+        for key in ("duration_sec", "duration", "expected_duration_sec"):
+            value = entry.get(key)
+            if isinstance(value, (int, float)) and value > 0:
+                return float(value)
+
+        texts = [motion_name, str(entry.get("name", "")), str(entry.get("description", ""))]
+        for text in texts:
+            match = re.search(r'(\d+(?:\.\d+)?)\s*(?:s|秒)', text, flags=re.IGNORECASE)
+            if match:
+                return float(match.group(1))
+
+        return None
+
+    def get_motion_completion_timeout(self, motion_name: str) -> float:
+        duration = self.motion_expected_durations.get(motion_name)
+        timeout = self.default_motion_timeout
+        if duration is not None:
+            timeout = max(timeout, duration + self.motion_timeout_buffer)
+        return min(timeout, self.max_motion_timeout)
+
     def start_client(self):
         """启动WebSocket客户端线程（异步）"""
         self.client_thread = threading.Thread(target=self.run_client, daemon=True)
@@ -431,9 +781,12 @@ class HumanoidWebSocketClient(Node):
                 self.last_connection_time = time.time()
                 self.get_logger().info('已连接到机器人本体WebSocket服务器')
 
+                # OTA: 从机器人拉取最新动作库列表
+                asyncio.create_task(self.fetch_gesture_list_from_robot())
+
                 #连接成功后，尝试进入准备模式
                 #asyncio.create_task(self.auto_startup_sequence())
-                
+
                 # 持续接收数据
                 async for message in websocket:
                     await self.handle_robot_message(message)
@@ -486,6 +839,8 @@ class HumanoidWebSocketClient(Node):
                 self.get_logger().info(f"收到动作引擎切换响应: {data}")
             elif data_type == "response_execute_atomic_motion":
                 self.get_logger().info(f"收到动作执行响应: {data}")
+            elif data_type == "response_get_atomic_motion_list":
+                self.get_logger().info(f"收到动作库列表响应: {data}")
             elif data_type == "response_set_walk_vel_sync":
                 pass
             else:
@@ -524,6 +879,8 @@ class HumanoidWebSocketClient(Node):
         """解析并处理动作执行完毕的底层推送通知"""
         try:
             result = message_data.get("result", "")
+            self.current_motion_result = result
+            self.current_motion_notify_data = dict(message_data)
             
             self.get_logger().info(f"收到动作底层通知 -> 当前动作: {self.current_motion_name}, 结果: {result}")
             
@@ -631,6 +988,12 @@ class HumanoidWebSocketClient(Node):
                         all_parsed_values[key] = val
 
             # 封装并发布原始数据
+            all_parsed_values["motion_busy"] = self.is_executing_motion
+            all_parsed_values["current_motion"] = self.current_motion_name or ""
+            all_parsed_values["control_ready_for_navigation"] = (
+                self.robot_state == RobotState.WALK and not self.is_executing_motion
+            )
+
             payload = {
                 "values": all_parsed_values,
                 "health": component_status,

@@ -223,6 +223,11 @@ class MessageBridge(Node):
             battery_pct = vals.get("battery", 0)
             robot_state = vals.get("robot_status", "Unknown")
             is_estop = vals.get("estop", "OFF") == "ON"
+            motion_busy = bool(vals.get("motion_busy", False))
+            current_motion = vals.get("current_motion", "") or ""
+            control_ready_for_navigation = bool(
+                vals.get("control_ready_for_navigation", robot_state == "Walk" and not motion_busy)
+            )
             
             # 丰富处理后的信息
             processed = {
@@ -237,6 +242,9 @@ class MessageBridge(Node):
                     "bat_temperature": vals.get("bat_temp0", 0.0)
                 },
                 "system_mode": vals.get("mode", "Unknown"),
+                "motion_busy": motion_busy,
+                "current_motion": current_motion,
+                "control_ready_for_navigation": control_ready_for_navigation,
                 "estop_active": is_estop,
                 "health_check": health,
                 "timestamp": time.time()

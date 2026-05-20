@@ -77,7 +77,17 @@ public:
     const pcl::PointCloud<PointT>::ConstPtr& cloud,
     bool reject_non_converged = false,
     double max_fitness_score = -1.0,
-    bool* correction_accepted = nullptr);
+    bool* correction_accepted = nullptr,
+    double max_correction_translation = -1.0,
+    double max_correction_yaw = -1.0,
+    bool* correction_rejected_by_jump = nullptr,
+    double min_inlier_fraction = -1.0,
+    double max_inlier_distance = 0.5,
+    double* inlier_fraction = nullptr,
+    bool* correction_rejected_by_inlier = nullptr,
+    double jump_override_max_fitness_score = -1.0,
+    double jump_override_min_inlier_fraction = -1.0,
+    bool* correction_jump_overridden = nullptr);
 
   /* getters */
   rclcpp::Time last_correction_time() const;
@@ -90,6 +100,7 @@ public:
   Eigen::Vector3f odom_pos() const;
   Eigen::Quaternionf odom_quat() const;
   Eigen::Matrix4f odom_matrix() const;
+  bool has_odom_prediction() const;
 
   const boost::optional<Eigen::Matrix4f>& wo_prediction_error() const;
   const boost::optional<Eigen::Matrix4f>& imu_prediction_error() const;

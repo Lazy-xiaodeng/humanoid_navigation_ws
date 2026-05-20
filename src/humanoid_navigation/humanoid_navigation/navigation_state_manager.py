@@ -9,7 +9,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
 from std_msgs.msg import String
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Odometry, Path
 from nav2_msgs.action import NavigateToPose
 from action_msgs.msg import GoalStatus
@@ -58,8 +58,12 @@ class NavigationStateManager(Node):
             ('waypoint_timeout', 300.0),
             ('status_publish_rate', 2.0),
             ('default_frame_id', 'map'),
-            ('obstacle_block_timeout', 10.0),  # 障碍物阻塞超时时间（秒）
-            ('velocity_threshold', 0.10)  # 判断机器人是否停滞的速度阈值（m/s）
+            ('obstacle_block_timeout', 5.0),  # 障碍物阻塞超时时间（秒）
+            ('velocity_threshold', 0.10),  # 判断机器人是否停滞的速度阈值（m/s）
+            ('require_walk_mode_for_navigation', True),
+            ('robot_status_timeout', 2.0),
+            ('pending_navigation_timeout', 90.0),
+            ('obstacle_block_near_goal_distance', 0.7)
         ])
 
         self.position_tolerance = self.get_parameter('position_tolerance').value
@@ -69,6 +73,10 @@ class NavigationStateManager(Node):
         self.default_frame_id = self.get_parameter('default_frame_id').value
         self.obstacle_block_timeout = self.get_parameter('obstacle_block_timeout').value
         self.velocity_threshold = self.get_parameter('velocity_threshold').value
+        self.require_walk_mode_for_navigation = self.get_parameter('require_walk_mode_for_navigation').value
+        self.robot_status_timeout = float(self.get_parameter('robot_status_timeout').value)
+        self.pending_navigation_timeout = float(self.get_parameter('pending_navigation_timeout').value)
+        self.obstacle_block_near_goal_distance = float(self.get_parameter('obstacle_block_near_goal_distance').value)
         
         # ========== 导航状态 ==========
         self.current_state = NavigationState.IDLE
@@ -86,7 +94,21 @@ class NavigationStateManager(Node):
         # ========== 机器人状态 ==========
         self.current_pose = None
         self.current_velocity = None
+        self.pose_derived_speed = None
+        self.last_motion_pose = None
+        self.last_motion_pose_time = None
         self.last_pose_update = 0
+        self.robot_control_state = "Unknown"
+        self.robot_motion_busy = False
+        self.robot_current_motion = ""
+        self.robot_ready_for_navigation = False
+        self.last_robot_status_update = 0.0
+        self.pending_navigation_request = None
+        self.pending_navigation_created_at = 0.0
+        self.pending_navigation_reason = ""
+        self.nav2_blockage_suppression_nodes = set()
+        self.distance_remaining = float('inf')
+        self.estimated_time_remaining = 0.0
 
         # ========== 障碍物阻塞检测状态 ==========
         self.is_blocked_by_obstacle = False
@@ -142,6 +164,10 @@ class NavigationStateManager(Node):
         self.odom_sub = self.create_subscription(
             Odometry, '/odom', self.odom_callback, 10
         )
+
+        self.robot_status_sub = self.create_subscription(
+            String, '/robot_status_raw', self.robot_status_callback, 10
+        )
         
         self.nav2_behavior_log_sub = self.create_subscription(BehaviorTreeLog,'/behavior_tree_log',self.nav2_log_callback,10)
     
@@ -155,6 +181,9 @@ class NavigationStateManager(Node):
         
         # 超时检查定时器
         self.create_timer(5.0, self.check_timeout)  # 每5秒检查一次超时
+
+        # 待启动导航检查定时器
+        self.create_timer(0.2, self.try_execute_pending_navigation)
     
     def navigation_request_callback(self, msg: String):
         """处理路点管理器的导航请求"""
@@ -198,6 +227,73 @@ class NavigationStateManager(Node):
         except Exception as e:
             self.get_logger().error(f'❌❌ 处理路点数据错误: {e}')
     
+    @staticmethod
+    def apply_velocity_deadzone(value: float, threshold: float = 0.01) -> float:
+        return 0.0 if abs(value) < threshold else value
+
+    def convert_fastlio_velocity_to_standard(self, msg: Odometry) -> Twist:
+        """Fast-LIO速度轴为x左/y下/z后，这里转换为ROS标准机器人速度。"""
+        velocity = Twist()
+        velocity.linear.x = self.apply_velocity_deadzone(-float(msg.twist.twist.linear.z))
+        velocity.linear.y = self.apply_velocity_deadzone(float(msg.twist.twist.linear.x))
+        velocity.linear.z = self.apply_velocity_deadzone(-float(msg.twist.twist.linear.y))
+        velocity.angular.x = self.apply_velocity_deadzone(-float(msg.twist.twist.angular.z))
+        velocity.angular.y = self.apply_velocity_deadzone(float(msg.twist.twist.angular.x))
+        velocity.angular.z = self.apply_velocity_deadzone(-float(msg.twist.twist.angular.y))
+        return velocity
+
+    def update_pose_derived_speed(self, msg: Odometry):
+        """基于 Fast-LIO 位姿差分估算水平运动速度，避免 /odom.twist 未填充导致误判停滞。"""
+        stamp = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
+        if stamp <= 0.0:
+            stamp = time.time()
+
+        position = msg.pose.pose.position
+        current_pose = (
+            float(position.x),
+            float(position.y),
+            float(position.z),
+        )
+
+        if self.last_motion_pose is None or self.last_motion_pose_time is None:
+            self.last_motion_pose = current_pose
+            self.last_motion_pose_time = stamp
+            self.pose_derived_speed = None
+            return
+
+        dt = stamp - self.last_motion_pose_time
+        if dt <= 0.0 or dt > 2.0:
+            self.last_motion_pose = current_pose
+            self.last_motion_pose_time = stamp
+            self.pose_derived_speed = None
+            return
+
+        dx = current_pose[0] - self.last_motion_pose[0]
+        dz = current_pose[2] - self.last_motion_pose[2]
+        # Fast-LIO 原始坐标约为 x=左、y=下、z=后，水平位移主要在 x/z 平面。
+        horizontal_delta = math.sqrt(dx * dx + dz * dz)
+        self.pose_derived_speed = horizontal_delta / dt
+        self.last_motion_pose = current_pose
+        self.last_motion_pose_time = stamp
+
+    def get_blockage_motion_speed(self):
+        """返回阻塞检测使用的运动速度及其来源。"""
+        twist_speed = None
+        if self.current_velocity is not None:
+            linear_velocity = math.sqrt(
+                self.current_velocity.linear.x**2 + self.current_velocity.linear.y**2
+            )
+            angular_velocity = abs(self.current_velocity.angular.z)
+            twist_speed = math.sqrt(linear_velocity**2 + angular_velocity**2)
+
+        if self.pose_derived_speed is None:
+            return twist_speed, "odom_twist"
+
+        if twist_speed is None or self.pose_derived_speed >= twist_speed:
+            return self.pose_derived_speed, "pose_delta"
+
+        return twist_speed, "odom_twist"
+
     def odom_callback(self, msg: Odometry):
         """处理里程计数据回调 —— 现在同时提供位姿和速度"""
         try:
@@ -205,8 +301,9 @@ class NavigationStateManager(Node):
             self.current_pose = msg.pose.pose
             self.last_pose_update = time.time()
 
-            # 更新速度
-            self.current_velocity = msg.twist.twist
+            # 更新速度。/odom来自Fast-LIO非标准坐标系，必须先转换再用于APP状态和阻塞检测。
+            self.current_velocity = self.convert_fastlio_velocity_to_standard(msg)
+            self.update_pose_derived_speed(msg)
 
             # 障碍物阻塞检测
             self.check_obstacle_blockage()
@@ -218,6 +315,159 @@ class NavigationStateManager(Node):
             )
         except Exception as e:
             self.get_logger().error(f'❌ 处理里程计数据错误: {e}')
+
+    def robot_status_callback(self, msg: String):
+        """跟踪机器人底层控制状态，导航启动前必须确认已回到 Walk。"""
+        try:
+            status = json.loads(msg.data)
+            values = status.get("values", {}) if isinstance(status, dict) else {}
+            if not isinstance(values, dict):
+                return
+
+            robot_state = values.get("robot_status") or values.get("robot_state") or self.robot_control_state
+            self.robot_control_state = str(robot_state)
+            self.robot_motion_busy = self._as_bool(values.get("motion_busy", False))
+            self.robot_current_motion = str(values.get("current_motion", "") or "")
+
+            ready_value = values.get("control_ready_for_navigation")
+            if ready_value is None:
+                self.robot_ready_for_navigation = (
+                    self.robot_control_state == "Walk" and not self.robot_motion_busy
+                )
+            else:
+                self.robot_ready_for_navigation = self._as_bool(ready_value)
+
+            self.last_robot_status_update = time.time()
+
+        except Exception as e:
+            self.get_logger().error(f'❌ 处理机器人控制状态错误: {e}')
+
+    @staticmethod
+    def _as_bool(value) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            return value.strip().lower() in ("1", "true", "yes", "y", "on")
+        return False
+
+    def get_navigation_start_block_reason(self) -> Optional[str]:
+        if not self.require_walk_mode_for_navigation:
+            return None
+
+        now = time.time()
+        if self.last_robot_status_update <= 0:
+            return "尚未收到机器人底层状态，暂不启动导航"
+
+        status_age = now - self.last_robot_status_update
+        if status_age > self.robot_status_timeout:
+            return f"机器人底层状态超时 {status_age:.1f}s，暂不启动导航"
+
+        if self.robot_ready_for_navigation:
+            return None
+
+        if self.robot_motion_busy:
+            motion_text = f" ({self.robot_current_motion})" if self.robot_current_motion else ""
+            return f"机器人正在执行动作{motion_text}，尚未回到 Walk，暂不启动导航"
+
+        return f"机器人当前状态为 {self.robot_control_state}，尚未回到 Walk，暂不启动导航"
+
+    def reject_navigation_start_if_robot_not_ready(self, ack_type: str) -> bool:
+        reason = self.get_navigation_start_block_reason()
+        if not reason:
+            return False
+
+        self.get_logger().warning(f"拒绝启动导航: {reason}")
+        self.send_acknowledgment(ack_type, "error", reason)
+        self.publish_status_update("navigation_start_rejected", {"reason": reason})
+        return True
+
+    def defer_navigation_start_if_robot_not_ready(self, request_data: Dict[str, Any]) -> bool:
+        """动作/Menu 状态下缓存启动导航请求，等机器人回到 Walk 后自动执行。"""
+        reason = self.get_navigation_start_block_reason()
+        if not reason:
+            return False
+
+        status_fresh = (
+            self.last_robot_status_update > 0 and
+            time.time() - self.last_robot_status_update <= self.robot_status_timeout
+        )
+        can_defer = status_fresh and (
+            self.robot_motion_busy or self.robot_control_state == "Menu"
+        )
+
+        if not can_defer:
+            self.get_logger().warning(f"拒绝启动导航: {reason}")
+            self.send_acknowledgment("navigation_started", "error", reason)
+            self.publish_status_update("navigation_start_rejected", {"reason": reason})
+            return True
+
+        if self.pending_navigation_request is not None:
+            self.get_logger().warning("新的导航请求覆盖上一条待启动导航请求")
+
+        self.pending_navigation_request = json.loads(json.dumps(request_data))
+        self.pending_navigation_created_at = time.time()
+        if self.robot_motion_busy:
+            pending_message = f"{reason}。已缓存导航请求，等待动作执行完成并回到 Walk 后再开始导航。"
+        else:
+            pending_message = f"{reason}。已缓存导航请求，等待机器人回到 Walk 后再开始导航。"
+        self.pending_navigation_reason = pending_message
+
+        command_type = request_data.get("command_data", {}).get("command_type", "")
+        self.get_logger().warning(pending_message)
+        self.send_acknowledgment("navigation_pending", "pending", pending_message)
+        self.publish_status_update("navigation_pending", {
+            "reason": pending_message,
+            "block_reason": reason,
+            "command_type": command_type,
+            "timeout_sec": self.pending_navigation_timeout
+        })
+        return True
+
+    def try_execute_pending_navigation(self):
+        """机器人重新就绪后执行缓存的导航启动请求。"""
+        if self.pending_navigation_request is None:
+            return
+
+        if self.current_state != NavigationState.IDLE:
+            pending_request = self.pending_navigation_request
+            self.pending_navigation_request = None
+            self.pending_navigation_reason = ""
+            command_type = pending_request.get("command_data", {}).get("command_type", "")
+            message = "已有其他导航任务启动，取消待执行导航"
+            self.get_logger().warning(f"{message}: {command_type}")
+            self.send_acknowledgment("navigation_pending_cancelled", "error", message)
+            self.publish_status_update("navigation_pending_cancelled", {
+                "reason": message,
+                "command_type": command_type
+            })
+            return
+
+        reason = self.get_navigation_start_block_reason()
+        if reason:
+            if time.time() - self.pending_navigation_created_at > self.pending_navigation_timeout:
+                pending_request = self.pending_navigation_request
+                self.pending_navigation_request = None
+                self.pending_navigation_reason = ""
+                command_type = pending_request.get("command_data", {}).get("command_type", "")
+                message = f"待执行导航超时: {reason}"
+                self.get_logger().warning(message)
+                self.send_acknowledgment("navigation_started", "error", message)
+                self.publish_status_update("navigation_pending_timeout", {
+                    "reason": reason,
+                    "command_type": command_type
+                })
+            return
+
+        request_data = self.pending_navigation_request
+        self.pending_navigation_request = None
+        self.pending_navigation_reason = ""
+
+        command_type = request_data.get("command_data", {}).get("command_type", "")
+        self.get_logger().info(f"机器人已回到 Walk，执行待启动导航: {command_type}")
+        self.send_acknowledgment("navigation_pending", "success", "动作执行完成，机器人已回到 Walk，开始执行待启动导航")
+        self.handle_navigation_command(request_data)
 
     def check_obstacle_blockage(self):
         """检测机器人是否被障碍物阻塞（速度接近0且正在执行导航）"""
@@ -232,13 +482,20 @@ class NavigationStateManager(Node):
             # 已经上报过阻塞，不再重复检测
             return
 
-        # 检查速度是否接近0
-        if self.current_velocity is None:
+        suppression_reason = self.get_obstacle_blockage_suppression_reason()
+        if suppression_reason:
+            if self.is_blocked_by_obstacle:
+                self.get_logger().info(
+                    f"当前处于{suppression_reason}，重置阻塞计时，避免误报障碍物阻塞",
+                    throttle_duration_sec=2.0
+                )
+                self.reset_block_detection()
             return
 
-        linear_velocity = abs(self.current_velocity.linear.x)
-        angular_velocity = abs(self.current_velocity.angular.z)
-        total_velocity = math.sqrt(linear_velocity**2 + angular_velocity**2)
+        # 检查运动速度是否接近0
+        total_velocity, velocity_source = self.get_blockage_motion_speed()
+        if total_velocity is None:
+            return
 
         if total_velocity < self.velocity_threshold:
             # 速度低于阈值，开始计时
@@ -247,7 +504,7 @@ class NavigationStateManager(Node):
                 self.block_start_time = time.time()
                 self.current_detailed_state = "BLOCKED_BY_OBSTACLE"
                 self.get_logger().warning(
-                    f"⚠️ 检测到机器人停滞，速度: {total_velocity:.4f} m/s，开始计时阻塞..."
+                    f"⚠️ 检测到机器人停滞，速度: {total_velocity:.4f} m/s ({velocity_source})，开始计时阻塞..."
                 )
             else:
                 # 检查阻塞是否超时
@@ -258,9 +515,43 @@ class NavigationStateManager(Node):
             # 速度正常，重置阻塞检测
             if self.is_blocked_by_obstacle:
                 self.get_logger().info(
-                    f"✅ 机器人恢复运动，速度: {total_velocity:.4f} m/s，重置阻塞检测"
+                    f"✅ 机器人恢复运动，速度: {total_velocity:.4f} m/s ({velocity_source})，重置阻塞检测"
                 )
                 self.reset_block_detection()
+
+    def get_obstacle_blockage_suppression_reason(self) -> Optional[str]:
+        """返回当前是否应暂停障碍物阻塞计时，以及暂停原因。"""
+        if self.robot_motion_busy:
+            motion_text = f"({self.robot_current_motion})" if self.robot_current_motion else ""
+            return f"机器人动作执行阶段{motion_text}"
+
+        if self.robot_control_state == "Menu":
+            return "机器人动作库模式"
+
+        if self.nav2_blockage_suppression_nodes:
+            active_nodes = ", ".join(sorted(self.nav2_blockage_suppression_nodes))
+            return f"Nav2恢复/原地转向阶段({active_nodes})"
+
+        if self.obstacle_block_near_goal_distance <= 0:
+            return None
+
+        threshold = self.obstacle_block_near_goal_distance
+        if math.isfinite(self.distance_remaining) and self.distance_remaining <= threshold:
+            return f"接近目标点阶段(剩余路径 {self.distance_remaining:.2f}m)"
+
+        distance_to_goal = self.calculate_distance_to_waypoint()
+        if math.isfinite(distance_to_goal) and distance_to_goal <= threshold:
+            return f"接近目标点阶段(直线距离 {distance_to_goal:.2f}m)"
+
+        return None
+
+    @staticmethod
+    def is_nav2_blockage_suppression_node(node_name: str) -> bool:
+        return (
+            "Recovery" in node_name or
+            "Spin" in node_name or
+            "BackUp" in node_name
+        )
 
     def reset_block_detection(self):
         """重置阻塞检测状态"""
@@ -343,7 +634,7 @@ class NavigationStateManager(Node):
             feedback = feedback_msg.feedback
             
             # 获取 Nav2 原生计算的剩余距离
-            self.distance_remaining = float(getattr(feedback, 'distance_remaining', 0.0))
+            self.distance_remaining = float(getattr(feedback, 'distance_remaining', float('inf')))
             
             # 提取预计剩余时间（解析 ROS Duration 对象）
             est_time = getattr(feedback, 'estimated_time_remaining', None)
@@ -433,6 +724,9 @@ class NavigationStateManager(Node):
             if self.current_state != NavigationState.IDLE:
                 self.send_acknowledgment("start_single_navigation", "error", "当前正在执行其他导航任务")
                 return
+
+            if self.defer_navigation_start_if_robot_not_ready(request_data):
+                return
             
             waypoint_id = command_data.get("waypoint_id")
             waypoint_data = request_data.get("waypoint_data", {})
@@ -470,6 +764,9 @@ class NavigationStateManager(Node):
              # 检查当前状态
             if self.current_state != NavigationState.IDLE:
                self.send_acknowledgment("start_multi_point_navigation", "error", "当前正在执行其他导航任务")
+               return
+
+            if self.defer_navigation_start_if_robot_not_ready(request_data):
                return
         
         # 获取点位ID列表
@@ -514,6 +811,9 @@ class NavigationStateManager(Node):
             if self.current_state != NavigationState.IDLE:
                 self.send_acknowledgment("start_exhibition_navigation", "error", "当前正在执行其他导航任务")
                 return
+
+            if self.defer_navigation_start_if_robot_not_ready(request_data):
+                return
             
             # 获取展台点位数据
             exhibition_points = request_data.get("waypoints_data", {})
@@ -551,6 +851,16 @@ class NavigationStateManager(Node):
     def handle_stop_navigation(self, command_data: Dict[str, Any]):
         """处理停止导航"""
         try:
+            if self.current_state == NavigationState.IDLE and self.pending_navigation_request is not None:
+                self.pending_navigation_request = None
+                self.pending_navigation_reason = ""
+                self.send_acknowledgment("navigation_pending_cancelled", "success", "已取消待执行导航")
+                self.publish_status_update("navigation_pending_cancelled", {
+                    "reason": "user_stop"
+                })
+                self.get_logger().info("已取消待执行导航")
+                return
+
             if self.current_state == NavigationState.IDLE:
                 self.send_acknowledgment("stop_navigation", "error", "当前没有在执行导航")
                 return
@@ -611,6 +921,7 @@ class NavigationStateManager(Node):
             self.current_state = NavigationState.PAUSED
             self.pause_time = time.time()
             self.pause_duration_limit = pause_duration
+            self.reset_block_detection()
         
             # 物理打断底盘：取消当前 Nav2 目标
             if self.current_goal_handle:
@@ -656,6 +967,9 @@ class NavigationStateManager(Node):
             if not self.current_waypoint:
                 self.send_acknowledgment("navigation_resumed", "error", "没有可恢复的导航目标")
                 self.reset_navigation_state()
+                return
+
+            if self.reject_navigation_start_if_robot_not_ready("navigation_resumed"):
                 return
             
             # ✅ 使用 command_data（虽然当前表格中 resume 没有额外参数，但预留扩展性）
@@ -923,10 +1237,17 @@ class NavigationStateManager(Node):
         """解析 Nav2 行为树日志，识别当前正在进行的具体动作"""
         for event in msg.event_log:
         # 检测是否正在执行恢复行为（自救）
-            if "Recovery" in event.node_name or "Spin" in event.node_name or "BackUp" in event.node_name:
+            if self.is_nav2_blockage_suppression_node(event.node_name):
                 if event.current_status == "RUNNING":
+                    was_active = event.node_name in self.nav2_blockage_suppression_nodes
+                    self.nav2_blockage_suppression_nodes.add(event.node_name)
                     self.current_detailed_state = "RECOVERING" # 标记为自救状态
-                    self.get_logger().info(f"Nav2 正在执行恢复行为: {event.node_name}")
+                    if not was_active:
+                        self.get_logger().info(f"Nav2 正在执行恢复/原地转向行为: {event.node_name}")
+                else:
+                    self.nav2_blockage_suppression_nodes.discard(event.node_name)
+                    if not self.nav2_blockage_suppression_nodes and self.current_detailed_state == "RECOVERING":
+                        self.current_detailed_state = "EXECUTING" if self.current_state == NavigationState.EXECUTING else self.current_state.value
                 
              # 检测是否有规划错误
             if "ComputePathToPose" in event.node_name and event.current_status == "FAILURE":
@@ -1071,7 +1392,15 @@ class NavigationStateManager(Node):
             "recovery_active": self.current_detailed_state == "RECOVERING",
             "obstacle_blocked": self.is_blocked_by_obstacle,
             "block_duration": (time.time() - self.block_start_time) if self.block_start_time else 0,
-            "block_reported": self.block_reported
+            "block_reported": self.block_reported,
+            "obstacle_block_suppressed": bool(self.get_obstacle_blockage_suppression_reason()),
+            "obstacle_block_suppression_reason": self.get_obstacle_blockage_suppression_reason() or "",
+            "pending_navigation": self.pending_navigation_request is not None,
+            "pending_navigation_age": (
+                time.time() - self.pending_navigation_created_at
+                if self.pending_navigation_request is not None else 0
+            ),
+            "pending_navigation_reason": self.pending_navigation_reason
         }
         
         # 添加当前位置信息
@@ -1170,6 +1499,9 @@ class NavigationStateManager(Node):
         
         # 重置阻塞检测状态
         self.reset_block_detection()
+        self.nav2_blockage_suppression_nodes.clear()
+        self.distance_remaining = float('inf')
+        self.estimated_time_remaining = 0.0
     
     def destroy_node(self):
         """销毁节点前的清理工作"""

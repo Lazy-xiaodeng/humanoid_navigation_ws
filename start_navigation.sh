@@ -1,16 +1,48 @@
 #!/bin/bash
-# 告诉脚本遇到错误不要立刻停下，或者打印命令 (可选)
-set -x
+set -euo pipefail
 
-# 设置环境变量，确保能找到 ROS2
-source /opt/ros/jazzy/setup.bash # 假设你使用的是 humble，如果是 foxy 请修改
+WORKSPACE=/home/ubuntu/humanoid_ws
+LOG_FILE="$WORKSPACE/debug_output.txt"
 
-# source 你自己工作空间的环境
-cd /home/ubuntu/humanoid_ws
-source install/setup.bash
+# 每次启动只保留本次日志，避免旧错误混在最新日志里。
+: > "$LOG_FILE"
+exec > >(tee -a "$LOG_FILE") 2>&1
 
-# 打印一下时间，方便之后看日志
 echo "Starting Humanoid Navigation at $(date)"
 
-# 运行启动文件，把原本打在屏幕上的日志输出到 debug_output.txt，并追加记录(>>)
-ros2 launch humanoid_bringup robot_real.launch.py >> /home/ubuntu/humanoid_ws/debug_output.txt 2>&1
+cd "$WORKSPACE"
+
+if [ ! -f /opt/ros/jazzy/setup.bash ]; then
+  echo "ERROR: /opt/ros/jazzy/setup.bash not found"
+  exit 1
+fi
+
+if [ ! -f "$WORKSPACE/install/setup.bash" ]; then
+  echo "ERROR: $WORKSPACE/install/setup.bash not found. Run colcon build first."
+  exit 1
+fi
+
+source /opt/ros/jazzy/setup.bash
+source "$WORKSPACE/install/setup.bash"
+
+python3 - <<'PY'
+import importlib.metadata as metadata
+
+required = ("humanoid-navigation", "humanoid-websocket")
+missing = []
+for package_name in required:
+    try:
+        metadata.distribution(package_name)
+    except metadata.PackageNotFoundError:
+        missing.append(package_name)
+
+if missing:
+    raise SystemExit(
+        "ERROR: missing Python package metadata after sourcing install/setup.bash: "
+        + ", ".join(missing)
+    )
+PY
+
+echo "ROS environment loaded from $WORKSPACE/install/setup.bash"
+
+ros2 launch humanoid_bringup robot_real.launch.py use_sim_time:=false

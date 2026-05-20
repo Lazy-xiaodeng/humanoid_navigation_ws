@@ -6,6 +6,8 @@
  * 支持NDT、GICP等多种配准算法，支持IMU去畸变、里程计预测等功能
  */
 
+#include <cmath>
+
 #include <lidar_localization/lidar_localization_component.hpp>
 #include <pcl/common/transforms.h> // ★ 新增：用于点云坐标系转换的头文件
 
@@ -69,6 +71,13 @@ PCLLocalization::PCLLocalization(const rclcpp::NodeOptions & options)
   declare_parameter("use_odom", false);   // 是否使用里程计数据进行位姿预测
   declare_parameter("use_imu", false);    // 是否使用IMU数据进行点云去畸变
   declare_parameter("enable_debug", false);  // 是否启用调试信息输出
+
+  // ========== 导航输出约束参数 ==========
+  declare_parameter("force_2d_pose", false);
+  declare_parameter("force_2d_fixed_z", true);
+  declare_parameter("force_2d_z", 0.0);
+  declare_parameter("republish_last_good_tf_on_failure", true);
+  declare_parameter("max_last_good_tf_age_sec", 3.0);
 }
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -296,6 +305,11 @@ void PCLLocalization::initializeParameters()
   get_parameter("use_odom", use_odom_);        // 是否使用里程计
   get_parameter("use_imu", use_imu_);          // 是否使用IMU
   get_parameter("enable_debug", enable_debug_);  // 是否启用调试
+  get_parameter("force_2d_pose", force_2d_pose_);
+  get_parameter("force_2d_fixed_z", force_2d_fixed_z_);
+  get_parameter("force_2d_z", force_2d_z_);
+  get_parameter("republish_last_good_tf_on_failure", republish_last_good_tf_on_failure_);
+  get_parameter("max_last_good_tf_age_sec", max_last_good_tf_age_sec_);
 
   // 打印参数值到日志，方便调试
   RCLCPP_INFO(get_logger(),"global_frame_id: %s", global_frame_id_.c_str());
@@ -316,6 +330,83 @@ void PCLLocalization::initializeParameters()
   RCLCPP_INFO(get_logger(),"use_odom: %d", use_odom_);
   RCLCPP_INFO(get_logger(),"use_imu: %d", use_imu_);
   RCLCPP_INFO(get_logger(),"enable_debug: %d", enable_debug_);
+  RCLCPP_INFO(get_logger(),"force_2d_pose: %d", force_2d_pose_);
+  RCLCPP_INFO(get_logger(),"force_2d_fixed_z: %d", force_2d_fixed_z_);
+  RCLCPP_INFO(get_logger(),"force_2d_z: %lf", force_2d_z_);
+  RCLCPP_INFO(get_logger(),"republish_last_good_tf_on_failure: %d", republish_last_good_tf_on_failure_);
+  RCLCPP_INFO(get_logger(),"max_last_good_tf_age_sec: %lf", max_last_good_tf_age_sec_);
+}
+
+void PCLLocalization::applyPlanarPoseConstraint(geometry_msgs::msg::Pose & pose) const
+{
+  if (!force_2d_pose_) {
+    return;
+  }
+
+  tf2::Quaternion quat_tf;
+  tf2::fromMsg(pose.orientation, quat_tf);
+
+  double roll;
+  double pitch;
+  double yaw;
+  tf2::Matrix3x3(quat_tf).getRPY(roll, pitch, yaw);
+
+  tf2::Quaternion yaw_only;
+  yaw_only.setRPY(0.0, 0.0, yaw);
+  yaw_only.normalize();
+
+  if (force_2d_fixed_z_) {
+    pose.position.z = force_2d_z_;
+  }
+  pose.orientation = tf2::toMsg(yaw_only);
+}
+
+Eigen::Matrix4f PCLLocalization::applyPlanarTransformConstraint(
+  const Eigen::Matrix4f & transform) const
+{
+  if (!force_2d_pose_) {
+    return transform;
+  }
+
+  const Eigen::Matrix3d rotation = transform.block<3, 3>(0, 0).cast<double>();
+  const double yaw = std::atan2(rotation(1, 0), rotation(0, 0));
+
+  Eigen::Matrix4f constrained = Eigen::Matrix4f::Identity();
+  constrained.block<3, 3>(0, 0) =
+    Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()).toRotationMatrix().cast<float>();
+  constrained(0, 3) = transform(0, 3);
+  constrained(1, 3) = transform(1, 3);
+  constrained(2, 3) = force_2d_fixed_z_ ? static_cast<float>(force_2d_z_) : transform(2, 3);
+  return constrained;
+}
+
+
+bool PCLLocalization::publishLastGoodTransformIfFresh(const char * reject_reason)
+{
+  if (!republish_last_good_tf_on_failure_ || !has_last_good_transform_) {
+    return false;
+  }
+
+  const rclcpp::Time now = this->now();
+  const double age_sec = (now - last_good_transform_time_).seconds();
+  if (age_sec < 0.0 || age_sec > max_last_good_tf_age_sec_) {
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 2000,
+      "Localization rejected scans for %.2f sec after %s; last good TF is too old, waiting for relocalization.",
+      age_sec, reject_reason);
+    return false;
+  }
+
+  auto transform_stamped = last_good_transform_;
+  transform_stamped.header.stamp = now;
+  broadcaster_.sendTransform(transform_stamped);
+
+  RCLCPP_WARN_THROTTLE(
+    get_logger(), *get_clock(), 2000,
+    "Republishing last good %s->%s TF for %.2f sec after %s.",
+    transform_stamped.header.frame_id.c_str(), transform_stamped.child_frame_id.c_str(),
+    age_sec, reject_reason);
+  return true;
 }
 
 /**
@@ -449,18 +540,49 @@ void PCLLocalization::initializeRegistration()
 void PCLLocalization::initialPoseReceived(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg)
 {
   RCLCPP_INFO(get_logger(), "initialPoseReceived");
-  
-  // 检查坐标系是否匹配
+
+  auto initial_pose_msg =
+    std::make_shared<geometry_msgs::msg::PoseWithCovarianceStamped>(*msg);
+
+  // RViz 的 2D Pose Estimate 会使用当前 Fixed Frame。导航界面通常使用
+  // map_ground，因此这里把它转换到定位节点真正使用的 global_frame_id。
   if (msg->header.frame_id != global_frame_id_) {
-    RCLCPP_WARN(this->get_logger(), "initialpose_frame_id does not match global_frame_id");
-    return;
+    try {
+      geometry_msgs::msg::PoseStamped pose_in;
+      pose_in.header = msg->header;
+      pose_in.pose = msg->pose.pose;
+
+      const auto transform = tfbuffer_.lookupTransform(
+        global_frame_id_, msg->header.frame_id, tf2::TimePointZero);
+
+      geometry_msgs::msg::PoseStamped pose_out;
+      tf2::doTransform(pose_in, pose_out, transform);
+
+      initial_pose_msg->header.frame_id = global_frame_id_;
+      initial_pose_msg->pose.pose = pose_out.pose;
+
+      RCLCPP_INFO(
+        get_logger(), "Transformed initialpose from %s to %s",
+        msg->header.frame_id.c_str(), global_frame_id_.c_str());
+    } catch (tf2::TransformException & ex) {
+      RCLCPP_WARN(
+        this->get_logger(), "Failed to transform initialpose from %s to %s: %s",
+        msg->header.frame_id.c_str(), global_frame_id_.c_str(), ex.what());
+      return;
+    }
   }
+
+  applyPlanarPoseConstraint(initial_pose_msg->pose.pose);
   
   initialpose_recieved_ = true;  // 标记已接收初始位姿
-  corrent_pose_with_cov_stamped_ptr_ = msg;  // 保存当前位姿
+  corrent_pose_with_cov_stamped_ptr_ = initial_pose_msg;  // 保存当前位姿
   pose_pub_->publish(*corrent_pose_with_cov_stamped_ptr_);  // 发布初始位姿
 
-  cloudReceived(last_scan_ptr_);  // 使用最后一帧点云进行首次定位
+  if (last_scan_ptr_) {
+    cloudReceived(last_scan_ptr_);  // 使用最后一帧点云进行首次定位
+  } else {
+    RCLCPP_WARN(get_logger(), "No scan received yet, initial pose stored only.");
+  }
   RCLCPP_INFO(get_logger(), "initialPoseReceived end");
 }
 
@@ -567,6 +689,7 @@ void PCLLocalization::odomReceived(const nav_msgs::msg::Odometry::ConstSharedPtr
   corrent_pose_with_cov_stamped_ptr_->pose.pose.position.y += delta_position.y();
   corrent_pose_with_cov_stamped_ptr_->pose.pose.position.z += delta_position.z();
   corrent_pose_with_cov_stamped_ptr_->pose.pose.orientation = quat_msg;
+  applyPlanarPoseConstraint(corrent_pose_with_cov_stamped_ptr_->pose.pose);
 }
 
 /**
@@ -641,6 +764,9 @@ void PCLLocalization::imuReceived(const sensor_msgs::msg::Imu::ConstSharedPtr ms
  */
 void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg)
 {
+  if (!msg) {return;}
+  last_scan_ptr_ = msg;  // 保存最新扫描，供手动 initialpose 后立即重定位
+
   // 检查是否已接收地图和初始位姿
   if (!map_recieved_ || !initialpose_recieved_) {return;}
   // RCLCPP_INFO(get_logger(), "cloudReceived");  // 已屏蔽：频繁输出，影响日志可读性
@@ -703,23 +829,27 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
   double fitness_score = registration_->getFitnessScore();  // 配准得分
   if (!has_converged) {
     RCLCPP_WARN(get_logger(), "The registration didn't converge.");
+    publishLastGoodTransformIfFresh("non-converged registration");
     return;  // 配准未收敛，放弃此次结果
   }
   if (fitness_score > score_threshold_) {
     RCLCPP_WARN(get_logger(), "The fitness score is over %lf, skip this result.", score_threshold_);
-    // ★ 匹配质量差时不发布TF，避免位姿跳变
-    return;  // 放弃此次结果，不发布不可靠的TF变换
+    publishLastGoodTransformIfFresh("high fitness score");
+    // ★ 匹配质量差时不发布新TF，避免位姿跳变
+    return;  // 放弃此次结果，不发布不可靠的新TF变换
   }
 
   // 获取最终的变换矩阵
   Eigen::Matrix4f final_transformation = registration_->getFinalTransformation();
+  const Eigen::Matrix4f navigation_transformation =
+    applyPlanarTransformConstraint(final_transformation);
 
   // ★★★ 核心修改 4：已经删除了导致崩溃的坐标系矩阵连乘补正 ★★★
   // 因为现在输入的地图和点云都已经完全处在规范的 ROS 坐标系下，
   // 获取到的 final_transformation 本身就是准确纯粹的 map -> odom，不再需要多余补偿。
 
   // 从变换矩阵中提取旋转并转换为四元数
-  Eigen::Matrix3d rot_mat = final_transformation.block<3, 3>(0, 0).cast<double>();  // 3x3旋转矩阵
+  Eigen::Matrix3d rot_mat = navigation_transformation.block<3, 3>(0, 0).cast<double>();  // 3x3旋转矩阵
   Eigen::Quaterniond quat_eig(rot_mat);  // 转换为四元数
   geometry_msgs::msg::Quaternion quat_msg = tf2::toMsg(quat_eig);  // 转换为ROS消息
 
@@ -728,9 +858,9 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
   corrent_pose_with_cov_stamped_ptr_->header.frame_id = global_frame_id_;
   
   // 从变换矩阵中提取平移并更新位姿
-  corrent_pose_with_cov_stamped_ptr_->pose.pose.position.x = static_cast<double>(final_transformation(0, 3));
-  corrent_pose_with_cov_stamped_ptr_->pose.pose.position.y = static_cast<double>(final_transformation(1, 3));
-  corrent_pose_with_cov_stamped_ptr_->pose.pose.position.z = static_cast<double>(final_transformation(2, 3));
+  corrent_pose_with_cov_stamped_ptr_->pose.pose.position.x = static_cast<double>(navigation_transformation(0, 3));
+  corrent_pose_with_cov_stamped_ptr_->pose.pose.position.y = static_cast<double>(navigation_transformation(1, 3));
+  corrent_pose_with_cov_stamped_ptr_->pose.pose.position.z = static_cast<double>(navigation_transformation(2, 3));
   corrent_pose_with_cov_stamped_ptr_->pose.pose.orientation = quat_msg;
   
   // 发布定位结果
@@ -742,10 +872,13 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
   transform_stamped.header.stamp = this->now();
   transform_stamped.header.frame_id = global_frame_id_;      // 父坐标系
   transform_stamped.child_frame_id = base_frame_id_;         // 子坐标系（机器人基座）
-  transform_stamped.transform.translation.x = static_cast<double>(final_transformation(0, 3));
-  transform_stamped.transform.translation.y = static_cast<double>(final_transformation(1, 3));
-  transform_stamped.transform.translation.z = static_cast<double>(final_transformation(2, 3));
+  transform_stamped.transform.translation.x = static_cast<double>(navigation_transformation(0, 3));
+  transform_stamped.transform.translation.y = static_cast<double>(navigation_transformation(1, 3));
+  transform_stamped.transform.translation.z = static_cast<double>(navigation_transformation(2, 3));
   transform_stamped.transform.rotation = quat_msg;
+  last_good_transform_ = transform_stamped;
+  last_good_transform_time_ = this->now();
+  has_last_good_transform_ = true;
   broadcaster_.sendTransform(transform_stamped);  // 广播TF变换
 
   // ========== 更新并发布路径 ==========
@@ -756,8 +889,6 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
   pose_stamped_ptr->pose = corrent_pose_with_cov_stamped_ptr_->pose.pose;
   path_ptr_->poses.push_back(*pose_stamped_ptr);  // 添加到路径
   path_pub_->publish(*path_ptr_);  // 发布路径
-
-  last_scan_ptr_ = msg;  // 保存当前扫描，供下次使用
 
   // ========== 调试信息输出 ==========
   if (enable_debug_) {

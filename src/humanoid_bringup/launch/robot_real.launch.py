@@ -20,12 +20,17 @@ def generate_launch_description():
     use_rviz = LaunchConfiguration('rviz', default='true')
 
     # ================= 第一阶段：基础设施 =================
-    launch_description = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(pkg_description, 'launch', 'display.launch.py')),
-        launch_arguments={
-            'use_sim_time': use_sim_time,
-            'rviz': 'false'
-        }.items()
+    launch_description = GroupAction(
+        [
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(os.path.join(pkg_description, 'launch', 'display.launch.py')),
+                launch_arguments={
+                    'use_sim_time': use_sim_time,
+                    'rviz': 'false'
+                }.items()
+            )
+        ],
+        scoped=True,
     )
 
     # ================= 第二阶段：导航栈（延迟6秒）=================
@@ -33,7 +38,7 @@ def generate_launch_description():
         period=6.0,
         actions=[
             IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(os.path.join(pkg_navigation2, 'launch', 'navigation2.launch.py')),
+                PythonLaunchDescriptionSource(os.path.join(pkg_navigation2, 'launch', 'navigation_stack.launch.py')),
                 launch_arguments={'use_sim_time': use_sim_time}.items()
             )
         ]
@@ -70,6 +75,7 @@ def generate_launch_description():
                 executable='rviz2',
                 name='rviz2',
                 arguments=['-d', rviz_config_path, '--ros-args', '--log-level', 'ERROR'],
+                condition=IfCondition(use_rviz),
             )
         ]
     )

@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'dynamic_waypoints_manager = humanoid_navigation.dynamic_waypoints_manager:main',
             'navigation_state_manager = humanoid_navigation.navigation_state_manager:main',
+            'navigation_state_manager_recoverable = humanoid_navigation.navigation_state_manager_recoverable:main',
         ],
     },
 )

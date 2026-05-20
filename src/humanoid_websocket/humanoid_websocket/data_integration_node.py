@@ -167,16 +167,23 @@ class UnifiedDataIntegrationNode(Node):
         self.last_update_times = {}      # 最后更新时间：{data_type: timestamp}
         self.data_expiry_config = {      # 数据过期时间配置（秒）
             'robot_pose': 5.0,           # 定位数据5秒过期
+            'robot_speed': 1.0,          # 速度数据1秒过期，避免/odom断流后APP继续显示旧速度
             'odom_raw': 5.0,             # 里程计原始数据5秒过期
             'navigation_status': 10.0,   # 导航状态10秒过期
             'navigation_path': 30.0,     # 路径数据30秒过期
             'system_status': 60.0,       # 系统状态60秒过期
+            'action_result': 30.0,       # 动作完成结果30秒过期
             'sensor_data': 2.0           # 传感器数据2秒过期
         }
         
         # 推送配置
         self.push_configs = {
             'robot_pose': {
+                'frequency': 5.0,        # 5Hz推送频率
+                'last_push_time': 0,
+                'qos_levels': ['realtime', 'standard']
+            },
+            'robot_speed': {
                 'frequency': 5.0,        # 5Hz推送频率
                 'last_push_time': 0,
                 'qos_levels': ['realtime', 'standard']
@@ -266,6 +273,11 @@ class UnifiedDataIntegrationNode(Node):
             self.navigation_ack_sub = self.create_subscription(
                 String, '/navigation/acknowledgments', self.navigation_ack_callback, 10
             )
+
+            # 订阅动作完成结果，立即推送给 APP。
+            self.action_result_sub = self.create_subscription(
+                String, '/robot/action_result', self.action_result_callback, 10
+            )
             
             # 里程计数据订阅（备用，用于调试或未来扩展）
             # 注意：主定位数据现在来自NDT的/pcl_pose话题
@@ -306,8 +318,14 @@ class UnifiedDataIntegrationNode(Node):
             
             # 数据订阅管理订阅
             self.subscription_sub = self.create_subscription(
-                String, '/websocket/data_subscriptions', 
+                String, '/websocket/data_subscriptions',
                 self.subscription_callback, 10
+            )
+
+            # OTA 动作库更新通知订阅
+            self.gesture_update_sub = self.create_subscription(
+                String, '/system/gesture_list_updated',
+                self.gesture_update_callback, 10
             )
             
             # ==================== 发布器 ====================
@@ -464,6 +482,11 @@ class UnifiedDataIntegrationNode(Node):
                     "system_timestamp": time.time(),
                     "performance_metrics": self.calculate_performance_metrics(basic_status)
                 }
+
+                robot_speed = self.data_storage.get('robot_speed', {})
+                if robot_speed:
+                    enhanced_status["robot_speed"] = robot_speed
+                    enhanced_status["current_velocity"] = self.speed_to_velocity_payload(robot_speed)
                 
                 # 存储数据
                 self.data_storage['navigation_status'] = enhanced_status
@@ -474,6 +497,61 @@ class UnifiedDataIntegrationNode(Node):
         except Exception as e:
             self.get_logger().error(f'❌ 处理导航状态错误: {e}')
     
+
+
+
+    def gesture_update_callback(self, msg: String):
+        """处理 OTA 动作库更新通知，热重载 gestures.yaml"""
+        try:
+            data = json.loads(msg.data)
+            action = data.get("action", "")
+            self.get_logger().info(f"🔄 收到动作库更新通知 (action={action})，正在热重载...")
+            self.load_gesture_list()
+            if 'gesture_list' in self.data_storage:
+                push_msg = self.create_base_message("push", "gesture_list", "data_integration", "all")
+                push_msg["data"] = self.data_storage['gesture_list']
+                msg_ros = String()
+                msg_ros.data = json.dumps(push_msg, ensure_ascii=False)
+                self.push_message_pub.publish(msg_ros)
+                count = len(self.data_storage["gesture_list"].get("gestures", []))
+                self.get_logger().info(f'📤 动作库热重载完成，已推送 {count} 个动作')
+        except Exception as e:
+            self.get_logger().error(f'❌ 热重载动作库失败: {e}')
+
+    def action_result_callback(self, msg: String):
+        """处理动作完成结果，转成统一 push 消息发给 APP。"""
+        try:
+            action_result = json.loads(msg.data)
+            action_result.setdefault("timestamp", time.time())
+
+            with self.data_lock:
+                self.data_storage['action_result'] = action_result
+                self.last_update_times['action_result'] = time.time()
+
+            push_msg = self.create_base_message(
+                message_type="push",
+                data_type="action_result",
+                source="data_integration",
+                destination="all"
+            )
+            push_msg["data"] = action_result
+            push_msg["metadata"].update({
+                "push_reason": "action_result",
+                "qos_level": "realtime",
+                "status": "success" if action_result.get("status") == "success" else "error",
+            })
+
+            if action_result.get("status") != "success":
+                push_msg["metadata"]["error_code"] = action_result.get("result", "action_failed")
+                push_msg["metadata"]["error_message"] = action_result.get("message", "动作执行失败")
+
+            self.publish_push_message(push_msg)
+            self.get_logger().info(
+                f"📤 立即推送动作结果: {action_result.get('action_name', '')}, "
+                f"status={action_result.get('status', '')}"
+            )
+        except Exception as e:
+            self.get_logger().error(f'❌ 处理动作完成结果错误: {e}')
 
     def navigation_ack_callback(self, msg: String):
         """处理导航命令确认消息，转发给APP（统一格式）"""
@@ -515,35 +593,72 @@ class UnifiedDataIntegrationNode(Node):
         except Exception as e:
             self.get_logger().error(f'❌ 处理导航确认消息错误: {e}')
 
+    @staticmethod
+    def apply_deadzone(value: float, threshold: float = 0.01) -> float:
+        return 0.0 if abs(value) < threshold else value
+
+    def convert_fastlio_velocity(self, msg: Odometry) -> Dict[str, Any]:
+        """将Fast-LIO非标准坐标系速度转换为APP使用的标准机器人速度。"""
+        linear_x = round(self.apply_deadzone(-float(msg.twist.twist.linear.z)), 3)
+        linear_y = round(self.apply_deadzone(float(msg.twist.twist.linear.x)), 3)
+        linear_z = round(self.apply_deadzone(-float(msg.twist.twist.linear.y)), 3)
+        angular_x = round(self.apply_deadzone(-float(msg.twist.twist.angular.z)), 3)
+        angular_y = round(self.apply_deadzone(float(msg.twist.twist.angular.x)), 3)
+        angular_z = round(self.apply_deadzone(-float(msg.twist.twist.angular.y)), 3)
+        speed_mps = round(math.sqrt(linear_x**2 + linear_y**2), 3)
+
+        return {
+            "linear_x": linear_x,             # 标准前向线速度，单位 m/s
+            "linear_y": linear_y,             # 标准左向线速度，单位 m/s
+            "angular_z": angular_z,           # 标准左转为正的角速度，单位 rad/s
+            "linear": {
+                "x": linear_x,
+                "y": linear_y,
+                "z": linear_z
+            },
+            "angular": {
+                "x": angular_x,
+                "y": angular_y,
+                "z": angular_z
+            },
+            "speed_mps": speed_mps,
+            "turn_rate_radps": angular_z,
+            "is_moving": speed_mps > 0.0 or any(
+                abs(value) > 0.0 for value in (angular_x, angular_y, angular_z)
+            ),
+            "coordinate_frame": "base_link_standard",
+            "source_topic": "/odom",
+            "source_coordinate_frame": "fast_lio_x_left_y_down_z_back",
+            "timestamp": time.time()
+        }
+
+    @staticmethod
+    def speed_to_velocity_payload(speed_data: Dict[str, Any]) -> Dict[str, Any]:
+        linear_x = float(speed_data.get("linear_x", 0.0))
+        linear_y = float(speed_data.get("linear_y", 0.0))
+        angular_z = float(speed_data.get("angular_z", 0.0))
+        linear = speed_data.get("linear", {})
+        angular = speed_data.get("angular", {})
+        return {
+            "linear": {
+                "x": linear_x,
+                "y": linear_y,
+                "z": float(linear.get("z", 0.0))
+            },
+            "angular": {
+                "x": float(angular.get("x", 0.0)),
+                "y": float(angular.get("y", 0.0)),
+                "z": angular_z
+            },
+            "coordinate_frame": "base_link_standard",
+            "source": "robot_speed"
+        }
+
     def odom_callback(self, msg: Odometry):
         """处理 Fast-LIO 的非标准里程计数据，并转换为标准速度推送给 APP"""
         try:
             with self.data_lock:
-                # --- 核心：坐标系重新映射 ---
-            
-                # 1. 线速度映射
-                # 我们需要的前向速度 (Standard X) 实际上是 Fast-LIO 的 负Z方向
-                # (因为 Fast-LIO 此时 Z 指向后)
-                forward_velocity = -msg.twist.twist.linear.z
-            
-                # 2. 角速度映射
-                # 我们需要的左转角速度 (Standard Z旋转) 实际上是绕标准 Up 轴转。
-                # 你的标准 Up 轴对应 Fast-LIO 的 -Y 轴。
-                # 所以标准的左转（正值）对应于 Fast-LIO 绕 Y 轴的 负旋转 (-angular.y)
-                turn_velocity = -msg.twist.twist.angular.y
-
-                # 3. 容错处理
-                # 机器人静止时会有微小的漂移噪声（例如 0.001），建议做个消噪
-                if abs(forward_velocity) < 0.01: forward_velocity = 0.0
-                if abs(turn_velocity) < 0.01: turn_velocity = 0.0
-
-                # 构造要推送给 App 的数据
-                speed_data = {
-                    "linear_x": round(float(forward_velocity), 3),  # 前向线速度 (m/s)
-                    "angular_z": round(float(turn_velocity), 3),   # 左右转向速度 (rad/s)
-                    "timestamp": time.time()
-                }
-
+                speed_data = self.convert_fastlio_velocity(msg)
                 self.data_storage['robot_speed'] = speed_data
                 self.last_update_times['robot_speed'] = time.time()
 
@@ -661,7 +776,7 @@ class UnifiedDataIntegrationNode(Node):
             yaml_path = os.path.join(
                 get_package_share_directory('humanoid_locomotion'),
                 'config',
-                'gestures.yaml'
+                'gestures_app.yaml'
             )
             with open(yaml_path, 'r', encoding='utf-8') as f:
                  config = yaml.safe_load(f)

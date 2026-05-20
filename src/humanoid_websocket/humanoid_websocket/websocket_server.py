@@ -12,7 +12,7 @@ import json
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 import time
 import uuid
 import threading
@@ -114,6 +114,11 @@ class CompleteWebSocketServer(Node):
             # 5. 面部控制指令发布器 ---
             self.facial_cmd_pub = self.create_publisher(
                 String, '/robot/facial_raw_cmd', 10
+            )
+
+            # 6. 初始位姿设置发布器 (代替 RViz "2D Pose Estimate")
+            self.initial_pose_pub = self.create_publisher(
+                PoseWithCovarianceStamped, '/initialpose', 10
             )
             
             # ==================== 统一数据流接口 ====================
@@ -355,6 +360,7 @@ class CompleteWebSocketServer(Node):
                     "navigation_control",   # 导航控制命令
                     "robot_control",        # 机器人控制命令
                     "system_command",       # 系统管理命令
+                    "initial_pose",         # 初始位姿设置
                 ],
                 "subscription_supported": True,             # 是否支持订阅功能
                 "heartbeat_interval": 30.0,                 # 建议的心跳间隔
@@ -604,6 +610,29 @@ class CompleteWebSocketServer(Node):
         try:
             # 设置消息来源为客户端
             message_data["source"] = client_id
+
+            data = message_data.get("data", {})
+            action = data.get("action", "subscribe")
+            data_types = data.get("data_types", [])
+            if isinstance(data_types, str):
+                data_types = [data_types]
+
+            with self.subscription_lock:
+                if action == "subscribe":
+                    subscriptions = self.client_subscriptions.setdefault(client_id, {})
+                    for data_type in data_types:
+                        subscriptions[data_type] = {
+                            "frequency": data.get("push_frequency", 1.0),
+                            "subscription_time": time.time()
+                        }
+                elif action == "unsubscribe":
+                    if not data_types:
+                        self.client_subscriptions.pop(client_id, None)
+                    elif client_id in self.client_subscriptions:
+                        for data_type in data_types:
+                            self.client_subscriptions[client_id].pop(data_type, None)
+                        if not self.client_subscriptions[client_id]:
+                            del self.client_subscriptions[client_id]
         
             # 发布订阅请求到数据整合节点
             subscription_msg = String()
@@ -647,6 +676,8 @@ class CompleteWebSocketServer(Node):
                 await self.handle_robot_control(websocket, command_data, client_id)
             elif command_type == "facial_control":
                 await self.handle_facial_control(websocket, message_data, client_id)
+            elif command_type == "initial_pose":
+                await self.handle_initial_pose(websocket, command_data, client_id)
             else:
                 await self.send_error_to_client(websocket, client_id, f"不支持的命令类型: {command_type}")
             
@@ -797,6 +828,57 @@ class CompleteWebSocketServer(Node):
             self.get_logger().error(f'❌ 处理面部控制命令错误: {e}')
             # 报错时也尝试带回 ID
             await self.send_error_to_client(websocket, client_id, f"失败: {str(e)}")
+
+    async def handle_initial_pose(self, websocket, command_data: Dict, client_id: str):
+        """处理初始位姿设置命令 - 代替 RViz "2D Pose Estimate" 手动点击"""
+        import math
+        try:
+            x = float(command_data.get("x", 0.0))
+            y = float(command_data.get("y", 0.0))
+            yaw = float(command_data.get("yaw", 0.0))
+            frame_id = command_data.get("frame_id", "map")
+
+            # yaw -> quaternion
+            qw = math.cos(yaw * 0.5)
+            qz = math.sin(yaw * 0.5)
+
+            pose_msg = PoseWithCovarianceStamped()
+            pose_msg.header.stamp = self.get_clock().now().to_msg()
+            pose_msg.header.frame_id = frame_id
+            pose_msg.pose.pose.position.x = x
+            pose_msg.pose.pose.position.y = y
+            pose_msg.pose.pose.position.z = 0.0
+            pose_msg.pose.pose.orientation.w = qw
+            pose_msg.pose.pose.orientation.x = 0.0
+            pose_msg.pose.pose.orientation.y = 0.0
+            pose_msg.pose.pose.orientation.z = qz
+            # 默认协方差矩阵 (中等置信度)
+            pose_msg.pose.covariance = [
+                0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.25, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0685,
+            ]
+
+            self.initial_pose_pub.publish(pose_msg)
+
+            # 发送确认
+            ack_message = self.create_base_message("response", "command_ack", "websocket_server", client_id)
+            ack_message["data"] = {
+                "command_type": "initial_pose",
+                "status": "executed",
+                "pose": {"x": x, "y": y, "yaw": yaw, "frame_id": frame_id},
+                "message": "初始位姿已设置"
+            }
+            await websocket.send(json.dumps(ack_message, ensure_ascii=False))
+
+            self.get_logger().info(f'📍 设置初始位姿: x={x:.3f}, y={y:.3f}, yaw={yaw:.3f} [{frame_id}] from {client_id}')
+
+        except Exception as e:
+            self.get_logger().error(f'❌ 处理初始位姿命令错误: {e}')
+            await self.send_error_to_client(websocket, client_id, f"设置初始位姿失败: {str(e)}")
 
     async def handle_system_command(self, websocket, command_data: Dict, client_id: str):
         """处理系统管理命令"""

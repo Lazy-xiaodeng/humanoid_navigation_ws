@@ -666,8 +666,9 @@ void publish_odometry(const rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPt
 {
     odomAftMapped.header.frame_id = "camera_init";
     odomAftMapped.child_frame_id = "body";
-    // ★★ 修复：使用ROS系统时间而非点云时间，避免TF时间戳不同步
-    odomAftMapped.header.stamp = rclcpp::Clock().now();
+    // Keep the pose timestamp aligned with /cloud_registered. Consumers that
+    // transform that cloud need the camera_init->body pose for the same scan.
+    odomAftMapped.header.stamp = get_ros_time(lidar_end_time);
     set_posestamp(odomAftMapped.pose);
     pubOdomAftMapped->publish(odomAftMapped);
     auto P = kf.get_P();
@@ -685,8 +686,7 @@ void publish_odometry(const rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPt
     geometry_msgs::msg::TransformStamped trans;
     trans.header.frame_id = "camera_init";
     trans.child_frame_id = "body";
-    // ★★ 修复：使用ROS系统时间而非点云时间，避免TF时间戳不同步
-    trans.header.stamp = rclcpp::Clock().now();
+    trans.header.stamp = get_ros_time(lidar_end_time);
     trans.transform.translation.x = odomAftMapped.pose.pose.position.x;
     trans.transform.translation.y = odomAftMapped.pose.pose.position.y;
     trans.transform.translation.z = odomAftMapped.pose.pose.position.z;
