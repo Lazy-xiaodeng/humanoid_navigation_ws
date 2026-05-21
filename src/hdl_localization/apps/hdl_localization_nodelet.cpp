@@ -72,6 +72,8 @@ public:
     max_scan_matching_correction_yaw = declare_parameter<double>("max_scan_matching_correction_yaw", -1.0);
     scan_matching_jump_override_max_fitness_score = declare_parameter<double>("scan_matching_jump_override_max_fitness_score", 0.12);
     scan_matching_jump_override_min_inlier_fraction = declare_parameter<double>("scan_matching_jump_override_min_inlier_fraction", 0.90);
+    scan_matching_rejected_log_throttle_ms = declare_parameter<int>("scan_matching_rejected_log_throttle_ms", 2000);
+    scan_matching_rejected_log_throttle_ms = std::max(0, scan_matching_rejected_log_throttle_ms);
     publish_odom_prediction_on_rejection = declare_parameter<bool>("publish_odom_prediction_on_rejection", true);
     max_odom_prediction_rejections = declare_parameter<int>("max_odom_prediction_rejections", 3);
     pointcloud_transform_timeout_sec = declare_parameter<double>("pointcloud_transform_timeout_sec", 0.15);
@@ -138,6 +140,8 @@ public:
     global_localization_max_z = declare_parameter<double>("global_localization_max_z", 1.9);
     global_localization_use_max_z_filter = declare_parameter<bool>("global_localization_use_max_z_filter", true);
     global_localization_query_timeout_sec = declare_parameter<double>("global_localization_query_timeout_sec", 60.0);
+    global_localization_recovery_query_timeout_sec =
+      declare_parameter<double>("global_localization_recovery_query_timeout_sec", global_localization_query_timeout_sec);
     globalmap_set_for_global_localization = false;
     auto_relocalize_done = false;
     relocalize_requested = false;
@@ -201,6 +205,11 @@ public:
         relocalize_with_prior_server = create_service<std_srvs::srv::Empty>(
           "/relocalize_with_prior",
           std::bind(&HdlLocalizationNodelet::relocalize_with_prior, this, std::placeholders::_1, std::placeholders::_2),
+          rclcpp::ServicesQoS(),
+          global_localization_callback_group);
+        standby_server = create_service<std_srvs::srv::Empty>(
+          "/hdl_bootstrap/standby",
+          std::bind(&HdlLocalizationNodelet::standby, this, std::placeholders::_1, std::placeholders::_2),
           rclcpp::ServicesQoS(),
           global_localization_callback_group);
         if (auto_relocalize_on_start) {
@@ -548,7 +557,7 @@ private:
       RCLCPP_WARN_THROTTLE(
         get_logger(),
         *get_clock(),
-        2000,
+        scan_matching_rejected_log_throttle_ms,
         "scan matching rejected: converged=%d fitness=%.3f threshold=%.3f inlier=%.3f min_inlier=%.3f jump_rejected=%d inlier_rejected=%d",
         static_cast<int>(registration->hasConverged()),
         registration->getFitnessScore(),
@@ -690,6 +699,31 @@ private:
     return perform_relocalize(true, true);
   }
 
+  bool standby(
+    std::shared_ptr<std_srvs::srv::Empty::Request> req,
+    std::shared_ptr<std_srvs::srv::Empty::Response> res) {
+    (void)req;
+    (void)res;
+
+    std::lock_guard<std::mutex> lock(pose_estimator_mutex);
+    if (relocalizing) {
+      RCLCPP_WARN(get_logger(), "ignore standby request while global relocalization is running");
+      return false;
+    }
+
+    pose_estimator.reset();
+    have_last_accepted_pose = false;
+    last_accepted_pose = Eigen::Matrix4f::Identity();
+    consecutive_scan_matching_rejections = 0;
+    global_pose_probation_frames_remaining = 0;
+    global_pose_probation_rejections = 0;
+    pending_global_localization_candidates.clear();
+    relocalize_requested = false;
+    auto_relocalize_done = true;
+    RCLCPP_INFO(get_logger(), "HDL localization entered standby; scans are cached but local tracking is stopped");
+    return true;
+  }
+
   bool perform_relocalize(bool allow_overwrite_existing_pose, bool use_recovery_prior = false) {
     pcl::PointCloud<PointT>::ConstPtr scan;
     {
@@ -750,7 +784,9 @@ private:
     query_req->max_num_candidates = std::max(1, global_localization_max_candidates);
 
     auto query_result_future = query_global_localization_service->async_send_request(query_req);
-    auto query_timeout = std::chrono::duration<double>(global_localization_query_timeout_sec);
+    const double query_timeout_sec =
+      use_recovery_prior ? global_localization_recovery_query_timeout_sec : global_localization_query_timeout_sec;
+    auto query_timeout = std::chrono::duration<double>(query_timeout_sec);
     if (query_result_future.wait_for(query_timeout) != std::future_status::ready) {
       RCLCPP_ERROR(get_logger(), "Failed to call QueryGlobalLocalization service");
       relocalizing = false;
@@ -1690,6 +1726,7 @@ private:
   double global_localization_max_z;
   bool global_localization_use_max_z_filter;
   double global_localization_query_timeout_sec;
+  double global_localization_recovery_query_timeout_sec;
   std::atomic_bool relocalizing;
   std::atomic_bool globalmap_set_for_global_localization;
   std::atomic_bool auto_relocalize_done;
@@ -1715,6 +1752,7 @@ private:
   rclcpp::Client<hdl_global_localization::srv::QueryGlobalLocalization>::SharedPtr query_global_localization_service;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr relocalize_server;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr relocalize_with_prior_server;
+  rclcpp::Service<std_srvs::srv::Empty>::SharedPtr standby_server;
   rclcpp::TimerBase::SharedPtr auto_relocalize_timer;
 
   // Parameters
@@ -1732,6 +1770,7 @@ private:
   double max_scan_matching_correction_yaw;
   double scan_matching_jump_override_max_fitness_score;
   double scan_matching_jump_override_min_inlier_fraction;
+  int scan_matching_rejected_log_throttle_ms;
   bool publish_odom_prediction_on_rejection;
   int max_odom_prediction_rejections;
   double pointcloud_transform_timeout_sec;

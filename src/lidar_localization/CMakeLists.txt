@@ -14,6 +14,7 @@ SET(CMAKE_CXX_FLAGS "-O2 -g ${CMAKE_CXX_FLAGS}")
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
@@ -42,6 +43,7 @@ ament_target_dependencies(lidar_localization_component
   tf2_geometry_msgs
   tf2_sensor_msgs
   tf2_eigen
+  std_msgs
   geometry_msgs
   sensor_msgs
   nav_msgs

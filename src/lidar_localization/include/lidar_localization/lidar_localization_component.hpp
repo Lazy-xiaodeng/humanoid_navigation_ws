@@ -42,6 +42,7 @@
 // ROS2消息类型
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
+#include "std_msgs/msg/string.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -125,6 +126,15 @@ public:
   void applyPlanarPoseConstraint(geometry_msgs::msg::Pose & pose) const;
   Eigen::Matrix4f applyPlanarTransformConstraint(const Eigen::Matrix4f & transform) const;
   bool publishLastGoodTransformIfFresh(const char * reject_reason);
+  void publishLocalizationStatus(
+    const char * state,
+    const char * reason,
+    bool has_converged,
+    double fitness_score,
+    int filtered_points,
+    const rclcpp::Time & stamp,
+    double correction_translation = 0.0,
+    double correction_yaw = 0.0);
 
   // ========== 消息回调函数 ==========
   void initialPoseReceived(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg);  ///< 初始位姿回调
@@ -148,6 +158,8 @@ public:
     path_pub_;  ///< 路径发布者
   rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::PointCloud2>::SharedPtr
     initial_map_pub_;  ///< 初始地图发布者
+  rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::String>::SharedPtr
+    status_pub_;  ///< 定位质量状态发布者
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::ConstSharedPtr
     map_sub_;  ///< 地图订阅者
   rclcpp::Subscription<nav_msgs::msg::Odometry>::ConstSharedPtr
@@ -171,16 +183,21 @@ public:
   bool initialpose_recieved_{false}; ///< 标记是否已接收初始位姿
   bool has_last_good_transform_{false}; ///< 是否已有可信定位TF
   rclcpp::Time last_good_transform_time_{0, 0, RCL_ROS_TIME}; ///< 最后可信TF发布时间
+  int consecutive_rejected_frames_{0}; ///< 连续被拒绝的扫描匹配帧数
 
   // ========== ROS参数 ==========
   std::string global_frame_id_;   ///< 全局坐标系ID（如"map"）
   std::string odom_frame_id_;     ///< 里程计坐标系ID
   std::string base_frame_id_;     ///< 机器人基坐标系ID
+  std::string localization_status_topic_; ///< 定位质量状态话题
   std::string registration_method_;  ///< 配准方法名称（NDT/GICP等）
   double scan_max_range_;         ///< 点云最大有效距离（米）
   double scan_min_range_;         ///< 点云最小有效距离（米）
   double scan_period_;            ///< 雷达扫描周期（秒），用于IMU去畸变
   double score_threshold_;        ///< 配准得分阈值，超过认为不可靠
+  bool reject_pose_jump_{true};    ///< 是否拒绝单帧位姿大跳变
+  double max_pose_jump_translation_{0.8}; ///< 单帧最大允许平移修正
+  double max_pose_jump_yaw_{0.45}; ///< 单帧最大允许航向修正
   double ndt_resolution_;         ///< NDT网格分辨率（米）
   double ndt_step_size_;          ///< NDT牛顿迭代步长
   double transform_epsilon_;      ///< 变换收敛阈值

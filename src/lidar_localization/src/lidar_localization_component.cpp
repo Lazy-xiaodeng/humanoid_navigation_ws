@@ -7,6 +7,7 @@
  */
 
 #include <cmath>
+#include <sstream>
 
 #include <lidar_localization/lidar_localization_component.hpp>
 #include <pcl/common/transforms.h> // ★ 新增：用于点云坐标系转换的头文件
@@ -39,6 +40,9 @@ PCLLocalization::PCLLocalization(const rclcpp::NodeOptions & options)
   // ========== 配准方法参数 ==========
   declare_parameter("registration_method", "NDT");  // 配准方法：NDT, NDT_OMP, GICP, GICP_OMP
   declare_parameter("score_threshold", 2.0);        // 配准得分阈值（fitness score），超过此值认为配准不可靠
+  declare_parameter("reject_pose_jump", true);
+  declare_parameter("max_pose_jump_translation", 0.8);
+  declare_parameter("max_pose_jump_yaw", 0.45);
   declare_parameter("ndt_resolution", 1.0);         // NDT算法的体素网格分辨率（米），控制NDT网格大小
   declare_parameter("ndt_step_size", 0.1);          // NDT算法的牛顿迭代步长，越大收敛越快但可能不稳定
   declare_parameter("ndt_max_iterations", 35);      // 配准算法最大迭代次数
@@ -78,6 +82,7 @@ PCLLocalization::PCLLocalization(const rclcpp::NodeOptions & options)
   declare_parameter("force_2d_z", 0.0);
   declare_parameter("republish_last_good_tf_on_failure", true);
   declare_parameter("max_last_good_tf_age_sec", 3.0);
+  declare_parameter("localization_status_topic", "/localization/ndt_status");
 }
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -120,6 +125,7 @@ CallbackReturn PCLLocalization::on_activate(const rclcpp_lifecycle::State &)
   pose_pub_->on_activate();
   path_pub_->on_activate();
   initial_map_pub_->on_activate();
+  status_pub_->on_activate();
 
   // 如果配置了启动时设置初始位姿，则发布初始位姿
   if (set_initial_pose_) {
@@ -200,6 +206,7 @@ CallbackReturn PCLLocalization::on_deactivate(const rclcpp_lifecycle::State &)
   pose_pub_->on_deactivate();
   path_pub_->on_deactivate();
   initial_map_pub_->on_deactivate();
+  status_pub_->on_deactivate();
 
   RCLCPP_INFO(get_logger(), "Deactivating end");
   return CallbackReturn::SUCCESS;
@@ -219,6 +226,7 @@ CallbackReturn PCLLocalization::on_cleanup(const rclcpp_lifecycle::State &)
   initial_map_pub_.reset();
   path_pub_.reset();
   pose_pub_.reset();
+  status_pub_.reset();
   odom_sub_.reset();
   cloud_sub_.reset();
   imu_sub_.reset();
@@ -271,10 +279,14 @@ void PCLLocalization::initializeParameters()
   get_parameter("global_frame_id", global_frame_id_);  // 全局坐标系（地图坐标系）
   get_parameter("odom_frame_id", odom_frame_id_);      // 里程计坐标系
   get_parameter("base_frame_id", base_frame_id_);      // 机器人基坐标系
+  get_parameter("localization_status_topic", localization_status_topic_);
   
   // 获取配准算法参数
   get_parameter("registration_method", registration_method_);  // 配准方法名称
   get_parameter("score_threshold", score_threshold_);          // 配准得分阈值
+  get_parameter("reject_pose_jump", reject_pose_jump_);
+  get_parameter("max_pose_jump_translation", max_pose_jump_translation_);
+  get_parameter("max_pose_jump_yaw", max_pose_jump_yaw_);
   get_parameter("ndt_resolution", ndt_resolution_);     // NDT网格分辨率
   get_parameter("ndt_step_size", ndt_step_size_);       // NDT牛顿迭代步长
   get_parameter("ndt_num_threads", ndt_num_threads_);   // OMP线程数
@@ -315,7 +327,12 @@ void PCLLocalization::initializeParameters()
   RCLCPP_INFO(get_logger(),"global_frame_id: %s", global_frame_id_.c_str());
   RCLCPP_INFO(get_logger(),"odom_frame_id: %s", odom_frame_id_.c_str());
   RCLCPP_INFO(get_logger(),"base_frame_id: %s", base_frame_id_.c_str());
+  RCLCPP_INFO(get_logger(),"localization_status_topic: %s", localization_status_topic_.c_str());
   RCLCPP_INFO(get_logger(),"registration_method: %s", registration_method_.c_str());
+  RCLCPP_INFO(get_logger(),"score_threshold: %lf", score_threshold_);
+  RCLCPP_INFO(get_logger(),"reject_pose_jump: %d", reject_pose_jump_);
+  RCLCPP_INFO(get_logger(),"max_pose_jump_translation: %lf", max_pose_jump_translation_);
+  RCLCPP_INFO(get_logger(),"max_pose_jump_yaw: %lf", max_pose_jump_yaw_);
   RCLCPP_INFO(get_logger(),"ndt_resolution: %lf", ndt_resolution_);
   RCLCPP_INFO(get_logger(),"ndt_step_size: %lf", ndt_step_size_);
   RCLCPP_INFO(get_logger(),"ndt_num_threads: %d", ndt_num_threads_);
@@ -409,6 +426,53 @@ bool PCLLocalization::publishLastGoodTransformIfFresh(const char * reject_reason
   return true;
 }
 
+void PCLLocalization::publishLocalizationStatus(
+  const char * state,
+  const char * reason,
+  bool has_converged,
+  double fitness_score,
+  int filtered_points,
+  const rclcpp::Time & stamp,
+  double correction_translation,
+  double correction_yaw)
+{
+  if (!status_pub_) {
+    return;
+  }
+
+  const std::string state_text = state ? state : "unknown";
+  const std::string reason_text = reason ? reason : "";
+  if (state_text == "rejected") {
+    consecutive_rejected_frames_ += 1;
+  } else if (state_text == "accepted") {
+    consecutive_rejected_frames_ = 0;
+  }
+
+  std::ostringstream out;
+  out.setf(std::ios::fixed);
+  out.precision(6);
+  out
+    << "{"
+    << "\"event_type\":\"ndt_localization_status\","
+    << "\"state\":\"" << state_text << "\","
+    << "\"reason\":\"" << reason_text << "\","
+    << "\"stamp_sec\":" << stamp.seconds() << ","
+    << "\"has_converged\":" << (has_converged ? "true" : "false") << ","
+    << "\"fitness_score\":" << fitness_score << ","
+    << "\"score_threshold\":" << score_threshold_ << ","
+    << "\"correction_translation\":" << correction_translation << ","
+    << "\"correction_yaw\":" << correction_yaw << ","
+    << "\"max_pose_jump_translation\":" << max_pose_jump_translation_ << ","
+    << "\"max_pose_jump_yaw\":" << max_pose_jump_yaw_ << ","
+    << "\"filtered_points\":" << filtered_points << ","
+    << "\"consecutive_rejected_frames\":" << consecutive_rejected_frames_
+    << "}";
+
+  std_msgs::msg::String msg;
+  msg.data = out.str();
+  status_pub_->publish(msg);
+}
+
 /**
  * @brief 初始化ROS发布者和订阅者
  * 
@@ -434,6 +498,10 @@ void PCLLocalization::initializePubSub()
   initial_map_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
     "initial_map",
     rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable());
+
+  status_pub_ = create_publisher<std_msgs::msg::String>(
+    localization_status_topic_,
+    rclcpp::QoS(rclcpp::KeepLast(10)).reliable());
 
   // 订阅初始位姿话题（通常在RViz中通过"2D Pose Estimate"设置）
   initial_pose_sub_ = create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
@@ -576,6 +644,8 @@ void PCLLocalization::initialPoseReceived(const geometry_msgs::msg::PoseWithCova
   
   initialpose_recieved_ = true;  // 标记已接收初始位姿
   corrent_pose_with_cov_stamped_ptr_ = initial_pose_msg;  // 保存当前位姿
+  has_last_good_transform_ = false;
+  consecutive_rejected_frames_ = 0;
   pose_pub_->publish(*corrent_pose_with_cov_stamped_ptr_);  // 发布初始位姿
 
   if (last_scan_ptr_) {
@@ -829,11 +899,17 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
   double fitness_score = registration_->getFitnessScore();  // 配准得分
   if (!has_converged) {
     RCLCPP_WARN(get_logger(), "The registration didn't converge.");
+    publishLocalizationStatus(
+      "rejected", "not_converged", has_converged, fitness_score,
+      static_cast<int>(tmp_ptr->size()), rclcpp::Time(msg->header.stamp));
     publishLastGoodTransformIfFresh("non-converged registration");
     return;  // 配准未收敛，放弃此次结果
   }
   if (fitness_score > score_threshold_) {
     RCLCPP_WARN(get_logger(), "The fitness score is over %lf, skip this result.", score_threshold_);
+    publishLocalizationStatus(
+      "rejected", "high_fitness", has_converged, fitness_score,
+      static_cast<int>(tmp_ptr->size()), rclcpp::Time(msg->header.stamp));
     publishLastGoodTransformIfFresh("high fitness score");
     // ★ 匹配质量差时不发布新TF，避免位姿跳变
     return;  // 放弃此次结果，不发布不可靠的新TF变换
@@ -843,6 +919,33 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
   Eigen::Matrix4f final_transformation = registration_->getFinalTransformation();
   const Eigen::Matrix4f navigation_transformation =
     applyPlanarTransformConstraint(final_transformation);
+
+  const double correction_translation = std::hypot(
+    static_cast<double>(navigation_transformation(0, 3) - init_guess(0, 3)),
+    static_cast<double>(navigation_transformation(1, 3) - init_guess(1, 3)));
+  const Eigen::Matrix3d init_rot = init_guess.block<3, 3>(0, 0).cast<double>();
+  const Eigen::Matrix3d result_rot = navigation_transformation.block<3, 3>(0, 0).cast<double>();
+  const double init_yaw = std::atan2(init_rot(1, 0), init_rot(0, 0));
+  const double result_yaw = std::atan2(result_rot(1, 0), result_rot(0, 0));
+  const double yaw_error = result_yaw - init_yaw;
+  const double correction_yaw = std::abs(std::atan2(std::sin(yaw_error), std::cos(yaw_error)));
+  if (
+    reject_pose_jump_ && has_last_good_transform_ &&
+    (correction_translation > max_pose_jump_translation_ ||
+     correction_yaw > max_pose_jump_yaw_))
+  {
+    RCLCPP_WARN(
+      get_logger(),
+      "Rejecting NDT pose jump: translation=%.3f limit=%.3f yaw=%.3f limit=%.3f fitness=%.3f",
+      correction_translation, max_pose_jump_translation_,
+      correction_yaw, max_pose_jump_yaw_, fitness_score);
+    publishLocalizationStatus(
+      "rejected", "pose_jump", has_converged, fitness_score,
+      static_cast<int>(tmp_ptr->size()), rclcpp::Time(msg->header.stamp),
+      correction_translation, correction_yaw);
+    publishLastGoodTransformIfFresh("pose jump");
+    return;
+  }
 
   // ★★★ 核心修改 4：已经删除了导致崩溃的坐标系矩阵连乘补正 ★★★
   // 因为现在输入的地图和点云都已经完全处在规范的 ROS 坐标系下，
@@ -865,6 +968,10 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
   
   // 发布定位结果
   pose_pub_->publish(*corrent_pose_with_cov_stamped_ptr_);
+  publishLocalizationStatus(
+    "accepted", "ok", has_converged, fitness_score,
+    static_cast<int>(tmp_ptr->size()), rclcpp::Time(msg->header.stamp),
+    correction_translation, correction_yaw);
 
   // ========== 发布TF变换 ==========
   // 发布map到base_link的变换，供其他节点使用

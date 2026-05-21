@@ -56,7 +56,13 @@ def generate_launch_description():
             'publish_tf': True,
             'default_frame_id': 'map',
             'auto_pause_on_localization_recovery': True,
+            'localization_stop_hold_sec': 2.0,
+            'localization_resume_settle_sec': 1.0,
             'localization_recovery_status_topic': '/localization/recovery_status',
+            'localization_recovery_request_topic': '/localization/recovery_requests',
+            'request_localization_recovery_on_nav_failure': True,
+            'localization_recovery_request_cooldown_sec': 20.0,
+            'localization_recovery_prior_radius_m': 10.0,
             'reverse_navigation_bt_xml': PathJoinSubstitution([
                 pkg_humanoid_navigation2, 'behavior_tree', 'navigate_reverse_xy_then_yaw.xml'
             ])

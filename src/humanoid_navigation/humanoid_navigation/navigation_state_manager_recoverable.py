@@ -64,13 +64,22 @@ class NavigationStateManager(Node):
             ('default_frame_id', 'map'),
             ('obstacle_block_timeout', 5.0),  # 障碍物阻塞超时时间（秒）
             ('velocity_threshold', 0.10),  # 判断机器人是否停滞的速度阈值（m/s）
+            ('blockage_pose_delta_deadzone', 0.12),  # 抑制定位/机身晃动带来的低速假恢复
+            ('blockage_recovery_velocity_threshold', 0.20),  # 解除阻塞需要更明确的持续运动
+            ('blockage_recovery_confirm_sec', 1.0),
             ('require_walk_mode_for_navigation', True),
             ('robot_status_timeout', 2.0),
             ('pending_navigation_timeout', 90.0),
             ('obstacle_block_near_goal_distance', 0.7),
             ('navigation_failure_policy', 'pause_on_failed'),
             ('auto_pause_on_localization_recovery', True),
+            ('localization_stop_hold_sec', 2.0),
+            ('localization_resume_settle_sec', 1.0),
             ('localization_recovery_status_topic', '/localization/recovery_status'),
+            ('localization_recovery_request_topic', '/localization/recovery_requests'),
+            ('request_localization_recovery_on_nav_failure', True),
+            ('localization_recovery_request_cooldown_sec', 20.0),
+            ('localization_recovery_prior_radius_m', 10.0),
             ('map_frame', 'map'),
             ('base_frame', 'base_footprint'),
             ('pose_tf_timeout_sec', 0.05),
@@ -88,6 +97,11 @@ class NavigationStateManager(Node):
         self.default_frame_id = self.get_parameter('default_frame_id').value
         self.obstacle_block_timeout = self.get_parameter('obstacle_block_timeout').value
         self.velocity_threshold = self.get_parameter('velocity_threshold').value
+        self.blockage_pose_delta_deadzone = float(self.get_parameter('blockage_pose_delta_deadzone').value)
+        self.blockage_recovery_velocity_threshold = float(
+            self.get_parameter('blockage_recovery_velocity_threshold').value)
+        self.blockage_recovery_confirm_sec = float(
+            self.get_parameter('blockage_recovery_confirm_sec').value)
         self.require_walk_mode_for_navigation = self.get_parameter('require_walk_mode_for_navigation').value
         self.robot_status_timeout = float(self.get_parameter('robot_status_timeout').value)
         self.pending_navigation_timeout = float(self.get_parameter('pending_navigation_timeout').value)
@@ -95,9 +109,21 @@ class NavigationStateManager(Node):
         self.navigation_failure_policy = str(self.get_parameter('navigation_failure_policy').value)
         self.auto_pause_on_localization_recovery = bool(
             self.get_parameter('auto_pause_on_localization_recovery').value)
+        self.localization_stop_hold_sec = float(
+            self.get_parameter('localization_stop_hold_sec').value)
+        self.localization_resume_settle_sec = float(
+            self.get_parameter('localization_resume_settle_sec').value)
         self.reverse_navigation_bt_xml = str(self.get_parameter('reverse_navigation_bt_xml').value)
         self.localization_recovery_status_topic = str(
             self.get_parameter('localization_recovery_status_topic').value)
+        self.localization_recovery_request_topic = str(
+            self.get_parameter('localization_recovery_request_topic').value)
+        self.request_localization_recovery_on_nav_failure = bool(
+            self.get_parameter('request_localization_recovery_on_nav_failure').value)
+        self.localization_recovery_request_cooldown_sec = float(
+            self.get_parameter('localization_recovery_request_cooldown_sec').value)
+        self.localization_recovery_prior_radius_m = float(
+            self.get_parameter('localization_recovery_prior_radius_m').value)
         self.map_frame = str(self.get_parameter('map_frame').value)
         self.base_frame = str(self.get_parameter('base_frame').value)
         self.pose_tf_timeout_sec = float(self.get_parameter('pose_tf_timeout_sec').value)
@@ -141,6 +167,8 @@ class NavigationStateManager(Node):
         self.is_blocked_by_obstacle = False
         self.block_start_time = None
         self.block_reported = False  # 防止重复上报
+        self.block_recovery_candidate_start_time = None
+        self.block_recovery_candidate_source = ""
         
         # ========== 从路点管理器接收的数据 ==========
         self.waypoints_data = {}
@@ -160,6 +188,9 @@ class NavigationStateManager(Node):
         self.localization_recovery_reason = ""
         self.localization_recovery_started_at = 0.0
         self.localization_recovery_last_status = {}
+        self.localization_stop_until = 0.0
+        self.localization_recovered_at = 0.0
+        self.last_localization_recovery_request_time = 0.0
         
         # ========== 设置ROS2通信 ==========
         self.setup_communication()
@@ -188,6 +219,12 @@ class NavigationStateManager(Node):
 
         # 定位异常自动暂停时，立即补一帧零速度，避免取消 Nav2 goal 前后继续沿旧速度滑行
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+
+        self.localization_recovery_request_pub = self.create_publisher(
+            String,
+            self.localization_recovery_request_topic,
+            10
+        )
         
         # ========== 订阅器 ==========
         # 订阅路点管理器的导航请求
@@ -234,6 +271,9 @@ class NavigationStateManager(Node):
 
         # 定位恢复后自动继续未完成导航
         self.create_timer(0.5, self.try_resume_after_localization_recovery)
+
+        # 定位恢复期间持续压零速度，避免异步 cancel 期间沿旧 cmd_vel 继续走
+        self.create_timer(0.1, self.enforce_localization_stop)
     
     def navigation_request_callback(self, msg: String):
         """处理路点管理器的导航请求"""
@@ -363,13 +403,39 @@ class NavigationStateManager(Node):
             angular_velocity = abs(self.current_velocity.angular.z)
             twist_speed = math.sqrt(linear_velocity**2 + angular_velocity**2)
 
-        if self.pose_derived_speed is None:
+        pose_delta_speed = self.pose_derived_speed
+        if pose_delta_speed is not None and pose_delta_speed < self.blockage_pose_delta_deadzone:
+            pose_delta_speed = 0.0
+
+        if pose_delta_speed is None:
             return twist_speed, "odom_twist"
 
-        if twist_speed is None or self.pose_derived_speed >= twist_speed:
-            return self.pose_derived_speed, "pose_delta"
+        if twist_speed is None or pose_delta_speed >= twist_speed:
+            return pose_delta_speed, "pose_delta"
 
         return twist_speed, "odom_twist"
+
+    def clear_block_recovery_candidate(self):
+        self.block_recovery_candidate_start_time = None
+        self.block_recovery_candidate_source = ""
+
+    def has_confirmed_blockage_recovery(self, total_velocity: float, velocity_source: str) -> bool:
+        if total_velocity < self.blockage_recovery_velocity_threshold:
+            self.clear_block_recovery_candidate()
+            return False
+
+        now = time.time()
+        if self.block_recovery_candidate_start_time is None:
+            self.block_recovery_candidate_start_time = now
+            self.block_recovery_candidate_source = velocity_source
+            return self.blockage_recovery_confirm_sec <= 0.0
+
+        return now - self.block_recovery_candidate_start_time >= self.blockage_recovery_confirm_sec
+
+    def is_stopped_for_blockage(self, total_velocity: float, velocity_source: str) -> bool:
+        if velocity_source == "pose_delta":
+            return total_velocity < self.blockage_recovery_velocity_threshold
+        return total_velocity < self.velocity_threshold
 
     def lookup_current_map_pose(self):
         """优先通过 TF 读取标准 map->base 位姿，避免直接使用 Fast-LIO 原始 /odom 坐标。"""
@@ -589,7 +655,7 @@ class NavigationStateManager(Node):
 
         if self.block_reported:
             # 阻塞异常已经上报过；等机器人真正恢复运动后再允许下一次阻塞上报。
-            if total_velocity >= self.velocity_threshold:
+            if self.has_confirmed_blockage_recovery(total_velocity, velocity_source):
                 self.get_logger().info(
                     f"✅ 机器人阻塞后已恢复运动，速度: {total_velocity:.4f} m/s ({velocity_source})，允许后续阻塞重新上报"
                 )
@@ -606,7 +672,8 @@ class NavigationStateManager(Node):
                 self.reset_block_detection()
             return
 
-        if total_velocity < self.velocity_threshold:
+        if self.is_stopped_for_blockage(total_velocity, velocity_source):
+            self.clear_block_recovery_candidate()
             # 速度低于阈值，开始计时
             if not self.is_blocked_by_obstacle:
                 self.is_blocked_by_obstacle = True
@@ -621,12 +688,17 @@ class NavigationStateManager(Node):
                 if block_duration > self.obstacle_block_timeout:
                     self.handle_obstacle_block_timeout(block_duration)
         else:
-            # 速度正常，重置阻塞检测
+            # 速度正常时也要先确认持续恢复，避免 pose_delta 单帧抖动打断阻塞计时。
             if self.is_blocked_by_obstacle:
-                self.get_logger().info(
-                    f"✅ 机器人恢复运动，速度: {total_velocity:.4f} m/s ({velocity_source})，重置阻塞检测"
-                )
-                self.reset_block_detection()
+                if self.has_confirmed_blockage_recovery(total_velocity, velocity_source):
+                    self.get_logger().info(
+                        f"✅ 机器人恢复运动，速度: {total_velocity:.4f} m/s ({velocity_source})，重置阻塞检测"
+                    )
+                    self.reset_block_detection()
+                else:
+                    block_duration = time.time() - self.block_start_time
+                    if block_duration > self.obstacle_block_timeout:
+                        self.handle_obstacle_block_timeout(block_duration)
 
     def get_obstacle_blockage_suppression_reason(self) -> Optional[str]:
         """返回当前是否应暂停障碍物阻塞计时，以及暂停原因。"""
@@ -665,6 +737,7 @@ class NavigationStateManager(Node):
         self.is_blocked_by_obstacle = False
         self.block_start_time = None
         self.block_reported = False
+        self.clear_block_recovery_candidate()
         if self.current_detailed_state == "BLOCKED_BY_OBSTACLE":
             self.current_detailed_state = "EXECUTING"
 
@@ -1201,6 +1274,8 @@ class NavigationStateManager(Node):
                 self.handle_localization_recovery_progress(status)
             elif event_type == "localization_relocalize_failed":
                 self.handle_localization_recovery_failed(status)
+            elif event_type == "localization_manual_initialpose_override":
+                self.handle_localization_manual_initialpose_override(status)
             elif event_type == "localization_recovered":
                 self.handle_localization_recovered(status)
 
@@ -1224,6 +1299,7 @@ class NavigationStateManager(Node):
             self.pause_time = time.time()
             self.pause_duration_limit = 0
             self.reset_block_detection()
+            self.begin_localization_stop_hold()
 
             if self.current_goal_handle:
                 self.cancel_navigation()
@@ -1274,9 +1350,25 @@ class NavigationStateManager(Node):
             "auto_resume_pending": self.localization_auto_paused,
         })
 
+    def handle_localization_manual_initialpose_override(self, status: Dict[str, Any]):
+        self.localization_recovery_active = False
+        self.localization_recovery_reason = status.get("reason", "人工重定位已接管")
+
+        self.publish_status_update("navigation_localization_manual_override", {
+            "reason": self.localization_recovery_reason,
+            "localization_event": status.get("event_type", ""),
+            "manual_lockout_sec": status.get("manual_lockout_sec", 0.0),
+            "current_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
+            "current_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
+            "waypoint_index": self.current_waypoint_index,
+            "total_waypoints": self.total_waypoints,
+            "auto_resume_pending": self.localization_auto_paused,
+        })
+
     def handle_localization_recovered(self, status: Dict[str, Any]):
         self.localization_recovery_active = False
         self.localization_recovery_reason = status.get("reason", "定位已恢复")
+        self.localization_recovered_at = time.time()
 
         event_data = {
             "reason": self.localization_recovery_reason,
@@ -1322,6 +1414,22 @@ class NavigationStateManager(Node):
             })
             return
 
+        settle_remaining = (
+            self.localization_recovered_at +
+            max(0.0, self.localization_resume_settle_sec) -
+            time.time()
+        )
+        if settle_remaining > 0.0:
+            self.publish_status_update("navigation_localization_resume_waiting", {
+                "reason": f"定位恢复后等待 NDT/代价地图稳定 {settle_remaining:.1f}s",
+                "settle_remaining_sec": round(settle_remaining, 2),
+                "current_waypoint_id": self.current_waypoint.get("id", ""),
+                "current_waypoint_name": self.current_waypoint.get("name", ""),
+                "waypoint_index": self.current_waypoint_index,
+                "total_waypoints": self.total_waypoints,
+            })
+            return
+
         pause_elapsed = time.time() - self.pause_time if self.pause_time else 0.0
         event_data = {
             "resumed_waypoint_id": self.current_waypoint.get("id", ""),
@@ -1335,6 +1443,7 @@ class NavigationStateManager(Node):
 
         self.localization_resume_pending = False
         self.localization_auto_paused = False
+        self.localization_stop_until = 0.0
         self.current_state = NavigationState.EXECUTING
         self.current_detailed_state = "EXECUTING"
 
@@ -1357,6 +1466,24 @@ class NavigationStateManager(Node):
             self.cmd_vel_pub.publish(Twist())
         except Exception as e:
             self.get_logger().error(f"发布零速度失败: {e}")
+
+    def begin_localization_stop_hold(self):
+        now = time.time()
+        self.localization_stop_until = max(
+            self.localization_stop_until,
+            now + max(0.0, self.localization_stop_hold_sec)
+        )
+        self.publish_zero_cmd_vel()
+
+    def enforce_localization_stop(self):
+        now = time.time()
+        localization_pause_active = (
+            self.localization_auto_paused and
+            self.current_state == NavigationState.PAUSED and
+            self.current_detailed_state == "LOCALIZATION_RECOVERY"
+        )
+        if localization_pause_active or now < self.localization_stop_until:
+            self.publish_zero_cmd_vel()
 
     def build_localization_pause_context(self, status: Dict[str, Any]) -> Dict[str, Any]:
         pause_location = None
@@ -1721,7 +1848,10 @@ class NavigationStateManager(Node):
     def handle_nav2_cancelled(self):
         """处理Nav2取消"""
         if self.current_state == NavigationState.PAUSED:
-            self.get_logger().info("Nav2 取消是由用户暂停触发，忽略重置操作")
+            if self.localization_auto_paused:
+                self.get_logger().info("Nav2 取消是由定位恢复自动暂停触发，忽略重置操作")
+            else:
+                self.get_logger().info("Nav2 取消是由用户暂停触发，忽略重置操作")
             return
         if self.current_state == NavigationState.EXECUTING:
             self.current_state = NavigationState.CANCELLED
@@ -1780,12 +1910,104 @@ class NavigationStateManager(Node):
             ],
             "resume_navigation_allowed": False
         }
+
+    @staticmethod
+    def pose_orientation_dict(orientation: Any) -> Dict[str, float]:
+        if isinstance(orientation, dict):
+            return {
+                "x": float(orientation.get("x", 0.0)),
+                "y": float(orientation.get("y", 0.0)),
+                "z": float(orientation.get("z", 0.0)),
+                "w": float(orientation.get("w", 1.0)),
+            }
+        if isinstance(orientation, (list, tuple)) and len(orientation) >= 4:
+            return {
+                "x": float(orientation[0]),
+                "y": float(orientation[1]),
+                "z": float(orientation[2]),
+                "w": float(orientation[3]),
+            }
+        return {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}
+
+    def request_localization_recovery_for_failed_navigation(self, reason: str):
+        """导航失败后按需唤醒 HDL，全局重定位优先搜索失败目标点附近。"""
+        if not self.request_localization_recovery_on_nav_failure:
+            return
+        if not self.current_waypoint:
+            return
+
+        now = time.time()
+        if now - self.last_localization_recovery_request_time < self.localization_recovery_request_cooldown_sec:
+            self.get_logger().warning(
+                "定位恢复请求仍在冷却中，跳过本次导航失败触发",
+                throttle_duration_sec=3.0,
+            )
+            return
+
+        position = self.current_waypoint.get("position", [0.0, 0.0, 0.0])
+        if not isinstance(position, (list, tuple)) or len(position) < 2:
+            return
+
+        orientation = self.pose_orientation_dict(self.current_waypoint.get("orientation", [0.0, 0.0, 0.0, 1.0]))
+        pose = {
+            "position": {
+                "x": float(position[0]),
+                "y": float(position[1]),
+                "z": float(position[2]) if len(position) >= 3 else 0.0,
+            },
+            "orientation": orientation,
+        }
+        payload = {
+            "event_type": "navigation_failure_recovery_request",
+            "source": "navigation_state_manager",
+            "reason": reason,
+            "timestamp": now,
+            "prior_source": "failed_waypoint",
+            "prior_frame_id": self.current_waypoint.get("frame_id", self.default_frame_id),
+            "prior_pose": pose,
+            "search_radius_m": self.localization_recovery_prior_radius_m,
+            "allow_full_global_fallback": True,
+            "failed_waypoint_index": self.current_waypoint_index,
+            "failed_waypoint_id": self.current_waypoint.get("id", ""),
+            "failed_waypoint_name": self.current_waypoint.get("name", ""),
+            "current_pose": self.pose_to_dict(self.current_pose) if self.current_pose else None,
+            "current_detailed_state": self.current_detailed_state,
+        }
+
+        msg = String()
+        msg.data = json.dumps(payload, ensure_ascii=False)
+        self.localization_recovery_request_pub.publish(msg)
+        self.last_localization_recovery_request_time = now
+        self.get_logger().warning(
+            f"导航失败后请求 HDL 按需重定位: 先验={payload['failed_waypoint_name']} "
+            f"半径={self.localization_recovery_prior_radius_m:.1f}m, reason={reason}"
+        )
+        self.publish_status_update("navigation_localization_recovery_requested", payload)
+
+    @staticmethod
+    def pose_to_dict(pose) -> Dict[str, Any]:
+        return {
+            "position": {
+                "x": float(pose.position.x),
+                "y": float(pose.position.y),
+                "z": float(pose.position.z),
+            },
+            "orientation": {
+                "x": float(pose.orientation.x),
+                "y": float(pose.orientation.y),
+                "z": float(pose.orientation.z),
+                "w": float(pose.orientation.w),
+            },
+        }
     
     def handle_navigation_failed(self, reason: str):
         """处理导航失败"""
         # 如果当前状态是 PAUSED(暂停)，说明是我们为了互动主动取消的，不要标记为失败，也不要重置数据
         if self.current_state == NavigationState.PAUSED:
-            self.get_logger().info("检测到导航由用户主动暂停，保留数据以备恢复...")
+            if self.localization_auto_paused:
+                self.get_logger().info("检测到导航由定位恢复自动暂停，保留数据以备恢复...")
+            else:
+                self.get_logger().info("检测到导航由用户主动暂停，保留数据以备恢复...")
             return
 
         if self.navigation_failure_policy == "abort_all":
@@ -1823,6 +2045,7 @@ class NavigationStateManager(Node):
         
         # 发布状态更新
         self.publish_status_update("navigation_failed", self.last_failure_context)
+        self.request_localization_recovery_for_failed_navigation(reason)
         
         self.get_logger().error(f"导航失败，进入可恢复失败状态: {reason}")
     

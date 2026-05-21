@@ -227,8 +227,9 @@ class UnifiedDataIntegrationNode(Node):
         self.actual_speed_min_dt = 0.03
         self.actual_speed_max_dt = 1.0
         self.actual_speed_filter_alpha = 0.35
-        self.actual_speed_linear_deadzone = 0.02
-        self.actual_speed_angular_deadzone = 0.02
+        self.actual_speed_linear_deadzone = 0.05
+        self.actual_speed_angular_deadzone = 0.05
+        self.actual_speed_navigation_status_timeout = 2.0
         self.actual_speed_max_linear = 2.0
         self.actual_speed_max_angular = 4.0
         self.last_actual_speed_pose = None
@@ -648,9 +649,11 @@ class UnifiedDataIntegrationNode(Node):
             "navigation_retry_failed_waypoint",
             "navigation_skip_failed_waypoint",
             "navigation_aborted",
+            "navigation_localization_recovery_requested",
             "navigation_localization_recovery_started",
             "navigation_localization_recovery_progress",
             "navigation_localization_recovery_failed",
+            "navigation_localization_manual_override",
             "navigation_localization_recovered",
             "navigation_localization_resume_waiting",
             "navigation_localization_resume_failed"
@@ -685,6 +688,42 @@ class UnifiedDataIntegrationNode(Node):
             abs(float(speed_data.get(key, 0.0))) > 0.0
             for key in ("linear_x", "linear_y", "angular_z")
         )
+
+    @staticmethod
+    def _truthy(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on", "busy", "moving"}
+        return False
+
+    def is_navigation_active_for_speed(self) -> bool:
+        nav_status = self.data_storage.get('navigation_status', {})
+        nav_updated_at = self.last_update_times.get('navigation_status', 0.0)
+        if not nav_status or time.time() - nav_updated_at > self.actual_speed_navigation_status_timeout:
+            return False
+
+        current_state = str(nav_status.get("current_state", "") or "").lower()
+        return bool(nav_status.get("is_active")) or current_state in {"planning", "executing"}
+
+    def speed_suppression_reason(self) -> str:
+        system_status = self.data_storage.get('system_status', {})
+        details = system_status.get("details", {}) if isinstance(system_status, dict) else {}
+        motion_busy = self._truthy(
+            system_status.get("motion_busy", details.get("motion_busy", False))
+        )
+        current_motion = str(
+            system_status.get("current_motion", details.get("current_motion", "")) or ""
+        )
+        if motion_busy:
+            return f"robot_motion_busy:{current_motion}" if current_motion else "robot_motion_busy"
+
+        if not self.is_navigation_active_for_speed():
+            return "navigation_inactive"
+
+        return ""
 
     def build_actual_speed_payload(
         self,
@@ -740,6 +779,18 @@ class UnifiedDataIntegrationNode(Node):
 
         previous = self.last_actual_speed_pose
         self.last_actual_speed_pose = current
+
+        suppress_reason = self.speed_suppression_reason()
+        if suppress_reason:
+            self.filtered_actual_speed = None
+            return self.build_actual_speed_payload(
+                0.0,
+                0.0,
+                0.0,
+                pose_timestamp,
+                valid=False,
+                reject_reason=suppress_reason
+            )
 
         if previous is None:
             return self.build_actual_speed_payload(0.0, 0.0, 0.0, pose_timestamp, valid=False, reject_reason="initializing")
@@ -849,6 +900,20 @@ class UnifiedDataIntegrationNode(Node):
         """处理 Fast-LIO 的非标准里程计速度；只有非零 twist 才作为 fallback。"""
         try:
             with self.data_lock:
+                suppress_reason = self.speed_suppression_reason()
+                if suppress_reason:
+                    self.filtered_actual_speed = None
+                    self.data_storage['robot_speed'] = self.build_actual_speed_payload(
+                        0.0,
+                        0.0,
+                        0.0,
+                        self.stamp_to_seconds(msg.header.stamp) or time.time(),
+                        valid=False,
+                        reject_reason=suppress_reason
+                    )
+                    self.last_update_times['robot_speed'] = time.time()
+                    return
+
                 speed_data = self.convert_fastlio_velocity(msg)
                 if not self.has_nonzero_speed(speed_data):
                     self.get_logger().debug(
