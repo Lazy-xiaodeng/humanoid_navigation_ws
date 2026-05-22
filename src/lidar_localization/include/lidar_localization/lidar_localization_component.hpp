@@ -125,6 +125,7 @@ public:
   void initializeRegistration(); ///< 初始化配准算法
   void applyPlanarPoseConstraint(geometry_msgs::msg::Pose & pose) const;
   Eigen::Matrix4f applyPlanarTransformConstraint(const Eigen::Matrix4f & transform) const;
+  bool initialPoseReacquireActive();
   bool publishLastGoodTransformIfFresh(const char * reject_reason);
   void publishLocalizationStatus(
     const char * state,
@@ -183,6 +184,8 @@ public:
   bool initialpose_recieved_{false}; ///< 标记是否已接收初始位姿
   bool has_last_good_transform_{false}; ///< 是否已有可信定位TF
   rclcpp::Time last_good_transform_time_{0, 0, RCL_ROS_TIME}; ///< 最后可信TF发布时间
+  rclcpp::Time last_initialpose_time_{0, 0, RCL_ROS_TIME}; ///< 最近一次初始位姿时间
+  bool initialpose_reacquire_active_{false}; ///< 初始位姿后是否处于NDT重新捕获窗口
   int consecutive_rejected_frames_{0}; ///< 连续被拒绝的扫描匹配帧数
 
   // ========== ROS参数 ==========
@@ -193,11 +196,15 @@ public:
   std::string registration_method_;  ///< 配准方法名称（NDT/GICP等）
   double scan_max_range_;         ///< 点云最大有效距离（米）
   double scan_min_range_;         ///< 点云最小有效距离（米）
+  int min_scan_points_{50};       ///< NDT匹配前要求的最少有效点数，避免空点云发布坏TF
   double scan_period_;            ///< 雷达扫描周期（秒），用于IMU去畸变
   double score_threshold_;        ///< 配准得分阈值，超过认为不可靠
   bool reject_pose_jump_{true};    ///< 是否拒绝单帧位姿大跳变
   double max_pose_jump_translation_{0.8}; ///< 单帧最大允许平移修正
   double max_pose_jump_yaw_{0.45}; ///< 单帧最大允许航向修正
+  double initialpose_relax_duration_sec_{0.0}; ///< 初始位姿后的宽松捕获窗口
+  double initialpose_max_pose_jump_translation_{2.0}; ///< 捕获窗口内允许的最大平移修正
+  double initialpose_max_pose_jump_yaw_{1.0}; ///< 捕获窗口内允许的最大航向修正
   double ndt_resolution_;         ///< NDT网格分辨率（米）
   double ndt_step_size_;          ///< NDT牛顿迭代步长
   double transform_epsilon_;      ///< 变换收敛阈值

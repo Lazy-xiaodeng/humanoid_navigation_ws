@@ -43,6 +43,9 @@ PCLLocalization::PCLLocalization(const rclcpp::NodeOptions & options)
   declare_parameter("reject_pose_jump", true);
   declare_parameter("max_pose_jump_translation", 0.8);
   declare_parameter("max_pose_jump_yaw", 0.45);
+  declare_parameter("initialpose_relax_duration_sec", 0.0);
+  declare_parameter("initialpose_max_pose_jump_translation", 2.0);
+  declare_parameter("initialpose_max_pose_jump_yaw", 1.0);
   declare_parameter("ndt_resolution", 1.0);         // NDT算法的体素网格分辨率（米），控制NDT网格大小
   declare_parameter("ndt_step_size", 0.1);          // NDT算法的牛顿迭代步长，越大收敛越快但可能不稳定
   declare_parameter("ndt_max_iterations", 35);      // 配准算法最大迭代次数
@@ -55,6 +58,7 @@ PCLLocalization::PCLLocalization(const rclcpp::NodeOptions & options)
   // ========== 点云范围参数 ==========
   declare_parameter("scan_max_range", 100.0);       // 点云最大有效距离（米），超出此范围的点将被过滤
   declare_parameter("scan_min_range", 1.0);         // 点云最小有效距离（米），近距离盲区过滤
+  declare_parameter("min_scan_points", 50);         // NDT匹配前最少有效点数，空点云/过少点云直接拒绝
   declare_parameter("scan_period", 0.1);            // 雷达扫描周期（秒），10Hz雷达为0.1，用于IMU去畸变
   
   // ========== 地图参数 ==========
@@ -287,6 +291,9 @@ void PCLLocalization::initializeParameters()
   get_parameter("reject_pose_jump", reject_pose_jump_);
   get_parameter("max_pose_jump_translation", max_pose_jump_translation_);
   get_parameter("max_pose_jump_yaw", max_pose_jump_yaw_);
+  get_parameter("initialpose_relax_duration_sec", initialpose_relax_duration_sec_);
+  get_parameter("initialpose_max_pose_jump_translation", initialpose_max_pose_jump_translation_);
+  get_parameter("initialpose_max_pose_jump_yaw", initialpose_max_pose_jump_yaw_);
   get_parameter("ndt_resolution", ndt_resolution_);     // NDT网格分辨率
   get_parameter("ndt_step_size", ndt_step_size_);       // NDT牛顿迭代步长
   get_parameter("ndt_num_threads", ndt_num_threads_);   // OMP线程数
@@ -297,7 +304,36 @@ void PCLLocalization::initializeParameters()
   get_parameter("voxel_leaf_size", voxel_leaf_size_);   // 体素滤波叶子大小
   get_parameter("scan_max_range", scan_max_range_);     // 点云最大距离
   get_parameter("scan_min_range", scan_min_range_);     // 点云最小距离
+  get_parameter("min_scan_points", min_scan_points_);   // NDT最少有效点数
   get_parameter("scan_period", scan_period_);           // 雷达扫描周期
+  if (min_scan_points_ < 1) {
+    RCLCPP_WARN(
+      get_logger(),
+      "min_scan_points=%d is invalid; clamping to 1.",
+      min_scan_points_);
+    min_scan_points_ = 1;
+  }
+  if (initialpose_relax_duration_sec_ < 0.0) {
+    RCLCPP_WARN(
+      get_logger(),
+      "initialpose_relax_duration_sec=%lf is invalid; clamping to 0.",
+      initialpose_relax_duration_sec_);
+    initialpose_relax_duration_sec_ = 0.0;
+  }
+  if (initialpose_max_pose_jump_translation_ < max_pose_jump_translation_) {
+    RCLCPP_WARN(
+      get_logger(),
+      "initialpose_max_pose_jump_translation=%lf is below normal limit %lf; clamping to normal limit.",
+      initialpose_max_pose_jump_translation_, max_pose_jump_translation_);
+    initialpose_max_pose_jump_translation_ = max_pose_jump_translation_;
+  }
+  if (initialpose_max_pose_jump_yaw_ < max_pose_jump_yaw_) {
+    RCLCPP_WARN(
+      get_logger(),
+      "initialpose_max_pose_jump_yaw=%lf is below normal limit %lf; clamping to normal limit.",
+      initialpose_max_pose_jump_yaw_, max_pose_jump_yaw_);
+    initialpose_max_pose_jump_yaw_ = max_pose_jump_yaw_;
+  }
   
   // 获取地图参数
   get_parameter("use_pcd_map", use_pcd_map_);  // 是否使用PCD地图
@@ -333,6 +369,9 @@ void PCLLocalization::initializeParameters()
   RCLCPP_INFO(get_logger(),"reject_pose_jump: %d", reject_pose_jump_);
   RCLCPP_INFO(get_logger(),"max_pose_jump_translation: %lf", max_pose_jump_translation_);
   RCLCPP_INFO(get_logger(),"max_pose_jump_yaw: %lf", max_pose_jump_yaw_);
+  RCLCPP_INFO(get_logger(),"initialpose_relax_duration_sec: %lf", initialpose_relax_duration_sec_);
+  RCLCPP_INFO(get_logger(),"initialpose_max_pose_jump_translation: %lf", initialpose_max_pose_jump_translation_);
+  RCLCPP_INFO(get_logger(),"initialpose_max_pose_jump_yaw: %lf", initialpose_max_pose_jump_yaw_);
   RCLCPP_INFO(get_logger(),"ndt_resolution: %lf", ndt_resolution_);
   RCLCPP_INFO(get_logger(),"ndt_step_size: %lf", ndt_step_size_);
   RCLCPP_INFO(get_logger(),"ndt_num_threads: %d", ndt_num_threads_);
@@ -340,6 +379,7 @@ void PCLLocalization::initializeParameters()
   RCLCPP_INFO(get_logger(),"voxel_leaf_size: %lf", voxel_leaf_size_);
   RCLCPP_INFO(get_logger(),"scan_max_range: %lf", scan_max_range_);
   RCLCPP_INFO(get_logger(),"scan_min_range: %lf", scan_min_range_);
+  RCLCPP_INFO(get_logger(),"min_scan_points: %d", min_scan_points_);
   RCLCPP_INFO(get_logger(),"scan_period: %lf", scan_period_);
   RCLCPP_INFO(get_logger(),"use_pcd_map: %d", use_pcd_map_);
   RCLCPP_INFO(get_logger(),"map_path: %s", map_path_.c_str());
@@ -397,9 +437,27 @@ Eigen::Matrix4f PCLLocalization::applyPlanarTransformConstraint(
   return constrained;
 }
 
+bool PCLLocalization::initialPoseReacquireActive()
+{
+  if (!initialpose_reacquire_active_ || initialpose_relax_duration_sec_ <= 0.0) {
+    return false;
+  }
+
+  const double age_sec = (this->now() - last_initialpose_time_).seconds();
+  if (age_sec < 0.0 || age_sec > initialpose_relax_duration_sec_) {
+    initialpose_reacquire_active_ = false;
+    return false;
+  }
+
+  return true;
+}
 
 bool PCLLocalization::publishLastGoodTransformIfFresh(const char * reject_reason)
 {
+  if (initialPoseReacquireActive()) {
+    return false;
+  }
+
   if (!republish_last_good_tf_on_failure_ || !has_last_good_transform_) {
     return false;
   }
@@ -448,6 +506,12 @@ void PCLLocalization::publishLocalizationStatus(
     consecutive_rejected_frames_ = 0;
   }
 
+  const bool initialpose_reacquiring = initialPoseReacquireActive();
+  const double pose_jump_translation_limit =
+    initialpose_reacquiring ? initialpose_max_pose_jump_translation_ : max_pose_jump_translation_;
+  const double pose_jump_yaw_limit =
+    initialpose_reacquiring ? initialpose_max_pose_jump_yaw_ : max_pose_jump_yaw_;
+
   std::ostringstream out;
   out.setf(std::ios::fixed);
   out.precision(6);
@@ -464,6 +528,9 @@ void PCLLocalization::publishLocalizationStatus(
     << "\"correction_yaw\":" << correction_yaw << ","
     << "\"max_pose_jump_translation\":" << max_pose_jump_translation_ << ","
     << "\"max_pose_jump_yaw\":" << max_pose_jump_yaw_ << ","
+    << "\"initialpose_reacquiring\":" << (initialpose_reacquiring ? "true" : "false") << ","
+    << "\"pose_jump_translation_limit\":" << pose_jump_translation_limit << ","
+    << "\"pose_jump_yaw_limit\":" << pose_jump_yaw_limit << ","
     << "\"filtered_points\":" << filtered_points << ","
     << "\"consecutive_rejected_frames\":" << consecutive_rejected_frames_
     << "}";
@@ -644,6 +711,8 @@ void PCLLocalization::initialPoseReceived(const geometry_msgs::msg::PoseWithCova
   
   initialpose_recieved_ = true;  // 标记已接收初始位姿
   corrent_pose_with_cov_stamped_ptr_ = initial_pose_msg;  // 保存当前位姿
+  last_initialpose_time_ = this->now();
+  initialpose_reacquire_active_ = initialpose_relax_duration_sec_ > 0.0;
   has_last_good_transform_ = false;
   consecutive_rejected_frames_ = 0;
   pose_pub_->publish(*corrent_pose_with_cov_stamped_ptr_);  // 发布初始位姿
@@ -877,6 +946,19 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
     }
   }
   pcl::PointCloud<pcl::PointXYZI>::Ptr tmp_ptr(new pcl::PointCloud<pcl::PointXYZI>(tmp));
+
+  if (static_cast<int>(tmp_ptr->size()) < min_scan_points_) {
+    const char * reason = tmp_ptr->empty() ? "empty_scan" : "too_few_scan_points";
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 2000,
+      "Rejecting NDT scan before registration: %s, effective_points=%zu < min_scan_points=%d "
+      "(raw=%zu voxel=%zu). No pose or TF will be published for this scan.",
+      reason, tmp_ptr->size(), min_scan_points_, cloud_ptr->size(), filtered_cloud_ptr->size());
+    publishLocalizationStatus(
+      "rejected", reason, false, -1.0,
+      static_cast<int>(tmp_ptr->size()), rclcpp::Time(msg->header.stamp));
+    return;
+  }
   
   // 设置配准源点云
   registration_->setInputSource(tmp_ptr);
@@ -929,16 +1011,22 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
   const double result_yaw = std::atan2(result_rot(1, 0), result_rot(0, 0));
   const double yaw_error = result_yaw - init_yaw;
   const double correction_yaw = std::abs(std::atan2(std::sin(yaw_error), std::cos(yaw_error)));
+  const bool initialpose_reacquiring = initialPoseReacquireActive();
+  const double pose_jump_translation_limit =
+    initialpose_reacquiring ? initialpose_max_pose_jump_translation_ : max_pose_jump_translation_;
+  const double pose_jump_yaw_limit =
+    initialpose_reacquiring ? initialpose_max_pose_jump_yaw_ : max_pose_jump_yaw_;
   if (
     reject_pose_jump_ && has_last_good_transform_ &&
-    (correction_translation > max_pose_jump_translation_ ||
-     correction_yaw > max_pose_jump_yaw_))
+    (correction_translation > pose_jump_translation_limit ||
+     correction_yaw > pose_jump_yaw_limit))
   {
     RCLCPP_WARN(
       get_logger(),
-      "Rejecting NDT pose jump: translation=%.3f limit=%.3f yaw=%.3f limit=%.3f fitness=%.3f",
-      correction_translation, max_pose_jump_translation_,
-      correction_yaw, max_pose_jump_yaw_, fitness_score);
+      "Rejecting NDT pose jump%s: translation=%.3f limit=%.3f yaw=%.3f limit=%.3f fitness=%.3f",
+      initialpose_reacquiring ? " during initialpose reacquire" : "",
+      correction_translation, pose_jump_translation_limit,
+      correction_yaw, pose_jump_yaw_limit, fitness_score);
     publishLocalizationStatus(
       "rejected", "pose_jump", has_converged, fitness_score,
       static_cast<int>(tmp_ptr->size()), rclcpp::Time(msg->header.stamp),

@@ -23,6 +23,9 @@ if [ ! -f "$WORKSPACE/install/setup.bash" ]; then
 fi
 
 source /opt/ros/jazzy/setup.bash
+
+colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+
 source "$WORKSPACE/install/setup.bash"
 
 python3 - <<'PY'

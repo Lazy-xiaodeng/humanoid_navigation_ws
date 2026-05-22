@@ -13,7 +13,7 @@ from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from rclpy.time import Time
-from std_srvs.srv import Empty
+from std_srvs.srv import Empty, Trigger
 from tf2_ros import Buffer, TransformException, TransformListener
 
 
@@ -133,6 +133,12 @@ class HdlBootstrapToInitialPose(Node):
         self.relocalize_service = self.declare_parameter('relocalize_service', '/relocalize').value
         self.relocalize_with_prior_service = self.declare_parameter(
             'relocalize_with_prior_service', '/relocalize_with_prior').value
+        self.relocalize_checked_service = self.declare_parameter(
+            'relocalize_checked_service', '/relocalize_checked').value
+        self.relocalize_with_prior_checked_service = self.declare_parameter(
+            'relocalize_with_prior_checked_service', '/relocalize_with_prior_checked').value
+        self.use_checked_relocalize_service = bool(
+            self.declare_parameter('use_checked_relocalize_service', True).value)
         self.hdl_standby_service = self.declare_parameter(
             'hdl_standby_service', '/hdl_bootstrap/standby').value
         self.external_relocalize_prior_topic = self.declare_parameter(
@@ -148,16 +154,35 @@ class HdlBootstrapToInitialPose(Node):
 
         self.startup_delay_sec = float(self.declare_parameter('startup_delay_sec', 2.0).value)
         self.relocalize_retry_sec = float(self.declare_parameter('relocalize_retry_sec', 10.0).value)
+        self.startup_relocalize_retry_sec = float(
+            self.declare_parameter('startup_relocalize_retry_sec', self.relocalize_retry_sec).value)
+        self.runtime_relocalize_retry_sec = float(
+            self.declare_parameter('runtime_relocalize_retry_sec', self.relocalize_retry_sec).value)
         self.max_relocalize_attempts = int(self.declare_parameter('max_relocalize_attempts', 0).value)
+        self.startup_max_relocalize_attempts = int(
+            self.declare_parameter('startup_max_relocalize_attempts', self.max_relocalize_attempts).value)
         self.max_runtime_relocalize_attempts = int(
             self.declare_parameter('max_runtime_relocalize_attempts', 5).value)
         self.runtime_recovery_failure_cooldown_sec = float(
             self.declare_parameter('runtime_recovery_failure_cooldown_sec', 30.0).value)
         self.required_stable_samples = int(self.declare_parameter('required_stable_samples', 3).value)
+        self.startup_required_stable_samples = int(
+            self.declare_parameter('startup_required_stable_samples', self.required_stable_samples).value)
+        self.runtime_required_stable_samples = int(
+            self.declare_parameter('runtime_required_stable_samples', self.required_stable_samples).value)
         self.stable_xy_tolerance = float(self.declare_parameter('stable_xy_tolerance', 0.20).value)
         self.stable_yaw_tolerance = float(self.declare_parameter('stable_yaw_tolerance', 0.12).value)
+        self.sample_wait_timeout_sec = float(self.declare_parameter('sample_wait_timeout_sec', 5.0).value)
+        self.startup_sample_wait_timeout_sec = float(
+            self.declare_parameter('startup_sample_wait_timeout_sec', self.sample_wait_timeout_sec).value)
+        self.runtime_sample_wait_timeout_sec = float(
+            self.declare_parameter('runtime_sample_wait_timeout_sec', self.sample_wait_timeout_sec).value)
         self.tf_lookup_timeout_sec = float(self.declare_parameter('tf_lookup_timeout_sec', 0.3).value)
         self.publish_repetitions = int(self.declare_parameter('publish_repetitions', 8).value)
+        self.startup_publish_repetitions = int(
+            self.declare_parameter('startup_publish_repetitions', self.publish_repetitions).value)
+        self.runtime_publish_repetitions = int(
+            self.declare_parameter('runtime_publish_repetitions', self.publish_repetitions).value)
         self.publish_period_sec = float(self.declare_parameter('publish_period_sec', 0.25).value)
         self.xy_covariance = float(self.declare_parameter('xy_covariance', 0.25).value)
         self.z_covariance = float(self.declare_parameter('z_covariance', 0.04).value)
@@ -173,6 +198,10 @@ class HdlBootstrapToInitialPose(Node):
         self.map_to_odom_tf_stale_sec = float(
             self.declare_parameter('map_to_odom_tf_stale_sec', 3.0).value)
         self.recovery_settle_sec = float(self.declare_parameter('recovery_settle_sec', 6.0).value)
+        self.startup_recovery_settle_sec = float(
+            self.declare_parameter('startup_recovery_settle_sec', self.recovery_settle_sec).value)
+        self.runtime_recovery_settle_sec = float(
+            self.declare_parameter('runtime_recovery_settle_sec', self.recovery_settle_sec).value)
         self.min_recovery_interval_sec = float(
             self.declare_parameter('min_recovery_interval_sec', 12.0).value)
         self.require_hdl_status = bool(self.declare_parameter('require_hdl_status', True).value)
@@ -207,11 +236,24 @@ class HdlBootstrapToInitialPose(Node):
             self.declare_parameter('external_recovery_request_cooldown_sec', 10.0).value)
         self.recovery_healthy_stable_count = int(
             self.declare_parameter('recovery_healthy_stable_count', 3).value)
+        self.require_ndt_stable_status_for_recovery = bool(
+            self.declare_parameter('require_ndt_stable_status_for_recovery', True).value)
+        self.ndt_recovery_required_stable_status_count = int(
+            self.declare_parameter('ndt_recovery_required_stable_status_count', 3).value)
+        self.ndt_recovery_status_stale_sec = float(
+            self.declare_parameter('ndt_recovery_status_stale_sec', 1.5).value)
+        self.ndt_recovery_max_correction_translation = float(
+            self.declare_parameter('ndt_recovery_max_correction_translation', 0.35).value)
+        self.ndt_recovery_max_correction_yaw = float(
+            self.declare_parameter('ndt_recovery_max_correction_yaw', 0.20).value)
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.relocalize_client = self.create_client(Empty, self.relocalize_service)
         self.relocalize_with_prior_client = self.create_client(Empty, self.relocalize_with_prior_service)
+        self.relocalize_checked_client = self.create_client(Trigger, self.relocalize_checked_service)
+        self.relocalize_with_prior_checked_client = self.create_client(
+            Trigger, self.relocalize_with_prior_checked_service)
         self.hdl_standby_client = self.create_client(Empty, self.hdl_standby_service)
         self.initialpose_pub = self.create_publisher(PoseWithCovarianceStamped, self.initialpose_topic, 10)
         self.initialpose_sub = self.create_subscription(
@@ -261,14 +303,23 @@ class HdlBootstrapToInitialPose(Node):
 
         self.start_time = time.monotonic()
         self.last_relocalize_request_time = 0.0
+        self.next_relocalize_allowed_time = 0.0
         self.relocalize_attempts = 0
         self.relocalize_future = None
         self.active_relocalize_service = None
+        self.active_relocalize_uses_checked = False
+        self.active_relocalize_counted_as_attempt = False
         self.use_prior_for_next_relocalize = False
+        self.last_relocalize_result = {}
         self.accept_hdl_samples = False
         self.need_relocalize = True
         self.bootstrap_done = False
-        self.samples = deque(maxlen=max(1, self.required_stable_samples))
+        self.samples = deque(maxlen=max(
+            1,
+            self.startup_required_stable_samples,
+            self.runtime_required_stable_samples,
+        ))
+        self.sample_wait_start_time = 0.0
         self.pending_initialpose = None
         self.pending_publish_count = 0
         self.last_publish_time = 0.0
@@ -296,6 +347,8 @@ class HdlBootstrapToInitialPose(Node):
         self.last_hdl_standby_request_time = 0.0
         self.recovery_waiting_for_ndt = False
         self.recovery_healthy_count = 0
+        self.ndt_recovery_stable_status_count = 0
+        self.last_ndt_recovery_stable_status_time = 0.0
         self.recovery_count = 0
 
         self.timer = self.create_timer(0.2, self.timer_callback)
@@ -308,6 +361,129 @@ class HdlBootstrapToInitialPose(Node):
                 f'{self.map_frame}->{self.odom_frame}, NDT status {self.ndt_status_topic}, '
                 f'recover through {self.relocalize_with_prior_service}'
             )
+
+    def is_runtime_recovery_mode(self):
+        return self.recovery_count > 0
+
+    def relocalization_mode(self):
+        return 'runtime_recovery' if self.is_runtime_recovery_mode() else 'startup_bootstrap'
+
+    def current_relocalize_retry_sec(self):
+        retry_sec = (
+            self.runtime_relocalize_retry_sec
+            if self.is_runtime_recovery_mode()
+            else self.startup_relocalize_retry_sec
+        )
+        return max(0.0, retry_sec)
+
+    def current_max_relocalize_attempts(self):
+        if self.is_runtime_recovery_mode():
+            return self.max_runtime_relocalize_attempts
+        return self.startup_max_relocalize_attempts
+
+    def current_required_stable_samples(self):
+        samples = (
+            self.runtime_required_stable_samples
+            if self.is_runtime_recovery_mode()
+            else self.startup_required_stable_samples
+        )
+        return max(1, samples)
+
+    def current_sample_wait_timeout_sec(self):
+        timeout = (
+            self.runtime_sample_wait_timeout_sec
+            if self.is_runtime_recovery_mode()
+            else self.startup_sample_wait_timeout_sec
+        )
+        return max(0.0, timeout)
+
+    def current_publish_repetitions(self):
+        repetitions = (
+            self.runtime_publish_repetitions
+            if self.is_runtime_recovery_mode()
+            else self.startup_publish_repetitions
+        )
+        return max(1, repetitions)
+
+    def current_recovery_settle_sec(self):
+        settle_sec = (
+            self.runtime_recovery_settle_sec
+            if self.is_runtime_recovery_mode()
+            else self.startup_recovery_settle_sec
+        )
+        return max(0.0, settle_sec)
+
+    def checked_relocalize_client_for_mode(self):
+        if self.use_prior_for_next_relocalize and self.use_prior_relocalize_on_recovery:
+            return self.relocalize_with_prior_checked_client, self.relocalize_with_prior_checked_service
+        return self.relocalize_checked_client, self.relocalize_checked_service
+
+    def legacy_relocalize_client_for_mode(self):
+        if self.use_prior_for_next_relocalize and self.use_prior_relocalize_on_recovery:
+            return self.relocalize_with_prior_client, self.relocalize_with_prior_service
+        return self.relocalize_client, self.relocalize_service
+
+    def select_relocalize_client(self):
+        if self.use_checked_relocalize_service:
+            checked_client, checked_service = self.checked_relocalize_client_for_mode()
+            if checked_client.service_is_ready() or checked_client.wait_for_service(timeout_sec=0.0):
+                return checked_client, checked_service, True
+            self.get_logger().info(
+                f'waiting for checked HDL relocalize service {checked_service}; '
+                'falling back to legacy service if available',
+                throttle_duration_sec=3.0,
+            )
+
+        legacy_client, legacy_service = self.legacy_relocalize_client_for_mode()
+        return legacy_client, legacy_service, False
+
+    @staticmethod
+    def parse_checked_relocalize_message(message, success):
+        try:
+            report = json.loads(message) if message else {}
+            if not isinstance(report, dict):
+                report = {}
+        except json.JSONDecodeError:
+            report = {"message": message}
+
+        report.setdefault("accepted", bool(success))
+        report.setdefault("code", "accepted" if success else "unknown")
+        report.setdefault("message", "")
+        report.setdefault("retry_hint_sec", 1.0)
+        report.setdefault("count_as_search_attempt", True)
+        return report
+
+    def publish_checked_relocalize_result(self, report):
+        event_type = (
+            'localization_relocalize_accepted'
+            if report.get('accepted')
+            else 'localization_relocalize_attempt_deferred'
+        )
+        self.publish_recovery_status(
+            event_type,
+            reason=report.get('message', ''),
+            result_code=report.get('code', 'unknown'),
+            retry_hint_sec=report.get('retry_hint_sec', 1.0),
+            count_as_search_attempt=report.get('count_as_search_attempt', True),
+            consistent_count=report.get('consistent_count', -1),
+            required_consistent_count=report.get('required_consistent_count', -1),
+            best_fitness=report.get('best_fitness'),
+            accepted_candidates=report.get('accepted_candidates', -1),
+            service=self.active_relocalize_service,
+            use_checked_service=self.active_relocalize_uses_checked,
+        )
+
+    def apply_checked_relocalize_retry_hint(self, report):
+        try:
+            retry_hint = float(report.get('retry_hint_sec', self.current_relocalize_retry_sec()))
+        except (TypeError, ValueError):
+            retry_hint = self.current_relocalize_retry_sec()
+        self.next_relocalize_allowed_time = time.monotonic() + max(0.0, retry_hint)
+
+        if not bool(report.get('count_as_search_attempt', True)):
+            if self.active_relocalize_counted_as_attempt and self.relocalize_attempts > 0:
+                self.relocalize_attempts -= 1
+            self.active_relocalize_counted_as_attempt = False
 
     def hdl_odom_callback(self, msg):
         if msg.header.frame_id and msg.header.frame_id != self.map_frame:
@@ -336,14 +512,20 @@ class HdlBootstrapToInitialPose(Node):
         self.samples.clear()
         self.pending_initialpose = None
         self.pending_publish_count = 0
+        self.sample_wait_start_time = 0.0
         self.relocalize_future = None
         self.active_relocalize_service = None
+        self.active_relocalize_uses_checked = False
+        self.active_relocalize_counted_as_attempt = False
         self.use_prior_for_next_relocalize = False
+        self.next_relocalize_allowed_time = 0.0
         self.last_hdl_status = None
         self.last_hdl_status_time = None
         self.last_external_prior_publish_time = 0.0
         self.recovery_waiting_for_ndt = True
         self.recovery_healthy_count = 0
+        self.ndt_recovery_stable_status_count = 0
+        self.last_ndt_recovery_stable_status_time = 0.0
 
         lockout = max(0.0, self.manual_initialpose_recovery_lockout_sec)
         self.monitor_suppressed_until = max(self.monitor_suppressed_until, now + lockout)
@@ -369,6 +551,84 @@ class HdlBootstrapToInitialPose(Node):
             pose_z=float(pose.z),
         )
         self.request_hdl_standby('manual /initialpose override')
+
+    def status_number(self, status, key, default=None):
+        value = status.get(key, default)
+        if isinstance(value, (int, float)):
+            return float(value)
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def ndt_status_stable_for_recovery(self, status):
+        if status is None:
+            return False, 'no NDT status has been received'
+
+        if status.get('state', '') != 'accepted':
+            reason = status.get('reason', 'unknown')
+            return False, f'NDT latest status is not accepted: {reason}'
+
+        if bool(status.get('initialpose_reacquiring', False)):
+            return False, 'NDT is still in the relaxed initialpose reacquire window'
+
+        correction_translation = self.status_number(
+            status, 'correction_translation', float('inf'))
+        correction_yaw = self.status_number(status, 'correction_yaw', float('inf'))
+
+        if correction_translation > self.ndt_recovery_max_correction_translation:
+            return (
+                False,
+                f'NDT correction is still large: translation={correction_translation:.3f}m '
+                f'> {self.ndt_recovery_max_correction_translation:.3f}m'
+            )
+        if correction_yaw > self.ndt_recovery_max_correction_yaw:
+            return (
+                False,
+                f'NDT correction is still large: yaw={correction_yaw:.3f}rad '
+                f'> {self.ndt_recovery_max_correction_yaw:.3f}rad'
+            )
+
+        return True, ''
+
+    def update_ndt_recovery_stability(self, status):
+        if not self.require_ndt_stable_status_for_recovery:
+            return
+
+        stable, _ = self.ndt_status_stable_for_recovery(status)
+        if stable:
+            self.ndt_recovery_stable_status_count += 1
+            self.last_ndt_recovery_stable_status_time = time.monotonic()
+        else:
+            self.ndt_recovery_stable_status_count = 0
+            self.last_ndt_recovery_stable_status_time = 0.0
+
+    def ndt_recovery_stability_reason(self):
+        if not self.require_ndt_stable_status_for_recovery:
+            return None
+
+        if self.last_ndt_status is None:
+            return f'waiting for NDT status on {self.ndt_status_topic}'
+
+        status_age = time.monotonic() - self.last_ndt_status_time
+        if status_age > self.ndt_recovery_status_stale_sec:
+            return (
+                f'NDT status stale for {status_age:.2f}s '
+                f'> {self.ndt_recovery_status_stale_sec:.2f}s'
+            )
+
+        stable, reason = self.ndt_status_stable_for_recovery(self.last_ndt_status)
+        if not stable:
+            return reason
+
+        required = max(1, self.ndt_recovery_required_stable_status_count)
+        if self.ndt_recovery_stable_status_count < required:
+            return (
+                f'waiting for stable NDT accepted frames: '
+                f'{self.ndt_recovery_stable_status_count}/{required}'
+            )
+
+        return None
 
     def recovery_request_callback(self, msg):
         try:
@@ -490,6 +750,63 @@ class HdlBootstrapToInitialPose(Node):
             reason=reason,
         )
 
+    def begin_hdl_sample_collection(self, service_name):
+        self.need_relocalize = False
+        self.accept_hdl_samples = True
+        self.samples.clear()
+        self.sample_wait_start_time = time.monotonic()
+        self.last_hdl_status = None
+        self.last_hdl_status_time = None
+        self.get_logger().info(
+            f'HDL {service_name} accepted; waiting for '
+            f'{self.current_required_stable_samples()} stable HDL samples '
+            f'before publishing {self.initialpose_topic}'
+        )
+        self.publish_recovery_status(
+            'localization_hdl_samples_waiting',
+            reason='HDL relocalization accepted; waiting for stable pose samples',
+            service=service_name,
+            required_stable_samples=self.current_required_stable_samples(),
+            sample_wait_timeout_sec=self.current_sample_wait_timeout_sec(),
+        )
+
+    def handle_unstable_hdl_samples_if_timed_out(self):
+        if not self.accept_hdl_samples:
+            return False
+
+        timeout_sec = self.current_sample_wait_timeout_sec()
+        if timeout_sec <= 0.0:
+            return False
+
+        now = time.monotonic()
+        if self.sample_wait_start_time <= 0.0:
+            self.sample_wait_start_time = now
+            return False
+
+        elapsed = now - self.sample_wait_start_time
+        if elapsed < timeout_sec:
+            return False
+
+        reason = (
+            f'HDL pose samples did not stabilize within {timeout_sec:.1f}s '
+            f'(samples={len(self.samples)}/{self.current_required_stable_samples()}); retrying relocalization'
+        )
+        self.get_logger().warn(reason)
+        self.publish_recovery_status(
+            'localization_hdl_samples_unstable',
+            reason=reason,
+            samples=len(self.samples),
+            required_stable_samples=self.current_required_stable_samples(),
+            stable_xy_tolerance=self.stable_xy_tolerance,
+            stable_yaw_tolerance=self.stable_yaw_tolerance,
+        )
+        self.accept_hdl_samples = False
+        self.samples.clear()
+        self.sample_wait_start_time = 0.0
+        self.need_relocalize = True
+        self.next_relocalize_allowed_time = now
+        return True
+
     def localization_pose_callback(self, msg):
         stamp = Time.from_msg(msg.header.stamp)
         if stamp.nanoseconds == 0:
@@ -505,6 +822,7 @@ class HdlBootstrapToInitialPose(Node):
 
         self.last_ndt_status = status
         self.last_ndt_status_time = time.monotonic()
+        self.update_ndt_recovery_stability(status)
 
         if (
             not self.monitor_localization or
@@ -575,28 +893,38 @@ class HdlBootstrapToInitialPose(Node):
             if not self.relocalize_future.done():
                 return
             try:
-                self.relocalize_future.result()
+                result = self.relocalize_future.result()
                 service_name = self.active_relocalize_service or self.relocalize_service
                 self.get_logger().info(f'HDL {service_name} service call completed')
-                self.publish_recovery_status(
-                    'localization_relocalize_completed',
-                    service=service_name,
-                )
-                self.need_relocalize = False
-                self.accept_hdl_samples = True
-                self.samples.clear()
-                self.last_hdl_status = None
-                self.last_hdl_status_time = None
+                if self.active_relocalize_uses_checked:
+                    report = self.parse_checked_relocalize_message(result.message, result.success)
+                    self.last_relocalize_result = report
+                    self.publish_checked_relocalize_result(report)
+                    if result.success:
+                        self.begin_hdl_sample_collection(service_name)
+                    else:
+                        self.apply_checked_relocalize_retry_hint(report)
+                else:
+                    self.publish_recovery_status(
+                        'localization_relocalize_completed',
+                        service=service_name,
+                        use_checked_service=False,
+                    )
+                    self.begin_hdl_sample_collection(service_name)
             except Exception as exc:
                 service_name = self.active_relocalize_service or self.relocalize_service
                 self.get_logger().warn(f'HDL {service_name} service call failed: {exc}')
+                self.next_relocalize_allowed_time = time.monotonic() + self.current_relocalize_retry_sec()
                 self.publish_recovery_status(
                     'localization_relocalize_failed',
                     reason=str(exc),
                     service=service_name,
+                    use_checked_service=self.active_relocalize_uses_checked,
                 )
             self.relocalize_future = None
             self.active_relocalize_service = None
+            self.active_relocalize_uses_checked = False
+            self.active_relocalize_counted_as_attempt = False
 
         if self.need_relocalize:
             self.request_relocalize_if_needed()
@@ -606,6 +934,11 @@ class HdlBootstrapToInitialPose(Node):
             if self.prepare_initialpose_from_latest_sample():
                 self.bootstrap_done = True
                 return
+
+        if self.accept_hdl_samples:
+            if self.handle_unstable_hdl_samples_if_timed_out():
+                self.request_relocalize_if_needed()
+            return
 
         self.request_relocalize_if_needed()
 
@@ -622,16 +955,19 @@ class HdlBootstrapToInitialPose(Node):
         self.last_publish_time = now
         if self.pending_publish_count == 0:
             self.get_logger().info('finished publishing bootstrap /initialpose')
-            settle_until = time.monotonic() + max(0.0, self.recovery_settle_sec)
+            settle_sec = self.current_recovery_settle_sec()
+            settle_until = time.monotonic() + settle_sec
             self.monitor_suppressed_until = settle_until
             self.recovery_ndt_check_after = settle_until
             self.recovery_waiting_for_ndt = True
             self.recovery_healthy_count = 0
+            self.ndt_recovery_stable_status_count = 0
+            self.last_ndt_recovery_stable_status_time = 0.0
             self.request_hdl_standby('verified HDL pose has been handed off to NDT')
             self.publish_recovery_status(
                 'localization_initialpose_published',
                 reason='published verified HDL pose as NDT initial pose',
-                ndt_settle_sec=max(0.0, self.recovery_settle_sec),
+                ndt_settle_sec=settle_sec,
             )
             if self.exit_after_publish:
                 self.get_logger().info('bootstrap initial pose published; exiting helper node')
@@ -640,11 +976,10 @@ class HdlBootstrapToInitialPose(Node):
 
     def request_relocalize_if_needed(self):
         now = time.monotonic()
-        if now - self.last_relocalize_request_time < self.relocalize_retry_sec:
+        retry_sec = self.current_relocalize_retry_sec()
+        if now < self.next_relocalize_allowed_time:
             return
-        attempt_limit = self.max_relocalize_attempts
-        if self.recovery_count > 0 and self.max_runtime_relocalize_attempts > 0:
-            attempt_limit = self.max_runtime_relocalize_attempts
+        attempt_limit = self.current_max_relocalize_attempts()
         if attempt_limit > 0 and self.relocalize_attempts >= attempt_limit:
             reason = (
                 f'max HDL relocalization attempts reached: '
@@ -656,13 +991,13 @@ class HdlBootstrapToInitialPose(Node):
                 self.get_logger().error(f'{reason}; bootstrap failed')
             return
 
-        client = self.relocalize_client
-        service_name = self.relocalize_service
-        if self.use_prior_for_next_relocalize and self.use_prior_relocalize_on_recovery:
-            client = self.relocalize_with_prior_client
-            service_name = self.relocalize_with_prior_service
+        client, service_name, use_checked_service = self.select_relocalize_client()
+        using_prior_service = service_name in {
+            self.relocalize_with_prior_service,
+            self.relocalize_with_prior_checked_service,
+        }
 
-        if service_name == self.relocalize_with_prior_service and self.pending_external_prior is not None:
+        if using_prior_service and self.pending_external_prior is not None:
             self.pending_external_prior.header.stamp = self.get_clock().now().to_msg()
             self.external_relocalize_prior_pub.publish(self.pending_external_prior)
             if self.last_external_prior_publish_time <= 0.0:
@@ -690,19 +1025,26 @@ class HdlBootstrapToInitialPose(Node):
             return
 
         self.samples.clear()
+        self.sample_wait_start_time = 0.0
         self.last_hdl_status = None
         self.last_hdl_status_time = None
         self.accept_hdl_samples = False
         self.relocalize_attempts += 1
         self.last_relocalize_request_time = now
+        self.next_relocalize_allowed_time = now + retry_sec
         self.active_relocalize_service = service_name
-        self.relocalize_future = client.call_async(Empty.Request())
+        self.active_relocalize_uses_checked = use_checked_service
+        self.active_relocalize_counted_as_attempt = True
+        request = Trigger.Request() if use_checked_service else Empty.Request()
+        self.relocalize_future = client.call_async(request)
         self.get_logger().info(f'calling HDL {service_name} attempt {self.relocalize_attempts}')
         self.publish_recovery_status(
             'localization_relocalize_requested',
             service=service_name,
-            use_prior=service_name == self.relocalize_with_prior_service,
+            use_prior=using_prior_service,
             use_external_prior=self.pending_external_prior is not None,
+            retry_sec=retry_sec,
+            use_checked_service=use_checked_service,
         )
 
     def fail_current_recovery(self, reason):
@@ -710,12 +1052,17 @@ class HdlBootstrapToInitialPose(Node):
         self.bootstrap_done = True
         self.accept_hdl_samples = False
         self.samples.clear()
+        self.sample_wait_start_time = 0.0
         self.pending_initialpose = None
         self.pending_publish_count = 0
         self.relocalize_future = None
         self.active_relocalize_service = None
+        self.active_relocalize_uses_checked = False
+        self.active_relocalize_counted_as_attempt = False
         self.recovery_waiting_for_ndt = False
         self.recovery_healthy_count = 0
+        self.ndt_recovery_stable_status_count = 0
+        self.last_ndt_recovery_stable_status_time = 0.0
         self.recovery_ndt_check_after = 0.0
         self.monitor_suppressed_until = max(
             self.monitor_suppressed_until,
@@ -736,13 +1083,15 @@ class HdlBootstrapToInitialPose(Node):
         )
 
     def samples_are_stable(self):
-        if len(self.samples) < self.required_stable_samples:
+        required_samples = self.current_required_stable_samples()
+        if len(self.samples) < required_samples:
             return False
         if self.require_hdl_status and not self.hdl_status_is_good():
             return False
-        first = self.samples[0].pose.pose
+        stable_samples = list(self.samples)[-required_samples:]
+        first = stable_samples[0].pose.pose
         first_yaw = yaw_from_pose(first)
-        for sample in list(self.samples)[1:]:
+        for sample in stable_samples[1:]:
             pose = sample.pose.pose
             dx = pose.position.x - first.position.x
             dy = pose.position.y - first.position.y
@@ -852,8 +1201,11 @@ class HdlBootstrapToInitialPose(Node):
         self.recovery_ndt_check_after = 0.0
         self.relocalize_attempts = 0
         self.last_relocalize_request_time = 0.0
+        self.next_relocalize_allowed_time = 0.0
         self.relocalize_future = None
         self.active_relocalize_service = None
+        self.active_relocalize_uses_checked = False
+        self.active_relocalize_counted_as_attempt = False
         self.use_prior_for_next_relocalize = use_prior
         self.accept_hdl_samples = False
         self.need_relocalize = True
@@ -866,6 +1218,8 @@ class HdlBootstrapToInitialPose(Node):
         self.bootstrap_done = False
         self.recovery_waiting_for_ndt = False
         self.recovery_healthy_count = 0
+        self.ndt_recovery_stable_status_count = 0
+        self.last_ndt_recovery_stable_status_time = 0.0
         self.get_logger().warn(
             f'localization unhealthy: {failure_reason}; starting HDL recovery #{self.recovery_count}; '
             f'prior={self.use_prior_for_next_relocalize} ({prior_reason})'
@@ -888,6 +1242,17 @@ class HdlBootstrapToInitialPose(Node):
                 throttle_key='settling',
                 throttle_sec=1.0,
                 ndt_settle_remaining_sec=remaining,
+            )
+            return
+
+        ndt_stability_reason = self.ndt_recovery_stability_reason()
+        if ndt_stability_reason is not None:
+            self.recovery_healthy_count = 0
+            self.publish_recovery_status(
+                'localization_recovery_waiting',
+                reason=ndt_stability_reason,
+                throttle_key='ndt_stability',
+                throttle_sec=1.0,
             )
             return
 
@@ -1160,7 +1525,7 @@ class HdlBootstrapToInitialPose(Node):
         msg.pose.covariance[35] = self.yaw_covariance
 
         self.pending_initialpose = msg
-        self.pending_publish_count = max(1, self.publish_repetitions)
+        self.pending_publish_count = self.current_publish_repetitions()
         self.last_publish_time = 0.0
         self.use_prior_for_next_relocalize = False
         self.get_logger().info(
@@ -1183,6 +1548,7 @@ class HdlBootstrapToInitialPose(Node):
             'event_type': event_type,
             'reason': reason,
             'timestamp': time.time(),
+            'relocalization_mode': self.relocalization_mode(),
             'recovery_count': self.recovery_count,
             'relocalize_attempts': self.relocalize_attempts,
             'active_service': self.active_relocalize_service,

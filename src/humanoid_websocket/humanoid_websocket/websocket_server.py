@@ -794,7 +794,16 @@ class CompleteWebSocketServer(Node):
         
             # 校验必要字段
             if not action:
-               await self.send_error_to_client(websocket, client_id, "面部控制命令缺少 'action' 字段")
+               error_message = "面部控制命令缺少 'action' 字段"
+               await self.send_error_to_client(websocket, client_id, error_message)
+               await self.broadcast_system_exception(
+                   category="expression",
+                   severity="error",
+                   title="表情控制异常",
+                   message=error_message,
+                   code="facial_action_missing",
+                   details={"client_id": client_id, "request_id": request_id},
+               )
                return
 
             # 构建 ROS 消息并发布 (保持不变)
@@ -804,7 +813,16 @@ class CompleteWebSocketServer(Node):
                self.facial_cmd_pub.publish(ros_msg)
                self.get_logger().info(f"✅ [Facial] 已转发指令ID {request_id}: '{action}'")
             else:
-               await self.send_error_to_client(websocket, client_id, "面部控制发布器未初始化")
+               error_message = "面部控制发布器未初始化"
+               await self.send_error_to_client(websocket, client_id, error_message)
+               await self.broadcast_system_exception(
+                   category="expression",
+                   severity="error",
+                   title="表情控制异常",
+                   message=error_message,
+                   code="facial_publisher_unavailable",
+                   details={"client_id": client_id, "request_id": request_id, "action": action},
+               )
                return
 
             # 3. 创建响应消息
@@ -827,7 +845,16 @@ class CompleteWebSocketServer(Node):
         except Exception as e:
             self.get_logger().error(f'❌ 处理面部控制命令错误: {e}')
             # 报错时也尝试带回 ID
-            await self.send_error_to_client(websocket, client_id, f"失败: {str(e)}")
+            error_message = f"失败: {str(e)}"
+            await self.send_error_to_client(websocket, client_id, error_message)
+            await self.broadcast_system_exception(
+                category="expression",
+                severity="error",
+                title="表情控制异常",
+                message=error_message,
+                code="facial_control_exception",
+                details={"client_id": client_id, "error": str(e)},
+            )
 
     async def handle_initial_pose(self, websocket, command_data: Dict, client_id: str):
         """处理初始位姿设置命令 - 代替 RViz "2D Pose Estimate" 手动点击"""
@@ -1196,6 +1223,50 @@ class CompleteWebSocketServer(Node):
             self.get_logger().error(f'❌ 广播消息错误: {e}')
     
     # ==================== 错误处理和工具函数 ====================
+
+    async def broadcast_system_exception(
+        self,
+        category: str,
+        severity: str,
+        title: str,
+        message: str,
+        code: str,
+        details: Dict = None,
+    ):
+        """向所有已连接客户端广播统一异常事件，供 APP 弹窗展示。"""
+        try:
+            exception_msg = self.create_base_message(
+                "push",
+                "system_exception",
+                "websocket_server",
+                "all"
+            )
+            exception_msg["data"] = {
+                "exception_id": self.generate_message_id("exception"),
+                "category": category,
+                "severity": severity,
+                "title": title,
+                "message": message,
+                "code": code,
+                "source_event": code,
+                "details": details or {},
+                "display": {
+                    "popup": True,
+                    "modal": severity in {"error", "critical"},
+                    "auto_close": severity in {"info", "warning"},
+                },
+                "timestamp": time.time()
+            }
+            exception_msg["metadata"].update({
+                "status": "error" if severity in {"error", "critical"} else severity,
+                "error_code": code,
+                "error_message": message,
+                "push_reason": "exception_event",
+                "qos_level": "realtime",
+            })
+            await self.broadcast_to_all_clients(exception_msg)
+        except Exception as e:
+            self.get_logger().error(f'❌ 广播系统异常错误: {e}')
     
     async def send_error_to_client(self, websocket, client_id: str, error_message: str, error_code: str = "PROCESSING_ERROR"):
         """发送错误消息到客户端"""

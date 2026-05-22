@@ -173,6 +173,7 @@ class UnifiedDataIntegrationNode(Node):
             'navigation_path': 30.0,     # 路径数据30秒过期
             'system_status': 60.0,       # 系统状态60秒过期
             'action_result': 30.0,       # 动作完成结果30秒过期
+            'system_exception': 120.0,   # 异常事件2分钟过期
             'sensor_data': 2.0           # 传感器数据2秒过期
         }
         
@@ -212,6 +213,11 @@ class UnifiedDataIntegrationNode(Node):
                 'frequency': 0.1,       # 0.1Hz推送频率
                 'last_push_time': 0,
                 'qos_levels': ['standard']
+            },
+            'system_exception': {
+                'frequency': 1.0,
+                'last_push_time': 0,
+                'qos_levels': ['realtime', 'standard']
             }
         }
         
@@ -221,6 +227,7 @@ class UnifiedDataIntegrationNode(Node):
         # 线程安全锁
         self.data_lock = threading.RLock()
         self.subscription_lock = threading.RLock()
+        self.last_exception_push_times = {}
 
         # 实际速度估计：主来源为 /robot_realpose 连续位姿差分。
         # /odom.twist 在当前定位链路中经常为 0，只作为非零 fallback。
@@ -285,6 +292,11 @@ class UnifiedDataIntegrationNode(Node):
             # 订阅导航命令确认消息
             self.navigation_ack_sub = self.create_subscription(
                 String, '/navigation/acknowledgments', self.navigation_ack_callback, 10
+            )
+
+            # 订阅定位恢复/重定位状态，转换为 APP 异常弹窗事件。
+            self.localization_recovery_status_sub = self.create_subscription(
+                String, '/localization/recovery_status', self.localization_recovery_status_callback, 10
             )
 
             # 订阅动作完成结果，立即推送给 APP。
@@ -507,6 +519,7 @@ class UnifiedDataIntegrationNode(Node):
 
                 if self.should_push_navigation_status_immediately(basic_status.get("event_type", "")):
                     self.publish_navigation_status_event(enhanced_status)
+                self.maybe_publish_navigation_exception(enhanced_status)
                 
                 self.get_logger().debug('🎯 导航状态已更新', throttle_duration_sec=2.0)
                 
@@ -534,6 +547,127 @@ class UnifiedDataIntegrationNode(Node):
         except Exception as e:
             self.get_logger().error(f'❌ 热重载动作库失败: {e}')
 
+    def publish_system_exception(
+        self,
+        category: str,
+        severity: str,
+        title: str,
+        message: str,
+        code: str,
+        source_event: str = "",
+        details: Dict[str, Any] = None,
+        popup: bool = True,
+        dedupe_sec: float = 1.0
+    ):
+        """统一向 APP 推送异常/恢复事件，客户端可用 data_type=system_exception 弹窗展示。"""
+        try:
+            now = time.time()
+            dedupe_key = f"{category}:{code}:{source_event}:{message}"
+            last_push = self.last_exception_push_times.get(dedupe_key, 0.0)
+            if dedupe_sec > 0.0 and now - last_push < dedupe_sec:
+                return
+            self.last_exception_push_times[dedupe_key] = now
+
+            exception_data = {
+                "exception_id": self.generate_message_id("exception"),
+                "category": category,
+                "severity": severity,
+                "title": title,
+                "message": message,
+                "code": code,
+                "source_event": source_event,
+                "details": details or {},
+                "display": {
+                    "popup": popup,
+                    "modal": severity in {"error", "critical"},
+                    "auto_close": severity in {"info", "warning"},
+                },
+                "timestamp": now
+            }
+
+            with self.data_lock:
+                self.data_storage['system_exception'] = exception_data
+                self.last_update_times['system_exception'] = now
+
+            push_msg = self.create_base_message(
+                message_type="push",
+                data_type="system_exception",
+                source="data_integration",
+                destination="all"
+            )
+            push_msg["data"] = exception_data
+            push_msg["metadata"].update({
+                "push_reason": "exception_event",
+                "qos_level": "realtime",
+                "status": "error" if severity in {"error", "critical"} else severity,
+                "error_code": code,
+                "error_message": message,
+            })
+            self.publish_push_message(push_msg)
+        except Exception as e:
+            self.get_logger().error(f'❌ 推送系统异常失败: {e}')
+
+    def localization_recovery_status_callback(self, msg: String):
+        """将定位恢复状态转换为 APP 可展示的定位异常/恢复事件。"""
+        try:
+            status = json.loads(msg.data)
+            event_type = status.get("event_type", "")
+            reason = status.get("reason", "")
+            result_code = status.get("result_code", "")
+
+            title = ""
+            severity = "info"
+            popup = True
+            code = result_code or event_type or "localization_event"
+            message = reason or event_type
+
+            if event_type == "localization_recovery_started":
+                title = "定位异常，正在重定位"
+                severity = "warning"
+            elif event_type == "localization_relocalize_requested":
+                title = "定位重定位请求已发出"
+                severity = "info"
+                popup = False
+            elif event_type == "localization_relocalize_attempt_deferred":
+                title = "定位重定位暂未接受"
+                severity = "warning" if result_code not in {
+                    "globalmap_not_ready",
+                    "no_scan",
+                    "not_enough_accumulated_scans",
+                    "held_for_consistency",
+                } else "info"
+            elif event_type == "localization_relocalize_accepted":
+                title = "定位重定位结果已接受"
+                severity = "info"
+            elif event_type == "localization_initialpose_published":
+                title = "定位初始位姿已更新"
+                severity = "info"
+            elif event_type == "localization_relocalize_failed":
+                title = "定位重定位失败"
+                severity = "error"
+            elif event_type == "localization_recovered":
+                title = "定位已恢复"
+                severity = "info"
+            elif event_type == "localization_manual_initialpose_override":
+                title = "定位已手动校正"
+                severity = "info"
+            else:
+                return
+
+            self.publish_system_exception(
+                category="localization",
+                severity=severity,
+                title=title,
+                message=message,
+                code=code,
+                source_event=event_type,
+                details=status,
+                popup=popup,
+                dedupe_sec=2.0 if event_type == "localization_relocalize_attempt_deferred" else 0.5,
+            )
+        except Exception as e:
+            self.get_logger().error(f'❌ 处理定位恢复状态错误: {e}')
+
     def action_result_callback(self, msg: String):
         """处理动作完成结果，转成统一 push 消息发给 APP。"""
         try:
@@ -560,6 +694,15 @@ class UnifiedDataIntegrationNode(Node):
             if action_result.get("status") != "success":
                 push_msg["metadata"]["error_code"] = action_result.get("result", "action_failed")
                 push_msg["metadata"]["error_message"] = action_result.get("message", "动作执行失败")
+                self.publish_system_exception(
+                    category="action",
+                    severity="error",
+                    title="动作异常",
+                    message=action_result.get("message", "动作执行失败"),
+                    code=action_result.get("result", "action_failed"),
+                    source_event="action_result",
+                    details=action_result,
+                )
 
             self.publish_push_message(push_msg)
             self.get_logger().info(
@@ -598,6 +741,15 @@ class UnifiedDataIntegrationNode(Node):
             if status == "error":
                 push_msg["metadata"]["error_code"] = "nav_error"
                 push_msg["metadata"]["error_message"] = message
+                self.publish_system_exception(
+                    category="navigation",
+                    severity="error",
+                    title="导航异常",
+                    message=message or "导航命令执行失败",
+                    code=ack_type or "nav_error",
+                    source_event="navigation_ack",
+                    details=ack_data,
+                )
     
             # 发布推送消息
             push_str = String()
@@ -631,6 +783,41 @@ class UnifiedDataIntegrationNode(Node):
             )
         except Exception as e:
             self.get_logger().error(f'❌ 推送导航事件失败: {e}')
+
+    def maybe_publish_navigation_exception(self, status_data: Dict[str, Any]):
+        event_type = status_data.get("event_type", "")
+        if event_type not in {
+            "navigation_failed",
+            "navigation_aborted",
+            "navigation_obstacle_blocked",
+            "navigation_localization_recovery_failed",
+            "navigation_localization_resume_failed",
+        }:
+            return
+
+        message = (
+            status_data.get("message")
+            or status_data.get("reason")
+            or status_data.get("error_message")
+            or event_type
+        )
+        title = "导航异常"
+        category = "navigation"
+        if "localization" in event_type:
+            title = "定位恢复异常"
+            category = "localization"
+        elif event_type == "navigation_obstacle_blocked":
+            title = "导航受阻"
+
+        self.publish_system_exception(
+            category=category,
+            severity="error" if event_type != "navigation_obstacle_blocked" else "warning",
+            title=title,
+            message=message,
+            code=event_type,
+            source_event=event_type,
+            details=status_data,
+        )
 
     @staticmethod
     def should_push_navigation_status_immediately(event_type: str) -> bool:

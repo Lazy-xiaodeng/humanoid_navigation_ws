@@ -9,6 +9,7 @@
 #include <cmath>
 #include <deque>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,7 @@
 #include <tf2/exceptions.h>
 
 #include <std_srvs/srv/empty.hpp>
+#include <std_srvs/srv/trigger.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <nav_msgs/msg/odometry.hpp>
@@ -145,6 +147,7 @@ public:
     globalmap_set_for_global_localization = false;
     auto_relocalize_done = false;
     relocalize_requested = false;
+    standby_mode = false;
     consecutive_scan_matching_rejections = 0;
     have_last_accepted_pose = false;
     last_accepted_pose = Eigen::Matrix4f::Identity();
@@ -202,9 +205,19 @@ public:
           std::bind(&HdlLocalizationNodelet::relocalize, this, std::placeholders::_1, std::placeholders::_2),
           rclcpp::ServicesQoS(),
           global_localization_callback_group);
+        relocalize_checked_server = create_service<std_srvs::srv::Trigger>(
+          "/relocalize_checked",
+          std::bind(&HdlLocalizationNodelet::relocalize_checked, this, std::placeholders::_1, std::placeholders::_2),
+          rclcpp::ServicesQoS(),
+          global_localization_callback_group);
         relocalize_with_prior_server = create_service<std_srvs::srv::Empty>(
           "/relocalize_with_prior",
           std::bind(&HdlLocalizationNodelet::relocalize_with_prior, this, std::placeholders::_1, std::placeholders::_2),
+          rclcpp::ServicesQoS(),
+          global_localization_callback_group);
+        relocalize_with_prior_checked_server = create_service<std_srvs::srv::Trigger>(
+          "/relocalize_with_prior_checked",
+          std::bind(&HdlLocalizationNodelet::relocalize_with_prior_checked, this, std::placeholders::_1, std::placeholders::_2),
           rclcpp::ServicesQoS(),
           global_localization_callback_group);
         standby_server = create_service<std_srvs::srv::Empty>(
@@ -261,6 +274,20 @@ private:
     size_t attempt_id;
     double fitness;
     size_t candidate_index;
+  };
+
+  struct RelocalizeReport {
+    bool accepted = false;
+    std::string code = "unknown";
+    std::string detail = "";
+    double retry_hint_sec = 1.0;
+    bool count_as_search_attempt = true;
+    int consistent_count = -1;
+    int required_consistent_count = -1;
+    double best_fitness = std::numeric_limits<double>::quiet_NaN();
+    int accepted_candidates = -1;
+    bool use_recovery_prior = false;
+    double query_timeout_sec = 0.0;
   };
 
   rclcpp::Time node_time(const builtin_interfaces::msg::Time& stamp) const {
@@ -358,6 +385,7 @@ private:
         force_2d_fixed_z ? global_localization_pose_z_offset : std::numeric_limits<double>::quiet_NaN()));
       last_accepted_pose = pose_estimator->matrix();
       have_last_accepted_pose = true;
+      standby_mode = false;
     }
   }
 
@@ -439,7 +467,19 @@ private:
     add_recent_scan(filtered);
 
     if (!pose_estimator) {
-      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5.0, "waiting for initial pose input or global relocalization!!");
+      if (standby_mode) {
+        RCLCPP_DEBUG_THROTTLE(
+          get_logger(),
+          *get_clock(),
+          30000,
+          "HDL localization is in standby; scans are cached but local tracking is stopped");
+      } else {
+        RCLCPP_WARN_THROTTLE(
+          get_logger(),
+          *get_clock(),
+          5000,
+          "waiting for initial pose input or global relocalization!!");
+      }
       return;
     }
 
@@ -681,6 +721,89 @@ private:
     }
   }
 
+  static std::string json_escape(const std::string& input) {
+    std::ostringstream escaped;
+    for (const char c : input) {
+      switch (c) {
+        case '"': escaped << "\\\""; break;
+        case '\\': escaped << "\\\\"; break;
+        case '\b': escaped << "\\b"; break;
+        case '\f': escaped << "\\f"; break;
+        case '\n': escaped << "\\n"; break;
+        case '\r': escaped << "\\r"; break;
+        case '\t': escaped << "\\t"; break;
+        default:
+          const unsigned char uc = static_cast<unsigned char>(c);
+          if (uc < 0x20) {
+            escaped << "\\u00";
+            const char* hex = "0123456789abcdef";
+            escaped << hex[(uc >> 4) & 0x0f] << hex[uc & 0x0f];
+          } else {
+            escaped << c;
+          }
+      }
+    }
+    return escaped.str();
+  }
+
+  RelocalizeReport make_relocalize_report(
+    bool accepted,
+    const std::string& code,
+    const std::string& detail,
+    double retry_hint_sec,
+    bool count_as_search_attempt,
+    bool use_recovery_prior,
+    int consistent_count = -1,
+    int required_consistent_count = -1,
+    double best_fitness = std::numeric_limits<double>::quiet_NaN(),
+    int accepted_candidates = -1,
+    double query_timeout_sec = 0.0) const {
+    RelocalizeReport report;
+    report.accepted = accepted;
+    report.code = code;
+    report.detail = detail;
+    report.retry_hint_sec = std::max(0.0, retry_hint_sec);
+    report.count_as_search_attempt = count_as_search_attempt;
+    report.consistent_count = consistent_count;
+    report.required_consistent_count = required_consistent_count;
+    report.best_fitness = best_fitness;
+    report.accepted_candidates = accepted_candidates;
+    report.use_recovery_prior = use_recovery_prior;
+    report.query_timeout_sec = query_timeout_sec;
+    return report;
+  }
+
+  void remember_relocalize_report(const RelocalizeReport& report) {
+    last_relocalize_report = report;
+  }
+
+  std::string relocalize_report_to_json(const RelocalizeReport& report) const {
+    std::ostringstream ss;
+    ss << "{";
+    ss << "\"accepted\":" << (report.accepted ? "true" : "false");
+    ss << ",\"code\":\"" << json_escape(report.code) << "\"";
+    ss << ",\"message\":\"" << json_escape(report.detail) << "\"";
+    ss << ",\"retry_hint_sec\":" << report.retry_hint_sec;
+    ss << ",\"count_as_search_attempt\":" << (report.count_as_search_attempt ? "true" : "false");
+    ss << ",\"consistent_count\":" << report.consistent_count;
+    ss << ",\"required_consistent_count\":" << report.required_consistent_count;
+    if (std::isfinite(report.best_fitness)) {
+      ss << ",\"best_fitness\":" << report.best_fitness;
+    } else {
+      ss << ",\"best_fitness\":null";
+    }
+    ss << ",\"accepted_candidates\":" << report.accepted_candidates;
+    ss << ",\"use_recovery_prior\":" << (report.use_recovery_prior ? "true" : "false");
+    ss << ",\"query_timeout_sec\":" << report.query_timeout_sec;
+    ss << "}";
+    return ss.str();
+  }
+
+  bool finish_relocalize_with_report(const RelocalizeReport& report) {
+    remember_relocalize_report(report);
+    return report.accepted;
+  }
+
   /**
    * @brief perform global localization to relocalize the sensor position
    * @param
@@ -691,12 +814,36 @@ private:
     return perform_relocalize(true, false);
   }
 
+  bool relocalize_checked(
+    std::shared_ptr<std_srvs::srv::Trigger::Request> req,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
+    (void)req;
+    const bool accepted = perform_relocalize(true, false);
+    RelocalizeReport report = last_relocalize_report;
+    report.accepted = accepted;
+    res->success = accepted;
+    res->message = relocalize_report_to_json(report);
+    return true;
+  }
+
   bool relocalize_with_prior(
     std::shared_ptr<std_srvs::srv::Empty::Request> req,
     std::shared_ptr<std_srvs::srv::Empty::Response> res) {
     (void)req;
     (void)res;
     return perform_relocalize(true, true);
+  }
+
+  bool relocalize_with_prior_checked(
+    std::shared_ptr<std_srvs::srv::Trigger::Request> req,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
+    (void)req;
+    const bool accepted = perform_relocalize(true, true);
+    RelocalizeReport report = last_relocalize_report;
+    report.accepted = accepted;
+    res->success = accepted;
+    res->message = relocalize_report_to_json(report);
+    return true;
   }
 
   bool standby(
@@ -720,6 +867,7 @@ private:
     pending_global_localization_candidates.clear();
     relocalize_requested = false;
     auto_relocalize_done = true;
+    standby_mode = true;
     RCLCPP_INFO(get_logger(), "HDL localization entered standby; scans are cached but local tracking is stopped");
     return true;
   }
@@ -731,17 +879,24 @@ private:
 
       if (relocalizing) {
         RCLCPP_WARN(get_logger(), "global relocalization is already running");
-        return false;
+        return finish_relocalize_with_report(make_relocalize_report(
+          false, "already_running", "global relocalization is already running",
+          0.5, false, use_recovery_prior));
       }
 
       if (last_scan == nullptr) {
         RCLCPP_INFO_STREAM(get_logger(), "no scan has been received");
-        return false;
+        return finish_relocalize_with_report(make_relocalize_report(
+          false, "no_scan", "no scan has been received",
+          0.5, false, use_recovery_prior));
       }
 
       if (!globalmap_set_for_global_localization) {
         RCLCPP_WARN(get_logger(), "globalmap has not been set in hdl_global_localization yet");
-        return false;
+        return finish_relocalize_with_report(make_relocalize_report(
+          false, "globalmap_not_ready",
+          "globalmap has not been set in hdl_global_localization yet",
+          0.5, false, use_recovery_prior));
       }
 
       relocalizing = true;
@@ -754,7 +909,10 @@ private:
             << recent_scans.size()
             << " need " << std::max(1, global_localization_query_min_accumulation_frames));
         relocalizing = false;
-        return false;
+        return finish_relocalize_with_report(make_relocalize_report(
+          false, "not_enough_accumulated_scans",
+          "not enough accumulated scans for global localization",
+          0.5, false, use_recovery_prior));
       }
     }
     if (global_localization_use_height_filter) {
@@ -767,7 +925,10 @@ private:
             << (global_localization_use_max_z_filter ? std::to_string(global_localization_max_z) : std::string("inf"))
             << "]");
         relocalizing = false;
-        return false;
+        return finish_relocalize_with_report(make_relocalize_report(
+          false, "height_filtered_scan_empty",
+          "global localization scan is empty after height filter",
+          0.5, false, use_recovery_prior));
       }
       RCLCPP_INFO_STREAM_THROTTLE(
         get_logger(),
@@ -790,14 +951,20 @@ private:
     if (query_result_future.wait_for(query_timeout) != std::future_status::ready) {
       RCLCPP_ERROR(get_logger(), "Failed to call QueryGlobalLocalization service");
       relocalizing = false;
-      return false;
+      return finish_relocalize_with_report(make_relocalize_report(
+        false, "query_timeout", "QueryGlobalLocalization service timed out",
+        std::max(1.0, query_timeout_sec * 0.25), true, use_recovery_prior,
+        -1, -1, std::numeric_limits<double>::quiet_NaN(), -1, query_timeout_sec));
     }
     auto query_result = query_result_future.get();
 
     if (query_result->poses.empty()) {
       RCLCPP_ERROR(get_logger(), "QueryGlobalLocalization returned empty poses array");
       relocalizing = false;
-      return false;
+      return finish_relocalize_with_report(make_relocalize_report(
+        false, "empty_query_result", "QueryGlobalLocalization returned empty poses array",
+        1.0, true, use_recovery_prior, -1, -1,
+        std::numeric_limits<double>::quiet_NaN(), 0, query_timeout_sec));
     }
 
     std::lock_guard<std::mutex> lock(pose_estimator_mutex);
@@ -805,7 +972,10 @@ private:
       RCLCPP_WARN(get_logger(), "discard auto relocalization result because an initial pose is already available");
       auto_relocalize_done = true;
       relocalizing = false;
-      return false;
+      return finish_relocalize_with_report(make_relocalize_report(
+        false, "initial_pose_already_available",
+        "discard auto relocalization result because an initial pose is already available",
+        2.0, false, use_recovery_prior));
     }
 
     const int required_consistent_results = std::max(1, global_localization_required_consistent_results);
@@ -869,7 +1039,11 @@ private:
       if (accepted_candidates.empty()) {
         RCLCPP_WARN(get_logger(), "reject global localization result: no candidate passed NDT validation");
         relocalizing = false;
-        return false;
+        return finish_relocalize_with_report(make_relocalize_report(
+          false, "no_candidate_passed_ndt_validation",
+          "reject global localization result: no candidate passed NDT validation",
+          1.0, true, use_recovery_prior, -1, required_consistent_results,
+          std::numeric_limits<double>::quiet_NaN(), 0, query_timeout_sec));
       }
 
       std::sort(
@@ -903,7 +1077,11 @@ private:
       if (accepted_candidates.empty()) {
         RCLCPP_WARN(get_logger(), "reject global localization result: no NDT-validated candidate is inside XY bounds");
         relocalizing = false;
-        return false;
+        return finish_relocalize_with_report(make_relocalize_report(
+          false, "no_candidate_inside_xy_bounds",
+          "reject global localization result: no NDT-validated candidate is inside XY bounds",
+          1.0, true, use_recovery_prior, -1, required_consistent_results,
+          std::numeric_limits<double>::quiet_NaN(), 0, query_timeout_sec));
       }
 
       if (use_recovery_prior) {
@@ -957,7 +1135,12 @@ private:
               "reject recovery global localization result: no candidate is close to "
                 << prior_source << " prior and hard gate is enabled");
             relocalizing = false;
-            return false;
+            return finish_relocalize_with_report(make_relocalize_report(
+              false, "no_candidate_near_recovery_prior",
+              "reject recovery global localization result: no candidate is close to prior and hard gate is enabled",
+              1.0, true, use_recovery_prior, -1, required_consistent_results,
+              std::numeric_limits<double>::quiet_NaN(),
+              static_cast<int>(accepted_candidates.size()), query_timeout_sec));
           } else {
             RCLCPP_WARN_STREAM(
               get_logger(),
@@ -997,7 +1180,11 @@ private:
               "reject global localization result: ambiguous fitness margin "
                 << margin << " < " << global_localization_min_fitness_margin);
             relocalizing = false;
-            return false;
+            return finish_relocalize_with_report(make_relocalize_report(
+              false, "ambiguous_fitness_margin",
+              "reject global localization result: ambiguous fitness margin below threshold",
+              1.0, true, use_recovery_prior, -1, required_consistent_results,
+              best.fitness, static_cast<int>(accepted_candidates.size()), query_timeout_sec));
           }
 
           const bool ambiguous_confident_enough =
@@ -1012,7 +1199,11 @@ private:
                 << " > ambiguous_max_fitness=" << global_localization_ambiguous_max_fitness_score
                 << "; retrying instead of adding a weak ambiguous candidate to the consistency gate");
             relocalizing = false;
-            return false;
+            return finish_relocalize_with_report(make_relocalize_report(
+              false, "ambiguous_low_confidence",
+              "ambiguous fitness margin and best fitness is not confident enough",
+              1.0, true, use_recovery_prior, -1, required_consistent_results,
+              best.fitness, static_cast<int>(accepted_candidates.size()), query_timeout_sec));
           }
 
           RCLCPP_WARN_STREAM(
@@ -1044,7 +1235,11 @@ private:
             << " xy_tol=" << global_localization_consistency_xy_tolerance
             << " yaw_tol=" << global_localization_consistency_yaw_tolerance);
         relocalizing = false;
-        return false;
+        return finish_relocalize_with_report(make_relocalize_report(
+          false, "held_for_consistency",
+          "hold global localization result until it is repeatable",
+          1.0, true, use_recovery_prior, consistent_count, required_consistent_results,
+          consistent_candidate_fitness, static_cast<int>(accepted_candidates.size()), query_timeout_sec));
       }
 
       if (consistent_candidate_index != best.index) {
@@ -1089,7 +1284,11 @@ private:
           << global_localization_min_x << ", " << global_localization_max_x
           << "] y=[" << global_localization_min_y << ", " << global_localization_max_y << "]");
       relocalizing = false;
-      return false;
+      return finish_relocalize_with_report(make_relocalize_report(
+        false, "pose_outside_xy_bounds",
+        "reject global localization result: pose outside XY bounds",
+        1.0, true, use_recovery_prior, -1, required_consistent_results,
+        std::numeric_limits<double>::quiet_NaN(), -1, query_timeout_sec));
     }
 
     if (!validate_global_localization_with_scan_matching) {
@@ -1103,7 +1302,11 @@ private:
             << " xy_tol=" << global_localization_consistency_xy_tolerance
             << " yaw_tol=" << global_localization_consistency_yaw_tolerance);
         relocalizing = false;
-        return false;
+        return finish_relocalize_with_report(make_relocalize_report(
+          false, "held_for_consistency",
+          "hold global localization result until it is repeatable",
+          1.0, true, use_recovery_prior, consistent_count, required_consistent_results,
+          std::numeric_limits<double>::quiet_NaN(), -1, query_timeout_sec));
       }
     }
 
@@ -1122,10 +1325,15 @@ private:
     global_pose_probation_rejections = 0;
     pending_global_localization_candidates.clear();
     auto_relocalize_done = true;
+    standby_mode = false;
 
     relocalizing = false;
 
-    return true;
+    return finish_relocalize_with_report(make_relocalize_report(
+      true, "accepted", "global localization accepted",
+      0.0, true, use_recovery_prior, required_consistent_results,
+      required_consistent_results, std::numeric_limits<double>::quiet_NaN(),
+      -1, query_timeout_sec));
   }
 
   static bool has_finite_xyz(const PointT& point) {
@@ -1463,9 +1671,17 @@ private:
    * @param pose_msg
    */
   void initialpose_callback(const geometry_msgs::msg::PoseWithCovarianceStamped::ConstSharedPtr pose_msg) {
-    RCLCPP_INFO(get_logger(), "initial pose received!!");
     std::lock_guard<std::mutex> lock(pose_estimator_mutex);
+    if (standby_mode.load()) {
+      RCLCPP_INFO_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "ignore /initialpose while HDL localization is in standby; NDT owns the pose");
+      return;
+    }
+
+    RCLCPP_INFO(get_logger(), "initial pose received!!");
     auto_relocalize_done = true;
+    standby_mode = false;
 
     geometry_msgs::msg::PoseStamped pose;
     pose.header = pose_msg->header;
@@ -1500,6 +1716,7 @@ private:
     have_last_accepted_pose = true;
     consecutive_scan_matching_rejections = 0;
     pending_global_localization_candidates.clear();
+    standby_mode = false;
   }
 
   pcl::PointCloud<PointT>::ConstPtr downsample(const pcl::PointCloud<PointT>::ConstPtr& cloud) const {
@@ -1731,6 +1948,7 @@ private:
   std::atomic_bool globalmap_set_for_global_localization;
   std::atomic_bool auto_relocalize_done;
   std::atomic_bool relocalize_requested;
+  std::atomic_bool standby_mode;
   std::unique_ptr<DeltaEstimater> delta_estimater;
   int consecutive_scan_matching_rejections;
   bool have_last_accepted_pose;
@@ -1751,9 +1969,12 @@ private:
   rclcpp::Client<hdl_global_localization::srv::SetGlobalMap>::SharedPtr set_global_map_service;
   rclcpp::Client<hdl_global_localization::srv::QueryGlobalLocalization>::SharedPtr query_global_localization_service;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr relocalize_server;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr relocalize_checked_server;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr relocalize_with_prior_server;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr relocalize_with_prior_checked_server;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr standby_server;
   rclcpp::TimerBase::SharedPtr auto_relocalize_timer;
+  RelocalizeReport last_relocalize_report;
 
   // Parameters
   double cool_time_duration;
