@@ -489,6 +489,16 @@ def generate_launch_description():
                     'global_localization_recovery_prior_max_xy': 10.0,
                     'global_localization_recovery_prior_max_yaw': 0.0,
                     'global_localization_recovery_prior_hard_gate': False,
+                    # 开机 bootstrap 专用原点先验；运行中恢复仍使用
+                    # /relocalize_with_prior_checked，不会走这个服务。
+                    'startup_origin_prior_enabled': True,
+                    'startup_origin_prior_x': 0.0,
+                    'startup_origin_prior_y': 0.0,
+                    'startup_origin_prior_z': 0.0,
+                    'startup_origin_prior_yaw': 0.0,
+                    'startup_origin_prior_max_xy': 4.0,
+                    'startup_origin_prior_max_yaw': 0.0,
+                    'startup_origin_prior_hard_gate': True,
                     'external_recovery_prior_topic': '/hdl_relocalize_prior',
                     'external_recovery_prior_max_age_sec': 15.0,
                     'global_localization_required_consistent_results': 3,
@@ -528,6 +538,7 @@ def generate_launch_description():
             'relocalize_with_prior_service': '/relocalize_with_prior',
             'relocalize_checked_service': '/relocalize_checked',
             'relocalize_with_prior_checked_service': '/relocalize_with_prior_checked',
+            'startup_origin_relocalize_checked_service': '/relocalize_startup_origin_checked',
             'use_checked_relocalize_service': True,
             'hdl_standby_service': '/hdl_bootstrap/standby',
             'external_relocalize_prior_topic': '/hdl_relocalize_prior',
@@ -544,6 +555,9 @@ def generate_launch_description():
             'startup_max_relocalize_attempts': 0,
             'max_runtime_relocalize_attempts': 5,
             'runtime_recovery_failure_cooldown_sec': 30.0,
+            'startup_use_origin_prior': True,
+            'startup_origin_prior_max_attempts': 3,
+            'startup_origin_prior_timeout_sec': 8.0,
             'required_stable_samples': 3,
             'startup_required_stable_samples': 3,
             'runtime_required_stable_samples': 3,
@@ -978,7 +992,7 @@ def generate_launch_description():
         # ┌─ 方案C-recovery：启动和运行期全局重定位，不发布 map->odom TF ─┐
         TimerAction(period=4.0, actions=[hdl_bootstrap_global_localization_node]),
         TimerAction(period=5.0, actions=[hdl_bootstrap_container]),
-        TimerAction(period=8.0, actions=[hdl_bootstrap_to_initialpose_node]),
+        TimerAction(period=6.0, actions=[hdl_bootstrap_to_initialpose_node]),
         # └──────────────────────────────────────────────────────────────┘
 
         # ┌─ 方案A：单分辨率 NDT 定位，等待 C recovery 发布 /initialpose ─┐

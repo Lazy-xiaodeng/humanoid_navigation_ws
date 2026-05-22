@@ -137,6 +137,8 @@ class HdlBootstrapToInitialPose(Node):
             'relocalize_checked_service', '/relocalize_checked').value
         self.relocalize_with_prior_checked_service = self.declare_parameter(
             'relocalize_with_prior_checked_service', '/relocalize_with_prior_checked').value
+        self.startup_origin_relocalize_checked_service = self.declare_parameter(
+            'startup_origin_relocalize_checked_service', '/relocalize_startup_origin_checked').value
         self.use_checked_relocalize_service = bool(
             self.declare_parameter('use_checked_relocalize_service', True).value)
         self.hdl_standby_service = self.declare_parameter(
@@ -165,6 +167,12 @@ class HdlBootstrapToInitialPose(Node):
             self.declare_parameter('max_runtime_relocalize_attempts', 5).value)
         self.runtime_recovery_failure_cooldown_sec = float(
             self.declare_parameter('runtime_recovery_failure_cooldown_sec', 30.0).value)
+        self.startup_use_origin_prior = bool(
+            self.declare_parameter('startup_use_origin_prior', False).value)
+        self.startup_origin_prior_max_attempts = int(
+            self.declare_parameter('startup_origin_prior_max_attempts', 3).value)
+        self.startup_origin_prior_timeout_sec = float(
+            self.declare_parameter('startup_origin_prior_timeout_sec', 8.0).value)
         self.required_stable_samples = int(self.declare_parameter('required_stable_samples', 3).value)
         self.startup_required_stable_samples = int(
             self.declare_parameter('startup_required_stable_samples', self.required_stable_samples).value)
@@ -254,6 +262,8 @@ class HdlBootstrapToInitialPose(Node):
         self.relocalize_checked_client = self.create_client(Trigger, self.relocalize_checked_service)
         self.relocalize_with_prior_checked_client = self.create_client(
             Trigger, self.relocalize_with_prior_checked_service)
+        self.startup_origin_relocalize_checked_client = self.create_client(
+            Trigger, self.startup_origin_relocalize_checked_service)
         self.hdl_standby_client = self.create_client(Empty, self.hdl_standby_service)
         self.initialpose_pub = self.create_publisher(PoseWithCovarianceStamped, self.initialpose_topic, 10)
         self.initialpose_sub = self.create_subscription(
@@ -309,8 +319,12 @@ class HdlBootstrapToInitialPose(Node):
         self.active_relocalize_service = None
         self.active_relocalize_uses_checked = False
         self.active_relocalize_counted_as_attempt = False
+        self.active_startup_origin_prior_attempt = False
         self.use_prior_for_next_relocalize = False
         self.last_relocalize_result = {}
+        self.startup_origin_prior_attempts = 0
+        self.startup_origin_prior_first_attempt_time = 0.0
+        self.startup_origin_prior_disabled_reason = ''
         self.accept_hdl_samples = False
         self.need_relocalize = True
         self.bootstrap_done = False
@@ -361,12 +375,60 @@ class HdlBootstrapToInitialPose(Node):
                 f'{self.map_frame}->{self.odom_frame}, NDT status {self.ndt_status_topic}, '
                 f'recover through {self.relocalize_with_prior_service}'
             )
+        if self.startup_use_origin_prior:
+            self.get_logger().info(
+                f'startup origin-prior relocalization enabled through '
+                f'{self.startup_origin_relocalize_checked_service}; '
+                f'max_attempts={self.startup_origin_prior_max_attempts}, '
+                f'timeout={self.startup_origin_prior_timeout_sec:.1f}s'
+            )
 
     def is_runtime_recovery_mode(self):
         return self.recovery_count > 0
 
     def relocalization_mode(self):
         return 'runtime_recovery' if self.is_runtime_recovery_mode() else 'startup_bootstrap'
+
+    def startup_origin_prior_is_available(self):
+        if not self.startup_use_origin_prior:
+            return False
+        if self.is_runtime_recovery_mode() or self.bootstrap_done:
+            return False
+        if self.startup_origin_prior_disabled_reason:
+            return False
+
+        max_attempts = self.startup_origin_prior_max_attempts
+        if max_attempts > 0 and self.startup_origin_prior_attempts >= max_attempts:
+            self.disable_startup_origin_prior(
+                f'max startup origin-prior attempts reached: '
+                f'{self.startup_origin_prior_attempts}/{max_attempts}'
+            )
+            return False
+
+        timeout_sec = max(0.0, self.startup_origin_prior_timeout_sec)
+        if timeout_sec > 0.0 and self.startup_origin_prior_first_attempt_time > 0.0:
+            elapsed = time.monotonic() - self.startup_origin_prior_first_attempt_time
+            if elapsed >= timeout_sec:
+                self.disable_startup_origin_prior(
+                    f'startup origin-prior timeout: {elapsed:.1f}s >= {timeout_sec:.1f}s'
+                )
+                return False
+
+        return True
+
+    def disable_startup_origin_prior(self, reason):
+        if self.startup_origin_prior_disabled_reason:
+            return
+        self.startup_origin_prior_disabled_reason = reason
+        self.next_relocalize_allowed_time = time.monotonic()
+        self.get_logger().warn(
+            f'disabling startup origin-prior relocalization; falling back to full global search: {reason}'
+        )
+        self.publish_recovery_status(
+            'localization_startup_origin_prior_disabled',
+            reason=reason,
+            startup_origin_prior_attempts=self.startup_origin_prior_attempts,
+        )
 
     def current_relocalize_retry_sec(self):
         retry_sec = (
@@ -414,6 +476,11 @@ class HdlBootstrapToInitialPose(Node):
         return max(0.0, settle_sec)
 
     def checked_relocalize_client_for_mode(self):
+        if self.startup_origin_prior_is_available():
+            return (
+                self.startup_origin_relocalize_checked_client,
+                self.startup_origin_relocalize_checked_service,
+            )
         if self.use_prior_for_next_relocalize and self.use_prior_relocalize_on_recovery:
             return self.relocalize_with_prior_checked_client, self.relocalize_with_prior_checked_service
         return self.relocalize_checked_client, self.relocalize_checked_service
@@ -427,6 +494,12 @@ class HdlBootstrapToInitialPose(Node):
         if self.use_checked_relocalize_service:
             checked_client, checked_service = self.checked_relocalize_client_for_mode()
             if checked_client.service_is_ready() or checked_client.wait_for_service(timeout_sec=0.0):
+                return checked_client, checked_service, True
+            if checked_service == self.startup_origin_relocalize_checked_service:
+                self.get_logger().info(
+                    f'waiting for startup origin-prior relocalize service {checked_service}',
+                    throttle_duration_sec=3.0,
+                )
                 return checked_client, checked_service, True
             self.get_logger().info(
                 f'waiting for checked HDL relocalize service {checked_service}; '
@@ -451,6 +524,7 @@ class HdlBootstrapToInitialPose(Node):
         report.setdefault("message", "")
         report.setdefault("retry_hint_sec", 1.0)
         report.setdefault("count_as_search_attempt", True)
+        report.setdefault("prior_mode", "none")
         return report
 
     def publish_checked_relocalize_result(self, report):
@@ -469,6 +543,7 @@ class HdlBootstrapToInitialPose(Node):
             required_consistent_count=report.get('required_consistent_count', -1),
             best_fitness=report.get('best_fitness'),
             accepted_candidates=report.get('accepted_candidates', -1),
+            prior_mode=report.get('prior_mode', 'none'),
             service=self.active_relocalize_service,
             use_checked_service=self.active_relocalize_uses_checked,
         )
@@ -483,6 +558,8 @@ class HdlBootstrapToInitialPose(Node):
         if not bool(report.get('count_as_search_attempt', True)):
             if self.active_relocalize_counted_as_attempt and self.relocalize_attempts > 0:
                 self.relocalize_attempts -= 1
+            if self.active_startup_origin_prior_attempt and self.startup_origin_prior_attempts > 0:
+                self.startup_origin_prior_attempts -= 1
             self.active_relocalize_counted_as_attempt = False
 
     def hdl_odom_callback(self, msg):
@@ -517,6 +594,7 @@ class HdlBootstrapToInitialPose(Node):
         self.active_relocalize_service = None
         self.active_relocalize_uses_checked = False
         self.active_relocalize_counted_as_attempt = False
+        self.active_startup_origin_prior_attempt = False
         self.use_prior_for_next_relocalize = False
         self.next_relocalize_allowed_time = 0.0
         self.last_hdl_status = None
@@ -904,6 +982,7 @@ class HdlBootstrapToInitialPose(Node):
                         self.begin_hdl_sample_collection(service_name)
                     else:
                         self.apply_checked_relocalize_retry_hint(report)
+                        self.handle_startup_origin_prior_failure(report)
                 else:
                     self.publish_recovery_status(
                         'localization_relocalize_completed',
@@ -925,6 +1004,7 @@ class HdlBootstrapToInitialPose(Node):
             self.active_relocalize_service = None
             self.active_relocalize_uses_checked = False
             self.active_relocalize_counted_as_attempt = False
+            self.active_startup_origin_prior_attempt = False
 
         if self.need_relocalize:
             self.request_relocalize_if_needed()
@@ -941,6 +1021,33 @@ class HdlBootstrapToInitialPose(Node):
             return
 
         self.request_relocalize_if_needed()
+
+    def handle_startup_origin_prior_failure(self, report):
+        if not self.active_startup_origin_prior_attempt:
+            return
+
+        if not bool(report.get('count_as_search_attempt', True)):
+            code = str(report.get('code', 'unknown'))
+            if code in {'startup_origin_prior_disabled', 'startup_origin_prior_unavailable'}:
+                self.disable_startup_origin_prior(code)
+            return
+
+        max_attempts = self.startup_origin_prior_max_attempts
+        if max_attempts > 0 and self.startup_origin_prior_attempts >= max_attempts:
+            self.disable_startup_origin_prior(
+                f'startup origin-prior failed {self.startup_origin_prior_attempts}/{max_attempts} attempts; '
+                f'last_code={report.get("code", "unknown")}'
+            )
+            return
+
+        timeout_sec = max(0.0, self.startup_origin_prior_timeout_sec)
+        if timeout_sec > 0.0 and self.startup_origin_prior_first_attempt_time > 0.0:
+            elapsed = time.monotonic() - self.startup_origin_prior_first_attempt_time
+            if elapsed >= timeout_sec:
+                self.disable_startup_origin_prior(
+                    f'startup origin-prior failed for {elapsed:.1f}s; '
+                    f'last_code={report.get("code", "unknown")}'
+                )
 
     def publish_pending_initialpose(self):
         if self.pending_initialpose is None or self.pending_publish_count <= 0:
@@ -995,9 +1102,11 @@ class HdlBootstrapToInitialPose(Node):
         using_prior_service = service_name in {
             self.relocalize_with_prior_service,
             self.relocalize_with_prior_checked_service,
+            self.startup_origin_relocalize_checked_service,
         }
+        using_startup_origin_prior = service_name == self.startup_origin_relocalize_checked_service
 
-        if using_prior_service and self.pending_external_prior is not None:
+        if using_prior_service and not using_startup_origin_prior and self.pending_external_prior is not None:
             self.pending_external_prior.header.stamp = self.get_clock().now().to_msg()
             self.external_relocalize_prior_pub.publish(self.pending_external_prior)
             if self.last_external_prior_publish_time <= 0.0:
@@ -1030,19 +1139,33 @@ class HdlBootstrapToInitialPose(Node):
         self.last_hdl_status_time = None
         self.accept_hdl_samples = False
         self.relocalize_attempts += 1
+        if using_startup_origin_prior:
+            self.startup_origin_prior_attempts += 1
+            if self.startup_origin_prior_first_attempt_time <= 0.0:
+                self.startup_origin_prior_first_attempt_time = now
         self.last_relocalize_request_time = now
         self.next_relocalize_allowed_time = now + retry_sec
         self.active_relocalize_service = service_name
         self.active_relocalize_uses_checked = use_checked_service
         self.active_relocalize_counted_as_attempt = True
+        self.active_startup_origin_prior_attempt = using_startup_origin_prior
         request = Trigger.Request() if use_checked_service else Empty.Request()
         self.relocalize_future = client.call_async(request)
-        self.get_logger().info(f'calling HDL {service_name} attempt {self.relocalize_attempts}')
+        if using_startup_origin_prior:
+            self.get_logger().info(
+                f'calling HDL {service_name} startup-origin attempt '
+                f'{self.startup_origin_prior_attempts} (total attempt {self.relocalize_attempts})'
+            )
+        else:
+            self.get_logger().info(f'calling HDL {service_name} attempt {self.relocalize_attempts}')
         self.publish_recovery_status(
             'localization_relocalize_requested',
             service=service_name,
             use_prior=using_prior_service,
-            use_external_prior=self.pending_external_prior is not None,
+            prior_mode='startup_origin' if using_startup_origin_prior else (
+                'recovery' if using_prior_service else 'none'),
+            use_external_prior=(self.pending_external_prior is not None and not using_startup_origin_prior),
+            startup_origin_prior_attempts=self.startup_origin_prior_attempts,
             retry_sec=retry_sec,
             use_checked_service=use_checked_service,
         )
@@ -1059,6 +1182,7 @@ class HdlBootstrapToInitialPose(Node):
         self.active_relocalize_service = None
         self.active_relocalize_uses_checked = False
         self.active_relocalize_counted_as_attempt = False
+        self.active_startup_origin_prior_attempt = False
         self.recovery_waiting_for_ndt = False
         self.recovery_healthy_count = 0
         self.ndt_recovery_stable_status_count = 0
@@ -1206,6 +1330,7 @@ class HdlBootstrapToInitialPose(Node):
         self.active_relocalize_service = None
         self.active_relocalize_uses_checked = False
         self.active_relocalize_counted_as_attempt = False
+        self.active_startup_origin_prior_attempt = False
         self.use_prior_for_next_relocalize = use_prior
         self.accept_hdl_samples = False
         self.need_relocalize = True
@@ -1553,6 +1678,8 @@ class HdlBootstrapToInitialPose(Node):
             'relocalize_attempts': self.relocalize_attempts,
             'active_service': self.active_relocalize_service,
             'use_prior': self.use_prior_for_next_relocalize,
+            'startup_origin_prior_attempts': self.startup_origin_prior_attempts,
+            'startup_origin_prior_disabled_reason': self.startup_origin_prior_disabled_reason,
             'waiting_for_ndt': self.recovery_waiting_for_ndt,
             'healthy_count': self.recovery_healthy_count,
         }

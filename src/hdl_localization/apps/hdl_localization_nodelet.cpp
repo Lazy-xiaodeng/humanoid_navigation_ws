@@ -122,6 +122,14 @@ public:
     global_localization_recovery_prior_max_xy = declare_parameter<double>("global_localization_recovery_prior_max_xy", 2.0);
     global_localization_recovery_prior_max_yaw = declare_parameter<double>("global_localization_recovery_prior_max_yaw", 1.2);
     global_localization_recovery_prior_hard_gate = declare_parameter<bool>("global_localization_recovery_prior_hard_gate", false);
+    startup_origin_prior_enabled = declare_parameter<bool>("startup_origin_prior_enabled", false);
+    startup_origin_prior_x = declare_parameter<double>("startup_origin_prior_x", 0.0);
+    startup_origin_prior_y = declare_parameter<double>("startup_origin_prior_y", 0.0);
+    startup_origin_prior_z = declare_parameter<double>("startup_origin_prior_z", 0.0);
+    startup_origin_prior_yaw = declare_parameter<double>("startup_origin_prior_yaw", 0.0);
+    startup_origin_prior_max_xy = declare_parameter<double>("startup_origin_prior_max_xy", 3.0);
+    startup_origin_prior_max_yaw = declare_parameter<double>("startup_origin_prior_max_yaw", 0.0);
+    startup_origin_prior_hard_gate = declare_parameter<bool>("startup_origin_prior_hard_gate", true);
     global_localization_required_consistent_results = declare_parameter<int>("global_localization_required_consistent_results", 1);
     global_localization_consistency_window = declare_parameter<int>("global_localization_consistency_window", 5);
     global_localization_consistency_xy_tolerance = declare_parameter<double>("global_localization_consistency_xy_tolerance", 0.8);
@@ -220,6 +228,11 @@ public:
           std::bind(&HdlLocalizationNodelet::relocalize_with_prior_checked, this, std::placeholders::_1, std::placeholders::_2),
           rclcpp::ServicesQoS(),
           global_localization_callback_group);
+        relocalize_startup_origin_checked_server = create_service<std_srvs::srv::Trigger>(
+          "/relocalize_startup_origin_checked",
+          std::bind(&HdlLocalizationNodelet::relocalize_startup_origin_checked, this, std::placeholders::_1, std::placeholders::_2),
+          rclcpp::ServicesQoS(),
+          global_localization_callback_group);
         standby_server = create_service<std_srvs::srv::Empty>(
           "/hdl_bootstrap/standby",
           std::bind(&HdlLocalizationNodelet::standby, this, std::placeholders::_1, std::placeholders::_2),
@@ -250,7 +263,9 @@ public:
               return;
             }
             RCLCPP_INFO(get_logger(), recovery_relocalize ? "auto relocalize after scan matching rejection" : "auto relocalize on start");
-            if (!perform_relocalize(recovery_relocalize, recovery_relocalize)) {
+            const RelocalizePriorMode auto_prior_mode =
+              recovery_relocalize ? RelocalizePriorMode::RECOVERY : RelocalizePriorMode::NONE;
+            if (!perform_relocalize(recovery_relocalize, auto_prior_mode)) {
               RCLCPP_WARN(get_logger(), "auto relocalize failed; call /relocalize after the scan is stable or set /initialpose manually");
             }
           }, global_localization_callback_group);
@@ -261,6 +276,12 @@ public:
   }
 
 private:
+  enum class RelocalizePriorMode {
+    NONE,
+    RECOVERY,
+    STARTUP_ORIGIN,
+  };
+
   struct ValidatedGlobalLocalizationCandidate {
     size_t index;
     double fitness;
@@ -288,6 +309,7 @@ private:
     int accepted_candidates = -1;
     bool use_recovery_prior = false;
     double query_timeout_sec = 0.0;
+    std::string prior_mode = "none";
   };
 
   rclcpp::Time node_time(const builtin_interfaces::msg::Time& stamp) const {
@@ -757,7 +779,8 @@ private:
     int required_consistent_count = -1,
     double best_fitness = std::numeric_limits<double>::quiet_NaN(),
     int accepted_candidates = -1,
-    double query_timeout_sec = 0.0) const {
+    double query_timeout_sec = 0.0,
+    RelocalizePriorMode prior_mode = RelocalizePriorMode::NONE) const {
     RelocalizeReport report;
     report.accepted = accepted;
     report.code = code;
@@ -770,6 +793,7 @@ private:
     report.accepted_candidates = accepted_candidates;
     report.use_recovery_prior = use_recovery_prior;
     report.query_timeout_sec = query_timeout_sec;
+    report.prior_mode = prior_mode_label(prior_mode);
     return report;
   }
 
@@ -795,6 +819,7 @@ private:
     ss << ",\"accepted_candidates\":" << report.accepted_candidates;
     ss << ",\"use_recovery_prior\":" << (report.use_recovery_prior ? "true" : "false");
     ss << ",\"query_timeout_sec\":" << report.query_timeout_sec;
+    ss << ",\"prior_mode\":\"" << json_escape(report.prior_mode) << "\"";
     ss << "}";
     return ss.str();
   }
@@ -811,14 +836,14 @@ private:
   bool relocalize(std::shared_ptr<std_srvs::srv::Empty::Request> req, std::shared_ptr<std_srvs::srv::Empty::Response> res) {
     (void)req;
     (void)res;
-    return perform_relocalize(true, false);
+    return perform_relocalize(true, RelocalizePriorMode::NONE);
   }
 
   bool relocalize_checked(
     std::shared_ptr<std_srvs::srv::Trigger::Request> req,
     std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
     (void)req;
-    const bool accepted = perform_relocalize(true, false);
+    const bool accepted = perform_relocalize(true, RelocalizePriorMode::NONE);
     RelocalizeReport report = last_relocalize_report;
     report.accepted = accepted;
     res->success = accepted;
@@ -831,14 +856,26 @@ private:
     std::shared_ptr<std_srvs::srv::Empty::Response> res) {
     (void)req;
     (void)res;
-    return perform_relocalize(true, true);
+    return perform_relocalize(true, RelocalizePriorMode::RECOVERY);
   }
 
   bool relocalize_with_prior_checked(
     std::shared_ptr<std_srvs::srv::Trigger::Request> req,
     std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
     (void)req;
-    const bool accepted = perform_relocalize(true, true);
+    const bool accepted = perform_relocalize(true, RelocalizePriorMode::RECOVERY);
+    RelocalizeReport report = last_relocalize_report;
+    report.accepted = accepted;
+    res->success = accepted;
+    res->message = relocalize_report_to_json(report);
+    return true;
+  }
+
+  bool relocalize_startup_origin_checked(
+    std::shared_ptr<std_srvs::srv::Trigger::Request> req,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
+    (void)req;
+    const bool accepted = perform_relocalize(true, RelocalizePriorMode::STARTUP_ORIGIN);
     RelocalizeReport report = last_relocalize_report;
     report.accepted = accepted;
     res->success = accepted;
@@ -872,7 +909,21 @@ private:
     return true;
   }
 
-  bool perform_relocalize(bool allow_overwrite_existing_pose, bool use_recovery_prior = false) {
+  static const char* prior_mode_label(RelocalizePriorMode mode) {
+    switch (mode) {
+      case RelocalizePriorMode::RECOVERY:
+        return "recovery";
+      case RelocalizePriorMode::STARTUP_ORIGIN:
+        return "startup_origin";
+      case RelocalizePriorMode::NONE:
+      default:
+        return "none";
+    }
+  }
+
+  bool perform_relocalize(bool allow_overwrite_existing_pose, RelocalizePriorMode prior_mode) {
+    const bool use_prior = prior_mode != RelocalizePriorMode::NONE;
+    const bool use_startup_origin_prior = prior_mode == RelocalizePriorMode::STARTUP_ORIGIN;
     pcl::PointCloud<PointT>::ConstPtr scan;
     {
       std::lock_guard<std::mutex> lock(pose_estimator_mutex);
@@ -881,14 +932,14 @@ private:
         RCLCPP_WARN(get_logger(), "global relocalization is already running");
         return finish_relocalize_with_report(make_relocalize_report(
           false, "already_running", "global relocalization is already running",
-          0.5, false, use_recovery_prior));
+          0.5, false, use_prior, -1, -1, std::numeric_limits<double>::quiet_NaN(), -1, 0.0, prior_mode));
       }
 
       if (last_scan == nullptr) {
         RCLCPP_INFO_STREAM(get_logger(), "no scan has been received");
         return finish_relocalize_with_report(make_relocalize_report(
           false, "no_scan", "no scan has been received",
-          0.5, false, use_recovery_prior));
+          0.5, false, use_prior, -1, -1, std::numeric_limits<double>::quiet_NaN(), -1, 0.0, prior_mode));
       }
 
       if (!globalmap_set_for_global_localization) {
@@ -896,7 +947,16 @@ private:
         return finish_relocalize_with_report(make_relocalize_report(
           false, "globalmap_not_ready",
           "globalmap has not been set in hdl_global_localization yet",
-          0.5, false, use_recovery_prior));
+          0.5, false, use_prior, -1, -1, std::numeric_limits<double>::quiet_NaN(), -1, 0.0, prior_mode));
+      }
+
+      if (use_startup_origin_prior && !startup_origin_prior_enabled) {
+        RCLCPP_WARN(get_logger(), "startup origin prior relocalization requested but disabled");
+        return finish_relocalize_with_report(make_relocalize_report(
+          false, "startup_origin_prior_disabled",
+          "startup origin prior relocalization is disabled",
+          0.0, false, use_prior, -1, -1,
+          std::numeric_limits<double>::quiet_NaN(), -1, 0.0, prior_mode));
       }
 
       relocalizing = true;
@@ -912,7 +972,7 @@ private:
         return finish_relocalize_with_report(make_relocalize_report(
           false, "not_enough_accumulated_scans",
           "not enough accumulated scans for global localization",
-          0.5, false, use_recovery_prior));
+          0.5, false, use_prior, -1, -1, std::numeric_limits<double>::quiet_NaN(), -1, 0.0, prior_mode));
       }
     }
     if (global_localization_use_height_filter) {
@@ -928,7 +988,7 @@ private:
         return finish_relocalize_with_report(make_relocalize_report(
           false, "height_filtered_scan_empty",
           "global localization scan is empty after height filter",
-          0.5, false, use_recovery_prior));
+          0.5, false, use_prior, -1, -1, std::numeric_limits<double>::quiet_NaN(), -1, 0.0, prior_mode));
       }
       RCLCPP_INFO_STREAM_THROTTLE(
         get_logger(),
@@ -946,15 +1006,15 @@ private:
 
     auto query_result_future = query_global_localization_service->async_send_request(query_req);
     const double query_timeout_sec =
-      use_recovery_prior ? global_localization_recovery_query_timeout_sec : global_localization_query_timeout_sec;
+      use_prior ? global_localization_recovery_query_timeout_sec : global_localization_query_timeout_sec;
     auto query_timeout = std::chrono::duration<double>(query_timeout_sec);
     if (query_result_future.wait_for(query_timeout) != std::future_status::ready) {
       RCLCPP_ERROR(get_logger(), "Failed to call QueryGlobalLocalization service");
       relocalizing = false;
       return finish_relocalize_with_report(make_relocalize_report(
         false, "query_timeout", "QueryGlobalLocalization service timed out",
-        std::max(1.0, query_timeout_sec * 0.25), true, use_recovery_prior,
-        -1, -1, std::numeric_limits<double>::quiet_NaN(), -1, query_timeout_sec));
+        std::max(1.0, query_timeout_sec * 0.25), true, use_prior,
+        -1, -1, std::numeric_limits<double>::quiet_NaN(), -1, query_timeout_sec, prior_mode));
     }
     auto query_result = query_result_future.get();
 
@@ -963,8 +1023,8 @@ private:
       relocalizing = false;
       return finish_relocalize_with_report(make_relocalize_report(
         false, "empty_query_result", "QueryGlobalLocalization returned empty poses array",
-        1.0, true, use_recovery_prior, -1, -1,
-        std::numeric_limits<double>::quiet_NaN(), 0, query_timeout_sec));
+        1.0, true, use_prior, -1, -1,
+        std::numeric_limits<double>::quiet_NaN(), 0, query_timeout_sec, prior_mode));
     }
 
     std::lock_guard<std::mutex> lock(pose_estimator_mutex);
@@ -975,7 +1035,8 @@ private:
       return finish_relocalize_with_report(make_relocalize_report(
         false, "initial_pose_already_available",
         "discard auto relocalization result because an initial pose is already available",
-        2.0, false, use_recovery_prior));
+        2.0, false, use_prior, -1, -1,
+        std::numeric_limits<double>::quiet_NaN(), -1, query_timeout_sec, prior_mode));
     }
 
     const int required_consistent_results = std::max(1, global_localization_required_consistent_results);
@@ -1042,8 +1103,8 @@ private:
         return finish_relocalize_with_report(make_relocalize_report(
           false, "no_candidate_passed_ndt_validation",
           "reject global localization result: no candidate passed NDT validation",
-          1.0, true, use_recovery_prior, -1, required_consistent_results,
-          std::numeric_limits<double>::quiet_NaN(), 0, query_timeout_sec));
+          1.0, true, use_prior, -1, required_consistent_results,
+          std::numeric_limits<double>::quiet_NaN(), 0, query_timeout_sec, prior_mode));
       }
 
       std::sort(
@@ -1080,30 +1141,31 @@ private:
         return finish_relocalize_with_report(make_relocalize_report(
           false, "no_candidate_inside_xy_bounds",
           "reject global localization result: no NDT-validated candidate is inside XY bounds",
-          1.0, true, use_recovery_prior, -1, required_consistent_results,
-          std::numeric_limits<double>::quiet_NaN(), 0, query_timeout_sec));
+          1.0, true, use_prior, -1, required_consistent_results,
+          std::numeric_limits<double>::quiet_NaN(), 0, query_timeout_sec, prior_mode));
       }
 
-      if (use_recovery_prior) {
+      if (use_prior) {
         Eigen::Isometry3f prior_pose = Eigen::Isometry3f::Identity();
         std::string prior_source;
-        if (select_recovery_prior(prior_pose, prior_source)) {
+        double prior_max_xy = 0.0;
+        double prior_max_yaw = 0.0;
+        bool prior_hard_gate = false;
+        if (select_relocalize_prior(prior_mode, prior_pose, prior_source, prior_max_xy, prior_max_yaw, prior_hard_gate)) {
           auto prior_filtered_candidates = accepted_candidates;
           prior_filtered_candidates.erase(
             std::remove_if(
               prior_filtered_candidates.begin(),
               prior_filtered_candidates.end(),
-              [this, &prior_pose, &prior_source](const auto& candidate) {
+              [this, &prior_pose, &prior_source, prior_max_xy, prior_max_yaw](const auto& candidate) {
                 const Eigen::Vector2f prior_xy(prior_pose.translation().x(), prior_pose.translation().y());
                 const Eigen::Vector2f candidate_xy(candidate.pose.translation().x(), candidate.pose.translation().y());
                 const double xy_distance = (candidate_xy - prior_xy).norm();
                 const double yaw_distance = std::abs(normalize_angle(pose_yaw(candidate.pose) - pose_yaw(prior_pose)));
                 const bool xy_ok =
-                  global_localization_recovery_prior_max_xy <= 0.0 ||
-                  xy_distance <= global_localization_recovery_prior_max_xy;
+                  prior_max_xy <= 0.0 || xy_distance <= prior_max_xy;
                 const bool yaw_ok =
-                  global_localization_recovery_prior_max_yaw <= 0.0 ||
-                  yaw_distance <= global_localization_recovery_prior_max_yaw;
+                  prior_max_yaw <= 0.0 || yaw_distance <= prior_max_yaw;
                 if (xy_ok && yaw_ok) {
                   return false;
                 }
@@ -1111,13 +1173,12 @@ private:
                 const auto& t = candidate.pose.translation();
                 RCLCPP_INFO_STREAM(
                   get_logger(),
-                  "recovery candidate[" << candidate.index
+                  "prior-gated candidate[" << candidate.index
                     << "] is far from " << prior_source << " prior, pose=("
                     << t.x() << ", " << t.y() << ", yaw=" << pose_yaw(candidate.pose)
                     << ") xy_delta=" << xy_distance
                     << " yaw_delta=" << yaw_distance
-                    << " limits=(" << global_localization_recovery_prior_max_xy
-                    << ", " << global_localization_recovery_prior_max_yaw << ")");
+                    << " limits=(" << prior_max_xy << ", " << prior_max_yaw << ")");
                 return true;
               }),
             prior_filtered_candidates.end());
@@ -1125,29 +1186,44 @@ private:
           if (!prior_filtered_candidates.empty()) {
             RCLCPP_INFO_STREAM(
               get_logger(),
-              "recovery prior selected " << prior_filtered_candidates.size()
+              prior_source << " prior selected " << prior_filtered_candidates.size()
                 << "/" << accepted_candidates.size()
-                << " candidates near " << prior_source << " prior");
+                << " candidates near prior");
             accepted_candidates = prior_filtered_candidates;
-          } else if (global_localization_recovery_prior_hard_gate) {
+          } else if (prior_hard_gate) {
+            const bool startup_prior = prior_mode == RelocalizePriorMode::STARTUP_ORIGIN;
+            const std::string code = startup_prior ?
+              "no_candidate_near_startup_origin_prior" :
+              "no_candidate_near_recovery_prior";
+            const std::string detail = startup_prior ?
+              "reject startup global localization result: no candidate is close to origin prior" :
+              "reject recovery global localization result: no candidate is close to prior and hard gate is enabled";
             RCLCPP_WARN_STREAM(
               get_logger(),
-              "reject recovery global localization result: no candidate is close to "
-                << prior_source << " prior and hard gate is enabled");
+              detail << " (" << prior_source << ")");
             relocalizing = false;
             return finish_relocalize_with_report(make_relocalize_report(
-              false, "no_candidate_near_recovery_prior",
-              "reject recovery global localization result: no candidate is close to prior and hard gate is enabled",
-              1.0, true, use_recovery_prior, -1, required_consistent_results,
+              false, code, detail,
+              1.0, true, use_prior, -1, required_consistent_results,
               std::numeric_limits<double>::quiet_NaN(),
-              static_cast<int>(accepted_candidates.size()), query_timeout_sec));
+              static_cast<int>(accepted_candidates.size()), query_timeout_sec, prior_mode));
           } else {
             RCLCPP_WARN_STREAM(
               get_logger(),
-              "no recovery candidate is close to " << prior_source
+              "no candidate is close to " << prior_source
                 << " prior; falling back to full global candidates");
           }
         } else {
+          if (prior_mode == RelocalizePriorMode::STARTUP_ORIGIN) {
+            RCLCPP_WARN(get_logger(), "startup origin prior requested but no usable prior is available");
+            relocalizing = false;
+            return finish_relocalize_with_report(make_relocalize_report(
+              false, "startup_origin_prior_unavailable",
+              "startup origin prior requested but no usable prior is available",
+              0.0, false, use_prior, -1, required_consistent_results,
+              std::numeric_limits<double>::quiet_NaN(),
+              static_cast<int>(accepted_candidates.size()), query_timeout_sec, prior_mode));
+          }
           RCLCPP_WARN(get_logger(), "recovery prior requested but no usable prior is available; using full global candidates");
         }
       }
@@ -1183,8 +1259,8 @@ private:
             return finish_relocalize_with_report(make_relocalize_report(
               false, "ambiguous_fitness_margin",
               "reject global localization result: ambiguous fitness margin below threshold",
-              1.0, true, use_recovery_prior, -1, required_consistent_results,
-              best.fitness, static_cast<int>(accepted_candidates.size()), query_timeout_sec));
+              1.0, true, use_prior, -1, required_consistent_results,
+              best.fitness, static_cast<int>(accepted_candidates.size()), query_timeout_sec, prior_mode));
           }
 
           const bool ambiguous_confident_enough =
@@ -1202,8 +1278,8 @@ private:
             return finish_relocalize_with_report(make_relocalize_report(
               false, "ambiguous_low_confidence",
               "ambiguous fitness margin and best fitness is not confident enough",
-              1.0, true, use_recovery_prior, -1, required_consistent_results,
-              best.fitness, static_cast<int>(accepted_candidates.size()), query_timeout_sec));
+              1.0, true, use_prior, -1, required_consistent_results,
+              best.fitness, static_cast<int>(accepted_candidates.size()), query_timeout_sec, prior_mode));
           }
 
           RCLCPP_WARN_STREAM(
@@ -1238,8 +1314,8 @@ private:
         return finish_relocalize_with_report(make_relocalize_report(
           false, "held_for_consistency",
           "hold global localization result until it is repeatable",
-          1.0, true, use_recovery_prior, consistent_count, required_consistent_results,
-          consistent_candidate_fitness, static_cast<int>(accepted_candidates.size()), query_timeout_sec));
+          1.0, true, use_prior, consistent_count, required_consistent_results,
+          consistent_candidate_fitness, static_cast<int>(accepted_candidates.size()), query_timeout_sec, prior_mode));
       }
 
       if (consistent_candidate_index != best.index) {
@@ -1287,8 +1363,8 @@ private:
       return finish_relocalize_with_report(make_relocalize_report(
         false, "pose_outside_xy_bounds",
         "reject global localization result: pose outside XY bounds",
-        1.0, true, use_recovery_prior, -1, required_consistent_results,
-        std::numeric_limits<double>::quiet_NaN(), -1, query_timeout_sec));
+        1.0, true, use_prior, -1, required_consistent_results,
+        std::numeric_limits<double>::quiet_NaN(), -1, query_timeout_sec, prior_mode));
     }
 
     if (!validate_global_localization_with_scan_matching) {
@@ -1305,8 +1381,8 @@ private:
         return finish_relocalize_with_report(make_relocalize_report(
           false, "held_for_consistency",
           "hold global localization result until it is repeatable",
-          1.0, true, use_recovery_prior, consistent_count, required_consistent_results,
-          std::numeric_limits<double>::quiet_NaN(), -1, query_timeout_sec));
+          1.0, true, use_prior, consistent_count, required_consistent_results,
+          std::numeric_limits<double>::quiet_NaN(), -1, query_timeout_sec, prior_mode));
       }
     }
 
@@ -1331,9 +1407,9 @@ private:
 
     return finish_relocalize_with_report(make_relocalize_report(
       true, "accepted", "global localization accepted",
-      0.0, true, use_recovery_prior, required_consistent_results,
+      0.0, true, use_prior, required_consistent_results,
       required_consistent_results, std::numeric_limits<double>::quiet_NaN(),
-      -1, query_timeout_sec));
+      -1, query_timeout_sec, prior_mode));
   }
 
   static bool has_finite_xyz(const PointT& point) {
@@ -1473,6 +1549,48 @@ private:
       prior_pose.matrix() = last_accepted_pose;
       prior_source = "HDL last-accepted";
       return true;
+    }
+
+    return false;
+  }
+
+  bool select_startup_origin_prior(Eigen::Isometry3f& prior_pose, std::string& prior_source) const {
+    if (!startup_origin_prior_enabled) {
+      return false;
+    }
+
+    prior_pose = Eigen::Isometry3f::Identity();
+    prior_pose.linear() = Eigen::AngleAxisf(
+      static_cast<float>(startup_origin_prior_yaw),
+      Eigen::Vector3f::UnitZ()).toRotationMatrix();
+    prior_pose.translation() = Eigen::Vector3f(
+      static_cast<float>(startup_origin_prior_x),
+      static_cast<float>(startup_origin_prior_y),
+      static_cast<float>(startup_origin_prior_z));
+    apply_2d_constraints(prior_pose);
+    prior_source = "startup-origin";
+    return true;
+  }
+
+  bool select_relocalize_prior(
+    RelocalizePriorMode mode,
+    Eigen::Isometry3f& prior_pose,
+    std::string& prior_source,
+    double& prior_max_xy,
+    double& prior_max_yaw,
+    bool& prior_hard_gate) const {
+    if (mode == RelocalizePriorMode::STARTUP_ORIGIN) {
+      prior_max_xy = startup_origin_prior_max_xy;
+      prior_max_yaw = startup_origin_prior_max_yaw;
+      prior_hard_gate = startup_origin_prior_hard_gate;
+      return select_startup_origin_prior(prior_pose, prior_source);
+    }
+
+    if (mode == RelocalizePriorMode::RECOVERY) {
+      prior_max_xy = global_localization_recovery_prior_max_xy;
+      prior_max_yaw = global_localization_recovery_prior_max_yaw;
+      prior_hard_gate = global_localization_recovery_prior_hard_gate;
+      return select_recovery_prior(prior_pose, prior_source);
     }
 
     return false;
@@ -1923,6 +2041,14 @@ private:
   double global_localization_recovery_prior_max_xy;
   double global_localization_recovery_prior_max_yaw;
   bool global_localization_recovery_prior_hard_gate;
+  bool startup_origin_prior_enabled;
+  double startup_origin_prior_x;
+  double startup_origin_prior_y;
+  double startup_origin_prior_z;
+  double startup_origin_prior_yaw;
+  double startup_origin_prior_max_xy;
+  double startup_origin_prior_max_yaw;
+  bool startup_origin_prior_hard_gate;
   int global_localization_required_consistent_results;
   int global_localization_consistency_window;
   double global_localization_consistency_xy_tolerance;
@@ -1972,6 +2098,7 @@ private:
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr relocalize_checked_server;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr relocalize_with_prior_server;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr relocalize_with_prior_checked_server;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr relocalize_startup_origin_checked_server;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr standby_server;
   rclcpp::TimerBase::SharedPtr auto_relocalize_timer;
   RelocalizeReport last_relocalize_report;
