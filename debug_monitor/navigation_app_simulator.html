@@ -355,6 +355,113 @@
       color: var(--bad);
     }
 
+    .alert-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(15, 23, 42, 0.34);
+    }
+
+    .alert-backdrop.open {
+      display: flex;
+    }
+
+    .alert-dialog {
+      width: min(500px, 100%);
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+      overflow: hidden;
+    }
+
+    .alert-dialog.warning {
+      border-color: #fde68a;
+    }
+
+    .alert-dialog.critical {
+      border-color: #ef4444;
+    }
+
+    .alert-dialog header {
+      padding: 16px 18px 10px;
+      border-bottom: 1px solid var(--line);
+      background: #fef2f2;
+    }
+
+    .alert-dialog.warning header {
+      background: #fffbeb;
+    }
+
+    .alert-dialog h2 {
+      margin: 7px 0 0;
+      font-size: 20px;
+      color: var(--text);
+    }
+
+    .alert-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: #fee2e2;
+      color: var(--bad);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .alert-dialog.warning .alert-badge {
+      background: #fef3c7;
+      color: var(--warn);
+    }
+
+    .alert-body {
+      padding: 14px 18px 18px;
+    }
+
+    .alert-message {
+      margin: 0 0 12px;
+      color: var(--text);
+      line-height: 1.55;
+      word-break: break-word;
+    }
+
+    .alert-meta {
+      display: grid;
+      gap: 7px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .alert-meta div {
+      display: grid;
+      grid-template-columns: 76px minmax(0, 1fr);
+      gap: 8px;
+    }
+
+    .alert-meta dt,
+    .alert-meta dd {
+      margin: 0;
+      word-break: break-word;
+    }
+
+    .alert-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 16px;
+    }
+
+    .alert-actions button {
+      width: auto;
+      min-width: 88px;
+    }
+
     @media (max-width: 900px) {
       .app {
         grid-template-columns: 1fr;
@@ -372,6 +479,10 @@
       .health-row {
         grid-template-columns: 1fr 1fr;
       }
+
+      .alert-meta div {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -381,7 +492,7 @@
       <h1>模拟 APP</h1>
 
       <label for="wsUrl">WebSocket 地址</label>
-      <input id="wsUrl" value="ws://127.0.0.1:8765">
+      <input id="wsUrl" value="ws://10.192.1.150:8765">
 
       <div class="row" style="margin-top: 10px;">
         <button id="connectBtn" class="primary">连接</button>
@@ -389,7 +500,7 @@
       </div>
 
       <h2>订阅</h2>
-      <textarea id="subTypes">robot_pose,navigation_status,navigation_command_result,system_status,robot_speed</textarea>
+      <textarea id="subTypes">robot_pose,navigation_status,navigation_command_result,system_status,system_exception,robot_speed</textarea>
       <button id="subscribeBtn" disabled>发送订阅</button>
 
       <h2>导航命令</h2>
@@ -554,10 +665,40 @@
     </main>
   </div>
 
+  <div id="alertBackdrop" class="alert-backdrop" role="dialog" aria-modal="true" aria-labelledby="alertTitle" aria-hidden="true">
+    <section id="alertDialog" class="alert-dialog">
+      <header>
+        <span id="alertBadge" class="alert-badge">异常</span>
+        <h2 id="alertTitle">系统异常</h2>
+      </header>
+      <div class="alert-body">
+        <p id="alertMessage" class="alert-message"></p>
+        <dl class="alert-meta">
+          <div>
+            <dt>类别</dt>
+            <dd id="alertCategory">-</dd>
+          </div>
+          <div>
+            <dt>事件</dt>
+            <dd id="alertEvent">-</dd>
+          </div>
+          <div>
+            <dt>时间</dt>
+            <dd id="alertTime">-</dd>
+          </div>
+        </dl>
+        <div class="alert-actions">
+          <button id="alertCloseBtn">关闭</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
   <script>
     const state = {
       ws: null,
       connected: false,
+      manualDisconnect: false,
       log: [],
       counts: {
         total: 0,
@@ -576,13 +717,43 @@
       sentHistory: [],
       navigationEvents: [],
       lastProgressStoredAt: 0,
-      lastSpeedStoredAt: 0
+      lastSpeedStoredAt: 0,
+      alert: {
+        active: null,
+        dismissedKeys: {},
+        titleTimer: null,
+        titleFlip: false,
+        originalTitle: document.title
+      }
     };
 
     const $ = (id) => document.getElementById(id);
     const MAX_DIAGNOSTIC_HISTORY = 5000;
     const MAX_NAVIGATION_EVENTS = 1000;
+    const ALERT_DISMISS_MS = 120000;
     const WATCHED_TYPES = ["robot_speed", "robot_pose", "navigation_status", "system_status"];
+    const ALERT_RECOVERY_EVENTS = new Set([
+      "navigation_completed",
+      "navigation_stopped",
+      "navigation_resumed",
+      "navigation_started",
+      "waypoint_started",
+      "waypoint_reached",
+      "localization_recovered",
+      "navigation_localization_recovered"
+    ]);
+    const ALERT_ABNORMAL_EVENTS = new Set([
+      "navigation_failed",
+      "navigation_aborted",
+      "navigation_obstacle_blocked",
+      "navigation_localization_recovery_failed",
+      "navigation_localization_resume_failed",
+      "navigation_pending_cancelled",
+      "localization_recovery_started",
+      "localization_relocalize_failed",
+      "localization_relocalize_attempt_deferred",
+      "localization_hdl_samples_unstable"
+    ]);
     const HEALTH_IDS = {
       robot_speed: ["healthSpeedState", "healthSpeedCount", "healthSpeedAge"],
       robot_pose: ["healthPoseState", "healthPoseCount", "healthPoseAge"],
@@ -710,6 +881,312 @@
       if (items.length > maxLength) {
         items.splice(0, items.length - maxLength);
       }
+    }
+
+    function alertKey(alert) {
+      return [
+        alert.category || "",
+        alert.code || "",
+        alert.sourceEvent || "",
+        alert.title || "",
+        alert.message || ""
+      ].join("|");
+    }
+
+    function pruneDismissedAlerts() {
+      const now = Date.now();
+      Object.entries(state.alert.dismissedKeys).forEach(([key, expiresAt]) => {
+        if (expiresAt <= now) {
+          delete state.alert.dismissedKeys[key];
+        }
+      });
+    }
+
+    function severityLabel(severity) {
+      if (severity === "critical") return "严重异常";
+      if (severity === "error") return "异常";
+      if (severity === "warning") return "警告";
+      return "提示";
+    }
+
+    function categoryLabel(category) {
+      if (category === "navigation") return "导航";
+      if (category === "localization") return "定位";
+      if (category === "connection") return "连接";
+      if (category === "action") return "动作";
+      return "系统";
+    }
+
+    function isRecoveryEventName(value) {
+      const eventName = String(value || "").toLowerCase();
+      return ALERT_RECOVERY_EVENTS.has(eventName) || eventName.includes("recovered");
+    }
+
+    function isAbnormalEventName(value) {
+      const eventName = String(value || "").toLowerCase();
+      return (
+        ALERT_ABNORMAL_EVENTS.has(eventName) ||
+        eventName.includes("failed") ||
+        eventName.includes("aborted") ||
+        eventName.includes("error") ||
+        eventName.includes("blocked") ||
+        eventName.includes("unhealthy") ||
+        eventName.includes("divergence") ||
+        eventName.includes("pose_jump")
+      );
+    }
+
+    function startAlertTitle() {
+      if (!state.alert.titleTimer) {
+        state.alert.titleTimer = setInterval(() => {
+          state.alert.titleFlip = !state.alert.titleFlip;
+          document.title = state.alert.titleFlip
+            ? `【异常】${state.alert.originalTitle}`
+            : state.alert.originalTitle;
+        }, 900);
+      }
+      document.title = `【异常】${state.alert.originalTitle}`;
+    }
+
+    function stopAlertTitle() {
+      if (state.alert.titleTimer) {
+        clearInterval(state.alert.titleTimer);
+        state.alert.titleTimer = null;
+      }
+      state.alert.titleFlip = false;
+      document.title = state.alert.originalTitle;
+    }
+
+    function showAlert(alert) {
+      const key = alert.key || alertKey(alert);
+      pruneDismissedAlerts();
+      if (state.alert.dismissedKeys[key] && state.alert.dismissedKeys[key] > Date.now()) {
+        return;
+      }
+
+      const normalized = {
+        ...alert,
+        key,
+        openedAt: Date.now(),
+        severity: alert.severity || "error",
+        category: alert.category || "system",
+        sourceEvent: alert.sourceEvent || alert.code || ""
+      };
+      state.alert.active = normalized;
+
+      const dialog = $("alertDialog");
+      const backdrop = $("alertBackdrop");
+      const severityClass = normalized.severity === "warning" ? "warning" : normalized.severity === "critical" ? "critical" : "error";
+      dialog.className = `alert-dialog ${severityClass}`;
+      setText("alertBadge", severityLabel(normalized.severity));
+      setText("alertTitle", normalized.title || "系统异常");
+      setText("alertMessage", normalized.message || "收到异常状态，请查看消息时间线。");
+      setText("alertCategory", categoryLabel(normalized.category));
+      setText("alertEvent", normalized.sourceEvent || normalized.code || "-");
+      setText("alertTime", new Date().toLocaleString());
+      backdrop.classList.add("open");
+      backdrop.setAttribute("aria-hidden", "false");
+      startAlertTitle();
+    }
+
+    function closeAlert(manual) {
+      if (!state.alert.active) {
+        return;
+      }
+      if (manual) {
+        state.alert.dismissedKeys[state.alert.active.key] = Date.now() + ALERT_DISMISS_MS;
+      }
+      state.alert.active = null;
+      $("alertBackdrop").classList.remove("open");
+      $("alertBackdrop").setAttribute("aria-hidden", "true");
+      stopAlertTitle();
+    }
+
+    function closeAlertForRecovery(category) {
+      Object.keys(state.alert.dismissedKeys).forEach((key) => {
+        if (!category || category === "all" || key.startsWith(`${category}|`)) {
+          delete state.alert.dismissedKeys[key];
+        }
+      });
+      if (!state.alert.active) {
+        return;
+      }
+      const activeCategory = state.alert.active.category;
+      if (!category || category === activeCategory || category === "all") {
+        closeAlert(false);
+      }
+    }
+
+    function alertFromSystemStatus(message) {
+      const data = message.data || {};
+      const details = data.details || {};
+      const health = String(firstValue(data.system_health, details.system_health, "") || "").toLowerCase();
+      const operationalStatus = String(firstValue(data.operational_status, details.operational_status, "") || "").toLowerCase();
+      const battery = numberValue(firstValue(data.battery_level, details.battery_level));
+      const errorCount = numberValue(firstValue(data.error_count, details.error_count));
+      const emergencyStop = firstValue(data.emergency_stop, details.emergency_stop);
+      const errors = firstValue(data.errors, details.errors);
+
+      if (emergencyStop === true || operationalStatus === "emergency_stop") {
+        return {
+          category: "system",
+          severity: "critical",
+          title: "机器人急停",
+          message: "系统状态显示急停已触发。",
+          code: "emergency_stop",
+          sourceEvent: "system_status"
+        };
+      }
+
+      if (health === "error" || health === "critical" || health === "fault" || health === "unhealthy" || (errorCount !== null && errorCount > 0)) {
+        return {
+          category: "system",
+          severity: "error",
+          title: "系统状态异常",
+          message: errors ? JSON.stringify(errors) : `system_health=${health || "unknown"}，error_count=${errorCount ?? 0}`,
+          code: "system_health_error",
+          sourceEvent: "system_status"
+        };
+      }
+
+      if (battery !== null && battery > 0 && battery < 10) {
+        return {
+          category: "system",
+          severity: "error",
+          title: "电量过低",
+          message: `当前电量 ${battery}%，请尽快处理。`,
+          code: "battery_critical",
+          sourceEvent: "system_status"
+        };
+      }
+
+      if (health === "warning" || (battery !== null && battery >= 10 && battery < 30)) {
+        return {
+          category: "system",
+          severity: "warning",
+          title: "系统状态警告",
+          message: battery !== null && battery < 30 ? `当前电量 ${battery}%。` : `system_health=${health}`,
+          code: "system_health_warning",
+          sourceEvent: "system_status"
+        };
+      }
+
+      return null;
+    }
+
+    function evaluateAlertMessage(message) {
+      const dataType = message.data_type || "";
+      const data = message.data || {};
+      const metadata = message.metadata || {};
+      const eventType = data.event_type || data.source_event || "";
+      const status = data.status || metadata.status || "";
+
+      if (dataType === "system_exception") {
+        const sourceEvent = data.source_event || data.code || eventType;
+        const severity = data.severity || metadata.status || "error";
+        const messageText = data.message || metadata.error_message || sourceEvent || "收到系统异常。";
+        const title = data.title || (data.category === "localization" ? "定位异常" : "系统异常");
+
+        if (isRecoveryEventName(sourceEvent) || /恢复|已恢复|recovered/i.test(`${title} ${messageText}`)) {
+          return { recovery: true, category: data.category || "system" };
+        }
+
+        if (data.display?.popup === false && !["error", "critical"].includes(severity)) {
+          return null;
+        }
+
+        if (!["warning", "error", "critical"].includes(severity) && !isAbnormalEventName(sourceEvent)) {
+          return null;
+        }
+
+        return {
+          category: data.category || "system",
+          severity,
+          title,
+          message: messageText,
+          code: data.code || metadata.error_code || sourceEvent,
+          sourceEvent
+        };
+      }
+
+      if (dataType === "navigation_command_result") {
+        if (status === "error") {
+          return {
+            category: "navigation",
+            severity: "error",
+            title: "导航命令异常",
+            message: data.message || metadata.error_message || "导航命令执行失败。",
+            code: data.ack_type || metadata.error_code || "navigation_command_error",
+            sourceEvent: data.ack_type || "navigation_command_result"
+          };
+        }
+        if (status === "success") {
+          return { recovery: true, category: "navigation" };
+        }
+      }
+
+      if (dataType === "navigation_status") {
+        if (isRecoveryEventName(eventType)) {
+          return {
+            recovery: true,
+            category: String(eventType).includes("localization") ? "localization" : "navigation"
+          };
+        }
+        if (isAbnormalEventName(eventType)) {
+          return {
+            category: String(eventType).includes("localization") ? "localization" : "navigation",
+            severity: eventType === "navigation_obstacle_blocked" ? "warning" : "error",
+            title: eventType === "navigation_obstacle_blocked" ? "导航受阻" : "导航异常",
+            message: data.message || data.reason || data.error_message || eventType,
+            code: eventType || "navigation_status_abnormal",
+            sourceEvent: eventType || "navigation_status"
+          };
+        }
+      }
+
+      if (dataType === "system_status") {
+        const systemAlert = alertFromSystemStatus(message);
+        if (systemAlert) {
+          return systemAlert;
+        }
+        return { recovery: true, category: "system" };
+      }
+
+      if (dataType === "error" || status === "error") {
+        return {
+          category: "system",
+          severity: "error",
+          title: "系统消息异常",
+          message: data.message || metadata.error_message || "收到错误状态消息。",
+          code: data.code || metadata.error_code || dataType || "message_error",
+          sourceEvent: dataType || "metadata_status_error"
+        };
+      }
+
+      return null;
+    }
+
+    function updateAlertFromMessage(message) {
+      const result = evaluateAlertMessage(message);
+      if (!result) {
+        return;
+      }
+      if (result.recovery) {
+        closeAlertForRecovery(result.category);
+        return;
+      }
+      showAlert(result);
+    }
+
+    function showConnectionAlert(title, message, code) {
+      showAlert({
+        category: "connection",
+        severity: "error",
+        title,
+        message,
+        code,
+        sourceEvent: code
+      });
     }
 
     function compactMessageRecord(direction, message, status) {
@@ -953,6 +1430,7 @@
       recordNavigationEvent(message);
       noteMessageStats(message);
       updateParsedState(message);
+      updateAlertFromMessage(message);
       const shouldStore = shouldStoreReceived(message);
       const item = {
         at: new Date().toLocaleTimeString(),
@@ -1084,11 +1562,13 @@
         return;
       }
 
+      state.manualDisconnect = false;
       const ws = new WebSocket(url);
       state.ws = ws;
 
       ws.onopen = () => {
         setConnected(true);
+        closeAlertForRecovery("connection");
         addLocalLog("connected", { url }, "ok");
       };
 
@@ -1102,15 +1582,20 @@
 
       ws.onclose = () => {
         setConnected(false);
+        if (!state.manualDisconnect) {
+          showConnectionAlert("WebSocket 连接断开", `无法连接或连接已断开：${url}`, "websocket_closed");
+        }
         addLocalLog("closed", { url }, "warn");
       };
 
       ws.onerror = () => {
+        showConnectionAlert("WebSocket 连接异常", `连接 ${url} 时发生错误。`, "websocket_error");
         addLocalLog("error", { url, message: "WebSocket error" }, "bad");
       };
     }
 
     function disconnect() {
+      state.manualDisconnect = true;
       if (state.ws) {
         state.ws.close();
       }
@@ -1185,6 +1670,7 @@
       state.navigationEvents = [];
       state.lastProgressStoredAt = 0;
       state.lastSpeedStoredAt = 0;
+      closeAlert(false);
       $("lastResult").textContent = "暂无";
       $("lastStatus").textContent = "暂无";
       $("lastSystem").textContent = "暂无";
@@ -1293,6 +1779,7 @@
     $("customBtn").addEventListener("click", sendCustom);
     $("clearBtn").addEventListener("click", clearLog);
     $("exportBtn").addEventListener("click", exportLog);
+    $("alertCloseBtn").addEventListener("click", () => closeAlert(true));
 
     setConnected(false);
     render();

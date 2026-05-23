@@ -50,7 +50,7 @@
           <SpinToPose goal="{goal}"
                       mode="goal_yaw"
                       robot_base_frame="base_footprint"
-                      yaw_tolerance="0.40"
+                      yaw_tolerance="0.18"
                       position_tolerance="0.0"
                       transform_tolerance="0.8"
                       time_allowance="20.0"

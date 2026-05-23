@@ -9,3 +9,15 @@ __pycache__/
 
 # 个人或临时生成的文件 (根据你的图片我加上了这些)
 *.pcd
+
+# 一键启动脚本运行时文件和调试日志
+.start_navigation.pid
+debug_logs/
+
+# 本地临时备份和调试快照
+start_navigation_bak.sh
+debug_monitor/code_backups/
+debug_output*.txt
+frames_*.gv
+frames_*.pdf
+rviz_*.png

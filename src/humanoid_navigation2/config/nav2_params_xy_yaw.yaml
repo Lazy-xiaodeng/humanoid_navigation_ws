@@ -151,7 +151,7 @@ controller_server:
     # --------------------------------------------------------------------------
     min_x_velocity_threshold: 0.05
     min_y_velocity_threshold: 0.0
-    min_theta_velocity_threshold: 0.05
+    min_theta_velocity_threshold: 0.18
 
     # --------------------------------------------------------------------------
     # 控制失败容忍度
@@ -1158,14 +1158,14 @@ behavior_server:
 
       # 最大旋转速度。
       # Spin 行为只输出角速度，线速度为 0。
-      # 这里设 0.3，使大角度转向尽量快速完成，减少非理想旋转时的横向漂移。
-      max_rotational_vel: 0.3
+      # 终点对齐需要减少过冲，最大旋转速度不要太高。
+      max_rotational_vel: 0.24
 
-      # 最小旋转速度，必须高于机器人角速度死区（0.15 rad/s）。
-      min_rotational_vel: 0.2
+      # 最小旋转速度，必须高于机器人角速度死区。
+      min_rotational_vel: 0.18
 
       # 角加速度限制。
-      rotational_acc_lim: 0.3
+      rotational_acc_lim: 0.2
 
     # --------------------------------------------------------------------------
     # BackUp 行为
