@@ -712,7 +712,8 @@ def generate_launch_description():
             'healthy_consecutive_frames': 3,
             'degraded_consecutive_frames': 2,
             'max_degraded_duration_sec': 120.0,  # 保留向后兼容（导航感知超时优先）
-            'max_odom_displacement_m': 30.0,
+            'max_odom_displacement_m': 30.0,       # 单段上限，每路点重置
+            'max_total_odom_displacement_m': 100.0,  # 累计上限，永不重置
             'nav_active_lost_timeout_sec': 120.0,
             'nav_idle_lost_timeout_sec': 600.0,  # 10分钟，够播完任何讲解词
             'nav_idle_extreme_error': 5.0,

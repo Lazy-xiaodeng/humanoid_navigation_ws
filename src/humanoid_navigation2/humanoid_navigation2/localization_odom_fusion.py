@@ -169,10 +169,16 @@ class LocalizationOdomFusion(Node):
         self.max_degraded_duration_sec = float(
             self.declare_parameter('max_degraded_duration_sec', 120.0).value)
 
-        # 最大 odom 位移（米），从冻结点算起，超过进入 LOST
-        # Fast-LIO 漂移率约 0.5cm/m，30m 位移 ≈ 15cm 漂移，可接受
+        # 最大单段 odom 位移（米），每到一个路点重置
+        # 防止单段导航中 odom 漂移过大（一段最长约30m走到下一个点）
         self.max_odom_displacement_m = float(
             self.declare_parameter('max_odom_displacement_m', 30.0).value)
+
+        # ★ 累计 odom 位移上限（米），从进入 DEGRADED 算起，永不重置
+        # Fast-LIO 漂移率约 0.5cm/m，100m → 50cm 误差，是导航可接受的极限
+        # 超过此值即使单段没超标也要进入 LOST，防止跨路点累积漂移
+        self.max_total_odom_displacement_m = float(
+            self.declare_parameter('max_total_odom_displacement_m', 100.0).value)
 
         # ── 导航感知超时（★ 关键: 区分导航中 vs 已到达静止）──
         # 导航中（EXECUTING/PLANNING）: LOST 超时较短，定位不准会影响导航
@@ -640,9 +646,13 @@ class LocalizationOdomFusion(Node):
             self._enter_transitioning()
             return
 
-        # ── 检查超时条件（★ 导航感知: 导航中 vs 静���不同超时）──
+        # ── 检查超时条件（★ 导航感知: 导航中 vs 静止不同超时）──
         elapsed = time.monotonic() - self.degraded_start_time
         odom_displacement = self._compute_odom_displacement(odom_body)
+
+        # ★ 累计位移追踪（不重置，用于检测跨路点累积漂移）
+        if odom_displacement > self.total_odom_displacement:
+            self.total_odom_displacement = odom_displacement
 
         # ★ 根据导航状态选择不同的 LOST 超时
         if self._is_robot_navigating():
@@ -651,8 +661,6 @@ class LocalizationOdomFusion(Node):
         else:
             lost_timeout = self.nav_idle_lost_timeout_sec
             timeout_label = 'nav_idle'
-            # 静止时额外检查: NDT error 极端高 (>5.0) 且持续超过超时一半
-            # 说明 NDT 彻底挂了，不是几何混叠，该恢复了
             if self.latest_ndt_error > self.nav_idle_extreme_error:
                 lost_timeout = min(lost_timeout, self.nav_idle_lost_timeout_sec / 2.0)
                 timeout_label = 'nav_idle_extreme_error'
@@ -666,8 +674,18 @@ class LocalizationOdomFusion(Node):
 
         if odom_displacement > self.max_odom_displacement_m:
             self.get_logger().warn(
-                f'[DEGRADED→LOST] odom 位移过大: {odom_displacement:.2f}m > '
+                f'[DEGRADED→LOST] 单段 odom 位移过大: {odom_displacement:.2f}m > '
                 f'{self.max_odom_displacement_m}m')
+            self._enter_lost()
+            return
+
+        # ★ 累计位移检查（永不重置，防止跨路点累积漂移）
+        if self.total_odom_displacement > self.max_total_odom_displacement_m:
+            self.get_logger().warn(
+                f'[DEGRADED→LOST] 累计 odom 位移过大: '
+                f'{self.total_odom_displacement:.1f}m > '
+                f'{self.max_total_odom_displacement_m:.0f}m '
+                f'(从进入DEGRADED算起，已跨多个路点)')
             self._enter_lost()
             return
 
@@ -798,6 +816,7 @@ class LocalizationOdomFusion(Node):
         self.frozen_odom_body = (self.last_healthy_odom_body.copy()
                                   if self.last_healthy_odom_body else None)
         self.degraded_start_time = time.monotonic()
+        self.total_odom_displacement = 0.0  # ★ 累计位移，永不重置
         self.consecutive_healthy = 0
         frozen_yaw = quat_to_yaw(
             self.frozen_map_odom['qx'],
