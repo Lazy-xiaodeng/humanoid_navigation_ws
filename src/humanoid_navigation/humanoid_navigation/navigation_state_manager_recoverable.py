@@ -25,7 +25,16 @@ import json
 import time
 import math
 from enum import Enum
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
+
+def yaw_from_pose(pose) -> float:
+    q = pose.orientation
+    siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+    cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+    return math.atan2(siny_cosp, cosy_cosp)
+
+def normalize_angle(angle: float) -> float:
+    return math.atan2(math.sin(angle), math.cos(angle))
 
 # ========== 枚举定义 ==========
 class NavigationState(Enum):
@@ -78,8 +87,16 @@ class NavigationStateManager(Node):
             ('localization_recovery_status_topic', '/localization/recovery_status'),
             ('localization_recovery_request_topic', '/localization/recovery_requests'),
             ('request_localization_recovery_on_nav_failure', True),
+            ('request_navigation_context_recovery_on_localization_failure', True),
             ('localization_recovery_request_cooldown_sec', 20.0),
             ('localization_recovery_prior_radius_m', 10.0),
+            ('localization_context_recovery_request_cooldown_sec', 4.0),
+            ('localization_context_prior_radius_m', 5.0),
+            ('localization_context_prior_max_previous_age_sec', 300.0),
+            ('localization_context_prior_min_segment_length_m', 0.2),
+            ('localization_resume_reverse_enabled', True),
+            ('localization_resume_reverse_max_distance_m', 2.0),
+            ('localization_resume_reverse_rear_angle_deg', 70.0),
             ('map_frame', 'map'),
             ('base_frame', 'base_footprint'),
             ('pose_tf_timeout_sec', 0.05),
@@ -120,10 +137,26 @@ class NavigationStateManager(Node):
             self.get_parameter('localization_recovery_request_topic').value)
         self.request_localization_recovery_on_nav_failure = bool(
             self.get_parameter('request_localization_recovery_on_nav_failure').value)
+        self.request_navigation_context_recovery_on_localization_failure = bool(
+            self.get_parameter('request_navigation_context_recovery_on_localization_failure').value)
         self.localization_recovery_request_cooldown_sec = float(
             self.get_parameter('localization_recovery_request_cooldown_sec').value)
         self.localization_recovery_prior_radius_m = float(
             self.get_parameter('localization_recovery_prior_radius_m').value)
+        self.localization_context_recovery_request_cooldown_sec = float(
+            self.get_parameter('localization_context_recovery_request_cooldown_sec').value)
+        self.localization_context_prior_radius_m = float(
+            self.get_parameter('localization_context_prior_radius_m').value)
+        self.localization_context_prior_max_previous_age_sec = float(
+            self.get_parameter('localization_context_prior_max_previous_age_sec').value)
+        self.localization_context_prior_min_segment_length_m = float(
+            self.get_parameter('localization_context_prior_min_segment_length_m').value)
+        self.localization_resume_reverse_enabled = bool(
+            self.get_parameter('localization_resume_reverse_enabled').value)
+        self.localization_resume_reverse_max_distance_m = float(
+            self.get_parameter('localization_resume_reverse_max_distance_m').value)
+        self.localization_resume_reverse_rear_angle_rad = math.radians(float(
+            self.get_parameter('localization_resume_reverse_rear_angle_deg').value))
         self.map_frame = str(self.get_parameter('map_frame').value)
         self.base_frame = str(self.get_parameter('base_frame').value)
         self.pose_tf_timeout_sec = float(self.get_parameter('pose_tf_timeout_sec').value)
@@ -191,6 +224,12 @@ class NavigationStateManager(Node):
         self.localization_stop_until = 0.0
         self.localization_recovered_at = 0.0
         self.last_localization_recovery_request_time = 0.0
+        self.last_navigation_context_recovery_request_time = 0.0
+        self.last_navigation_context_recovery_key = ""
+        self.last_succeeded_waypoint = None
+        self.last_succeeded_waypoint_index = -1
+        self.last_succeeded_pose = None
+        self.last_succeeded_time = 0.0
         
         # ========== 设置ROS2通信 ==========
         self.setup_communication()
@@ -1270,6 +1309,8 @@ class NavigationStateManager(Node):
                 "localization_relocalize_completed",
                 "localization_initialpose_published",
                 "localization_recovery_waiting",
+                "localization_recovery_clearing_buffer",
+                "localization_recovery_buffer_cleared",
             ):
                 self.handle_localization_recovery_progress(status)
             elif event_type == "localization_relocalize_failed":
@@ -1314,6 +1355,7 @@ class NavigationStateManager(Node):
                 event_data
             )
             self.get_logger().warning(f"定位异常，自动暂停导航: {reason}")
+            self.request_navigation_context_recovery_for_localization(reason, status)
             return
 
         if self.current_state == NavigationState.PAUSED and self.localization_auto_paused:
@@ -1321,6 +1363,7 @@ class NavigationStateManager(Node):
                 "navigation_localization_recovery_started",
                 self.build_localization_pause_context(status)
             )
+            self.request_navigation_context_recovery_for_localization(reason, status)
 
     def handle_localization_recovery_progress(self, status: Dict[str, Any]):
         if not self.localization_recovery_active:
@@ -1440,6 +1483,8 @@ class NavigationStateManager(Node):
             "resume_reason": "localization_recovered",
             "localization_reason": self.localization_recovery_reason,
         }
+        reverse_resume, reverse_context = self.should_reverse_resume_to_current_waypoint()
+        event_data.update(reverse_context)
 
         self.localization_resume_pending = False
         self.localization_auto_paused = False
@@ -1454,12 +1499,91 @@ class NavigationStateManager(Node):
             event_data
         )
         self.publish_status_update("navigation_resumed", event_data)
-        self.navigate_to_waypoint(self.current_waypoint)
-
-        self.get_logger().info(
-            f"定位恢复后自动继续导航: {self.current_waypoint.get('name', '')} "
-            f"({self.current_waypoint_index + 1}/{self.total_waypoints})"
+        self.navigate_to_waypoint(
+            self.current_waypoint,
+            force_walk_direction="backward" if reverse_resume else None,
         )
+
+        if reverse_resume:
+            self.get_logger().info(
+                f"定位恢复后当前点在身后不远，使用倒走回补: "
+                f"{self.current_waypoint.get('name', '')} "
+                f"({self.current_waypoint_index + 1}/{self.total_waypoints}), "
+                f"distance={reverse_context.get('reverse_resume_distance_m', 0.0):.2f}m"
+            )
+        else:
+            self.get_logger().info(
+                f"定位恢复后自动继续导航: {self.current_waypoint.get('name', '')} "
+                f"({self.current_waypoint_index + 1}/{self.total_waypoints})"
+            )
+
+    def should_reverse_resume_to_current_waypoint(self) -> Tuple[bool, Dict[str, Any]]:
+        context: Dict[str, Any] = {
+            "reverse_resume_selected": False,
+            "reverse_resume_reason": "",
+        }
+        if not self.localization_resume_reverse_enabled:
+            context["reverse_resume_reason"] = "disabled"
+            return False, context
+        if not self.current_pose or not self.current_waypoint:
+            context["reverse_resume_reason"] = "missing current pose or waypoint"
+            return False, context
+
+        current_position = self.waypoint_position_tuple(self.current_waypoint)
+        if current_position is None:
+            context["reverse_resume_reason"] = "current waypoint has no valid position"
+            return False, context
+
+        dx = float(current_position[0]) - float(self.current_pose.position.x)
+        dy = float(current_position[1]) - float(self.current_pose.position.y)
+        distance = math.hypot(dx, dy)
+        context["reverse_resume_distance_m"] = round(distance, 3)
+        if distance <= max(self.position_tolerance, 0.05):
+            context["reverse_resume_reason"] = "already within waypoint tolerance"
+            return False, context
+        if distance > max(0.0, self.localization_resume_reverse_max_distance_m):
+            context["reverse_resume_reason"] = (
+                f"waypoint too far for reverse resume: {distance:.2f}m"
+            )
+            return False, context
+
+        robot_yaw = yaw_from_pose(self.current_pose)
+        target_bearing = math.atan2(dy, dx)
+        rear_error = abs(normalize_angle(target_bearing - robot_yaw - math.pi))
+        context["reverse_resume_rear_angle_deg"] = round(math.degrees(rear_error), 1)
+        if rear_error > max(0.0, self.localization_resume_reverse_rear_angle_rad):
+            context["reverse_resume_reason"] = (
+                f"waypoint is not behind robot: rear_error={math.degrees(rear_error):.1f}deg"
+            )
+            return False, context
+
+        previous_waypoint, _, previous_source = self.resolve_previous_waypoint_context(time.time())
+        previous_position = self.waypoint_position_tuple(previous_waypoint)
+        overshot_segment = False
+        raw_projection = None
+        if previous_position is not None:
+            seg_dx = float(current_position[0]) - float(previous_position[0])
+            seg_dy = float(current_position[1]) - float(previous_position[1])
+            seg_len_sq = seg_dx * seg_dx + seg_dy * seg_dy
+            if seg_len_sq > 1e-6:
+                raw_projection = (
+                    ((float(self.current_pose.position.x) - float(previous_position[0])) * seg_dx +
+                     (float(self.current_pose.position.y) - float(previous_position[1])) * seg_dy) /
+                    seg_len_sq
+                )
+                overshot_segment = raw_projection > 1.0
+
+        context.update({
+            "reverse_resume_selected": True,
+            "reverse_resume_reason": "current waypoint is behind robot after localization recovery",
+            "reverse_resume_overshot_segment": overshot_segment,
+            "reverse_resume_projection_ratio": (
+                round(raw_projection, 3) if raw_projection is not None else None
+            ),
+            "reverse_resume_previous_source": previous_source,
+            "reverse_resume_behavior_tree": self.reverse_navigation_bt_xml,
+        })
+        return True, context
 
     def publish_zero_cmd_vel(self):
         try:
@@ -1687,7 +1811,7 @@ class NavigationStateManager(Node):
             return "backward"
         return "forward"
     
-    def navigate_to_waypoint(self, waypoint_data: Dict[str, Any]):
+    def navigate_to_waypoint(self, waypoint_data: Dict[str, Any], force_walk_direction: Optional[str] = None):
         """导航到指定路点"""
         try:
             self.current_waypoint = waypoint_data
@@ -1698,7 +1822,7 @@ class NavigationStateManager(Node):
             goal_pose = self.waypoint_to_pose_stamped(waypoint_data)
             goal_msg = NavigateToPose.Goal()
             goal_msg.pose = goal_pose
-            walk_direction = self.get_waypoint_walk_direction(waypoint_data)
+            walk_direction = force_walk_direction or self.get_waypoint_walk_direction(waypoint_data)
             if walk_direction == "backward":
                 goal_msg.behavior_tree = self.reverse_navigation_bt_xml
         
@@ -1817,6 +1941,7 @@ class NavigationStateManager(Node):
             })
             
             self.get_logger().info(f"Nav2确认到达路点: {waypoint_name}")
+            self.record_last_succeeded_waypoint(self.current_waypoint, self.current_waypoint_index)
             
             # 移动到下一个路点或完成导航
             self.current_waypoint_index += 1
@@ -1929,6 +2054,258 @@ class NavigationStateManager(Node):
             }
         return {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}
 
+    @staticmethod
+    def quaternion_from_yaw(yaw: float) -> Dict[str, float]:
+        half_yaw = yaw * 0.5
+        return {
+            "x": 0.0,
+            "y": 0.0,
+            "z": math.sin(half_yaw),
+            "w": math.cos(half_yaw),
+        }
+
+    @staticmethod
+    def waypoint_position_tuple(waypoint: Optional[Dict[str, Any]]) -> Optional[Tuple[float, float, float]]:
+        if not waypoint:
+            return None
+        position = waypoint.get("position", [0.0, 0.0, 0.0])
+        if not isinstance(position, (list, tuple)) or len(position) < 2:
+            return None
+        try:
+            return (
+                float(position[0]),
+                float(position[1]),
+                float(position[2]) if len(position) >= 3 else 0.0,
+            )
+        except (TypeError, ValueError):
+            return None
+
+    def waypoint_context_dict(self, waypoint: Optional[Dict[str, Any]], index: int) -> Optional[Dict[str, Any]]:
+        position = self.waypoint_position_tuple(waypoint)
+        if not waypoint or position is None:
+            return None
+        return {
+            "id": waypoint.get("id", ""),
+            "name": waypoint.get("name", ""),
+            "index": index,
+            "frame_id": waypoint.get("frame_id", self.default_frame_id),
+            "position": {
+                "x": position[0],
+                "y": position[1],
+                "z": position[2],
+            },
+        }
+
+    def resolve_previous_waypoint_context(self, now: float):
+        if self.waypoint_ids and self.current_waypoint_index > 0:
+            previous_index = self.current_waypoint_index - 1
+            previous_waypoint = self.find_waypoint_data_by_id(self.waypoint_ids[previous_index])
+            if previous_waypoint:
+                return previous_waypoint, previous_index, "current_sequence_previous"
+
+        if not self.last_succeeded_waypoint:
+            return None, -1, "none"
+
+        current_id = self.current_waypoint.get("id", "") if self.current_waypoint else ""
+        previous_id = self.last_succeeded_waypoint.get("id", "")
+        if current_id and previous_id and current_id == previous_id:
+            return None, -1, "none"
+
+        age = now - self.last_succeeded_time if self.last_succeeded_time > 0.0 else float("inf")
+        max_age = self.localization_context_prior_max_previous_age_sec
+        if max_age > 0.0 and age > max_age:
+            return None, -1, "last_succeeded_too_old"
+
+        return self.last_succeeded_waypoint, self.last_succeeded_waypoint_index, "last_succeeded_waypoint"
+
+    def resolve_next_waypoint_context(self):
+        if not self.waypoint_ids:
+            return None, -1
+        next_index = self.current_waypoint_index + 1
+        if next_index < 0 or next_index >= len(self.waypoint_ids):
+            return None, -1
+        next_waypoint = self.find_waypoint_data_by_id(self.waypoint_ids[next_index])
+        return next_waypoint, next_index
+
+    def build_navigation_context_recovery_request(
+        self,
+        reason: str,
+        trigger_event: str,
+        radius_m: float,
+        status: Optional[Dict[str, Any]] = None,
+        event_type: str = "navigation_context_recovery_request",
+    ) -> Optional[Dict[str, Any]]:
+        current_waypoint = self.current_waypoint
+        current_position = self.waypoint_position_tuple(current_waypoint)
+        if not current_waypoint or current_position is None:
+            return None
+
+        now = time.time()
+        previous_waypoint, previous_index, previous_source = self.resolve_previous_waypoint_context(now)
+        previous_position = self.waypoint_position_tuple(previous_waypoint)
+        next_waypoint, next_index = self.resolve_next_waypoint_context()
+
+        selected_prior_source = "navigation_context_current_goal"
+        selected_prior = {
+            "position": {
+                "x": current_position[0],
+                "y": current_position[1],
+                "z": current_position[2],
+            },
+            "orientation": self.pose_orientation_dict(
+                current_waypoint.get("orientation", [0.0, 0.0, 0.0, 1.0])
+            ),
+        }
+        selected_prior_meta = {
+            "method": "current_goal",
+            "previous_source": previous_source,
+        }
+
+        if previous_position is not None:
+            dx = current_position[0] - previous_position[0]
+            dy = current_position[1] - previous_position[1]
+            dz = current_position[2] - previous_position[2]
+            segment_length = math.hypot(dx, dy)
+
+            if segment_length >= max(0.0, self.localization_context_prior_min_segment_length_m):
+                if self.current_pose:
+                    reference_x = float(self.current_pose.position.x)
+                    reference_y = float(self.current_pose.position.y)
+                else:
+                    reference_x = current_position[0]
+                    reference_y = current_position[1]
+
+                projection = (
+                    ((reference_x - previous_position[0]) * dx + (reference_y - previous_position[1]) * dy) /
+                    max(segment_length * segment_length, 1e-6)
+                )
+                projection_clamped = max(0.0, min(1.0, projection))
+                prior_x = previous_position[0] + projection_clamped * dx
+                prior_y = previous_position[1] + projection_clamped * dy
+                prior_z = previous_position[2] + projection_clamped * dz
+                prior_yaw = math.atan2(dy, dx)
+
+                selected_prior_source = "navigation_context_segment"
+                selected_prior = {
+                    "position": {
+                        "x": prior_x,
+                        "y": prior_y,
+                        "z": prior_z,
+                    },
+                    "orientation": self.quaternion_from_yaw(prior_yaw),
+                }
+                selected_prior_meta = {
+                    "method": "projected_previous_to_current_segment",
+                    "previous_source": previous_source,
+                    "segment_length_m": round(segment_length, 3),
+                    "projection_ratio": round(projection_clamped, 3),
+                    "raw_projection_ratio": round(projection, 3),
+                    "reference_pose_source": "current_map_pose" if self.current_pose else "current_goal",
+                }
+
+        radius_m = max(0.0, float(radius_m))
+        current_context = self.waypoint_context_dict(current_waypoint, self.current_waypoint_index)
+        previous_context = self.waypoint_context_dict(previous_waypoint, previous_index)
+        next_context = self.waypoint_context_dict(next_waypoint, next_index)
+
+        payload = {
+            "event_type": event_type,
+            "source": "navigation_state_manager",
+            "reason": reason,
+            "timestamp": now,
+            "trigger_event": trigger_event,
+            "prior_source": selected_prior_source,
+            "prior_frame_id": current_waypoint.get("frame_id", self.default_frame_id),
+            "prior_pose": selected_prior,
+            "search_radius_m": radius_m,
+            "prior_max_xy_m": radius_m,
+            "allow_full_global_fallback": True,
+            "failed_waypoint_index": self.current_waypoint_index,
+            "failed_waypoint_id": current_waypoint.get("id", ""),
+            "failed_waypoint_name": current_waypoint.get("name", ""),
+            "current_pose": self.pose_to_dict(self.current_pose) if self.current_pose else None,
+            "current_detailed_state": self.current_detailed_state,
+            "navigation_context": {
+                "current_waypoint": current_context,
+                "previous_waypoint": previous_context,
+                "next_waypoint": next_context,
+                "selected_prior": selected_prior_meta,
+                "current_sequence_id": self.current_sequence_id,
+                "navigation_mode": self.current_navigation_mode.value if self.current_navigation_mode else None,
+                "total_waypoints": self.total_waypoints,
+            },
+        }
+
+        if status:
+            payload["localization_status"] = {
+                "event_type": status.get("event_type", ""),
+                "recovery_count": status.get("recovery_count", 0),
+                "relocalize_attempts": status.get("relocalize_attempts", 0),
+                "prior_reason": status.get("prior_reason", ""),
+            }
+
+        return payload
+
+    def publish_localization_recovery_request(self, payload: Dict[str, Any]):
+        msg = String()
+        msg.data = json.dumps(payload, ensure_ascii=False)
+        self.localization_recovery_request_pub.publish(msg)
+        self.publish_status_update("navigation_localization_recovery_requested", payload)
+
+    def request_navigation_context_recovery_for_localization(self, reason: str, status: Dict[str, Any]):
+        """定位异常触发重定位时，把当前导航上下文作为动态先验发给 HDL。"""
+        if not self.request_navigation_context_recovery_on_localization_failure:
+            return
+        if not self.current_waypoint:
+            return
+
+        now = time.time()
+        current_id = self.current_waypoint.get("id", "")
+        recovery_count = status.get("recovery_count", 0) if isinstance(status, dict) else 0
+        request_key = f"{self.current_sequence_id}:{self.current_waypoint_index}:{current_id}:{recovery_count}"
+        if request_key == self.last_navigation_context_recovery_key:
+            return
+
+        if (
+            now - self.last_navigation_context_recovery_request_time <
+            self.localization_context_recovery_request_cooldown_sec
+        ):
+            self.get_logger().warning(
+                "定位异常上下文恢复请求仍在冷却中，跳过本次触发",
+                throttle_duration_sec=3.0,
+            )
+            return
+
+        payload = self.build_navigation_context_recovery_request(
+            reason=reason,
+            trigger_event="localization_failure",
+            radius_m=self.localization_context_prior_radius_m,
+            status=status,
+            event_type="localization_failure_navigation_context_recovery_request",
+        )
+        if not payload:
+            return
+
+        self.publish_localization_recovery_request(payload)
+        self.last_navigation_context_recovery_request_time = now
+        self.last_navigation_context_recovery_key = request_key
+
+        context = payload.get("navigation_context", {})
+        previous_name = (context.get("previous_waypoint") or {}).get("name", "")
+        current_name = (context.get("current_waypoint") or {}).get("name", "")
+        selected = context.get("selected_prior", {})
+        self.get_logger().warning(
+            f"定位异常后请求 HDL 使用导航上下文重定位: "
+            f"prior={payload['prior_source']}, prev={previous_name}, current={current_name}, "
+            f"method={selected.get('method', '')}, 半径={payload['prior_max_xy_m']:.1f}m, reason={reason}"
+        )
+
+    def record_last_succeeded_waypoint(self, waypoint: Dict[str, Any], index: int):
+        self.last_succeeded_waypoint = dict(waypoint)
+        self.last_succeeded_waypoint_index = index
+        self.last_succeeded_pose = self.pose_to_dict(self.current_pose) if self.current_pose else None
+        self.last_succeeded_time = time.time()
+
     def request_localization_recovery_for_failed_navigation(self, reason: str):
         """导航失败后按需唤醒 HDL，全局重定位优先搜索失败目标点附近。"""
         if not self.request_localization_recovery_on_nav_failure:
@@ -1944,45 +2321,24 @@ class NavigationStateManager(Node):
             )
             return
 
-        position = self.current_waypoint.get("position", [0.0, 0.0, 0.0])
-        if not isinstance(position, (list, tuple)) or len(position) < 2:
+        payload = self.build_navigation_context_recovery_request(
+            reason=reason,
+            trigger_event="navigation_failure",
+            radius_m=self.localization_recovery_prior_radius_m,
+            event_type="navigation_failure_recovery_request",
+        )
+        if not payload:
             return
 
-        orientation = self.pose_orientation_dict(self.current_waypoint.get("orientation", [0.0, 0.0, 0.0, 1.0]))
-        pose = {
-            "position": {
-                "x": float(position[0]),
-                "y": float(position[1]),
-                "z": float(position[2]) if len(position) >= 3 else 0.0,
-            },
-            "orientation": orientation,
-        }
-        payload = {
-            "event_type": "navigation_failure_recovery_request",
-            "source": "navigation_state_manager",
-            "reason": reason,
-            "timestamp": now,
-            "prior_source": "failed_waypoint",
-            "prior_frame_id": self.current_waypoint.get("frame_id", self.default_frame_id),
-            "prior_pose": pose,
-            "search_radius_m": self.localization_recovery_prior_radius_m,
-            "allow_full_global_fallback": True,
-            "failed_waypoint_index": self.current_waypoint_index,
-            "failed_waypoint_id": self.current_waypoint.get("id", ""),
-            "failed_waypoint_name": self.current_waypoint.get("name", ""),
-            "current_pose": self.pose_to_dict(self.current_pose) if self.current_pose else None,
-            "current_detailed_state": self.current_detailed_state,
-        }
-
-        msg = String()
-        msg.data = json.dumps(payload, ensure_ascii=False)
-        self.localization_recovery_request_pub.publish(msg)
+        self.publish_localization_recovery_request(payload)
         self.last_localization_recovery_request_time = now
+        context = payload.get("navigation_context", {})
+        selected = context.get("selected_prior", {})
         self.get_logger().warning(
-            f"导航失败后请求 HDL 按需重定位: 先验={payload['failed_waypoint_name']} "
-            f"半径={self.localization_recovery_prior_radius_m:.1f}m, reason={reason}"
+            f"导航失败后请求 HDL 按需重定位: 先验={payload['prior_source']} "
+            f"目标={payload['failed_waypoint_name']}, method={selected.get('method', '')}, "
+            f"半径={payload['prior_max_xy_m']:.1f}m, reason={reason}"
         )
-        self.publish_status_update("navigation_localization_recovery_requested", payload)
 
     @staticmethod
     def pose_to_dict(pose) -> Dict[str, Any]:

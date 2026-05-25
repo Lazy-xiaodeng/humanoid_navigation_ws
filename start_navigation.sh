@@ -169,6 +169,13 @@ fi
 
 source /opt/ros/jazzy/setup.bash
 
+# Keep the parent launch process and every child node on the same DDS profile.
+# Large PointCloud2 topics such as /airy_points need this profile to avoid
+# falling back to slow inter-process transport during navigation startup.
+export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
+export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-/home/ubuntu/.config/fastdds_shm.xml}"
+export RMW_FASTRTPS_USE_QOS_FROM_XML="${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
+
 echo "Building workspace..."
 colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 
@@ -178,6 +185,10 @@ if [ ! -f "$WORKSPACE/install/setup.bash" ]; then
 fi
 
 source "$WORKSPACE/install/setup.bash"
+
+export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
+export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-/home/ubuntu/.config/fastdds_shm.xml}"
+export RMW_FASTRTPS_USE_QOS_FROM_XML="${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
 
 python3 - <<'PY'
 import importlib.metadata as metadata

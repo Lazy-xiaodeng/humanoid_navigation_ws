@@ -205,6 +205,18 @@ public:
   double initialpose_relax_duration_sec_{0.0}; ///< 初始位姿后的宽松捕获窗口
   double initialpose_max_pose_jump_translation_{2.0}; ///< 捕获窗口内允许的最大平移修正
   double initialpose_max_pose_jump_yaw_{1.0}; ///< 捕获窗口内允许的最大航向修正
+  bool pose_jump_reacquire_enabled_{false}; ///< 是否对高置信单帧跳变做连续确认后放行
+  double pose_jump_reacquire_max_translation_{1.5}; ///< 连续确认模式允许的最大平移修正
+  double pose_jump_reacquire_max_yaw_{0.12}; ///< 连续确认模式允许的最大航向修正
+  double pose_jump_reacquire_max_fitness_{0.02}; ///< 连续确认模式要求的最大fitness
+  int pose_jump_reacquire_required_frames_{2}; ///< 连续确认模式要求的一致帧数
+  double pose_jump_reacquire_xy_tolerance_{0.35}; ///< 连续候选XY一致性阈值
+  double pose_jump_reacquire_yaw_tolerance_{0.12}; ///< 连续候选yaw一致性阈值
+  bool pose_jump_candidate_active_{false}; ///< 是否已有待确认的pose jump候选
+  int pose_jump_candidate_count_{0}; ///< 当前pose jump候选连续确认帧数
+  double pose_jump_candidate_x_{0.0}; ///< 待确认候选X
+  double pose_jump_candidate_y_{0.0}; ///< 待确认候选Y
+  double pose_jump_candidate_yaw_{0.0}; ///< 待确认候选yaw
   double ndt_resolution_;         ///< NDT网格分辨率（米）
   double ndt_step_size_;          ///< NDT牛顿迭代步长
   double transform_epsilon_;      ///< 变换收敛阈值

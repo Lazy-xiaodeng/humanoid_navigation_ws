@@ -4,9 +4,7 @@
       lid_topic: "/airy_points"
       imu_topic: "/airy_imu"  # /mavros/imu/data /ouster/imu /imu/data
       time_sync_en: false      # ONLY turn on when external time synchronization is really not possible
-      time_offset_lidar_to_imu: 0.1   #测试为0.1s，当自动对齐打开时设为0.0；当自动对齐关闭时，设为0.1
-                                      # Time offset between lidar and IMU calibrated by other algorithms, e.g. LI-Init (can be found in README).
-                                      # This param will take effect no matter what time_sync_en is. So if the time offset is not known exactly, please set as 0.0
+      time_offset_lidar_to_imu: 0.0   # 只有精确标定出 LiDAR->IMU 时间偏移时才填非 0；该值不受 time_sync_en 影响
 
     preprocess:
       lidar_type: 5  # 1 for Livox serials LiDAR, 2 for Velodyne LiDAR, 3 for ouster LiDAR, 5 for RoboSense Airy
@@ -17,14 +15,14 @@
     mapping:
       max_search_dist_surf: 1.0  # default: 5
       num_sub_cloud: 1 # This is int, should be fine
-      acc_cov: 0.5     #IMU 加速度的噪声协方差0.1
-      gyr_cov: 0.5     #IMU 角速度的噪声协方差0.1
+      acc_cov: 0.01      # IMU 加速度过程噪声；不要按静态 std^2 直接填，需结合运动测试调参
+      gyr_cov: 0.001     # IMU 角速度过程噪声；过小会让滤波器过度相信 IMU
       b_acc_cov: 0.0001  #IMU 零偏漂移协方差
       b_gyr_cov: 0.0001
       fov_degree: 120.0  #雷达水平视场角
       det_range: 60.0  #最大探测距离（米）
       extrinsic_est_en: false  # true: enable the online estimation of IMU-LiDAR extrinsic
-      gravity_align: false     #开启重力对齐
+      gravity_align: true     # 当前 fast_lio_robosense 代码未读取此参数；重力初始化始终由静止 IMU 均值完成
       extrinsic_T: [0.004250, 0.004180, -0.004460]
       extrinsic_R: [0.001474, -0.999996, -0.002458,
                     -0.999998, -0.001470, -0.001425,

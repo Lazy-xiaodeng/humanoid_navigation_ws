@@ -289,8 +289,6 @@ class LocalizationOdomFusion(Node):
             '/localization/recovery_requests',
             QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE),
         )
-            QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE),
-        )
 
         # =====================================================================
         # 内部状态初始化
