@@ -684,6 +684,41 @@ def generate_launch_description():
     )
 
     # ┌──────────────────────────────────────────────────────────────────────────┐
+    # │  NDT定位 + 里程计融合节点 (localization_odom_fusion)                     │
+    # │                                                                          │
+    # │  核心职责:                                                               │
+    # │    当 NDT matching_error > 0.5 时，冻结 map->odom，                      │
+    # │    让 Fast-LIO 里程计 (camera_init->body) 驱动机器人运动。               │
+    # │    NDT 恢复后 (error < 0.15) 平滑过渡切回。                              │
+    # │                                                                          │
+    # │  状态机:                                                                 │
+    # │    HEALTHY ──error>0.5──▶ DEGRADED ──error<0.15──▶ TRANSITIONING        │
+    # │              DEGRADED ──超时/位移过大──▶ LOST ──recovery──▶ HEALTHY      │
+    # │                                                                          │
+    # │  关键参数:                                                               │
+    # │    - degraded_error_threshold: 进入 DEGRADED 的 NDT error 阈值           │
+    # │    - healthy_error_threshold: 恢复 HEALTHY 的 NDT error 阈值              │
+    # │    - max_degraded_duration_sec: 最长冻结时间，超时进入 LOST               │
+    # │    - max_odom_displacement_m: 最大 odom 位移，超过进入 LOST               │
+    # │    - transition_duration_sec: 平滑过渡时间                                │
+    # └──────────────────────────────────────────────────────────────────────────┘
+    localization_odom_fusion_node = nav2_python_node(
+        'localization_odom_fusion',
+        'localization_odom_fusion',
+        {
+            'degraded_error_threshold': 0.5,
+            'healthy_error_threshold': 0.15,
+            'healthy_consecutive_frames': 3,
+            'degraded_consecutive_frames': 2,
+            'max_degraded_duration_sec': 120.0,
+            'max_odom_displacement_m': 30.0,
+            'transition_duration_sec': 2.0,
+            'publish_rate_hz': 30.0,
+            'verbose_logging': True,
+        },
+    )
+
+    # ┌──────────────────────────────────────────────────────────────────────────┐
     # │  方案C：hdl_localization (Humble移植, 已注释)                             │
     # │                                                                          │
     # │  算法：UKF(16维状态)预测 + NDT_OMP扫描匹配校正                           │
@@ -1033,6 +1068,12 @@ def generate_launch_description():
         TimerAction(period=5.0, actions=[ndt_localization_node]),
         TimerAction(period=7.0, actions=[ndt_lifecycle_manager]),
         # └──────────────────────────────────────────────┘
+
+        # ┌─ NDT定位 + 里程计融合节点 ───────────────────────────────────┐
+        # 在 NDT 定位和 TF 树就绪后启动（period=8.0）
+        # HEALTHY 时不干预，NDT 漂移时冻结 map->odom 让 odom 传播位姿
+        TimerAction(period=8.0, actions=[localization_odom_fusion_node]),
+        # └──────────────────────────────────────────────────────────────┘
 
         # ┌─ 方案C：hdl_localization UKF+NDT (Humble移植, ★当前使用★) ─┐
         #   hdl组件容器自带生命周期, 无需TimerAction和lifecycle_manager

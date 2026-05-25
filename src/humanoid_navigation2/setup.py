@@ -56,6 +56,7 @@ setup(
             'wait_for_tf = humanoid_navigation2.wait_for_tf:main',
             'dynamic_odom_ground_publisher = humanoid_navigation2.dynamic_odom_ground_publisher:main',
             'hdl_bootstrap_to_initialpose = humanoid_navigation2.hdl_bootstrap_to_initialpose:main',
+            'localization_odom_fusion = humanoid_navigation2.localization_odom_fusion:main',
             'imu_transformer = humanoid_navigation2.imu_transformer:main',
             'pcd_converter = humanoid_navigation2.pcd_converter:main',
         ],
