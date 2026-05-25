@@ -662,15 +662,18 @@ class LocalizationOdomFusion(Node):
                                   if self.last_healthy_odom_body else None)
         self.degraded_start_time = time.monotonic()
         self.consecutive_healthy = 0
+        frozen_yaw = quat_to_yaw(
+            self.frozen_map_odom['qx'],
+            self.frozen_map_odom['qy'],
+            self.frozen_map_odom['qz'],
+            self.frozen_map_odom['qw'],
+        )
 
         self.get_logger().warn(
             '========== [HEALTHY→DEGRADED] 冻结 map->odom ==========\n'
             f'  冻结值: ({self.frozen_map_odom["x"]:.3f}, '
             f'{self.frozen_map_odom["y"]:.3f}, '
-            f'yaw={quat_to_yaw(self.frozen_map_odom["qx"],'
-            f' self.frozen_map_odom["qy"],'
-            f' self.frozen_map_odom["qz"],'
-            f' self.frozen_map_odom["qw"]):.2f}rad)\n'
+            f'yaw={frozen_yaw:.2f}rad)\n'
             f'  NDT error: {self.latest_ndt_error:.4f}\n'
             f'  此后机器人运动由 Fast-LIO 里程计驱动')
 
