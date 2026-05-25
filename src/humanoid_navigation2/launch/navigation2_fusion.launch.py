@@ -711,8 +711,12 @@ def generate_launch_description():
             'healthy_error_threshold': 0.15,
             'healthy_consecutive_frames': 3,
             'degraded_consecutive_frames': 2,
-            'max_degraded_duration_sec': 120.0,
+            'max_degraded_duration_sec': 120.0,  # 保留向后兼容（导航感知超时优先）
             'max_odom_displacement_m': 30.0,
+            'nav_active_lost_timeout_sec': 120.0,
+            'nav_idle_lost_timeout_sec': 600.0,  # 10分钟，够播完任何讲解词
+            'nav_idle_extreme_error': 5.0,
+            'nav_status_topic': '/navigation_status',
             'transition_duration_sec': 2.0,
             'publish_rate_hz': 30.0,
             'verbose_logging': True,

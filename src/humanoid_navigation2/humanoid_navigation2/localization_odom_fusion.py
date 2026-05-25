@@ -174,6 +174,25 @@ class LocalizationOdomFusion(Node):
         self.max_odom_displacement_m = float(
             self.declare_parameter('max_odom_displacement_m', 30.0).value)
 
+        # ── 导航感知超时（★ 关键: 区分导航中 vs 已到达静止）──
+        # 导航中（EXECUTING/PLANNING）: LOST 超时较短，定位不准会影响导航
+        self.nav_active_lost_timeout_sec = float(
+            self.declare_parameter('nav_active_lost_timeout_sec', 120.0).value)
+
+        # 已到达/静止（IDLE/COMPLETED/PAUSED）: LOST 超时很长
+        # 因为机器人正在播报讲解词，不需要定位精度，等播报完再说
+        self.nav_idle_lost_timeout_sec = float(
+            self.declare_parameter('nav_idle_lost_timeout_sec', 600.0).value)
+
+        # 静止时极端 NDT error 阈值: 超过此值即使静止也触发 LOST
+        # 因为 NDT 已经彻底挂了，不是短暂的几何混叠
+        self.nav_idle_extreme_error = float(
+            self.declare_parameter('nav_idle_extreme_error', 5.0).value)
+
+        # 导航状态 topic (由 navigation_state_manager 发布)
+        self.nav_status_topic = str(
+            self.declare_parameter('nav_status_topic', '/navigation_status').value)
+
         # ── 平滑过渡参数 ──
         # DEGRADED→HEALTHY 平滑过渡时间（秒）
         # 在此时长内从 frozen_map_odom 插值到 ndt_current_map_odom
@@ -222,6 +241,17 @@ class LocalizationOdomFusion(Node):
             String,
             '/localization/recovery_status',
             self._on_recovery_status,
+            QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE),
+        )
+
+        # 订阅导航状态（★ 用于区分导航中 vs 已到达静止）
+        # navigation_state_manager 发布 /navigation_status topic
+        # 格式: {"state": "EXECUTING"|"IDLE"|"COMPLETED"|"PAUSED"|...}
+        self.nav_state = "IDLE"  # 默认空闲
+        self.nav_status_sub = self.create_subscription(
+            String,
+            self.nav_status_topic,
+            self._on_nav_status,
             QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE),
         )
 
@@ -340,6 +370,42 @@ class LocalizationOdomFusion(Node):
             self._reset_state()
             self.state = FusionState.HEALTHY
             self._publish_fusion_status()
+
+    def _on_nav_status(self, msg: String):
+        """
+        接收导航状态回调（★ 用于区分导航中 vs 已到达静止）
+
+        navigation_state_manager 发布 /navigation_status topic，
+        格式: {"state": "EXECUTING"|"IDLE"|"COMPLETED"|"PAUSED"|...}
+
+        作用: 当机器人到达目标后静止播报时，NDT 即使漂移也不需要触发 LOST，
+              因为此时不需要定位精度。延长静止时的 LOST 超时到 600s。
+
+        Args:
+            msg: 导航状态 JSON 字符串
+        """
+        try:
+            import json
+            data = json.loads(msg.data)
+            new_state = data.get('state', 'IDLE')
+            if new_state != self.nav_state:
+                self.get_logger().info(
+                    f'[NAV] 导航状态变更: {self.nav_state} → {new_state}',
+                    throttle_duration_sec=2.0)
+            self.nav_state = new_state
+        except Exception:
+            pass
+
+    def _is_robot_navigating(self) -> bool:
+        """
+        判断机器人是否正在导航中（需要精确定位）
+
+        Returns:
+            True: 导航中 (EXECUTING, PLANNING) — LOST 超时使用较短值
+            False: 静止/空闲 (IDLE, COMPLETED, PAUSED) — LOST 超时使用较长值
+        """
+        navigating_states = ('EXECUTING', 'PLANNING', 'MOVING', 'RUNNING')
+        return self.nav_state in navigating_states
 
     # =========================================================================
     # 主循环
@@ -524,21 +590,36 @@ class LocalizationOdomFusion(Node):
             self._enter_transitioning()
             return
 
-        # ── 检查超时条件 ──
+        # ── 检查超时条件（★ 导航感知: 导航中 vs 静���不同超时）──
         elapsed = time.monotonic() - self.degraded_start_time
         odom_displacement = self._compute_odom_displacement(odom_body)
 
-        if elapsed > self.max_degraded_duration_sec:
-            self.get_logger().warn(
-                f'[DEGRADED→LOST] 超时: {elapsed:.1f}s > '
-                f'{self.max_degraded_duration_sec}s')
-            self._enter_lost()
+        # ★ 根据导航状态选择不同的 LOST 超时
+        if self._is_robot_navigating():
+            lost_timeout = self.nav_active_lost_timeout_sec
+            timeout_label = 'nav_active'
+        else:
+            lost_timeout = self.nav_idle_lost_timeout_sec
+            timeout_label = 'nav_idle'
+            # 静止时额外检查: NDT error 极端高 (>5.0) 且持续超过超时一半
+            # 说明 NDT 彻底挂了，不是几何混叠，该恢复了
+            if self.latest_ndt_error > self.nav_idle_extreme_error:
+                lost_timeout = min(lost_timeout, self.nav_idle_lost_timeout_sec / 2.0)
+                timeout_label = 'nav_idle_extreme_error'
 
-        elif odom_displacement > self.max_odom_displacement_m:
+        if elapsed > lost_timeout:
+            self.get_logger().warn(
+                f'[DEGRADED→LOST] 超时 ({timeout_label}): {elapsed:.1f}s > '
+                f'{lost_timeout:.0f}s (nav_state={self.nav_state})')
+            self._enter_lost()
+            return
+
+        if odom_displacement > self.max_odom_displacement_m:
             self.get_logger().warn(
                 f'[DEGRADED→LOST] odom 位移过大: {odom_displacement:.2f}m > '
                 f'{self.max_odom_displacement_m}m')
             self._enter_lost()
+            return
 
     def _update_transitioning(self, ndt_map_odom: dict, odom_body: dict):
         """
