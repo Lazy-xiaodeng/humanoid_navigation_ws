@@ -421,10 +421,28 @@ class LocalizationOdomFusion(Node):
             if (old_state in navigating_states and
                 new_state in idle_states and
                 self.state == FusionState.DEGRADED):
-                self.get_logger().info(
-                    '[NAV] 到达路点，重置 DEGRADED 超时计时器 '
-                    f'(已用 {time.monotonic() - self.degraded_start_time:.0f}s)')
+                old_elapsed = time.monotonic() - self.degraded_start_time
+
+                # ★ 到达路点: 重置超时计时器 + odom 位移计数器
+                # 原理: 静止时 odom 零漂移, 且知道自己在路点位置,
+                #       之前的累积误差可以在此归零
                 self.degraded_start_time = time.monotonic()
+
+                # 更新 odom 参考点到当前位置 (位移从当前路点开始重新算)
+                odom_body = self._lookup_odom_body()
+                if odom_body is not None and self.frozen_odom_body is not None:
+                    old_displacement = math.hypot(
+                        odom_body['x'] - self.frozen_odom_body[0],
+                        odom_body['y'] - self.frozen_odom_body[1])
+                else:
+                    old_displacement = 0.0
+
+                if odom_body is not None:
+                    self.frozen_odom_body = (odom_body['x'], odom_body['y'])
+
+                self.get_logger().info(
+                    '[NAV] 到达路点，重置 DEGRADED 计时器 '
+                    f'(用时{old_elapsed:.0f}s, 位移{old_displacement:.1f}m → 归零)')
         except Exception:
             pass
 
