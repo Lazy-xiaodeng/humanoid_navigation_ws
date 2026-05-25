@@ -653,7 +653,8 @@ def generate_launch_description():
                 'use_sim_time': use_sim_time,
                 'set_initial_pose': False,
                 'score_threshold': 2.0,
-                'reject_pose_jump': False,
+                # ★ 融合模式必须开启: NDT跳变→拒帧→error升高→fusion检测→DEGRADED
+                'reject_pose_jump': True,
                 'max_pose_jump_translation': 0.80,
                 'max_pose_jump_yaw': 0.45,
                 'initialpose_relax_duration_sec': 4.0,
