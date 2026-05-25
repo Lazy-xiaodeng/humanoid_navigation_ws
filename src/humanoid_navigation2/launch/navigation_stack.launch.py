@@ -177,16 +177,24 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time}]
     )
 
-    # map -> map_ground 的静态 TF
+    # map -> map_ground 的动态 TF。
+    # NDT 只发布平面 map->odom，但 Fast-LIO 的 odom->base_footprint 高度会随
+    # 路线漂移。如果 map_ground 固定在启动高度，RViz 和跨 frame 的 costmap
+    # 会在远处被整体抬高/压低。这里让 map_ground 跟随当前 base 高度，使
+    # base_footprint 在 map_ground 中保持接近 z=0，并与 odom_ground 对齐。
     tf_map_to_ground = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='tf_map_to_ground',
-        arguments=[
-            '0.0', '0.0', '-1.215',    # ★ Z 轴向下掉 1.215 米 (距离依你底盘到雷达的实际高度微调)
-            '0.0', '0.0', '0.0', '1.0',
-            'map', 'map_ground'        # 父节点是 map，子节点是预留的 map_ground
-        ]
+        package='humanoid_navigation2',
+        executable='dynamic_odom_ground_publisher',
+        name='dynamic_map_ground_publisher',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'parent_frame': 'map',
+            'base_frame': 'base_footprint',
+            'child_frame': 'map_ground',
+            'publish_rate': 30.0,
+            'z_offset': 0.0,
+        }],
+        output='screen'
     )
 
     # odom -> odom_ground 的动态 TF。
@@ -333,12 +341,13 @@ def generate_launch_description():
     #     }]
     # )
 
-    # 5. 机器人实时位姿发布器（从 TF 读取 map->base_footprint）
+    # 5. 机器人实时位姿发布器（从 TF 读取 map_ground->base_footprint）
     #    与 /pcl_pose 不同：/pcl_pose 发布的是 map->odom 偏移量（通常 0.1-0.5m），
-    #    本节点通过完整 TF 链计算机器人在地图中的实际位姿，发布到 /robot_realpose
+    #    本节点通过完整 TF 链计算机器人在导航地面坐标系中的实际位姿，发布到 /robot_realpose
     robot_realpose_publisher = nav2_python_node(
         'robot_realpose_publisher',
-        'robot_realpose_publisher'
+        'robot_realpose_publisher',
+        {'global_frame': 'map_ground'}
     )
 
     # hdl_localization 的全局重定位服务（3D FPFH + RANSAC）
@@ -469,6 +478,10 @@ def generate_launch_description():
                     'scan_matching_inlier_max_correspondence_distance': 0.5,
                     'max_scan_matching_correction_translation': 0.80,
                     'max_scan_matching_correction_yaw': 0.45,
+                    'recovery_jump_gate_relax_frames': 8,
+                    'recovery_jump_gate_relax_sec': 5.0,
+                    'recovery_max_scan_matching_correction_translation': 3.0,
+                    'recovery_max_scan_matching_correction_yaw': 1.2,
                     'scan_matching_jump_override_max_fitness_score': 0.12,
                     'scan_matching_jump_override_min_inlier_fraction': 0.90,
                     'scan_matching_rejected_log_throttle_ms': 30000,
@@ -484,19 +497,19 @@ def generate_launch_description():
                     'validate_global_localization_with_scan_matching': True,
                     'global_localization_max_fitness_score': 0.12,
                     'global_localization_max_candidates': 10,
-                    'global_localization_min_fitness_margin': 0.10,
-                    'global_localization_ambiguous_max_fitness_score': 0.045,
-                    'global_localization_recovery_prior_max_xy': 10.0,
+                    'global_localization_min_fitness_margin': 0.03,
+                    'global_localization_ambiguous_max_fitness_score': 0.07,
+                    'global_localization_recovery_prior_max_xy': 4.0,
                     'global_localization_recovery_prior_max_yaw': 0.0,
-                    'global_localization_recovery_prior_hard_gate': False,
-                    # 开机 bootstrap 专用原点先验；运行中恢复仍使用
-                    # /relocalize_with_prior_checked，不会走这个服务。
+                    'global_localization_recovery_prior_hard_gate': True,
+                    # 开机 bootstrap 专用原点先验；运行中恢复关闭先验，
+                    # 直接走 /relocalize_checked 做全图搜索。
                     'startup_origin_prior_enabled': True,
                     'startup_origin_prior_x': 0.0,
                     'startup_origin_prior_y': 0.0,
                     'startup_origin_prior_z': 0.0,
                     'startup_origin_prior_yaw': 0.0,
-                    'startup_origin_prior_max_xy': 4.0,
+                    'startup_origin_prior_max_xy': 1.0,
                     'startup_origin_prior_max_yaw': 0.0,
                     'startup_origin_prior_hard_gate': True,
                     'external_recovery_prior_topic': '/hdl_relocalize_prior',
@@ -505,7 +518,10 @@ def generate_launch_description():
                     'global_localization_consistency_window': 5,
                     'global_localization_consistency_xy_tolerance': 0.8,
                     'global_localization_consistency_yaw_tolerance': 0.35,
-                    'global_localization_query_accumulation_frames': 8,
+                    # /fast_lio/cloud_registered 的 frame_id 是 camera_init，原始轴为
+                    # x左/y下/z后；上面的 odom->camera_init 静态 TF 已经负责把它
+                    # 转到 ROS 标准轴，HDL 内部再转到 base_footprint。
+                    'global_localization_query_accumulation_frames': 5,
                     'global_localization_query_min_accumulation_frames': 3,
                     'global_localization_post_accept_validation_frames': 5,
                     'global_localization_post_accept_max_rejections': 1,
@@ -520,8 +536,8 @@ def generate_launch_description():
                     'global_localization_min_z': 0.0,
                     'global_localization_max_z': 0.0,
                     'global_localization_use_max_z_filter': False,
-                    'global_localization_query_timeout_sec': 12.0,
-                    'global_localization_recovery_query_timeout_sec': 8.0,
+                    'global_localization_query_timeout_sec': 30.0,
+                    'global_localization_recovery_query_timeout_sec': 30.0,
                 }]
             )
         ],
@@ -541,6 +557,7 @@ def generate_launch_description():
             'startup_origin_relocalize_checked_service': '/relocalize_startup_origin_checked',
             'use_checked_relocalize_service': True,
             'hdl_standby_service': '/hdl_bootstrap/standby',
+            'hdl_clear_relocalize_buffer_service': '/hdl_bootstrap/clear_relocalize_buffer',
             'external_relocalize_prior_topic': '/hdl_relocalize_prior',
             'recovery_request_topic': '/localization/recovery_requests',
             'ndt_status_topic': '/localization/ndt_status',
@@ -551,10 +568,20 @@ def generate_launch_description():
             'relocalize_retry_sec': 6.0,
             'startup_relocalize_retry_sec': 1.0,
             'runtime_relocalize_retry_sec': 2.0,
+            'runtime_relocalize_start_delay_sec': 0.5,
+            'clear_relocalize_buffer_on_runtime_recovery': True,
+            'runtime_relocalize_buffer_refill_sec': 1.5,
+            'wait_stationary_before_runtime_relocalize': True,
+            'runtime_stationary_settle_sec': 1.0,
+            'runtime_stationary_max_xy_delta': 0.08,
+            'runtime_stationary_max_yaw_delta': 0.08,
+            'publish_zero_cmd_vel_during_recovery': True,
+            'recovery_stop_cmd_vel_topic': '/cmd_vel',
+            'recovery_stop_cmd_vel_period_sec': 0.1,
             'max_relocalize_attempts': 0,
             'startup_max_relocalize_attempts': 0,
-            'max_runtime_relocalize_attempts': 5,
-            'runtime_recovery_failure_cooldown_sec': 30.0,
+            'max_runtime_relocalize_attempts': 0,
+            'runtime_recovery_failure_cooldown_sec': 5.0,
             'startup_use_origin_prior': True,
             'startup_origin_prior_max_attempts': 3,
             'startup_origin_prior_timeout_sec': 8.0,
@@ -586,8 +613,8 @@ def generate_launch_description():
             'hdl_status_stale_sec': 2.0,
             'hdl_max_matching_error': 0.20,
             'hdl_min_inlier_fraction': 0.78,
-            'use_prior_relocalize_on_recovery': True,
-            'allow_full_global_recovery_without_prior': False,
+            'use_prior_relocalize_on_recovery': False,
+            'allow_full_global_recovery_without_prior': True,
             'compare_with_hdl': False,
             'hdl_divergence_triggers_recovery': False,
             'hdl_pose_stale_sec': 2.0,
@@ -604,8 +631,8 @@ def generate_launch_description():
             'require_ndt_stable_status_for_recovery': True,
             'ndt_recovery_required_stable_status_count': 3,
             'ndt_recovery_status_stale_sec': 1.5,
-            'ndt_recovery_max_correction_translation': 0.35,
-            'ndt_recovery_max_correction_yaw': 0.20,
+            'ndt_recovery_max_correction_translation': 0.80,
+            'ndt_recovery_max_correction_yaw': 0.45,
         }
     )
 
@@ -624,13 +651,20 @@ def generate_launch_description():
             {
                 'use_sim_time': use_sim_time,
                 'set_initial_pose': False,
-                'score_threshold': 0.30,
-                'reject_pose_jump': True,
+                'score_threshold': 2.0,
+                'reject_pose_jump': False,
                 'max_pose_jump_translation': 0.80,
                 'max_pose_jump_yaw': 0.45,
                 'initialpose_relax_duration_sec': 4.0,
                 'initialpose_max_pose_jump_translation': 2.00,
                 'initialpose_max_pose_jump_yaw': 1.20,
+                'pose_jump_reacquire_enabled': True,
+                'pose_jump_reacquire_max_translation': 2.00,
+                'pose_jump_reacquire_max_yaw': 0.45,
+                'pose_jump_reacquire_max_fitness': 0.10,
+                'pose_jump_reacquire_required_frames': 2,
+                'pose_jump_reacquire_xy_tolerance': 0.50,
+                'pose_jump_reacquire_yaw_tolerance': 0.25,
                 'min_scan_points': 50,
                 'localization_status_topic': '/localization/ndt_status',
             }

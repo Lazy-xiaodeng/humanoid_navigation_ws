@@ -5,7 +5,7 @@ from collections import deque
 
 import numpy as np
 import rclpy
-from geometry_msgs.msg import PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
 from hdl_localization.msg import ScanMatchingStatus
 from nav_msgs.msg import Odometry
 from std_msgs.msg import String
@@ -143,6 +143,10 @@ class HdlBootstrapToInitialPose(Node):
             self.declare_parameter('use_checked_relocalize_service', True).value)
         self.hdl_standby_service = self.declare_parameter(
             'hdl_standby_service', '/hdl_bootstrap/standby').value
+        self.hdl_clear_relocalize_buffer_service = self.declare_parameter(
+            'hdl_clear_relocalize_buffer_service',
+            '/hdl_bootstrap/clear_relocalize_buffer',
+        ).value
         self.external_relocalize_prior_topic = self.declare_parameter(
             'external_relocalize_prior_topic', '/hdl_relocalize_prior').value
         self.recovery_request_topic = self.declare_parameter(
@@ -160,6 +164,26 @@ class HdlBootstrapToInitialPose(Node):
             self.declare_parameter('startup_relocalize_retry_sec', self.relocalize_retry_sec).value)
         self.runtime_relocalize_retry_sec = float(
             self.declare_parameter('runtime_relocalize_retry_sec', self.relocalize_retry_sec).value)
+        self.runtime_relocalize_start_delay_sec = float(
+            self.declare_parameter('runtime_relocalize_start_delay_sec', 0.0).value)
+        self.clear_relocalize_buffer_on_runtime_recovery = bool(
+            self.declare_parameter('clear_relocalize_buffer_on_runtime_recovery', True).value)
+        self.runtime_relocalize_buffer_refill_sec = float(
+            self.declare_parameter('runtime_relocalize_buffer_refill_sec', 1.2).value)
+        self.wait_stationary_before_runtime_relocalize = bool(
+            self.declare_parameter('wait_stationary_before_runtime_relocalize', True).value)
+        self.runtime_stationary_settle_sec = float(
+            self.declare_parameter('runtime_stationary_settle_sec', 1.0).value)
+        self.runtime_stationary_max_xy_delta = float(
+            self.declare_parameter('runtime_stationary_max_xy_delta', 0.03).value)
+        self.runtime_stationary_max_yaw_delta = float(
+            self.declare_parameter('runtime_stationary_max_yaw_delta', 0.03).value)
+        self.publish_zero_cmd_vel_during_recovery = bool(
+            self.declare_parameter('publish_zero_cmd_vel_during_recovery', True).value)
+        self.recovery_stop_cmd_vel_topic = self.declare_parameter(
+            'recovery_stop_cmd_vel_topic', '/cmd_vel').value
+        self.recovery_stop_cmd_vel_period_sec = float(
+            self.declare_parameter('recovery_stop_cmd_vel_period_sec', 0.1).value)
         self.max_relocalize_attempts = int(self.declare_parameter('max_relocalize_attempts', 0).value)
         self.startup_max_relocalize_attempts = int(
             self.declare_parameter('startup_max_relocalize_attempts', self.max_relocalize_attempts).value)
@@ -236,6 +260,8 @@ class HdlBootstrapToInitialPose(Node):
             self.declare_parameter('trusted_pose_requires_hdl_status', self.require_hdl_status).value)
         self.trusted_pose_log_interval_sec = float(
             self.declare_parameter('trusted_pose_log_interval_sec', 30.0).value)
+        self.trusted_pose_max_map_odom_displacement = float(
+            self.declare_parameter('trusted_pose_max_map_odom_displacement', 3.0).value)
         self.manual_initialpose_recovery_lockout_sec = float(
             self.declare_parameter('manual_initialpose_recovery_lockout_sec', 300.0).value)
         self.external_prior_ready_delay_sec = float(
@@ -265,6 +291,8 @@ class HdlBootstrapToInitialPose(Node):
         self.startup_origin_relocalize_checked_client = self.create_client(
             Trigger, self.startup_origin_relocalize_checked_service)
         self.hdl_standby_client = self.create_client(Empty, self.hdl_standby_service)
+        self.hdl_clear_relocalize_buffer_client = self.create_client(
+            Trigger, self.hdl_clear_relocalize_buffer_service)
         self.initialpose_pub = self.create_publisher(PoseWithCovarianceStamped, self.initialpose_topic, 10)
         self.initialpose_sub = self.create_subscription(
             PoseWithCovarianceStamped,
@@ -280,6 +308,10 @@ class HdlBootstrapToInitialPose(Node):
             prior_qos,
         )
         self.recovery_status_pub = self.create_publisher(String, self.recovery_status_topic, 10)
+        self.recovery_stop_cmd_vel_pub = None
+        if self.publish_zero_cmd_vel_during_recovery:
+            self.recovery_stop_cmd_vel_pub = self.create_publisher(
+                Twist, self.recovery_stop_cmd_vel_topic, 10)
         self.hdl_odom_sub = self.create_subscription(
             Odometry,
             self.hdl_odom_topic,
@@ -314,8 +346,12 @@ class HdlBootstrapToInitialPose(Node):
         self.start_time = time.monotonic()
         self.last_relocalize_request_time = 0.0
         self.next_relocalize_allowed_time = 0.0
+        self.relocalize_start_after = 0.0
         self.relocalize_attempts = 0
         self.relocalize_future = None
+        self.clear_relocalize_buffer_future = None
+        self.relocalize_buffer_cleared_for_recovery = False
+        self.reset_stationary_gate()
         self.active_relocalize_service = None
         self.active_relocalize_uses_checked = False
         self.active_relocalize_counted_as_attempt = False
@@ -359,6 +395,7 @@ class HdlBootstrapToInitialPose(Node):
         self.last_external_prior_publish_time = 0.0
         self.last_external_recovery_request_time = 0.0
         self.last_hdl_standby_request_time = 0.0
+        self.last_stop_cmd_vel_publish_time = 0.0
         self.recovery_waiting_for_ndt = False
         self.recovery_healthy_count = 0
         self.ndt_recovery_stable_status_count = 0
@@ -388,6 +425,118 @@ class HdlBootstrapToInitialPose(Node):
 
     def relocalization_mode(self):
         return 'runtime_recovery' if self.is_runtime_recovery_mode() else 'startup_bootstrap'
+
+    def runtime_recovery_active(self):
+        return (
+            self.is_runtime_recovery_mode() and (
+                self.need_relocalize or
+                self.accept_hdl_samples or
+                self.pending_initialpose is not None or
+                self.relocalize_future is not None or
+                self.clear_relocalize_buffer_future is not None or
+                self.recovery_waiting_for_ndt
+            )
+        )
+
+    def reset_stationary_gate(self):
+        self.stationary_reference_odom_to_base = None
+        self.stationary_reference_time = 0.0
+
+    def publish_recovery_stop_cmd_vel(self):
+        if not self.publish_zero_cmd_vel_during_recovery or self.recovery_stop_cmd_vel_pub is None:
+            return
+        if not self.runtime_recovery_active():
+            return
+
+        now = time.monotonic()
+        period = max(0.0, self.recovery_stop_cmd_vel_period_sec)
+        if period > 0.0 and now - self.last_stop_cmd_vel_publish_time < period:
+            return
+
+        self.recovery_stop_cmd_vel_pub.publish(Twist())
+        self.last_stop_cmd_vel_publish_time = now
+
+    def lookup_odom_to_base_matrix(self):
+        transform = self.tf_buffer.lookup_transform(
+            self.odom_frame,
+            self.base_frame,
+            Time(),
+            timeout=Duration(seconds=self.tf_lookup_timeout_sec),
+        )
+        return transform_to_matrix(transform)
+
+    def ensure_runtime_robot_stationary(self, now_mono):
+        if not self.is_runtime_recovery_mode() or not self.wait_stationary_before_runtime_relocalize:
+            return True
+
+        try:
+            odom_to_base = self.lookup_odom_to_base_matrix()
+        except TransformException as exc:
+            self.reset_stationary_gate()
+            self.publish_recovery_status(
+                'localization_recovery_waiting',
+                reason=f'waiting for robot pose before runtime relocalize: {exc}',
+                throttle_key='runtime_stationary_tf',
+                throttle_sec=1.0,
+            )
+            return False
+
+        if self.stationary_reference_odom_to_base is None:
+            self.stationary_reference_odom_to_base = odom_to_base
+            self.stationary_reference_time = now_mono
+            self.publish_recovery_status(
+                'localization_recovery_waiting',
+                reason='waiting for robot to remain stationary before HDL relocalize',
+                throttle_key='runtime_stationary_start',
+                throttle_sec=1.0,
+                stationary_settle_sec=self.runtime_stationary_settle_sec,
+            )
+            return False
+
+        delta = np.linalg.inv(self.stationary_reference_odom_to_base) @ odom_to_base
+        moved_xy = math.hypot(float(delta[0, 3]), float(delta[1, 3]))
+        moved_yaw = abs(normalize_angle(math.atan2(float(delta[1, 0]), float(delta[0, 0]))))
+        max_xy_delta = max(0.0, self.runtime_stationary_max_xy_delta)
+        max_yaw_delta = max(0.0, self.runtime_stationary_max_yaw_delta)
+        moved = (
+            moved_xy > max_xy_delta or
+            moved_yaw > max_yaw_delta
+        )
+        if moved:
+            self.stationary_reference_odom_to_base = odom_to_base
+            self.stationary_reference_time = now_mono
+            if self.relocalize_buffer_cleared_for_recovery:
+                self.relocalize_buffer_cleared_for_recovery = False
+            self.publish_recovery_status(
+                'localization_recovery_waiting',
+                reason=(
+                    f'robot still moving before HDL relocalize: '
+                    f'xy_delta={moved_xy:.3f}m yaw_delta={moved_yaw:.3f}rad'
+                ),
+                throttle_key='runtime_stationary_moving',
+                throttle_sec=1.0,
+                stationary_max_xy_delta=max_xy_delta,
+                stationary_max_yaw_delta=max_yaw_delta,
+            )
+            return False
+
+        stationary_for = now_mono - self.stationary_reference_time
+        settle_sec = max(0.0, self.runtime_stationary_settle_sec)
+        if stationary_for < settle_sec:
+            self.publish_recovery_status(
+                'localization_recovery_waiting',
+                reason=(
+                    f'waiting for stationary settle before HDL relocalize: '
+                    f'{stationary_for:.1f}/{settle_sec:.1f}s'
+                ),
+                throttle_key='runtime_stationary_settle',
+                throttle_sec=1.0,
+                stationary_for_sec=stationary_for,
+                stationary_settle_sec=settle_sec,
+            )
+            return False
+
+        return True
 
     def startup_origin_prior_is_available(self):
         if not self.startup_use_origin_prior:
@@ -591,6 +740,9 @@ class HdlBootstrapToInitialPose(Node):
         self.pending_publish_count = 0
         self.sample_wait_start_time = 0.0
         self.relocalize_future = None
+        self.clear_relocalize_buffer_future = None
+        self.relocalize_buffer_cleared_for_recovery = False
+        self.reset_stationary_gate()
         self.active_relocalize_service = None
         self.active_relocalize_uses_checked = False
         self.active_relocalize_counted_as_attempt = False
@@ -727,6 +879,9 @@ class HdlBootstrapToInitialPose(Node):
             return
 
         prior_ok, prior_reason = self.prepare_external_prior_from_request(request)
+        if prior_ok and not self.use_prior_relocalize_on_recovery:
+            prior_ok = False
+            prior_reason = f'prior ignored because runtime recovery is configured for full global search ({prior_reason})'
         if not prior_ok and not self.allow_full_global_recovery_without_prior:
             reason = request.get('reason', 'external localization recovery request')
             self.get_logger().error(
@@ -799,11 +954,19 @@ class HdlBootstrapToInitialPose(Node):
             search_radius = float(request.get('search_radius_m', 0.0))
         except (TypeError, ValueError):
             search_radius = 0.0
+        try:
+            prior_max_xy = float(request.get('prior_max_xy_m', search_radius))
+        except (TypeError, ValueError):
+            prior_max_xy = search_radius
+        if prior_max_xy > 0.0 and math.isfinite(prior_max_xy):
+            # Side-channel for HDL: keep covariance[0]/[7] as real covariance and use
+            # the normally-zero x/y covariance slot for request-specific XY gating.
+            msg.pose.covariance[1] = prior_max_xy
         self.pending_external_prior = msg
         self.pending_external_prior_reason = (
             f'{source} prior: frame={msg.header.frame_id} '
             f'pose=({x:.3f}, {y:.3f}, yaw={yaw_from_pose(msg.pose.pose):.3f}), '
-            f'preferred_search_radius={search_radius:.1f}m'
+            f'preferred_search_radius={search_radius:.1f}m, prior_max_xy={prior_max_xy:.1f}m'
         )
         return True, self.pending_external_prior_reason
 
@@ -957,6 +1120,7 @@ class HdlBootstrapToInitialPose(Node):
         self.last_hdl_status_time = stamp
 
     def timer_callback(self):
+        self.publish_recovery_stop_cmd_vel()
         if self.publish_pending_initialpose():
             return
         if self.bootstrap_done:
@@ -1081,9 +1245,96 @@ class HdlBootstrapToInitialPose(Node):
                 rclpy.try_shutdown()
         return True
 
+    def runtime_relocalize_buffer_clear_required(self):
+        return (
+            self.is_runtime_recovery_mode() and
+            self.clear_relocalize_buffer_on_runtime_recovery and
+            not self.relocalize_buffer_cleared_for_recovery
+        )
+
+    def ensure_runtime_relocalize_buffer_cleared(self, now):
+        if not self.runtime_relocalize_buffer_clear_required():
+            return True
+
+        if self.clear_relocalize_buffer_future is not None:
+            if not self.clear_relocalize_buffer_future.done():
+                self.publish_recovery_status(
+                    'localization_recovery_waiting',
+                    reason='waiting for HDL relocalize buffer clear to complete',
+                    throttle_key='clear_relocalize_buffer_pending',
+                    throttle_sec=1.0,
+                    service=self.hdl_clear_relocalize_buffer_service,
+                )
+                return False
+
+            try:
+                result = self.clear_relocalize_buffer_future.result()
+            except Exception as exc:
+                self.clear_relocalize_buffer_future = None
+                self.next_relocalize_allowed_time = now + max(1.0, self.runtime_relocalize_retry_sec)
+                self.publish_recovery_status(
+                    'localization_recovery_waiting',
+                    reason=f'HDL relocalize buffer clear failed: {exc}',
+                    service=self.hdl_clear_relocalize_buffer_service,
+                )
+                return False
+
+            self.clear_relocalize_buffer_future = None
+            if not result.success:
+                self.next_relocalize_allowed_time = now + max(1.0, self.runtime_relocalize_retry_sec)
+                self.publish_recovery_status(
+                    'localization_recovery_waiting',
+                    reason=f'HDL relocalize buffer clear was rejected: {result.message}',
+                    service=self.hdl_clear_relocalize_buffer_service,
+                )
+                return False
+
+            refill_sec = max(0.0, self.runtime_relocalize_buffer_refill_sec)
+            self.relocalize_buffer_cleared_for_recovery = True
+            self.relocalize_start_after = max(self.relocalize_start_after, now + refill_sec)
+            self.publish_recovery_status(
+                'localization_recovery_buffer_cleared',
+                reason=result.message,
+                service=self.hdl_clear_relocalize_buffer_service,
+                buffer_refill_sec=refill_sec,
+            )
+            return False
+
+        if not self.hdl_clear_relocalize_buffer_client.service_is_ready():
+            self.hdl_clear_relocalize_buffer_client.wait_for_service(timeout_sec=0.0)
+            self.publish_recovery_status(
+                'localization_recovery_waiting',
+                reason=f'waiting for HDL clear buffer service {self.hdl_clear_relocalize_buffer_service}',
+                throttle_key='clear_relocalize_buffer_service',
+                throttle_sec=3.0,
+            )
+            return False
+
+        self.clear_relocalize_buffer_future = self.hdl_clear_relocalize_buffer_client.call_async(Trigger.Request())
+        self.publish_recovery_status(
+            'localization_recovery_clearing_buffer',
+            reason='clearing stale HDL relocalize scans before runtime recovery',
+            service=self.hdl_clear_relocalize_buffer_service,
+        )
+        return False
+
     def request_relocalize_if_needed(self):
         now = time.monotonic()
         retry_sec = self.current_relocalize_retry_sec()
+        if now < self.relocalize_start_after:
+            remaining = self.relocalize_start_after - now
+            self.publish_recovery_status(
+                'localization_recovery_waiting',
+                reason=f'waiting {remaining:.1f}s for robot motion to settle before HDL relocalize',
+                throttle_key='pre_relocalize_start_delay',
+                throttle_sec=1.0,
+                relocalize_start_delay_remaining_sec=remaining,
+            )
+            return
+        if not self.ensure_runtime_robot_stationary(now):
+            return
+        if not self.ensure_runtime_relocalize_buffer_cleared(now):
+            return
         if now < self.next_relocalize_allowed_time:
             return
         attempt_limit = self.current_max_relocalize_attempts()
@@ -1179,6 +1430,9 @@ class HdlBootstrapToInitialPose(Node):
         self.pending_initialpose = None
         self.pending_publish_count = 0
         self.relocalize_future = None
+        self.clear_relocalize_buffer_future = None
+        self.relocalize_buffer_cleared_for_recovery = False
+        self.reset_stationary_gate()
         self.active_relocalize_service = None
         self.active_relocalize_uses_checked = False
         self.active_relocalize_counted_as_attempt = False
@@ -1326,7 +1580,12 @@ class HdlBootstrapToInitialPose(Node):
         self.relocalize_attempts = 0
         self.last_relocalize_request_time = 0.0
         self.next_relocalize_allowed_time = 0.0
+        start_delay = max(0.0, self.runtime_relocalize_start_delay_sec)
+        self.relocalize_start_after = now_mono + start_delay
         self.relocalize_future = None
+        self.clear_relocalize_buffer_future = None
+        self.relocalize_buffer_cleared_for_recovery = False
+        self.reset_stationary_gate()
         self.active_relocalize_service = None
         self.active_relocalize_uses_checked = False
         self.active_relocalize_counted_as_attempt = False
@@ -1439,8 +1698,23 @@ class HdlBootstrapToInitialPose(Node):
             )
             return
 
-        self.last_trusted_map_to_base = transform_to_matrix(map_to_base)
-        self.last_trusted_odom_to_base = transform_to_matrix(odom_to_base)
+        new_map_to_base = transform_to_matrix(map_to_base)
+        new_odom_to_base = transform_to_matrix(odom_to_base)
+
+        if self.last_trusted_map_to_base is not None:
+            last_map_to_odom = self.last_trusted_map_to_base @ np.linalg.inv(self.last_trusted_odom_to_base)
+            new_map_to_odom = new_map_to_base @ np.linalg.inv(new_odom_to_base)
+            map_odom_delta_xy = float(
+                np.linalg.norm(
+                    new_map_to_odom[:2, 3] - last_map_to_odom[:2, 3]))
+            if map_odom_delta_xy > self.trusted_pose_max_map_odom_displacement:
+                self.get_logger().warn(
+                    f'reject trusted pose update: map->odom jumped {map_odom_delta_xy:.2f}m '
+                    f'> {self.trusted_pose_max_map_odom_displacement:.2f}m')
+                return
+
+        self.last_trusted_map_to_base = new_map_to_base
+        self.last_trusted_odom_to_base = new_odom_to_base
         self.last_trusted_time = now_mono
 
         if now_mono - self.last_trusted_update_log_time > self.trusted_pose_log_interval_sec:
