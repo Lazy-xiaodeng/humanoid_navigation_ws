@@ -599,7 +599,8 @@ def generate_launch_description():
             'publish_period_sec': 0.25,
             'exit_after_publish': False,
             'monitor_localization': True,
-            'ndt_failure_triggers_recovery': True,
+            # ★ 融合模式: NDT异常时不触发recovery，由fusion节点决定何时recovery
+            'ndt_failure_triggers_recovery': False,
             'ndt_rejected_recovery_count': 2,
             'localization_pose_topic': '/pcl_pose',
             'localization_pose_stale_sec': 2.5,
