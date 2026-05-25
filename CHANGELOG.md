@@ -45,6 +45,38 @@
 - **修改原因**: 集成融合节点到导航启动流程
 - **影响范围**: 导航启动顺序
 
+## [2026-05-25 20:15:00] 两条路架构 - 融合模式独立路径
+
+- **新建文件**: `src/humanoid_navigation2/launch/navigation2_fusion.launch.py`
+- **修改内容**: 复制自 navigation_stack.launch.py，改动:
+  - hdl_bootstrap `ndt_failure_triggers_recovery`: True → **False** (不让hdl_bootstrap自动触发recovery)
+  - hdl_bootstrap `hdl_divergence_triggers_recovery`: False → False (保持)
+  - 保留 fusion 节点和所有其他配置
+- **修改原因**: 融合模式下 fusion 节点决定何时 recovery，hdl_bootstrap 不应争抢控制权
+
+- **新建文件**: `src/humanoid_navigation/launch/navigation_fusion.launch.py`
+- **修改内容**: 复制自 navigation.launch.py，只改可执行文件名为 `navigation_state_manager_fusion`
+- **修改原因**: 融合模式需使用专用的状态管理器
+
+- **新建文件**: `src/humanoid_navigation/humanoid_navigation/navigation_state_manager_fusion.py`
+- **修改内容**: 复制自原版 ~2700行, 只改 ~40行:
+  - 类名改为 `NavigationStateManagerFusion`
+  - 新增 `/localization/fusion_status` 订阅
+  - `handle_localization_recovery_started()` 检查 fusion 状态: DEGRADED/TRANSITIONING → 跳过暂停和上报; LOST → 走原版 recovery 流程
+  - 入口改为 `main_fusion()`
+- **修改原因**: NDT 漂移时 fusion 节点用 odom 兜底，导航不应暂停，APP不应收到定位异常
+
+- **修改文件**: `src/humanoid_navigation/setup.py` → 注册 `navigation_state_manager_fusion` 入口点
+
+- **原文件完全不动**:
+  - `navigation_stack.launch.py` — 路径1继续使用
+  - `navigation.launch.py` — 路径1继续使用
+  - `navigation_state_manager_recoverable.py` — 路径1继续使用
+
+- **切换方式**:
+  - 路径1: `ros2 launch humanoid_navigation2 navigation_stack.launch.py` + `ros2 launch humanoid_navigation navigation.launch.py`
+  - 路径2: `ros2 launch humanoid_navigation2 navigation2_fusion.launch.py` + `ros2 launch humanoid_navigation navigation_fusion.launch.py`
+
 ## [2026-05-25 18:45:00] 工作规则更新
 
 - **记忆文件**: `feedback_git_and_docs.md` — 修改前 git commit、修改后记录 CHANGELOG.md（精确到秒）
