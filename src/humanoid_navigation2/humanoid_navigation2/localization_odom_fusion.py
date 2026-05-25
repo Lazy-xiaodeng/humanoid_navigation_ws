@@ -391,8 +391,12 @@ class LocalizationOdomFusion(Node):
         navigation_state_manager 发布 /navigation_status topic，
         格式: {"state": "EXECUTING"|"IDLE"|"COMPLETED"|"PAUSED"|...}
 
-        作用: 当机器人到达目标后静止播报时，NDT 即使漂移也不需要触发 LOST，
-              因为此时不需要定位精度。延长静止时的 LOST 超时到 600s。
+        核心逻辑:
+        - 导航中 (EXECUTING): LOST 超时 120s——需要准确定位
+        - 静止播报 (IDLE/COMPLETED): LOST 超时 600s——不需要定位精度
+        - ★ 到达点位时 (EXECUTING→IDLE): 重置 DEGRADED 计时器
+          因为机器人静止时 odom 零漂移，且知道自己在路点位置，
+          之前累积的 odom 误差可以在此时"归零"
 
         Args:
             msg: 导航状态 JSON 字符串
@@ -401,11 +405,26 @@ class LocalizationOdomFusion(Node):
             import json
             data = json.loads(msg.data)
             new_state = data.get('state', 'IDLE')
-            if new_state != self.nav_state:
+            old_state = self.nav_state
+
+            if new_state != old_state:
                 self.get_logger().info(
-                    f'[NAV] 导航状态变更: {self.nav_state} → {new_state}',
-                    throttle_duration_sec=2.0)
+                    f'[NAV] 导航状态变更: {old_state} → {new_state}')
+
             self.nav_state = new_state
+
+            # ★ 到达点位时重置 DEGRADED 超时计时器
+            # 旧状态是导航中，新状态是空闲 → 机器人刚到达一个路点
+            navigating_states = ('EXECUTING', 'PLANNING', 'MOVING', 'RUNNING')
+            idle_states = ('IDLE', 'COMPLETED')
+
+            if (old_state in navigating_states and
+                new_state in idle_states and
+                self.state == FusionState.DEGRADED):
+                self.get_logger().info(
+                    '[NAV] 到达路点，重置 DEGRADED 超时计时器 '
+                    f'(已用 {time.monotonic() - self.degraded_start_time:.0f}s)')
+                self.degraded_start_time = time.monotonic()
         except Exception:
             pass
 
