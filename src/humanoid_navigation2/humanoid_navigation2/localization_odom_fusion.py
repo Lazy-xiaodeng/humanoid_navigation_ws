@@ -193,6 +193,10 @@ class LocalizationOdomFusion(Node):
         self.nav_status_topic = str(
             self.declare_parameter('nav_status_topic', '/navigation_status').value)
 
+        # LOST 时请求 recovery 的冷却时间（秒），防止重复请求
+        self.recovery_request_cooldown_sec = float(
+            self.declare_parameter('recovery_request_cooldown_sec', 15.0).value)
+
         # ── 平滑过渡参数 ──
         # DEGRADED→HEALTHY 平滑过渡时间（秒）
         # 在此时长内从 frozen_map_odom 插值到 ndt_current_map_odom
@@ -270,6 +274,15 @@ class LocalizationOdomFusion(Node):
         self.odom_displacement_pub = self.create_publisher(
             Float64,
             '/localization/fusion_odom_displacement',
+            QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE),
+        )
+
+        # ★ LOST 时主动请求 recovery（通过 /localization/recovery_requests 触发 HDL 重定位）
+        self.recovery_request_pub = self.create_publisher(
+            String,
+            '/localization/recovery_requests',
+            QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE),
+        )
             QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE),
         )
 
@@ -697,6 +710,7 @@ class LocalizationOdomFusion(Node):
 
         行为:
         - 不发布 map->odom（让 recovery 机制接管）
+        - 定期重新请求 recovery（如果上次请求后仍处于 LOST）
         - 定期输出诊断日志
         - recovery 成功后由 _on_recovery_status 切回 HEALTHY
 
@@ -717,6 +731,11 @@ class LocalizationOdomFusion(Node):
             self.get_logger().warn(
                 f'[LOST] 等待 recovery... '
                 f'(error={self.latest_ndt_error:.4f})')
+
+        # ★ 如果上次 recovery 请求后仍处于 LOST，定期重试
+        last_req = getattr(self, 'last_recovery_request_time', 0.0)
+        if now - last_req > self.recovery_request_cooldown_sec:
+            self._request_recovery()
 
     # =========================================================================
     # 状态转换辅助函数
@@ -797,19 +816,58 @@ class LocalizationOdomFusion(Node):
         """
         进入 LOST 状态：里程计偏移过大或时间过长
 
-        停止发布 map->odom，等待 recovery 机制接管。
+        停止发布 map->odom，主动请求 HDL 全局重定位。
+        ★ 关键: 通过 /localization/recovery_requests 触发 hdl_bootstrap 的 recovery
         """
         self.state = FusionState.LOST
         elapsed = time.monotonic() - self.degraded_start_time
 
         self.get_logger().error(
-            '========== [DEGRADED→LOST] 等待 recovery ==========\n'
+            '========== [DEGRADED→LOST] 触发 recovery ==========\n'
             f'  冻结持续时间: {elapsed:.1f}s\n'
             f'  NDT error: {self.latest_ndt_error:.4f}\n'
             f'  最后健康 map->odom: ({self.frozen_map_odom["x"]:.3f}, '
             f'{self.frozen_map_odom["y"]:.3f})')
 
+        # ★ 主动请求 HDL 全局重定位
+        self._request_recovery()
+
         self._publish_fusion_status()
+
+    def _request_recovery(self):
+        """
+        向 hdl_bootstrap 发送 recovery 请求 (通过 /localization/recovery_requests)
+
+        hdl_bootstrap 收到后会:
+        1. 准备 recovery prior (基于 trusted pose)
+        2. 等待机器人静止
+        3. 清除 HDL 缓存
+        4. 调用 /relocalize_with_prior_checked 全局重定位
+        5. 发布 /initialpose → NDT 重新初始化
+        """
+        now = time.monotonic()
+        if (hasattr(self, 'last_recovery_request_time') and
+            now - self.last_recovery_request_time < self.recovery_request_cooldown_sec):
+            self.get_logger().info(
+                f'[LOST] recovery 请求冷却中 '
+                f'({now - self.last_recovery_request_time:.1f}s < '
+                f'{self.recovery_request_cooldown_sec}s)')
+            return
+
+        self.last_recovery_request_time = now
+
+        import json as _json
+        request_msg = String()
+        request_msg.data = _json.dumps({
+            'reason': 'fusion odom fallback exhausted (timeout or displacement limit)',
+            'source': 'localization_odom_fusion',
+            'event_type': 'fusion_lost',
+            'search_radius_m': 5.0,
+        })
+        self.recovery_request_pub.publish(request_msg)
+        self.get_logger().warn(
+            '[LOST] 已发送 recovery 请求到 /localization/recovery_requests，'
+            '等待 hdl_bootstrap 执行全局重定位...')
 
     def _reset_state(self):
         """重置所有内部状态变量"""

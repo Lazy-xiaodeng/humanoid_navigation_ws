@@ -717,6 +717,7 @@ def generate_launch_description():
             'nav_idle_lost_timeout_sec': 600.0,  # 10分钟，够播完任何讲解词
             'nav_idle_extreme_error': 5.0,
             'nav_status_topic': '/navigation_status',
+            'recovery_request_cooldown_sec': 15.0,  # LOST时重复请求recovery的冷却
             'transition_duration_sec': 2.0,
             'publish_rate_hz': 30.0,
             'verbose_logging': True,
