@@ -1136,7 +1136,7 @@ class LocalizationOdomFusion(Node):
         LOST 状态：长时间退化，等待 recovery
 
         行为:
-        - 不发布 map->odom（让 recovery 机制接管）
+        - ★ Phase 1: 继续发布冻结 map->odom，保持 TF 树完整 (支持 prior 查询)
         - 定期重新请求 recovery（如果上次请求后仍处于 LOST）
         - 定期输出诊断日志
         - recovery 成功后由 _on_recovery_status 切回 HEALTHY
@@ -1148,9 +1148,10 @@ class LocalizationOdomFusion(Node):
         if ndt_map_odom is not None:
             self.latest_ndt_map_odom = ndt_map_odom
 
-        # 在 LOST 状态下不发布 map->odom
-        # 让 recovery bridge (SC/HDL) 发布 /initialpose 后由 NDT 重新建立定位
-        # recovery 会: 清除缓存 → 等待静止 → 全局重定位 → 发布 initialpose → 恢复
+        # ★ Phase 1: LOST 状态下继续发布冻结的 map->odom
+        # 保持 TF 树不断，让 recovery 期间 TF chain prior 可查询 map->body
+        if self.frozen_map_odom is not None:
+            self._publish_map_odom_tf(self.frozen_map_odom)
 
         now = time.monotonic()
         if now - self.last_state_log_time > 5.0:
@@ -1218,6 +1219,27 @@ class LocalizationOdomFusion(Node):
             self.frozen_map_odom['qz'],
             self.frozen_map_odom['qw'],
         )
+
+        # ★ Phase 1: 保存冻结时的 map_T_body (机器人实际位置) + NDT 状态
+        # 用途: prior fallback 和可信度评估
+        self.frozen_map_body = None
+        self.frozen_body_stamp = 0.0
+        self.ndt_correction_at_freeze = self.latest_ndt_correction_translation
+        try:
+            body_in_map = self.tf_buffer.lookup_transform(
+                'map', 'body', rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=0.1))
+            self.frozen_map_body = {
+                'x': body_in_map.transform.translation.x,
+                'y': body_in_map.transform.translation.y,
+                'z': body_in_map.transform.translation.z,
+                'qx': body_in_map.transform.rotation.x,
+                'qy': body_in_map.transform.rotation.y,
+                'qz': body_in_map.transform.rotation.z,
+                'qw': body_in_map.transform.rotation.w,
+            }
+            self.frozen_body_stamp = time.monotonic()
+        except Exception:
+            self.get_logger().warn('[DEGRADED] 无法查询 frozen_map_body (TF 链可能不完整)')
 
         self.get_logger().warn(
             '========== [HEALTHY→DEGRADED] 冻结 map->odom ==========\n'

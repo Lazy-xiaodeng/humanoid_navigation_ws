@@ -301,34 +301,170 @@ class NavigationStateManagerFusion(Node):
         # ★ 融合模式新增: 订阅融合节点状态
         # fusion_status 格式: {"state": "HEALTHY|DEGRADED|TRANSITIONING|LOST", "ndt_error": ..., "time": ...}
         self.latest_fusion_state = "HEALTHY"  # 默认健康
+        self.last_fusion_status_time = time.time()  # ★ Phase 1: 超时检测
         self.fusion_status_sub = self.create_subscription(
             String,
             '/localization/fusion_status',
             self._on_fusion_status,
             10
         )
+        # ★ Phase 1: fusion_status 超时定时器 (5s 检查一次)
+        self.create_timer(5.0, self._check_fusion_status_timeout)
 
     def _get_fusion_state(self) -> str:
         """获取融合节点当前状态"""
         return self.latest_fusion_state
 
+    # ★ Phase 1: 定位不健康状态集合
+    BLOCKED_STATES = {"DEGRADED", "TRANSITIONING", "LOST"}
+
     def _on_fusion_status(self, msg: String):
-        """融合节点状态回调"""
+        """融合节点状态回调 — Phase 1: SET-BASED 判据
+
+        核心逻辑:
+          - 只要定位进入非 HEALTHY → blocked (暂停导航)
+          - 只要定位恢复 HEALTHY → unblocked (恢复导航或执行待处理点位)
+          - 不再绑定单个状态跳变 (HEALTHY→DEGRADED)
+        """
         try:
             import ast, json as _json
-            # 兼容 JSON (新) 和 Python dict repr (旧) 两种格式
             try:
                 data = _json.loads(msg.data)
             except (ValueError, _json.JSONDecodeError):
                 data = ast.literal_eval(msg.data) if isinstance(msg.data, str) else _json.loads(msg.data)
             new_state = data.get('state', 'HEALTHY')
-            if new_state != self.latest_fusion_state:
+            old_state = self.latest_fusion_state
+
+            if new_state != old_state:
                 self.get_logger().info(
-                    f'[FUSION] 状态变更: {self.latest_fusion_state} → {new_state}',
+                    f'[FUSION] 状态变更: {old_state} → {new_state}',
                     throttle_duration_sec=2.0)
+
+            # ★ SET-BASED 判据
+            was_blocked = old_state in self.BLOCKED_STATES
+            is_blocked = new_state in self.BLOCKED_STATES
+
+            if is_blocked and not was_blocked:
+                self._handle_localization_blocked(new_state)
+            elif not is_blocked and was_blocked:
+                self._handle_fusion_recovered()
+
             self.latest_fusion_state = new_state
+            self.last_fusion_status_time = time.time()
         except Exception:
             pass
+
+
+    # =========================================================================
+    # Phase 1: 定位 blocked/resume 处理
+    # =========================================================================
+
+    def _handle_localization_blocked(self, blocked_state: str):
+        """定位进入不健康状态: 停止导航 + 缓存上下文
+
+        覆盖场景:
+          - HEALTHY→DEGRADED (导航中 NDT 退化)
+          - INITIALIZING→DEGRADED (启动时 NDT 就异常)
+          - TRANSITIONING→DEGRADED (过渡中又退化, 已 blocked 不重复)
+          - HEALTHY→LOST (直接进入 LOST)
+          - 首次收到 fusion_status 就是非 HEALTHY (navigator 晚于 fusion 启动)
+        """
+        if self.current_state in (NavigationState.EXECUTING, NavigationState.PLANNING):
+            self.localization_auto_paused = True
+            self.localization_resume_pending = False
+            self.localization_recovery_active = True
+            self.localization_recovery_reason = f"fusion进入{blocked_state}状态"
+
+            self.current_state = NavigationState.PAUSED
+            self.current_detailed_state = "LOCALIZATION_RECOVERY"
+            self.pause_time = time.time()
+            self.pause_duration_limit = 0
+            self.reset_block_detection()
+            self.begin_localization_stop_hold()
+
+            if self.current_goal_handle:
+                self.cancel_navigation()
+
+            self.publish_status_update("navigation_paused", {
+                "pause_source": "fusion_blocked",
+                "fusion_state": blocked_state,
+                "reason": self.localization_recovery_reason,
+                "current_waypoint_id": self.current_waypoint.get("id", ""),
+                "waypoint_index": self.current_waypoint_index,
+            })
+            self.get_logger().warn(
+                f'[FUSION] 定位进入 {blocked_state} 状态, 暂停导航 + zero cmd hold')
+        # else: IDLE 态 → 不暂停 (由导航入口门禁拦截新点位)
+
+    def _handle_fusion_recovered(self):
+        """定位恢复 HEALTHY: resume 被中断的导航 或 执行缓存的新点位"""
+        if self.localization_auto_paused:
+            self.localization_resume_pending = True
+            self.get_logger().info('[FUSION] 定位恢复 HEALTHY, 尝试 resume 导航')
+            self.try_resume_after_localization_recovery()
+        elif self.pending_navigation_request is not None:
+            self.get_logger().info('[FUSION] 定位恢复 HEALTHY, 执行缓存的新点位')
+            self._execute_pending_navigation_later()
+        # else: 什么都不做
+
+    def _cache_navigation_for_recovery(self, request_data: dict):
+        """定位恢复期间收到的新点位请求 → 缓存 + 告知 APP pending
+
+        Pending 语义:
+          - 只保留最后一个请求 (新请求覆盖旧请求)
+          - 覆盖时通知 APP: "pending_overwritten"
+          - 用户 cancel_navigation 时清除 pending request
+          - 恢复后自动执行 (延迟 1s 等 NDT/costmap 稳定)
+          - pending 超时 (pending_navigation_timeout: 90s) → 通知 APP 失败
+        """
+        was_pending = self.pending_navigation_request is not None
+        self.pending_navigation_request = json.loads(json.dumps(request_data))
+        self.pending_navigation_created_at = time.time()
+        self.pending_navigation_reason = "等待定位恢复后自动执行"
+        self.send_acknowledgment(
+            "navigation_pending_overwritten" if was_pending else "navigation_pending",
+            "pending",
+            f"定位异常({self.latest_fusion_state})，导航请求已{'覆盖' if was_pending else '缓存'}，定位恢复后自动执行")
+        self.get_logger().info(
+            f'[FUSION] 新点位请求已缓存 (定位状态={self.latest_fusion_state}), '
+            f'{"覆盖旧请求" if was_pending else "首次缓存"}')
+
+    def _execute_pending_navigation_later(self, delay_sec: float = 1.0):
+        """延迟执行缓存的新点位 (等 NDT/costmap 稳定)"""
+        if self.pending_navigation_request is None:
+            return
+        self.get_logger().info(
+            f'[FUSION] 将在 {delay_sec}s 后执行缓存的新点位导航')
+        self.create_timer(delay_sec, self._execute_pending_navigation_now, oneshot=True)
+
+    def _execute_pending_navigation_now(self):
+        """立即执行缓存的导航请求 (复用现有 dispatch)"""
+        if self.pending_navigation_request is None:
+            return
+        if self.current_state != NavigationState.IDLE:
+            self.get_logger().warn(
+                '[FUSION] 待执行缓存导航时状态非 IDLE, 跳过')
+            return
+
+        request_data = self.pending_navigation_request
+        self.pending_navigation_request = None
+        self.pending_navigation_reason = ""
+
+        command_type = request_data.get("command_data", {}).get("command_type", "")
+        self.get_logger().info(
+            f'[FUSION] 定位恢复, 执行缓存的新点位导航: {command_type}')
+        # 复用现有导航命令 dispatch
+        self.handle_navigation_command(request_data)
+
+    def _check_fusion_status_timeout(self):
+        """fusion_status 超时检测: 如果 fusion 崩溃在非健康态 → 保持 blocked"""
+        if self.latest_fusion_state in self.BLOCKED_STATES:
+            age = time.time() - self.last_fusion_status_time
+            if age > 5.0:
+                self.get_logger().error(
+                    f'[FUSION] fusion_status 超时 ({age:.1f}s), '
+                    f'最后状态={self.latest_fusion_state}, 保持 localization_blocked')
+                # 不清除 blocked 状态，不 resume 导航
 
     def setup_timers(self):
         """设置定时器"""
@@ -991,6 +1127,11 @@ class NavigationStateManagerFusion(Node):
                 self.send_acknowledgment("start_single_navigation", "error", "当前正在执行其他导航任务")
                 return
 
+            # ★ Phase 1: 定位不健康时缓存请求，不立即执行
+            if self.latest_fusion_state != "HEALTHY":
+                self._cache_navigation_for_recovery(request_data)
+                return
+
             if self.defer_navigation_start_if_robot_not_ready(request_data):
                 return
             
@@ -1031,6 +1172,11 @@ class NavigationStateManagerFusion(Node):
             if self.current_state != NavigationState.IDLE:
                self.send_acknowledgment("start_multi_point_navigation", "error", "当前正在执行其他导航任务")
                return
+
+            # ★ Phase 1: 定位不健康时缓存请求，不立即执行
+            if self.latest_fusion_state != "HEALTHY":
+                self._cache_navigation_for_recovery(request_data)
+                return
 
             if self.defer_navigation_start_if_robot_not_ready(request_data):
                return
@@ -1078,6 +1224,11 @@ class NavigationStateManagerFusion(Node):
             # 检查当前状态
             if self.current_state != NavigationState.IDLE:
                 self.send_acknowledgment("start_exhibition_navigation", "error", "当前正在执行其他导航任务")
+                return
+
+            # ★ Phase 1: 定位不健康时缓存请求，不立即执行
+            if self.latest_fusion_state != "HEALTHY":
+                self._cache_navigation_for_recovery(request_data)
                 return
 
             if self.defer_navigation_start_if_robot_not_ready(request_data):
@@ -1363,18 +1514,11 @@ class NavigationStateManagerFusion(Node):
         if not self.auto_pause_on_localization_recovery:
             return
 
-        # ★ 融合模式核心逻辑: 检查fusion节点状态
-        # DEGRADED/TRANSITIONING → fusion节点正在用odom兜底 → 不暂停 → 不上报APP
-        # LOST → fusion兜不住了 → 走原版recovery逻辑
-        fusion_state = self._get_fusion_state()
-        if fusion_state in ("DEGRADED", "TRANSITIONING"):
-            self.get_logger().info(
-                f'[FUSION] 定位异常但fusion处于{fusion_state}状态，odom正在兜底，'
-                f'不暂停导航，不上报APP。reason={status.get("reason","")}',
-                throttle_duration_sec=3.0)
-            # 关键: 直接return，不执行下面的暂停+上报逻辑
-            return
+        # ★ Phase 1: DEGRADED/TRANSITIONING 豁免已移除
+        # 导航暂停现在由 _on_fusion_status → _handle_localization_blocked 主动触发
+        # SC bridge 的 recovery_started 事件用于上报和日志，不再影响暂停决策
 
+        fusion_state = self._get_fusion_state()
         if fusion_state == "LOST":
             self.get_logger().warn(
                 f'[FUSION] fusion进入LOST状态，odom兜底失败，触发原版recovery流程')

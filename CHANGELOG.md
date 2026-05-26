@@ -1,5 +1,23 @@
 # 变更记录
 
+## [2026-05-27 18:30:00] Phase 1: TF抑制 + DEGRADED停车 + LOST TF保持 + 导航入口门禁
+
+- **修改文件**:
+  - `src/lidar_localization/include/lidar_localization/lidar_localization_component.hpp` — 新增 fusion_status 监听成员变量 + shouldSuppressTF() 声明
+  - `src/lidar_localization/src/lidar_localization_component.cpp` — 订阅 /localization/fusion_status, 实现 3-tier TF 语义抑制 (HEALTHY检查 → FUSION_TIMEOUT → fusion_ever_received_non_healthy_)
+  - `src/humanoid_navigation2/humanoid_navigation2/localization_odom_fusion.py` — LOST 状态继续发布冻结 TF + DEGRADED 进入时保存 frozen_map_body + ndt_correction_at_freeze
+  - `src/humanoid_navigation/humanoid_navigation/navigation_state_manager_fusion.py` — SET-BASED 判据 (BLOCKED_STATES) + _handle_localization_blocked/_handle_fusion_recovered + 3个导航入口门禁 + _cache_navigation_for_recovery + 移除 DEGRADED 豁免 + fusion_status 超时检测
+  - `src/humanoid_navigation2/launch/navigation2_fusion_sc_v2.launch.py` — 新文件, Phase 1 参数 (fusion_status_timeout_sec: 5.0, allow_ndt_tf_when_fusion_timeout: false, min/max_degraded_lock_sec: 10, max_odom_displacement_m: 5)
+
+- **设计依据**: `DUAL_ENGINE_RECOVERY_DESIGN.md` Phase 1, ~165 行改动
+
+- **关键行为变更**:
+  - NDT: fusion 非 HEALTHY → 抑制 TF; fusion 超时(5s)+曾在非HEALTHY → FUSION_TIMEOUT 默认继续抑制
+  - Fusion: LOST 继续发冻结 TF (保持 TF 树完整, 支持 prior 查询); DEGRADED 保存 frozen_map_body 快照
+  - Navigator: 收到 BLOCKED_STATES → 立即 pause + cancel goal + zero cmd; fusion 恢复 HEALTHY → auto resume
+  - IDLE 态定位不健康 → 新点位缓存 (pending), 恢复后自动执行
+  - 旧 launch 文件 navigation2_fusion_sc.launch.py 保持不变
+
 ## [2026-05-26 23:10:00] TF冲突修复: DEGRADED期间禁止NDT重发旧TF
 
 - **修改文件**:

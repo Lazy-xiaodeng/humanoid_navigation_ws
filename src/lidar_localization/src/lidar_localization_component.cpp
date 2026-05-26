@@ -94,6 +94,8 @@ PCLLocalization::PCLLocalization(const rclcpp::NodeOptions & options)
   declare_parameter("republish_last_good_tf_on_failure", true);
   declare_parameter("max_last_good_tf_age_sec", 3.0);
   declare_parameter("localization_status_topic", "/localization/ndt_status");
+  declare_parameter("fusion_status_timeout_sec", 5.0);
+  declare_parameter("allow_ndt_tf_when_fusion_timeout", false);
 }
 
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -379,6 +381,8 @@ void PCLLocalization::initializeParameters()
   get_parameter("force_2d_z", force_2d_z_);
   get_parameter("republish_last_good_tf_on_failure", republish_last_good_tf_on_failure_);
   get_parameter("max_last_good_tf_age_sec", max_last_good_tf_age_sec_);
+  get_parameter("fusion_status_timeout_sec", fusion_status_timeout_sec_);
+  get_parameter("allow_ndt_tf_when_fusion_timeout", allow_ndt_tf_when_fusion_timeout_);
 
   // 打印参数值到日志，方便调试
   RCLCPP_INFO(get_logger(),"global_frame_id: %s", global_frame_id_.c_str());
@@ -497,6 +501,11 @@ bool PCLLocalization::publishLastGoodTransformIfFresh(const char * reject_reason
       get_logger(), *get_clock(), 2000,
       "Localization rejected scans for %.2f sec after %s; last good TF is too old, waiting for relocalization.",
       age_sec, reject_reason);
+    return false;
+  }
+
+  // Phase 1: fusion DEGRADED/LOST/FUSION_TIMEOUT 时不重发旧 TF
+  if (shouldSuppressTF()) {
     return false;
   }
 
@@ -628,6 +637,11 @@ void PCLLocalization::initializePubSub()
   imu_sub_ = create_subscription<sensor_msgs::msg::Imu>(
     "imu", rclcpp::SensorDataQoS(),
     std::bind(&PCLLocalization::imuReceived, this, std::placeholders::_1));
+
+  // ★ Phase 1: 订阅 fusion 状态，用于 TF 语义抑制
+  fusion_status_sub_ = create_subscription<std_msgs::msg::String>(
+    "/localization/fusion_status", rclcpp::SystemDefaultsQoS(),
+    std::bind(&PCLLocalization::fusionStatusCallback, this, std::placeholders::_1));
 
   RCLCPP_INFO(get_logger(), "initializePubSub end");
 }
@@ -943,7 +957,65 @@ void PCLLocalization::imuReceived(const sensor_msgs::msg::Imu::ConstSharedPtr ms
 
 /**
  * @brief 接收点云消息回调（核心函数）
- * 
+ */
+
+// =========================================================================
+// Phase 1: fusion_status callback + TF semantic suppression
+// =========================================================================
+
+void PCLLocalization::fusionStatusCallback(const std_msgs::msg::String::SharedPtr msg)
+{
+  if (!msg) return;
+
+  try {
+    std::string data = msg->data;
+    auto pos = data.find("\"state\"");
+    if (pos == std::string::npos) return;
+
+    pos = data.find(':', pos);
+    if (pos == std::string::npos) return;
+
+    auto start = data.find('"', pos);
+    if (start == std::string::npos) return;
+    auto end = data.find('"', start + 1);
+    if (end == std::string::npos) return;
+
+    std::string state = data.substr(start + 1, end - start - 1);
+
+    fusion_state_ = state;
+    last_fusion_status_time_ = this->now();
+    fusion_ever_received_ = true;
+
+    if (fusion_state_ != "HEALTHY" && fusion_state_ != "INITIALIZING") {
+      fusion_ever_received_non_healthy_ = true;
+    }
+  } catch (...) {
+  }
+}
+
+bool PCLLocalization::shouldSuppressTF()
+{
+  if (fusion_state_ != "HEALTHY" && fusion_state_ != "INITIALIZING") {
+    double age = (this->now() - last_fusion_status_time_).seconds();
+    if (age <= fusion_status_timeout_sec_) {
+      return true;
+    }
+    if (fusion_ever_received_non_healthy_) {
+      if (!allow_ndt_tf_when_fusion_timeout_) {
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 5000,
+          "FUSION_TIMEOUT: fusion_status age=%.1fs, suppressing TF", age);
+        return true;
+      }
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 5000,
+        "FUSION_TIMEOUT: age=%.1fs, allow_ndt_tf_when_fusion_timeout=true", age);
+    }
+  }
+  return false;
+}
+
+/**
  * 这是定位功能的核心处理函数，流程如下：
  * 1. 如果启用IMU，进行点云去畸变
  * 2. 对点云进行体素滤波降采样
@@ -1203,7 +1275,11 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
   last_good_transform_ = transform_stamped;
   last_good_transform_time_ = this->now();
   has_last_good_transform_ = true;
-  broadcaster_.sendTransform(transform_stamped);  // 广播TF变换
+
+  // Phase 1: fusion DEGRADED/LOST/FUSION_TIMEOUT 时抑制 TF
+  if (!shouldSuppressTF()) {
+    broadcaster_.sendTransform(transform_stamped);  // 广播TF变换
+  }
 
   // ========== 更新并发布路径 ==========
   // 将当前位姿添加到路径中

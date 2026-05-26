@@ -714,15 +714,19 @@ HDL bridge:
 
 ### Phase 1: TF 抑制 + DEGRADED 停车 + LOST TF 保持
 
+**状态**: ✅ **已实施** (2026-05-27)
+
 **目标**: 消除 TF 冲突，DEGRADED 时可靠停车，LOST 时 TF 不断
 
-**修改**:
-| 文件 | 改动 | 量级 |
+**实际修改**:
+| 文件 | 改动 | 状态 |
 |------|------|------|
-| `lidar_localization_component.cpp` | 订阅 `/localization/fusion_status`，非 HEALTHY 时抑制 TF + fusion_status 超时保护(5s) | ~25行 |
-| `localization_odom_fusion.py` | (a) LOST 状态继续发布 frozen TF (line 1151)；(b) 确保 fusion_status 及时发布 | ~8行 |
-| `navigation_state_manager_fusion.py` | (a) `_on_fusion_status` 检测 DEGRADED 进入 → 主动暂停导航；(b) 移除 `handle_localization_recovery_started` 中 DEGRADED 豁免 (line 1370-1376) | ~25行 |
-| `navigation2_fusion_sc_v2.launch.py` | 新文件，参数调整 (max_degraded_lock_sec: 30, min_degraded_lock_sec: 15) | ~50行 |
+| `lidar_localization_component.hpp` | 新增 fusion_status 监听成员变量 + shouldSuppressTF() 声明 | ✅ |
+| `lidar_localization_component.cpp` | 订阅 `/localization/fusion_status`，shouldSuppressTF() 3-tier 判据 (HEALTHY→FUSION_TIMEOUT→fusion_ever_received_non_healthy_)，TF 发布点抑制 | ✅ |
+| `localization_odom_fusion.py` | (a) `_update_lost()` 继续发布 frozen TF；(b) `_enter_degraded()` 保存 frozen_map_body + ndt_correction_at_freeze | ✅ |
+| `navigation_state_manager_fusion.py` | (a) SET-BASED `_on_fusion_status` 判据 (BLOCKED_STATES)；(b) `_handle_localization_blocked()` / `_handle_fusion_recovered()`；(c) 3个导航入口门禁 + `_cache_navigation_for_recovery()`；(d) 移除 DEGRADED 豁免；(e) `_check_fusion_status_timeout()` 定时器 | ✅ |
+| `navigation2_fusion_sc_v2.launch.py` | 新文件，参数: fusion_status_timeout_sec: 5.0, allow_ndt_tf_when_fusion_timeout: false, min/max_degraded_lock_sec: 10, max_odom_displacement_m: 5 | ✅ |
+| `CHANGELOG.md` | Phase 1 变更记录 | ✅ |
 
 **验收**:
 ```bash
@@ -822,14 +826,15 @@ ros2 topic echo /localization/recovery_requests
 
 ### 8.4 Phase 1 修改量 (最终版)
 
-| 文件 | 改动点 | 量级 |
+| 文件 | 改动点 | 状态 |
 |------|--------|------|
-| `lidar_localization_component.cpp` | (a) 订阅 `/localization/fusion_status`; (b) `shouldSuppressTF()` 3 级判据; (c) FUSION_TIMEOUT 超时逻辑 | ~40 行 |
-| `localization_odom_fusion.py` | (a) `_update_lost()` 继续发布 frozen TF; (b) `_enter_degraded()` 保存 frozen_map_body + ndt_correction_at_freeze; (c) fusion_status 超时检测 | ~15 行 |
-| `navigation_state_manager_fusion.py` | (a) set-based `_on_fusion_status` 判据 + `_handle_localization_blocked()`; (b) `_handle_fusion_recovered()`; (c) 三个导航入口 fusion_state 门禁 + `_cache_navigation_for_recovery()`; (d) 移除 line 1370-1376; (e) fusion_status 超时定时器 | ~60 行 |
-| `navigation2_fusion_sc_v2.launch.py` | 新文件, 完整参数 | ~50 行 |
+| `lidar_localization_component.hpp` | (a) fusionStatusCallback/shouldSuppressTF 声明; (b) fusion 状态成员变量; (c) 新参数声明 | ✅ |
+| `lidar_localization_component.cpp` | (a) 订阅 `/localization/fusion_status`; (b) `shouldSuppressTF()` 3 级判据; (c) FUSION_TIMEOUT 超时逻辑; (d) TF 发布点抑制 (acceptance + rejection) | ✅ |
+| `localization_odom_fusion.py` | (a) `_update_lost()` 继续发 frozen TF; (b) `_enter_degraded()` 保存 frozen_map_body + ndt_correction_at_freeze | ✅ |
+| `navigation_state_manager_fusion.py` | (a) SET-BASED `_on_fusion_status` + `_handle_localization_blocked()`; (b) `_handle_fusion_recovered()`; (c) 导航入口门禁 + `_cache_navigation_for_recovery()`; (d) 移除 DEGRADED 豁免; (e) `_check_fusion_status_timeout()` | ✅ |
+| `navigation2_fusion_sc_v2.launch.py` | 新文件 (~400 行) | ✅ |
 
-总计: ~165 行 (含新 launch 文件)
+**Phase 1 实施完毕** ✅ | **编译**: ✅ 通过 (lidar_localization_ros2)
 
 ## 9. 风险与边界
 

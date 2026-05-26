@@ -144,6 +144,8 @@ public:
   void imuReceived(const sensor_msgs::msg::Imu::ConstSharedPtr msg);                             ///< IMU回调
   void cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg);                   ///< 点云回调（核心）
 
+  void fusionStatusCallback(const std_msgs::msg::String::SharedPtr msg);                         ///< fusion状态回调 (Phase 1)
+  bool shouldSuppressTF();                                                                       ///< 检查是否应抑制TF发布 (Phase 1)
   // ========== 成员变量 ==========
   tf2_ros::TransformBroadcaster broadcaster_;  ///< TF变换广播器，发布坐标变换
   rclcpp::Clock clock_;                        ///< ROS时钟
@@ -169,6 +171,8 @@ public:
     cloud_sub_;  ///< 点云订阅者
   rclcpp::Subscription<sensor_msgs::msg::Imu>::ConstSharedPtr
     imu_sub_;  ///< IMU订阅者
+  rclcpp::Subscription<std_msgs::msg::String>::ConstSharedPtr
+    fusion_status_sub_;  ///< fusion状态订阅者 (Phase 1)
 
   // 配准和滤波
   boost::shared_ptr<pcl::Registration<pcl::PointXYZI, pcl::PointXYZI>> registration_;  ///< 配准算法对象
@@ -187,6 +191,12 @@ public:
   rclcpp::Time last_initialpose_time_{0, 0, RCL_ROS_TIME}; ///< 最近一次初始位姿时间
   bool initialpose_reacquire_active_{false}; ///< 初始位姿后是否处于NDT重新捕获窗口
   int consecutive_rejected_frames_{0}; ///< 连续被拒绝的扫描匹配帧数
+
+  // ========== fusion_status 监听状态 (Phase 1) ==========
+  std::string fusion_state_{"HEALTHY"};              ///< 融合节点最新状态
+  rclcpp::Time last_fusion_status_time_{0, 0, RCL_ROS_TIME}; ///< 最后收到fusion_status的时间
+  bool fusion_ever_received_{false};                 ///< 是否收到过fusion_status
+  bool fusion_ever_received_non_healthy_{false};     ///< fusion是否曾报告非HEALTHY状态
 
   // ========== ROS参数 ==========
   std::string global_frame_id_;   ///< 全局坐标系ID（如"map"）
@@ -241,6 +251,8 @@ public:
   double force_2d_z_{0.0};        ///< 2D约束时使用的固定Z坐标
   bool republish_last_good_tf_on_failure_{true}; ///< 定位短暂失败时是否重发最后可信TF
   double max_last_good_tf_age_sec_{3.0}; ///< 最后可信TF可重发的最大时长
+  double fusion_status_timeout_sec_{5.0};          ///< fusion_status 超时阈值 (Phase 1)
+  bool allow_ndt_tf_when_fusion_timeout_{false};   ///< FUSION_TIMEOUT时是否允许NDT独立发TF (Phase 1)
 
   int ndt_num_threads_;           ///< OMP线程数
   int ndt_max_iterations_;        ///< 配准最大迭代次数
