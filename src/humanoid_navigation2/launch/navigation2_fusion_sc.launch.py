@@ -523,6 +523,9 @@ def generate_launch_description():
                 'pose_jump_reacquire_yaw_tolerance': 0.25,
                 'min_scan_points': 50,
                 'localization_status_topic': '/localization/ndt_status',
+                # NDT拒帧时不重发旧TF，避免与fusion DEGRADED冻结TF冲突
+                'republish_last_good_tf_on_failure': False,
+                'max_last_good_tf_age_sec': 0.5,
             }
         ],
         remappings=[('/cloud', '/fast_lio/cloud_registered')],

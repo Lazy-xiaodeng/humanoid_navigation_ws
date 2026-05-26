@@ -1,5 +1,18 @@
 # 变更记录
 
+## [2026-05-26 23:10:00] TF冲突修复: DEGRADED期间禁止NDT重发旧TF
+
+- **修改文件**:
+  - `src/humanoid_navigation2/launch/navigation2_fusion_sc.launch.py`
+
+- **根因**: NDT C++ 节点在拒帧时通过 `publishLastGoodTransformIfFresh()` 重发旧 map->odom TF (最多3秒前)，与 fusion DEGRADED 冻结的 map->odom TF 同时发布。两个发布者竞争，下游节点按最新时间戳取 TF，在"旧位姿"和"冻结位姿"之间反复横跳，导致 Nav2 控制器位姿跳动、反复重算路径。
+
+- **修改内容**:
+  - `republish_last_good_tf_on_failure`: true → false (NDT拒帧时不再重发旧TF)
+  - `max_last_good_tf_age_sec`: 3.0 → 0.5 (旧TF有效期降至0.5秒，双重保险)
+
+- **效果**: DEGRADED 期间仅 fusion 发布冻结 map->odom TF，无冲突。HEALTHY 期间 NDT 正常发布当前 TF（不受影响）。启动到导航的 TF 链完全不变。
+
 ## [2026-05-26 22:45:00] test3 导航失控修复: 点位8-9 NDT漂移阈值收紧 + TF冲突分析
 
 - **修改文件**:
