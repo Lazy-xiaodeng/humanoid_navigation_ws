@@ -271,6 +271,25 @@ class LocalizationOdomFusion(Node):
         self.recovery_pose_jump_max_m = float(
             self.declare_parameter('recovery_pose_jump_max_m', 5.0).value)
 
+        # ── NDT inlier=0 虚假健康检测 (P0-2) ──
+        # 长廊中 NDT 收敛到错误位置时 fitness 极低(<0.01) 但 inlier 始终为 0
+        # 这是几何混叠的强特征，应加速触发 LOST 而非坐等 180s 超时
+        self.inlier_zero_degraded_early_lost_sec = float(
+            self.declare_parameter('inlier_zero_degraded_early_lost_sec', 30.0).value)
+        self.inlier_zero_error_ceiling = float(
+            self.declare_parameter('inlier_zero_error_ceiling', 0.01).value)
+        # 追踪 inlier=0 的持续时间（进入 DEGRADED 后累加）
+        self._inlier_zero_elapsed = 0.0
+        self._inlier_zero_start = 0.0
+
+        # ── DEGRADED 静止检测定时器重置 (P0-3) ──
+        # 替代不可靠的 nav_state 变更检测。如果机器人在 DEGRADED 期间
+        # 里程计位移在 5 秒内 <0.1m（即确实停在路点上），自动重置计时器
+        self._odom_stationary_start = 0.0     # 静止开始时间
+        self._odom_stationary_threshold_m = 0.1   # 5秒内位移阈值
+        self._odom_stationary_duration_sec = 5.0  # 需要持续静止的时长
+        self._last_odom_body_for_stationary = None  # 上次检查时的 odom_body
+
         # ── 发布参数 ──
         # 融合节点发布 map->odom TF 的频率（Hz）
         # 高于 lidar_localization 的发布频率（10Hz），确保 DEGRADED 时
@@ -432,7 +451,9 @@ class LocalizationOdomFusion(Node):
             f'  启动状态: INITIALIZING，等待首次 NDT/SC 定位成功\n'
             f'  状态转换: HEALTHY ←→ DEGRADED (error>{self.degraded_error_threshold})\n'
             f'  恢复阈值: error<{self.healthy_error_threshold} 连续{self.healthy_consecutive_frames}帧\n'
-            f'  超时限制: {self.max_degraded_duration_sec}s / {self.max_odom_displacement_m}m\n'
+            f'  DEGRADED超时: {self.max_degraded_lock_sec}s (锁定期{self.min_degraded_lock_sec}s)\n'
+            f'  inlier=0 虚假健康检测: >{self.inlier_zero_degraded_early_lost_sec}s+error<{self.inlier_zero_error_ceiling} → LOST\n'
+            f'  静止定时器重置: odom<{self._odom_stationary_threshold_m}m 持续{self._odom_stationary_duration_sec}s → 归零\n'
             f'  过渡时间: {self.transition_duration_sec}s\n'
             f'  发布频率: {self.publish_rate_hz}Hz'
         )
@@ -957,6 +978,53 @@ class LocalizationOdomFusion(Node):
             self._enter_lost()
             return
 
+        # 条件1.5: NDT inlier=0 + 极低 error → 虚假健康 (P0-2)
+        # 长廊几何混叠的强特征: fitness 极低但 inlier 始终为 0
+        # 此时 NDT 已收敛到错误位置且不再调整，必须加速触发 LOST
+        if (not in_lock and
+            self.latest_ndt_inlier <= 0.0 and
+            self.latest_ndt_error < self.inlier_zero_error_ceiling):
+            if self._inlier_zero_start <= 0.0:
+                self._inlier_zero_start = time.monotonic()
+            self._inlier_zero_elapsed = time.monotonic() - self._inlier_zero_start
+            if self._inlier_zero_elapsed > self.inlier_zero_degraded_early_lost_sec:
+                self.get_logger().error(
+                    f'[DEGRADED→LOST] NDT inlier=0 虚假健康检测: '
+                    f'inlier={self.latest_ndt_inlier}, '
+                    f'error={self.latest_ndt_error:.4f}<{self.inlier_zero_error_ceiling}, '
+                    f'持续{self._inlier_zero_elapsed:.0f}s>{self.inlier_zero_degraded_early_lost_sec:.0f}s '
+                    f'→ NDT 已收敛到错误位置，触发 SC 全局重定位')
+                self._enter_lost()
+                return
+        else:
+            self._inlier_zero_start = 0.0
+            self._inlier_zero_elapsed = 0.0
+
+        # ── DEGRADED 静止检测: 里程计长时间不动 → 重置定时器 (P0-3) ──
+        # 比 nav_state 变更更可靠，不依赖导航状态消息的精确时序
+        if odom_body is not None and not in_lock:
+            if self._last_odom_body_for_stationary is not None:
+                dx = odom_body['x'] - self._last_odom_body_for_stationary['x']
+                dz = odom_body['z'] - self._last_odom_body_for_stationary['z']
+                moved = math.hypot(dx, dz)
+                if moved < self._odom_stationary_threshold_m:
+                    if self._odom_stationary_start <= 0.0:
+                        self._odom_stationary_start = time.monotonic()
+                    elif (time.monotonic() - self._odom_stationary_start >
+                          self._odom_stationary_duration_sec):
+                        old_elapsed = elapsed
+                        self.degraded_start_time = time.monotonic()
+                        self._odom_stationary_start = 0.0
+                        self.get_logger().info(
+                            f'[DEGRADED] 静止检测: odom 位移 <{self._odom_stationary_threshold_m}m '
+                            f'持续{self._odom_stationary_duration_sec}s，'
+                            f'重置 DEGRADED 计时器 (原已用{old_elapsed:.0f}s → 归零)')
+                else:
+                    self._odom_stationary_start = 0.0
+            self._last_odom_body_for_stationary = odom_body.copy()
+        else:
+            self._odom_stationary_start = 0.0
+
         # 条件2: DEGRADED 总超时
         if elapsed > self.max_degraded_lock_sec:
             self.get_logger().warn(
@@ -1055,6 +1123,12 @@ class LocalizationOdomFusion(Node):
             self.degraded_lock_until = 0.0       # 平滑恢复成功后清理锁定期状态
             self._lock_ndt_total_frames = 0
             self._lock_ndt_rejected_frames = 0
+            # 清理 inlier=0 虚假健康检测 (P0-2)
+            self._inlier_zero_start = 0.0
+            self._inlier_zero_elapsed = 0.0
+            # 清理 DEGRADED 静止检测 (P0-3)
+            self._odom_stationary_start = 0.0
+            self._last_odom_body_for_stationary = None
             self._publish_fusion_status()
 
     def _update_lost(self, ndt_map_odom: dict, odom_body: dict):
@@ -1129,6 +1203,14 @@ class LocalizationOdomFusion(Node):
         # 锁定期内 NDT 帧统计（用于检测 NDT 持续不可用）
         self._lock_ndt_total_frames = 0
         self._lock_ndt_rejected_frames = 0
+
+        # ── inlier=0 虚假健康检测初始化 (P0-2) ──
+        self._inlier_zero_start = 0.0
+        self._inlier_zero_elapsed = 0.0
+
+        # ── DEGRADED 静止检测初始化 (P0-3) ──
+        self._odom_stationary_start = 0.0
+        self._last_odom_body_for_stationary = None
 
         frozen_yaw = quat_to_yaw(
             self.frozen_map_odom['qx'],
@@ -1274,6 +1356,12 @@ class LocalizationOdomFusion(Node):
         self.degraded_lock_until = 0.0
         self._lock_ndt_total_frames = 0
         self._lock_ndt_rejected_frames = 0
+        # 清理 inlier=0 虚假健康检测 (P0-2)
+        self._inlier_zero_start = 0.0
+        self._inlier_zero_elapsed = 0.0
+        # 清理 DEGRADED 静止检测 (P0-3)
+        self._odom_stationary_start = 0.0
+        self._last_odom_body_for_stationary = None
 
     # =========================================================================
     # 状态判断辅助函数

@@ -1,5 +1,51 @@
 # 变更记录
 
+## [2026-05-26 20:50:00] P0+P1: NDT跳变/融合链路修复 — 长廊定位漂移根治
+
+- **修改文件**:
+  - `src/humanoid_navigation2/humanoid_navigation2/localization_odom_fusion.py`
+  - `src/humanoid_navigation2/launch/navigation2_fusion.launch.py`
+  - `src/lidar_localization/param/localization.yaml`
+
+- **背景**: 2026-05-26 20:20 导航测试，点位7-12区域 NDT 频繁跳变（0.8-1.8m），fusion DEGRADED 持续180s后 LOST，恢复时接受 3.26m 位姿跳变导致定位崩溃。根因分析见下方五条链路。
+
+- **P0-1: 收紧 pose_jump_reacquire 参数** (`navigation2_fusion.launch.py`):
+  - `pose_jump_reacquire_max_translation`: 2.00→0.50 (长廊中单帧真实运动不超过0.5m)
+  - `pose_jump_reacquire_max_yaw`: 0.45→0.20
+  - `pose_jump_reacquire_max_fitness`: 0.10→0.05
+  - `pose_jump_reacquire_required_frames`: 2→5 (需要更多帧确认非偶然错误收敛)
+  - `pose_jump_reacquire_xy_tolerance`: 0.50→0.30
+  - `pose_jump_reacquire_yaw_tolerance`: 0.25→0.15
+
+- **P0-2: inlier=0 虚假健康检测** (`localization_odom_fusion.py`):
+  - 新增参数 `inlier_zero_degraded_early_lost_sec`(30s) + `inlier_zero_error_ceiling`(0.01)
+  - 锁定期后在 `_update_degraded` 增加条件1.5: inlier=0 + error<0.01 持续30s → 虚假健康 → 加速 LOST
+  - 原理: 长廊几何混叠下NDT收敛到错误位置后fitness极低但inlier始终为0
+
+- **P0-3: DEGRADED 静止检测定时器重置** (`localization_odom_fusion.py`):
+  - 新增基于里程计位移的静止检测: odom位移<0.1m持续5s → 自动重置 `degraded_start_time`
+  - 替代不可靠的 nav_state 变更检测（快速连续导航时状态转换可能漏过）
+  - 新增参数 `_odom_stationary_threshold_m`(0.1), `_odom_stationary_duration_sec`(5.0)
+
+- **P1-4: 收紧 LOST recovery 软验收** (`navigation2_fusion.launch.py`):
+  - `recovery_pose_max_xy_error_m`: 5.0→2.0 (显式覆盖默认值)
+  - `recovery_pose_accept_if_ndt_error_below`: 0.03→0.01
+  - `recovery_pose_skip_odom_after_displacement_m`: 20→10
+  - `max_degraded_lock_sec`: 180→60 (缩短DEGRADED超时减少odom累积漂移)
+
+- **P1-5: NDT匹配参数优化** (`localization.yaml`):
+  - `ndt_resolution`: 1.0→0.5 (更细网格增强长廊方向约束)
+  - `ndt_max_iterations`: 35→50 (更细网格需要更多迭代收敛)
+  - `score_threshold`: 2.0→1.0 (收紧匹配质量要求)
+  - `voxel_leaf_size`: 0.2→0.15 (配合resolution保持1/3比例)
+
+- **根因总结**:
+  1. 长廊几何混叠 → NDT收敛到错误局部极小值 (fitness 0.0009但位姿偏移3m)
+  2. pose_jump_reacquire 2帧确认+2m容差 → 错误收敛被确认
+  3. DEGRADED 定时器依赖 nav_state 变更重置 → 快速导航中漏过
+  4. inlier=0 异常信号被忽略 → 虚假健康持续3分钟
+  5. LOST 软验收 5m+odom_displacement → 3.26m跳变被放行
+
 ## [2026-05-26 20:15:00] Fusion DEGRADED 锁定期方案 (替代循环检测)
 
 - **修改文件**:

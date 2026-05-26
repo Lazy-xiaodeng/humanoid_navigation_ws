@@ -661,12 +661,12 @@ def generate_launch_description():
                 'initialpose_max_pose_jump_translation': 2.00,
                 'initialpose_max_pose_jump_yaw': 1.20,
                 'pose_jump_reacquire_enabled': True,
-                'pose_jump_reacquire_max_translation': 2.00,
-                'pose_jump_reacquire_max_yaw': 0.45,
-                'pose_jump_reacquire_max_fitness': 0.10,
-                'pose_jump_reacquire_required_frames': 2,
-                'pose_jump_reacquire_xy_tolerance': 0.50,
-                'pose_jump_reacquire_yaw_tolerance': 0.25,
+                'pose_jump_reacquire_max_translation': 0.50,   # ★ 从2.0→0.5: 长廊中超过0.5m/帧的真实运动极罕见
+                'pose_jump_reacquire_max_yaw': 0.20,           # ★ 从0.45→0.2: 单帧旋转不可能超过~12°
+                'pose_jump_reacquire_max_fitness': 0.05,       # ★ 从0.1→0.05: 只接受高质量的重新收敛
+                'pose_jump_reacquire_required_frames': 5,       # ★ 从2→5: 长廊NLOS需更多帧确认非偶然
+                'pose_jump_reacquire_xy_tolerance': 0.30,       # ★ 从0.5→0.3: 收紧一致性要求
+                'pose_jump_reacquire_yaw_tolerance': 0.15,      # ★ 从0.25→0.15: 收紧一致性要求
                 'min_scan_points': 50,
                 'localization_status_topic': '/localization/ndt_status',
             }
@@ -729,12 +729,24 @@ def generate_launch_description():
             'transition_duration_sec': 2.0,
             # ★ DEGRADED 锁定期: 进入 DEGRADED 后强制冷静期，拒绝 NDT 假恢复
             'min_degraded_lock_sec': 30.0,
-            'max_degraded_lock_sec': 180.0,
+            'max_degraded_lock_sec': 60.0,    # ★ 从180→60: 过长DEGRADED导致odom漂移积累
             'lock_recovery_healthy_consecutive_frames': 10,
             'lock_recovery_max_correction_m': 0.3,
             'lock_early_lost_rejection_rate': 0.9,
             'lock_early_lost_min_frames': 30,
             'recovery_pose_jump_max_m': 5.0,
+            # ★ LOST recovery 软验收收紧 (P1-4)
+            # 原默认值太宽: max_xy_error=5m+odom_displacement 几乎全放行
+            'recovery_pose_soft_gate_enabled': True,
+            'recovery_pose_max_xy_error_m': 2.0,                # 从5.0→2.0
+            'recovery_pose_accept_if_ndt_error_below': 0.01,    # 从0.03→0.01
+            'recovery_pose_skip_odom_after_displacement_m': 10.0,  # 从20→10
+            'recovery_pose_max_status_age_sec': 2.0,
+            'recovery_pose_max_pcl_age_sec': 2.0,
+            # ★ NDT inlier=0 异常检测 (P0-2)
+            # 长廊中NDT收敛到错误位置时fitness极低但inlier始终为0
+            'inlier_zero_degraded_early_lost_sec': 30.0,   # inlier=0持续30s → 加速LOST
+            'inlier_zero_error_ceiling': 0.01,  # NDT error低于此值+inlier=0 → 虚假健康
             'publish_rate_hz': 30.0,
             'verbose_logging': True,
         },
