@@ -509,15 +509,15 @@ def generate_launch_description():
                 'score_threshold': 0.3,
                 # ★ 严格阈值: odom兜底可靠,NDT宁可拒帧也不接受低质量匹配
                 'reject_pose_jump': True,
-                'max_pose_jump_translation': 0.80,
-                'max_pose_jump_yaw': 0.45,
+                'max_pose_jump_translation': 0.40,
+                'max_pose_jump_yaw': 0.30,
                 'initialpose_relax_duration_sec': 4.0,
                 'initialpose_max_pose_jump_translation': 2.00,
                 'initialpose_max_pose_jump_yaw': 1.20,
                 'pose_jump_reacquire_enabled': True,
-                'pose_jump_reacquire_max_translation': 2.00,
-                'pose_jump_reacquire_max_yaw': 0.45,
-                'pose_jump_reacquire_max_fitness': 0.10,
+                'pose_jump_reacquire_max_translation': 0.80,
+                'pose_jump_reacquire_max_yaw': 0.30,
+                'pose_jump_reacquire_max_fitness': 0.08,
                 'pose_jump_reacquire_required_frames': 2,
                 'pose_jump_reacquire_xy_tolerance': 0.50,
                 'pose_jump_reacquire_yaw_tolerance': 0.25,
@@ -586,7 +586,7 @@ def generate_launch_description():
             'pose_jump_degraded_from_status': True,    # NDT status reason 检测
             'pose_jump_degraded_from_pcl': True,       # /pcl_pose 帧间跳变兜底
             'pose_jump_pcl_threshold_m': 0.5,          # /pcl_pose 跳变阈值(m)
-            'pose_jump_correction_threshold_m': 0.5,   # NDT correction_translation 阈值(m)
+            'pose_jump_correction_threshold_m': 0.35,   # NDT correction_translation 阈值(m)
             'transition_duration_sec': 2.0,
             # ★ DEGRADED 锁定期: 进入 DEGRADED 后强制冷静期，拒绝 NDT 假恢复
             'min_degraded_lock_sec': 30.0,               # 最短锁定期(s)，此期间忽略 NDT 恢复信号

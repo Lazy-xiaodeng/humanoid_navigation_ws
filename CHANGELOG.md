@@ -1,5 +1,27 @@
 # 变更记录
 
+## [2026-05-26 22:45:00] test3 导航失控修复: 点位8-9 NDT漂移阈值收紧 + TF冲突分析
+
+- **修改文件**:
+  - `src/humanoid_navigation2/launch/navigation2_fusion_sc.launch.py`
+
+- **根因**: test3 导航点位8→9 区域，NDT 在几何退化区产出 0.5-0.77m 系统性错误修正，单帧低于 0.8m 阈值被接受，累积导致位姿漂移 3m+。同时 NDT C++ 节点在 fusion DEGRADED 状态仍持续发布 map->odom TF，与 fusion 冻结的 TF 产生时间戳竞争（30Hz vs 10Hz），下游节点位姿来回跳动，Nav2 控制器反复重算路径，robot 右转失控。
+
+- **修改内容**:
+  - `max_pose_jump_translation`: 0.80 → 0.40 (拦截 test3 中的 0.5-0.77m 致命区间)
+  - `max_pose_jump_yaw`: 0.45 → 0.30
+  - `pose_jump_reacquire_max_translation`: 2.00 → 0.80 (降低重定位触发门槛，原来太高永不触发)
+  - `pose_jump_reacquire_max_fitness`: 0.10 → 0.08
+  - `pose_jump_reacquire_max_yaw`: 0.45 → 0.30
+  - `pose_jump_correction_threshold_m`: 0.50 → 0.35 (Fusion DEGRADED 更早触发)
+  - NDT 网格分辨率: 确认已在上次 commit 调至 0.5m，无需再次修改
+
+- **效果预期**:
+  - test3 的 32 帧 0.4-0.8m 漂移修正全部被拦截
+  - Fusion 在修正 >0.35m 时提前进入 DEGRADED 冻结 TF
+  - 重定位触发条件从 (连续2帧>2.0m) 降到 (连续2帧>0.8m)，实际可生效
+  - 风险: 急转弯时合法修正 0.3-0.4m 可能被误拒 (从 test3 数据看健康期修正<0.01m，风险低)
+
 ## [2026-05-26 20:50:00] P0+P1: NDT跳变/融合链路修复 — 长廊定位漂移根治
 
 - **修改文件**:
