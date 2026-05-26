@@ -1,0 +1,4 @@
+# command: ros2 topic echo /diagnostics
+# started: 2026-05-24 16:52:53 +0800
+WARNING: topic [/diagnostics] does not appear to be published yet
+Could not determine the type for the passed topic

@@ -56,6 +56,7 @@
   <depend>lidar_localization_ros2</depend>
   <depend>hdl_localization</depend>
   <depend>hdl_global_localization</depend>
+  <depend>humanoid_scancontext_global_localization</depend>
 
   <!-- ===== 测试 ===== -->
   <test_depend>ament_copyright</test_depend>

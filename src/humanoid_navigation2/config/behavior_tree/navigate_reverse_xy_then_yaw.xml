@@ -20,7 +20,7 @@
                       mode="goal_position_reverse"
                       robot_base_frame="base_footprint"
                       yaw_tolerance="0.25"
-                      position_tolerance="0.20"
+                      position_tolerance="0.80"
                       transform_tolerance="0.8"
                       time_allowance="20.0"
                       max_attempts="3"

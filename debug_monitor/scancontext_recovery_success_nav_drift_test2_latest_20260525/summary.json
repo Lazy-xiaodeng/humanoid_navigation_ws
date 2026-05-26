@@ -1,0 +1,13 @@
+{
+  "samples": 753,
+  "conservative_success": 488,
+  "conservative_success_rate": 0.648074369189907,
+  "global_additional_success": 3,
+  "global_additional_success_rate": 0.00398406374501992,
+  "total_success": 491,
+  "total_success_rate": 0.6520584329349269,
+  "global_wrong_publish": 237,
+  "global_wrong_publish_rate": 0.3147410358565737,
+  "no_recovery_publish": 25,
+  "no_recovery_publish_rate": 0.033200531208499334
+}

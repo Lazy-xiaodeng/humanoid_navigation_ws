@@ -651,7 +651,7 @@ def generate_launch_description():
             {
                 'use_sim_time': use_sim_time,
                 'set_initial_pose': False,
-                'score_threshold': 2.0,
+                'score_threshold': 0.3,
                 'reject_pose_jump': False,
                 'max_pose_jump_translation': 0.80,
                 'max_pose_jump_yaw': 0.45,
@@ -712,6 +712,7 @@ def generate_launch_description():
             'degraded_consecutive_frames': 2,
             'max_degraded_duration_sec': 120.0,
             'max_odom_displacement_m': 30.0,
+            'init_timeout_sec': 20.0,               # INITIALIZING超时，超时后主动请求recovery
             'transition_duration_sec': 2.0,
             'publish_rate_hz': 30.0,
             'verbose_logging': True,

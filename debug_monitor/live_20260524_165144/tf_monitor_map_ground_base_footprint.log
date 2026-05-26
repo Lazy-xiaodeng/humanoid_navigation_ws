@@ -1,0 +1,7 @@
+# command: ros2 run tf2_ros tf2_monitor map_ground base_footprint
+# started: 2026-05-24 16:51:45 +0800
+[INFO] [1779612706.775285894] [tf2_monitor_main]: Waiting for transform map_ground ->  base_footprint: Invalid frame ID "map_ground" passed to canTransform argument target_frame - frame does not exist
+[INFO] [1779612707.780026424] [tf2_monitor_main]: Waiting for transform map_ground ->  base_footprint: Invalid frame ID "map_ground" passed to canTransform argument target_frame - frame does not exist
+[INFO] [1779612708.780236944] [tf2_monitor_main]: Waiting for transform map_ground ->  base_footprint: Invalid frame ID "map_ground" passed to canTransform argument target_frame - frame does not exist
+[INFO] [1779612709.780821112] [tf2_monitor_main]: Waiting for transform map_ground ->  base_footprint: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
+[INFO] [1779612710.782195461] [tf2_monitor_main]: Waiting for transform map_ground ->  base_footprint: Could not find a connection between 'map_ground' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.

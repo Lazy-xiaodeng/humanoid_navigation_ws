@@ -96,6 +96,7 @@ collect_old_navigation_pids() {
     "nav2_lifecycle_manager.*/lifecycle_manager.*lifecycle_manager_(map|ndt|navigation)"
     "hdl_global_localization_node"
     "component_container_mt.*hdl_bootstrap_container"
+    "scancontext_global_localizer"
     "lidar_localization_node"
     "hdl_bootstrap_to_initialpose"
     "robot_realpose_publisher"

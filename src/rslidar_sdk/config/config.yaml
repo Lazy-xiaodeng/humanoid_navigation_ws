@@ -16,6 +16,7 @@ lidar:
                                    #  If you want to use IMU, please first set ENABLE_IMU_DATA_PARSE to ON in CMakeLists.txt 
       user_layer_bytes: 0          #  Bytes of user layer. thers is no user layer if it is 0         
       tail_layer_bytes: 0          #  Bytes of tail layer. thers is no tail layer if it is 0
+      socket_recv_buf: 67108864    #  64 MiB requested socket receive buffer for high-rate UDP LiDAR packets
 
 
       min_distance: 0.1           #  Minimum distance of point cloud

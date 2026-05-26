@@ -709,6 +709,13 @@ void PCLLocalization::initializeRegistration()
 void PCLLocalization::initialPoseReceived(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg)
 {
   RCLCPP_INFO(get_logger(), "initialPoseReceived");
+  RCLCPP_INFO(
+    get_logger(), "initialpose input: frame=%s x=%.3f y=%.3f z=%.3f yaw=%.1fdeg",
+    msg->header.frame_id.c_str(),
+    msg->pose.pose.position.x,
+    msg->pose.pose.position.y,
+    msg->pose.pose.position.z,
+    tf2::getYaw(msg->pose.pose.orientation) * 180.0 / M_PI);
 
   auto initial_pose_msg =
     std::make_shared<geometry_msgs::msg::PoseWithCovarianceStamped>(*msg);
@@ -731,8 +738,12 @@ void PCLLocalization::initialPoseReceived(const geometry_msgs::msg::PoseWithCova
       initial_pose_msg->pose.pose = pose_out.pose;
 
       RCLCPP_INFO(
-        get_logger(), "Transformed initialpose from %s to %s",
-        msg->header.frame_id.c_str(), global_frame_id_.c_str());
+        get_logger(), "Transformed initialpose from %s to %s: x=%.3f y=%.3f z=%.3f yaw=%.1fdeg",
+        msg->header.frame_id.c_str(), global_frame_id_.c_str(),
+        initial_pose_msg->pose.pose.position.x,
+        initial_pose_msg->pose.pose.position.y,
+        initial_pose_msg->pose.pose.position.z,
+        tf2::getYaw(initial_pose_msg->pose.pose.orientation) * 180.0 / M_PI);
     } catch (tf2::TransformException & ex) {
       RCLCPP_WARN(
         this->get_logger(), "Failed to transform initialpose from %s to %s: %s",
@@ -742,6 +753,13 @@ void PCLLocalization::initialPoseReceived(const geometry_msgs::msg::PoseWithCova
   }
 
   applyPlanarPoseConstraint(initial_pose_msg->pose.pose);
+  RCLCPP_INFO(
+    get_logger(), "initialpose stored: frame=%s x=%.3f y=%.3f z=%.3f yaw=%.1fdeg",
+    initial_pose_msg->header.frame_id.c_str(),
+    initial_pose_msg->pose.pose.position.x,
+    initial_pose_msg->pose.pose.position.y,
+    initial_pose_msg->pose.pose.position.z,
+    tf2::getYaw(initial_pose_msg->pose.pose.orientation) * 180.0 / M_PI);
   
   initialpose_recieved_ = true;  // 标记已接收初始位姿
   corrent_pose_with_cov_stamped_ptr_ = initial_pose_msg;  // 保存当前位姿

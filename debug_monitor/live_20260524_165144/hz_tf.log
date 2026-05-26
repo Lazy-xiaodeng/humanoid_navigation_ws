@@ -1,0 +1,8 @@
+# command: ros2 topic hz /tf --window 200
+# started: 2026-05-24 16:51:45 +0800
+average rate: 22.712
+	min: 0.000s max: 0.396s std dev: 0.07882s window: 24
+average rate: 36.699
+	min: 0.000s max: 0.396s std dev: 0.04743s window: 76
+average rate: 52.036
+	min: 0.000s max: 0.396s std dev: 0.03556s window: 160

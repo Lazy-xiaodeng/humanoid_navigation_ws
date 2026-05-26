@@ -1,0 +1,528 @@
+[
+  {
+    "start_sample": 3,
+    "stamp": 1779695607.599,
+    "odom_x": -0.0328,
+    "odom_y": -0.0125,
+    "nearest_waypoint": "点位1",
+    "waypoint_dist": 0.0358,
+    "success": true,
+    "reason": "conservative accepted by simulated NDT",
+    "attempts": 1,
+    "final_mode": "conservative",
+    "final_error": 0.0387,
+    "final_nearest_waypoint": "点位1",
+    "attempt_trace": [
+      {
+        "mode": "conservative",
+        "x": -0.0032,
+        "y": 0.0123,
+        "error": 0.0387,
+        "count": 1,
+        "nearest_waypoint": "点位1",
+        "first_sample": 3,
+        "last_sample": 3,
+        "published": true,
+        "ndt_result": "accepted"
+      }
+    ]
+  },
+  {
+    "start_sample": 50,
+    "stamp": 1779695704.298,
+    "odom_x": 0.0315,
+    "odom_y": -8.8182,
+    "nearest_waypoint": "点位2",
+    "waypoint_dist": 0.187,
+    "success": true,
+    "reason": "global accepted by simulated NDT",
+    "attempts": 5,
+    "final_mode": "global",
+    "final_error": 1.2364558890456048,
+    "final_nearest_waypoint": "点位3",
+    "attempt_trace": [
+      {
+        "mode": "conservative",
+        "x": 22.1509,
+        "y": 17.8392,
+        "error": 34.6394,
+        "count": 1,
+        "nearest_waypoint": "点位18",
+        "first_sample": 50,
+        "last_sample": 50,
+        "published": false,
+        "ndt_result": "no_initialpose"
+      },
+      {
+        "mode": "conservative",
+        "x": 22.1509,
+        "y": 17.8392,
+        "error": 34.6394,
+        "count": 1,
+        "nearest_waypoint": "点位18",
+        "first_sample": 50,
+        "last_sample": 50,
+        "published": false,
+        "ndt_result": "no_initialpose"
+      },
+      {
+        "mode": "conservative",
+        "x": 22.1509,
+        "y": 17.8392,
+        "error": 34.6394,
+        "count": 1,
+        "nearest_waypoint": "点位18",
+        "first_sample": 50,
+        "last_sample": 50,
+        "published": false,
+        "ndt_result": "no_initialpose"
+      },
+      {
+        "mode": "global",
+        "error": Infinity,
+        "count": 0,
+        "nearest_waypoint": "",
+        "first_sample": 59,
+        "last_sample": 59,
+        "published": false,
+        "ndt_result": "no_initialpose"
+      },
+      {
+        "mode": "global",
+        "x": -0.9899666666666667,
+        "y": -11.009566666666666,
+        "error": 1.2364558890456048,
+        "count": 3,
+        "nearest_waypoint": "点位3",
+        "first_sample": 65,
+        "last_sample": 67,
+        "published": true,
+        "ndt_result": "accepted"
+      }
+    ]
+  },
+  {
+    "start_sample": 103,
+    "stamp": 1779695813.0,
+    "odom_x": -3.2835,
+    "odom_y": -11.2317,
+    "nearest_waypoint": "点位4",
+    "waypoint_dist": 0.1896,
+    "success": false,
+    "reason": "max attempts reached",
+    "attempts": 5,
+    "final_mode": "global",
+    "final_error": 17.579097604973928,
+    "final_nearest_waypoint": "点位24",
+    "attempt_trace": [
+      {
+        "mode": "conservative",
+        "x": -1.2,
+        "y": 6.3627,
+        "error": 17.7173,
+        "count": 1,
+        "nearest_waypoint": "点位23",
+        "first_sample": 103,
+        "last_sample": 103,
+        "published": false,
+        "ndt_result": "no_initialpose"
+      },
+      {
+        "mode": "conservative",
+        "x": -1.2,
+        "y": 6.3627,
+        "error": 17.7173,
+        "count": 1,
+        "nearest_waypoint": "点位23",
+        "first_sample": 103,
+        "last_sample": 103,
+        "published": false,
+        "ndt_result": "no_initialpose"
+      },
+      {
+        "mode": "conservative",
+        "x": -1.2,
+        "y": 6.3627,
+        "error": 17.7173,
+        "count": 1,
+        "nearest_waypoint": "点位23",
+        "first_sample": 103,
+        "last_sample": 103,
+        "published": false,
+        "ndt_result": "no_initialpose"
+      },
+      {
+        "mode": "global",
+        "x": -1.28466,
+        "y": 6.24054,
+        "error": 17.584511586370546,
+        "count": 5,
+        "nearest_waypoint": "点位24",
+        "first_sample": 112,
+        "last_sample": 117,
+        "published": true,
+        "ndt_result": "rejected"
+      },
+      {
+        "mode": "global",
+        "x": -1.28466,
+        "y": 6.24054,
+        "error": 17.579097604973928,
+        "count": 5,
+        "nearest_waypoint": "点位24",
+        "first_sample": 115,
+        "last_sample": 120,
+        "published": true,
+        "ndt_result": "rejected"
+      }
+    ]
+  },
+  {
+    "start_sample": 167,
+    "stamp": 1779695944.701,
+    "odom_x": -3.888,
+    "odom_y": -5.7433,
+    "nearest_waypoint": "点位6",
+    "waypoint_dist": 0.5101,
+    "success": false,
+    "reason": "max attempts reached",
+    "attempts": 5,
+    "final_mode": "global",
+    "final_error": 11.184448639070235,
+    "final_nearest_waypoint": "点位9",
+    "attempt_trace": [
+      {
+        "mode": "conservative",
+        "x": 21.2479,
+        "y": 18.4169,
+        "error": 34.8645,
+        "count": 1,
+        "nearest_waypoint": "点位17",
+        "first_sample": 167,
+        "last_sample": 167,
+        "published": false,
+        "ndt_result": "no_initialpose"
+      },
+      {
+        "mode": "conservative",
+        "x": 21.2479,
+        "y": 18.4169,
+        "error": 34.8645,
+        "count": 1,
+        "nearest_waypoint": "点位17",
+        "first_sample": 167,
+        "last_sample": 167,
+        "published": false,
+        "ndt_result": "no_initialpose"
+      },
+      {
+        "mode": "conservative",
+        "x": 21.2479,
+        "y": 18.4169,
+        "error": 34.8645,
+        "count": 1,
+        "nearest_waypoint": "点位17",
+        "first_sample": 167,
+        "last_sample": 167,
+        "published": false,
+        "ndt_result": "no_initialpose"
+      },
+      {
+        "mode": "global",
+        "x": -3.4269,
+        "y": 8.9754,
+        "error": 11.116056218821495,
+        "count": 6,
+        "nearest_waypoint": "点位9",
+        "first_sample": 176,
+        "last_sample": 181,
+        "published": true,
+        "ndt_result": "rejected"
+      },
+      {
+        "mode": "global",
+        "x": -3.4269,
+        "y": 8.9754,
+        "error": 11.184448639070235,
+        "count": 5,
+        "nearest_waypoint": "点位9",
+        "first_sample": 179,
+        "last_sample": 184,
+        "published": true,
+        "ndt_result": "rejected"
+      }
+    ]
+  },
+  {
+    "start_sample": 226,
+    "stamp": 1779696066.302,
+    "odom_x": -3.8441,
+    "odom_y": 11.0103,
+    "nearest_waypoint": "点位9",
+    "waypoint_dist": 0.1944,
+    "success": false,
+    "reason": "max attempts reached",
+    "attempts": 5,
+    "final_mode": "global",
+    "final_error": 2.2807270775395776,
+    "final_nearest_waypoint": "点位9",
+    "attempt_trace": [
+      {
+        "mode": "conservative",
+        "x": -1.5488,
+        "y": 10.3572,
+        "error": 2.3865,
+        "count": 1,
+        "nearest_waypoint": "点位9",
+        "first_sample": 226,
+        "last_sample": 226,
+        "published": false,
+        "ndt_result": "no_initialpose"
+      },
+      {
+        "mode": "conservative",
+        "x": -1.5488,
+        "y": 10.3572,
+        "error": 2.3865,
+        "count": 1,
+        "nearest_waypoint": "点位9",
+        "first_sample": 226,
+        "last_sample": 226,
+        "published": false,
+        "ndt_result": "no_initialpose"
+      },
+      {
+        "mode": "conservative",
+        "x": -1.5488,
+        "y": 10.3572,
+        "error": 2.3865,
+        "count": 1,
+        "nearest_waypoint": "点位9",
+        "first_sample": 226,
+        "last_sample": 226,
+        "published": false,
+        "ndt_result": "no_initialpose"
+      },
+      {
+        "mode": "global",
+        "x": -1.6472333333333333,
+        "y": 10.348733333333334,
+        "error": 2.286256122766845,
+        "count": 6,
+        "nearest_waypoint": "点位9",
+        "first_sample": 235,
+        "last_sample": 240,
+        "published": true,
+        "ndt_result": "rejected"
+      },
+      {
+        "mode": "global",
+        "x": -1.6472333333333333,
+        "y": 10.348733333333334,
+        "error": 2.2807270775395776,
+        "count": 6,
+        "nearest_waypoint": "点位9",
+        "first_sample": 238,
+        "last_sample": 243,
+        "published": true,
+        "ndt_result": "rejected"
+      }
+    ]
+  },
+  {
+    "start_sample": 272,
+    "stamp": 1779696161.006,
+    "odom_x": 1.5088,
+    "odom_y": 10.3765,
+    "nearest_waypoint": "点位10",
+    "waypoint_dist": 0.2643,
+    "success": true,
+    "reason": "conservative accepted by simulated NDT",
+    "attempts": 1,
+    "final_mode": "conservative",
+    "final_error": 0.8897,
+    "final_nearest_waypoint": "点位10",
+    "attempt_trace": [
+      {
+        "mode": "conservative",
+        "x": 1.5174,
+        "y": 9.4869,
+        "error": 0.8897,
+        "count": 1,
+        "nearest_waypoint": "点位10",
+        "first_sample": 272,
+        "last_sample": 272,
+        "published": true,
+        "ndt_result": "accepted"
+      }
+    ]
+  },
+  {
+    "start_sample": 324,
+    "stamp": 1779696267.608,
+    "odom_x": 5.407,
+    "odom_y": 18.7971,
+    "nearest_waypoint": "点位13",
+    "waypoint_dist": 0.5102,
+    "success": true,
+    "reason": "conservative accepted by simulated NDT",
+    "attempts": 1,
+    "final_mode": "conservative",
+    "final_error": 0.9019,
+    "final_nearest_waypoint": "点位13",
+    "attempt_trace": [
+      {
+        "mode": "conservative",
+        "x": 4.8851,
+        "y": 18.0616,
+        "error": 0.9019,
+        "count": 1,
+        "nearest_waypoint": "点位13",
+        "first_sample": 324,
+        "last_sample": 324,
+        "published": true,
+        "ndt_result": "accepted"
+      }
+    ]
+  },
+  {
+    "start_sample": 392,
+    "stamp": 1779696406.807,
+    "odom_x": 5.813,
+    "odom_y": 18.5198,
+    "nearest_waypoint": "点位13",
+    "waypoint_dist": 0.833,
+    "success": true,
+    "reason": "conservative accepted by simulated NDT",
+    "attempts": 1,
+    "final_mode": "conservative",
+    "final_error": 0.9437,
+    "final_nearest_waypoint": "点位13",
+    "attempt_trace": [
+      {
+        "mode": "conservative",
+        "x": 5.8663,
+        "y": 17.5776,
+        "error": 0.9437,
+        "count": 1,
+        "nearest_waypoint": "点位13",
+        "first_sample": 392,
+        "last_sample": 392,
+        "published": true,
+        "ndt_result": "accepted"
+      }
+    ]
+  },
+  {
+    "start_sample": 457,
+    "stamp": 1779696540.704,
+    "odom_x": 5.8882,
+    "odom_y": 18.4809,
+    "nearest_waypoint": "点位13",
+    "waypoint_dist": 0.9089,
+    "success": true,
+    "reason": "conservative accepted by simulated NDT",
+    "attempts": 1,
+    "final_mode": "conservative",
+    "final_error": 0.9036,
+    "final_nearest_waypoint": "点位13",
+    "attempt_trace": [
+      {
+        "mode": "conservative",
+        "x": 5.8663,
+        "y": 17.5776,
+        "error": 0.9036,
+        "count": 1,
+        "nearest_waypoint": "点位13",
+        "first_sample": 457,
+        "last_sample": 457,
+        "published": true,
+        "ndt_result": "accepted"
+      }
+    ]
+  },
+  {
+    "start_sample": 558,
+    "stamp": 1779696748.603,
+    "odom_x": 5.9042,
+    "odom_y": 18.4916,
+    "nearest_waypoint": "点位13",
+    "waypoint_dist": 0.9245,
+    "success": true,
+    "reason": "conservative accepted by simulated NDT",
+    "attempts": 1,
+    "final_mode": "conservative",
+    "final_error": 0.9147,
+    "final_nearest_waypoint": "点位13",
+    "attempt_trace": [
+      {
+        "mode": "conservative",
+        "x": 5.8663,
+        "y": 17.5776,
+        "error": 0.9147,
+        "count": 1,
+        "nearest_waypoint": "点位13",
+        "first_sample": 558,
+        "last_sample": 558,
+        "published": true,
+        "ndt_result": "accepted"
+      }
+    ]
+  },
+  {
+    "start_sample": 627,
+    "stamp": 1779696891.098,
+    "odom_x": 5.8976,
+    "odom_y": 18.4859,
+    "nearest_waypoint": "点位13",
+    "waypoint_dist": 0.9181,
+    "success": true,
+    "reason": "conservative accepted by simulated NDT",
+    "attempts": 1,
+    "final_mode": "conservative",
+    "final_error": 0.9089,
+    "final_nearest_waypoint": "点位13",
+    "attempt_trace": [
+      {
+        "mode": "conservative",
+        "x": 5.8663,
+        "y": 17.5776,
+        "error": 0.9089,
+        "count": 1,
+        "nearest_waypoint": "点位13",
+        "first_sample": 627,
+        "last_sample": 627,
+        "published": true,
+        "ndt_result": "accepted"
+      }
+    ]
+  },
+  {
+    "start_sample": 736,
+    "stamp": 1779697115.4,
+    "odom_x": 5.9015,
+    "odom_y": 18.4742,
+    "nearest_waypoint": "点位13",
+    "waypoint_dist": 0.9226,
+    "success": true,
+    "reason": "conservative accepted by simulated NDT",
+    "attempts": 1,
+    "final_mode": "conservative",
+    "final_error": 0.8973,
+    "final_nearest_waypoint": "点位13",
+    "attempt_trace": [
+      {
+        "mode": "conservative",
+        "x": 5.8663,
+        "y": 17.5776,
+        "error": 0.8973,
+        "count": 1,
+        "nearest_waypoint": "点位13",
+        "first_sample": 736,
+        "last_sample": 736,
+        "published": true,
+        "ndt_result": "accepted"
+      }
+    ]
+  }
+]

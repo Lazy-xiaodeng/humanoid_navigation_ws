@@ -1,0 +1,8 @@
+# command: ros2 topic hz /odom --window 100
+# started: 2026-05-24 16:51:45 +0800
+average rate: 7.894
+	min: 0.000s max: 0.294s std dev: 0.10296s window: 9
+average rate: 6.510
+	min: 0.000s max: 0.312s std dev: 0.10065s window: 14
+average rate: 6.598
+	min: 0.000s max: 0.404s std dev: 0.10601s window: 21

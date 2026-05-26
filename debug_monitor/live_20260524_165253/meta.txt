@@ -1,0 +1,10 @@
+start_time=2026-05-24 16:52:53 +0800
+workspace=/home/ubuntu/humanoid_ws
+monitor_dir=/home/ubuntu/humanoid_ws/debug_monitor/live_20260524_165253
+ros_distro=jazzy
+ros_domain_id=0
+rmw_implementation=rmw_fastrtps_cpp
+latest_nav_log=/home/ubuntu/humanoid_ws/debug_logs/start_navigation_20260524_163944.log
+latest_ros_log_dir=/home/ubuntu/humanoid_ws/debug_logs/ros_20260524_163944
+stop_time=2026-05-24 17:03:41 +0800
+remaining_processes:

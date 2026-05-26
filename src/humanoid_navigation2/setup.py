@@ -60,6 +60,7 @@ setup(
             'localization_odom_fusion = humanoid_navigation2.localization_odom_fusion:main',
             'imu_transformer = humanoid_navigation2.imu_transformer:main',
             'pcd_converter = humanoid_navigation2.pcd_converter:main',
+            'ndt_fusion_monitor = humanoid_navigation2.ndt_fusion_monitor:main',
         ],
     },
 )

@@ -1,0 +1,3 @@
+# command: ros2 topic hz /airy_points --window 100
+# started: 2026-05-24 16:51:45 +0800
+WARNING: topic [/airy_points] does not appear to be published yet

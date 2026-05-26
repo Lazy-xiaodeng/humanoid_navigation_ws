@@ -15,19 +15,16 @@ class FacialDriver(Node):
 
         # 1. 参数配置
         self.declare_parameter('port', '/dev/ttyUSB0')
+        self.declare_parameter('baudrate', 115200)
         self.declare_parameter('config_path', 'src/humanoid_locomotion/config/facial_gestures.yaml') 
         
-        port = self.get_parameter('port').value
+        self.port = self.get_parameter('port').value
+        self.baudrate = self.get_parameter('baudrate').value
         config_path = self.get_parameter('config_path').value
         
         # 2. 串口初始化
-        try:
-            self.ser = serial.Serial(port, 115200, timeout=0.1)
-            self.get_logger().info(f"✅ 已连接到仿生头模块: {port}")
-            time.sleep(2.0)
-        except Exception as e:
-            self.get_logger().error(f"❌ 头部串口连接失败: {e}")
-            self.ser = None  # 修复：必须初始化 self.ser，否则后续访问会报 AttributeError
+        self.ser = None
+        self.connect_serial()
 
 
         # 3. 加载 YAML 动作库
@@ -79,9 +76,13 @@ class FacialDriver(Node):
 
         # 清空串口缓冲区，避免指令堆积
         if self.ser and self.ser.is_open:
-            self.ser.flushInput()
-            self.ser.flushOutput()
-            self.get_logger().info("🧹 清空串口缓冲区，避免指令残留")
+            try:
+                self.ser.reset_input_buffer()
+                self.ser.reset_output_buffer()
+                self.get_logger().info("🧹 清空串口缓冲区，避免指令残留")
+            except (serial.SerialException, OSError) as e:
+                self.get_logger().error(f"❌ 清空串口缓冲区失败，将尝试重连: {e}")
+                self.close_serial()
 
         self.is_interrupted = False
         self.current_gesture = action_name
@@ -127,8 +128,12 @@ class FacialDriver(Node):
         self.get_logger().info(f"🎬 执行表情: {name}")
 
         if self.ser and self.ser.is_open:
-            self.ser.flushInput()
-            self.ser.flushOutput()
+            try:
+                self.ser.reset_input_buffer()
+                self.ser.reset_output_buffer()
+            except (serial.SerialException, OSError) as e:
+                self.get_logger().error(f"❌ 清空串口缓冲区失败，将尝试重连: {e}")
+                self.close_serial()
 
         for cmd in commands:
             if self.is_interrupted:
@@ -160,13 +165,38 @@ class FacialDriver(Node):
                 else:
                     time.sleep(0.1)
 
+    def connect_serial(self):
+        """Open the facial serial port if it is not already open."""
+        if self.ser and self.ser.is_open:
+            return True
+
+        try:
+            self.ser = serial.Serial(self.port, self.baudrate, timeout=0.1)
+            self.get_logger().info(f"✅ 已连接到仿生头模块: {self.port}, baudrate={self.baudrate}")
+            time.sleep(2.0)
+            return True
+        except Exception as e:
+            self.get_logger().error(f"❌ 头部串口连接失败: {e}")
+            self.ser = None
+            return False
+
+    def close_serial(self):
+        """Close and forget a broken serial handle."""
+        if self.ser:
+            try:
+                if self.ser.is_open:
+                    self.ser.close()
+            except Exception:
+                pass
+        self.ser = None
+
     def send_raw(self, cmd_str):
         """发送原始指令（自动补全\r\n，兼容硬件）"""
         if not cmd_str or cmd_str.strip() == "":
             self.get_logger().warning("⚠️ 空指令，忽略发送")
             return
 
-        if not (self.ser and self.ser.is_open):
+        if not self.connect_serial():
             self.get_logger().error("❌ 串口未连接，无法发送指令")
             return
 
@@ -174,8 +204,9 @@ class FacialDriver(Node):
             send_cmd = cmd_str.strip() + "\r\n"
             self.ser.write(send_cmd.encode('utf-8'))
             self.get_logger().info(f"Serial Out: {send_cmd.strip()}")
-        except serial.SerialException as e:
-            self.get_logger().error(f"❌ 串口发送失败: {e}")
+        except (serial.SerialException, OSError) as e:
+            self.get_logger().error(f"❌ 串口发送失败，将关闭串口并等待下次指令重连: {e}")
+            self.close_serial()
         except Exception as e:
             self.get_logger().error(f"❌ 指令发送异常: {e}")
 

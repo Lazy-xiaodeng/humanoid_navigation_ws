@@ -1,0 +1,4 @@
+started_wall_epoch=1779677238.641474
+jsonl_path=/home/ubuntu/humanoid_ws/debug_monitor/fastlio_drift_live_20260525_104718.jsonl
+http_port=8766
+tf_pairs=map->odom,camera_init->body,map->base_footprint,odom->base_footprint

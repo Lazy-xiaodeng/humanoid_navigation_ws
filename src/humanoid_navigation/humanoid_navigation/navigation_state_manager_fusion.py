@@ -315,8 +315,12 @@ class NavigationStateManagerFusion(Node):
     def _on_fusion_status(self, msg: String):
         """融合节点状态回调"""
         try:
-            import ast
-            data = ast.literal_eval(msg.data) if isinstance(msg.data, str) else json.loads(msg.data)
+            import ast, json as _json
+            # 兼容 JSON (新) 和 Python dict repr (旧) 两种格式
+            try:
+                data = _json.loads(msg.data)
+            except (ValueError, _json.JSONDecodeError):
+                data = ast.literal_eval(msg.data) if isinstance(msg.data, str) else _json.loads(msg.data)
             new_state = data.get('state', 'HEALTHY')
             if new_state != self.latest_fusion_state:
                 self.get_logger().info(

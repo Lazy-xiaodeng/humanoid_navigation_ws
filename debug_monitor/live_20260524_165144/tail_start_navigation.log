@@ -1,0 +1,3 @@
+# command: tail -n 0 -F /home/ubuntu/humanoid_ws/debug_logs/start_navigation_20260524_163944.log
+# started: 2026-05-24 16:51:45 +0800
+[hdl_bootstrap_to_initialpose-27] [INFO] [1779612707.793971891] [hdl_bootstrap_to_initialpose]: updated trusted pose for recovery prior: map->base=(6.054, 10.937, -1.184)

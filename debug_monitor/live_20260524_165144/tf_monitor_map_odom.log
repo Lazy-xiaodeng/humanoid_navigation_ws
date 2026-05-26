@@ -1,0 +1,5 @@
+# command: ros2 run tf2_ros tf2_monitor map odom
+# started: 2026-05-24 16:51:45 +0800
+[INFO] [1779612706.317996294] [tf2_monitor_main]: Waiting for transform map ->  odom: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+[INFO] [1779612707.325603854] [tf2_monitor_main]: Waiting for transform map ->  odom: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+Gathering data on map -> odom for 10 seconds...

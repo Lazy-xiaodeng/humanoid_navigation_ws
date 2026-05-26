@@ -17,8 +17,14 @@ def generate_launch_description():
         package='humanoid_locomotion',
         executable='facial_driver',
         name='facial_driver',
-        parameters=[{'config_path': facial_gestures}], # 加载 YAML 路径
-        output='screen'
+        parameters=[{
+            'config_path': facial_gestures,
+            'port': '/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0',
+            'baudrate': 115200,
+        }], # 加载 YAML 路径
+        output='screen',
+        respawn=True,
+        respawn_delay=2.0,
     )
 
     return LaunchDescription([

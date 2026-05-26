@@ -1,0 +1,86 @@
+# command: ros2 topic echo /diagnostics
+# started: 2026-05-24 16:51:45 +0800
+header:
+  stamp:
+    sec: 1779612709
+    nanosec: 368886103
+  frame_id: ''
+status:
+- level: "\0"
+  name: 'lifecycle_manager_ndt: Nav2 Health'
+  message: Managed nodes are active
+  hardware_id: Nav2
+  values: []
+---
+header:
+  stamp:
+    sec: 1779612710
+    nanosec: 374694845
+  frame_id: ''
+status:
+- level: "\0"
+  name: 'lifecycle_manager_ndt: Nav2 Health'
+  message: Managed nodes are active
+  hardware_id: Nav2
+  values: []
+---
+header:
+  stamp:
+    sec: 1779612710
+    nanosec: 502580167
+  frame_id: ''
+status:
+- level: "\0"
+  name: 'lifecycle_manager_map: Nav2 Health'
+  message: Managed nodes are active
+  hardware_id: Nav2
+  values: []
+---
+header:
+  stamp:
+    sec: 1779612710
+    nanosec: 316913744
+  frame_id: ''
+status:
+- level: "\0"
+  name: 'lifecycle_manager_navigation: Nav2 Health'
+  message: Managed nodes are active
+  hardware_id: Nav2
+  values: []
+---
+header:
+  stamp:
+    sec: 1779612711
+    nanosec: 316878157
+  frame_id: ''
+status:
+- level: "\0"
+  name: 'lifecycle_manager_navigation: Nav2 Health'
+  message: Managed nodes are active
+  hardware_id: Nav2
+  values: []
+---
+header:
+  stamp:
+    sec: 1779612711
+    nanosec: 368822879
+  frame_id: ''
+status:
+- level: "\0"
+  name: 'lifecycle_manager_ndt: Nav2 Health'
+  message: Managed nodes are active
+  hardware_id: Nav2
+  values: []
+---
+header:
+  stamp:
+    sec: 1779612711
+    nanosec: 500932745
+  frame_id: ''
+status:
+- level: "\0"
+  name: 'lifecycle_manager_map: Nav2 Health'
+  message: Managed nodes are active
+  hardware_id: Nav2
+  values: []
+---

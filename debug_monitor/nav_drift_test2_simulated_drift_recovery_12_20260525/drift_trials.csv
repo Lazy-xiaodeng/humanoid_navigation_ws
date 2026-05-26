@@ -1,0 +1,13 @@
+start_sample,stamp,nearest_waypoint,waypoint_dist,success,attempts,final_mode,final_error,final_nearest_waypoint,reason
+6,1779695607.895,点位1,0.037,True,1,conservative,0.0452,点位1,conservative accepted by simulated NDT
+101,1779695708.498,点位2,0.1908,False,5,global,1.0819880082514777,点位3,max attempts reached
+206,1779695820.099,点位4,0.1928,False,5,global,17.59899826559739,点位23,max attempts reached
+336,1779695957.001,点位7,0.9648,True,1,conservative,0.4495,点位7,conservative accepted by simulated NDT
+543,1779696176.802,点位10,0.2515,True,1,conservative,0.9038,点位10,conservative accepted by simulated NDT
+649,1779696288.503,点位13,0.4732,True,1,conservative,0.9889,点位13,conservative accepted by simulated NDT
+784,1779696431.205,点位13,0.8382,True,4,global,0.9535473401986906,点位13,global accepted by simulated NDT
+915,1779696570.004,点位13,0.889,True,1,conservative,0.8979,点位13,conservative accepted by simulated NDT
+1117,1779696783.997,点位13,0.919,True,1,conservative,0.9031,点位13,conservative accepted by simulated NDT
+1255,1779696929.498,点位13,0.9125,True,1,conservative,0.9036,点位13,conservative accepted by simulated NDT
+1326,1779697003.999,点位13,0.9245,True,1,conservative,0.9062,点位13,conservative accepted by simulated NDT
+1420,1779697103.199,点位13,0.9195,True,1,conservative,0.8968,点位13,conservative accepted by simulated NDT

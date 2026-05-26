@@ -1,0 +1,8 @@
+# command: ros2 topic hz /robot_realpose --window 100
+# started: 2026-05-24 16:51:45 +0800
+average rate: 10.500
+	min: 0.000s max: 0.441s std dev: 0.11605s window: 12
+average rate: 10.175
+	min: 0.000s max: 0.441s std dev: 0.08684s window: 22
+average rate: 10.206
+	min: 0.000s max: 0.441s std dev: 0.07104s window: 33

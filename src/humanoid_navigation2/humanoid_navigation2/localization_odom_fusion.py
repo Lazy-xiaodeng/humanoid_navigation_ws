@@ -50,11 +50,10 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
 
-from geometry_msgs.msg import PoseStamped, TransformStamped
+from geometry_msgs.msg import PoseStamped, TransformStamped, PoseWithCovarianceStamped
 from std_msgs.msg import String, Float64
 from tf2_ros import Buffer, TransformListener, TransformBroadcaster
 from tf2_ros.transform_broadcaster import TransformBroadcaster
-from hdl_localization.msg import ScanMatchingStatus
 
 # ── 四元数工具函数 ──────────────────────────────────────────────────────────
 def quat_to_yaw(qx: float, qy: float, qz: float, qw: float) -> float:
@@ -119,6 +118,7 @@ FRAME_BASE_FOOTPRINT = 'base_footprint'
 # ── 状态枚举 ────────────────────────────────────────────────────────────────
 class FusionState:
     """融合节点状态机枚举"""
+    INITIALIZING = 'INITIALIZING'   # 启动阶段，等待首次 NDT/SC 定位成功
     HEALTHY = 'HEALTHY'             # NDT 正常，直通转发
     DEGRADED = 'DEGRADED'           # NDT 退化，冻结 map->odom + odom 传播
     TRANSITIONING = 'TRANSITIONING' # 从 DEGRADED 平滑过渡回 HEALTHY
@@ -199,15 +199,77 @@ class LocalizationOdomFusion(Node):
         self.nav_status_topic = str(
             self.declare_parameter('nav_status_topic', '/navigation_status').value)
 
-        # LOST 时请求 recovery 的冷却时间（秒），防止重复请求
+        # LOST / INITIALIZING 时请求 recovery 的冷却时间（秒），防止重复请求
         self.recovery_request_cooldown_sec = float(
             self.declare_parameter('recovery_request_cooldown_sec', 15.0).value)
+
+        # INITIALIZING 状态超时（秒），超时后主动请求 SC recovery
+        # 防止启动阶段死锁: SC bridge 等 fusion → fusion 等 NDT → NDT 等 SC bridge
+        self.init_timeout_sec = float(
+            self.declare_parameter('init_timeout_sec', 20.0).value)
+
+        # ── LOST recovery 软验收参数 ──
+        # 只拦截明显离谱的重定位结果；不使用 yaw 硬阈值，避免 odom/冻结TF 误差导致正确恢复被拒。
+        self.recovery_pose_soft_gate_enabled = bool(
+            self.declare_parameter('recovery_pose_soft_gate_enabled', True).value)
+        self.recovery_pose_max_xy_error_m = float(
+            self.declare_parameter('recovery_pose_max_xy_error_m', 5.0).value)
+        self.recovery_pose_accept_if_ndt_error_below = float(
+            self.declare_parameter('recovery_pose_accept_if_ndt_error_below', 0.03).value)
+        self.recovery_pose_skip_odom_after_displacement_m = float(
+            self.declare_parameter('recovery_pose_skip_odom_after_displacement_m', 20.0).value)
+        self.recovery_pose_max_status_age_sec = float(
+            self.declare_parameter('recovery_pose_max_status_age_sec', 2.0).value)
+        self.recovery_pose_max_pcl_age_sec = float(
+            self.declare_parameter('recovery_pose_max_pcl_age_sec', 2.0).value)
+
+        # ── NDT pose jump 检测参数 ──
+        # NDT 几何混叠场景下可能 fitness 极低但收敛到错误位置
+        # (fitness=0.003 同时跳变 1.4m)。以下参数在 fitness 判据之外
+        # 增加对 NDT 位姿跳变的感知，防止保护链被旁路。
+        self.pose_jump_degraded_from_status = bool(
+            self.declare_parameter('pose_jump_degraded_from_status', True).value)
+        # status reason 字段触发 DEGRADED 的模式:
+        #   "pose_jump_candidate" — NDT 正在确认跳变（仍在重发布旧 pose）
+        #   "confirmed_pose_jump" — NDT 已接受跳变
+        self.pose_jump_degraded_from_pcl = bool(
+            self.declare_parameter('pose_jump_degraded_from_pcl', True).value)
+        self.pose_jump_pcl_threshold_m = float(
+            self.declare_parameter('pose_jump_pcl_threshold_m', 0.5).value)
+        # NDT correction_translation 直接触发 DEGRADED 的阈值（比 NDT 的 0.8 更敏感）
+        self.pose_jump_correction_threshold_m = float(
+            self.declare_parameter('pose_jump_correction_threshold_m', 0.5).value)
 
         # ── 平滑过渡参数 ──
         # DEGRADED→HEALTHY 平滑过渡时间（秒）
         # 在此时长内从 frozen_map_odom 插值到 ndt_current_map_odom
         self.transition_duration_sec = float(
             self.declare_parameter('transition_duration_sec', 2.0).value)
+
+        # ── DEGRADED 锁定期参数 ──
+        # 进入 DEGRADED 后的最短锁定期，此期间拒绝 NDT 恢复信号
+        # 防止 NDT 快速 pose_jump→错误收敛→report ok→fusion 假恢复循环
+        self.min_degraded_lock_sec = float(
+            self.declare_parameter('min_degraded_lock_sec', 30.0).value)
+        # DEGRADED 总超时（包含锁定期），超时→LOST→SC
+        self.max_degraded_lock_sec = float(
+            self.declare_parameter('max_degraded_lock_sec', 180.0).value)
+        # 锁定期后恢复验证参数
+        # 恢复时需连续健康的帧数（比默认的 3 更严格）
+        self.lock_recovery_healthy_consecutive_frames = int(
+            self.declare_parameter('lock_recovery_healthy_consecutive_frames', 10).value)
+        # 恢复时允许的最大 NDT correction_translation (m)
+        self.lock_recovery_max_correction_m = float(
+            self.declare_parameter('lock_recovery_max_correction_m', 0.3).value)
+        # 锁定期内 NDT 拒绝率超过此比例 → 提前 LOST（NDT 明显无法工作）
+        self.lock_early_lost_rejection_rate = float(
+            self.declare_parameter('lock_early_lost_rejection_rate', 0.9).value)
+        # 锁定期内最少累积帧数后才允许提前 LOST
+        self.lock_early_lost_min_frames = int(
+            self.declare_parameter('lock_early_lost_min_frames', 30).value)
+        # 恢复验证: frozen map→odom 与 NDT 恢复后的 map→odom 跳变超过此值 → 拒绝恢复
+        self.recovery_pose_jump_max_m = float(
+            self.declare_parameter('recovery_pose_jump_max_m', 5.0).value)
 
         # ── 发布参数 ──
         # 融合节点发布 map->odom TF 的频率（Hz）
@@ -237,12 +299,23 @@ class LocalizationOdomFusion(Node):
         # =====================================================================
 
         # 订阅 NDT 扫描匹配状态（/localization/ndt_status）
-        # 消息类型: hdl_localization/msg/ScanMatchingStatus
-        # 关键字段: has_converged(bool), matching_error(float32), inlier_fraction(float32)
+        # 消息类型: std_msgs/String (JSON)
+        # JSON 字段: state(accepted/rejected), has_converged(bool), fitness_score(float),
+        #            correction_translation(float), correction_yaw(float)
         self.status_sub = self.create_subscription(
-            ScanMatchingStatus,
+            String,
             '/localization/ndt_status',
             self._on_ndt_status,
+            QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE),
+        )
+
+        # ★ 订阅 NDT 原始 map->odom (通过 topic 而非 TF, 避免融合节点自己发布的 TF 污染)
+        # /pcl_pose 由 lidar_localization 发布，geometry_msgs/PoseWithCovarianceStamped
+        # 其 position 字段即为 NDT 估计的 map->odom 平移量
+        self.pcl_pose_sub = self.create_subscription(
+            PoseWithCovarianceStamped,
+            '/pcl_pose',
+            self._on_pcl_pose,
             QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE),
         )
 
@@ -295,16 +368,28 @@ class LocalizationOdomFusion(Node):
         # =====================================================================
 
         # 当前状态
-        self.state = FusionState.HEALTHY
+        self.state = FusionState.INITIALIZING
 
         # 最新的 NDT 状态数据
         self.latest_ndt_error = float('inf')
         self.latest_ndt_inlier = 0.0
         self.latest_ndt_converged = False
+        self.latest_ndt_state = ''  # "accepted" | "rejected" | "confirming"
         self.latest_ndt_status_time = 0.0
 
         # 最新的 NDT map->odom（从 TF 获取）
         self.latest_ndt_map_odom = None  # dict with keys: x, y, z, qx, qy, qz, qw
+
+        # ★ 最新的 NDT map->odom（从 /pcl_pose topic 获取，不受融合 TF 污染）
+        self.latest_pcl_map_odom = None  # dict with keys: x, y, z, qx, qy, qz, qw
+        self.latest_pcl_pose_time = 0.0
+        self.prev_pcl_map_odom = None   # 上一帧 /pcl_pose (用于帧间跳变检测)
+        self._pcl_pose_jump_detected = False  # 帧间跳变标志
+
+        # NDT 状态增强字段（从 ndt_status JSON 解析）
+        self.latest_ndt_reason = ''                # "ok" | "pose_jump_candidate" | "confirmed_pose_jump" | ...
+        self.latest_ndt_correction_translation = 0.0  # NDT 本帧平移修正量
+        self.latest_ndt_correction_yaw = 0.0          # NDT 本帧旋转修正量
 
         # 最后健康时的快照——用于冻结和恢复
         self.last_healthy_map_odom = None     # 最后健康的 map->odom
@@ -325,6 +410,13 @@ class LocalizationOdomFusion(Node):
         self.transition_from = None           # 过渡起始 map->odom
         self.transition_to = None             # 过渡目标 map->odom
 
+        # Recovery 状态跟踪（防止重复请求）
+        self._recovery_in_progress = False    # SC/HDL 正在执行 recovery
+        self.init_start_time = time.monotonic()  # INITIALIZING 启动时间，用于超时检测
+
+        # 累计 odom 位移追踪（从进入 DEGRADED 算起，永不重置）
+        self.total_odom_displacement = 0.0
+
         # =====================================================================
         # 定时器：以固定频率运行融合主循环
         # =====================================================================
@@ -337,6 +429,7 @@ class LocalizationOdomFusion(Node):
 
         self.get_logger().info(
             '========== 定位融合节点已启动 ==========\n'
+            f'  启动状态: INITIALIZING，等待首次 NDT/SC 定位成功\n'
             f'  状态转换: HEALTHY ←→ DEGRADED (error>{self.degraded_error_threshold})\n'
             f'  恢复阈值: error<{self.healthy_error_threshold} 连续{self.healthy_consecutive_frames}帧\n'
             f'  超时限制: {self.max_degraded_duration_sec}s / {self.max_odom_displacement_m}m\n'
@@ -348,44 +441,126 @@ class LocalizationOdomFusion(Node):
     # 回调函数
     # =========================================================================
 
-    def _on_ndt_status(self, msg: ScanMatchingStatus):
+    def _on_ndt_status(self, msg: String):
         """
         接收 NDT 扫描匹配状态回调
 
         由 lidar_localization 节点在每次 NDT 匹配后发布。
-        我们用它来判断 NDT 定位是否可靠。
+        JSON 格式:
+          - state: "accepted" | "rejected" | "confirming"
+          - has_converged: 是否收敛
+          - fitness_score: 匹配误差（替代 matching_error）
+          - reason: 拒绝原因（rejected 时）
+          - correction_translation: 修正平移量
+          - correction_yaw: 修正旋转量
 
         Args:
-            msg: ScanMatchingStatus 消息
-                 - has_converged: 是否收敛
-                 - matching_error: 匹配误差（类似 fitness score）
-                 - inlier_fraction: 内点比例
+            msg: std_msgs/String (JSON)
         """
-        self.latest_ndt_error = msg.matching_error
-        self.latest_ndt_inlier = msg.inlier_fraction
-        self.latest_ndt_converged = msg.has_converged
-        self.latest_ndt_status_time = time.monotonic()
+        try:
+            import json
+            status = json.loads(msg.data)
+            self.latest_ndt_error = float(status.get('fitness_score', float('inf')))
+            self.latest_ndt_inlier = float(status.get('inlier_fraction', 0.0))
+            self.latest_ndt_converged = bool(status.get('has_converged', False))
+            self.latest_ndt_state = str(status.get('state', ''))
+            self.latest_ndt_reason = str(status.get('reason', ''))
+            self.latest_ndt_correction_translation = float(status.get('correction_translation', 0.0))
+            self.latest_ndt_correction_yaw = float(status.get('correction_yaw', 0.0))
+            self.latest_ndt_status_time = time.monotonic()
+        except Exception:
+            pass
+
+    def _on_pcl_pose(self, msg: PoseWithCovarianceStamped):
+        """
+        接收 NDT 发布的 map->odom (通过 /pcl_pose topic)
+
+        相比 TF 查询 _lookup_ndt_map_odom()，此回调不受融合节点自己
+        发布的 TF 污染。在 DEGRADED/TRANSITIONING 状态下，融合节点
+        也会发布 map->odom TF，此时 TF 查询会拿到自己的值而非 NDT 的。
+        /pcl_pose 直接来自 NDT 节点，数据纯净。
+
+        Args:
+            msg: geometry_msgs/PoseWithCovarianceStamped
+        """
+        self.latest_pcl_map_odom = {
+            'x': msg.pose.pose.position.x,
+            'y': msg.pose.pose.position.y,
+            'z': msg.pose.pose.position.z,
+            'qx': msg.pose.pose.orientation.x,
+            'qy': msg.pose.pose.orientation.y,
+            'qz': msg.pose.pose.orientation.z,
+            'qw': msg.pose.pose.orientation.w,
+        }
+        self.latest_pcl_pose_time = time.monotonic()
 
     def _on_recovery_status(self, msg: String):
         """
         接收 recovery 状态回调
 
-        当 recovery 成功完成时（navigation_localization_recovered），
-        从 LOST 状态恢复到 HEALTHY，接受新的 map->odom。
+        处理 SC/HDL 恢复事件流程:
+          localization_recovery_started → localization_relocalize_requested →
+          localization_initialpose_published → localization_recovery_waiting →
+          localization_recovered (成功) 或 localization_relocalize_failed (失败)
+
+        当 recovery 成功完成时，从 LOST 状态恢复到 HEALTHY。
 
         Args:
             msg: 恢复状态 JSON 字符串
         """
+        event_type = ''
+        recovery_reason = ''
+        try:
+            import json as _json
+            data = _json.loads(msg.data)
+            event_type = data.get('event_type', '')
+            recovery_reason = data.get('reason', '')
+        except Exception:
+            pass
+
+        # 跟踪 recovery 进行状态（防止 fusion 重复请求）
+        if event_type == 'localization_recovery_started':
+            self._recovery_in_progress = True
+            self.get_logger().info('[RECOVERY] 检测到 recovery 已启动，抑制重复请求')
+        elif event_type == 'localization_relocalize_failed':
+            self._recovery_in_progress = False
+            if self.state == FusionState.LOST:
+                self.get_logger().warn('[RECOVERY] SC 重定位失败，允许后续重试')
+
+        # LOST 状态下检测 recovery 成功
         if self.state != FusionState.LOST:
             return
 
-        # 检查是否是 recovery 成功事件
-        if 'localization_recovered' in msg.data or \
-           'localization_initialpose_published' in msg.data:
+        recovered_event = event_type == 'localization_recovered'
+        if not recovered_event and not event_type:
+            # 兼容非 JSON 格式的旧消息，但仍然必须走 LOST recovery 软验收。
+            recovered_event = (
+                'localization_recovered' in msg.data or
+                'localization_initialpose_published' in msg.data
+            )
+
+        if recovered_event:
+            if not self._validate_lost_recovery_soft():
+                self._recovery_in_progress = False
+                self.last_recovery_request_time = 0.0
+                self.get_logger().warn(
+                    '[LOST] recovery 软验收拒绝本次结果，继续请求 SC 重定位'
+                    + (f' (bridge_reason={recovery_reason})' if recovery_reason else ''))
+                self._request_recovery()
+                return
+            pose_text = 'pcl_pose=unavailable'
+            if self.latest_pcl_map_odom is not None:
+                pose_text = (
+                    f'pcl_pose=({self.latest_pcl_map_odom["x"]:.3f}, '
+                    f'{self.latest_pcl_map_odom["y"]:.3f})')
             self.get_logger().info(
-                f'[LOST→HEALTHY] 检测到 recovery 成功，切回 HEALTHY 并接受新 map->odom')
+                '[LOST→HEALTHY] recovery 通过软验收，切回 HEALTHY 并接受新 map->odom '
+                f'({pose_text}, ndt_state={self.latest_ndt_state or "none"}, '
+                f'converged={self.latest_ndt_converged}, '
+                f'error={self.latest_ndt_error:.4f})')
             self._reset_state()
             self.state = FusionState.HEALTHY
+            self._recovery_in_progress = False
             self._publish_fusion_status()
 
     def _on_nav_status(self, msg: String):
@@ -437,12 +612,12 @@ class LocalizationOdomFusion(Node):
                 if odom_body is not None and self.frozen_odom_body is not None:
                     old_displacement = math.hypot(
                         odom_body['x'] - self.frozen_odom_body[0],
-                        odom_body['y'] - self.frozen_odom_body[1])
+                        odom_body['z'] - self.frozen_odom_body[2])
                 else:
                     old_displacement = 0.0
 
                 if odom_body is not None:
-                    self.frozen_odom_body = (odom_body['x'], odom_body['y'])
+                    self.frozen_odom_body = (odom_body['x'], odom_body['y'], odom_body['z'])
 
                 self.get_logger().info(
                     '[NAV] 到达路点，重置 DEGRADED 计时器 '
@@ -485,7 +660,9 @@ class LocalizationOdomFusion(Node):
             odom_body = self._lookup_odom_body()
 
             # ── 步骤3: 更新状态机 ──
-            if self.state == FusionState.HEALTHY:
+            if self.state == FusionState.INITIALIZING:
+                self._update_initializing(ndt_map_odom, odom_body)
+            elif self.state == FusionState.HEALTHY:
                 self._update_healthy(ndt_map_odom, odom_body)
             elif self.state == FusionState.DEGRADED:
                 self._update_degraded(ndt_map_odom, odom_body)
@@ -561,6 +738,67 @@ class LocalizationOdomFusion(Node):
     # 状态更新函数
     # =========================================================================
 
+    def _update_initializing(self, ndt_map_odom: dict, odom_body: dict):
+        """
+        INITIALIZING state: wait for first reliable localization.
+
+        At startup, NDT hasn't received /initialpose yet, so ndt_status will
+        be rejected/error=inf for an extended period. This should NOT be
+        interpreted as degradation from HEALTHY.
+
+        Timeout protection: if NDT doesn't become healthy within init_timeout_sec,
+        proactively request SC recovery to prevent deadlock.
+        (SC bridge waits for fusion -> fusion waits for NDT -> NDT waits for SC bridge)
+        """
+        if ndt_map_odom is not None:
+            self.latest_ndt_map_odom = ndt_map_odom
+
+        initial_pose = ndt_map_odom if ndt_map_odom is not None else self.latest_pcl_map_odom
+        if initial_pose is not None and odom_body is not None and self._is_healthy():
+            self.last_healthy_map_odom = initial_pose.copy()
+            self.last_healthy_odom_body = odom_body.copy()
+            self.last_healthy_time = time.monotonic()
+            self.state = FusionState.HEALTHY
+            self.consecutive_healthy = 0
+            self.consecutive_degraded = 0
+            self.get_logger().info(
+                '========== [INITIALIZING→HEALTHY] 首次定位成功 ==========\n'
+                f'  NDT error: {self.latest_ndt_error:.4f}\n'
+                f'  map->odom: ({initial_pose["x"]:.3f}, {initial_pose["y"]:.3f})')
+            self._publish_fusion_status()
+            return
+
+        # ★ 超时保护: INITIALIZING 超时后主动请求 SC recovery
+        #    防止启动死锁: 如果 SC bridge 的 startup 窗口已过,
+        #    fusion 必须主动触发 recovery 而不是被动等待
+        now = time.monotonic()
+        init_elapsed = now - self.init_start_time
+        if init_elapsed > self.init_timeout_sec:
+            last_req = getattr(self, 'last_recovery_request_time', 0.0)
+            if now - last_req > self.recovery_request_cooldown_sec:
+                self.get_logger().warn(
+                    f'[INITIALIZING] 启动超时 ({init_elapsed:.0f}s > '
+                    f'{self.init_timeout_sec:.0f}s)，主动请求 SC recovery...')
+                self._request_recovery()
+
+        if self.verbose_logging and now - self.last_state_log_time > self.state_log_interval_sec:
+            self.last_state_log_time = now
+            reason = '等待 /initialpose 后 NDT 首次 accepted'
+            if self.latest_ndt_status_time <= 0.0:
+                reason = '等待 NDT 状态'
+            elif initial_pose is None:
+                reason = '等待 map->odom 或 /pcl_pose'
+            elif odom_body is None:
+                reason = '等待 odom->body TF'
+            elif init_elapsed > self.init_timeout_sec:
+                reason = (f'启动超时 ({init_elapsed:.0f}s), '
+                          f'已请求 recovery, 等待 NDT 接受 /initialpose')
+            self.get_logger().info(
+                f'[INITIALIZING] {reason} '
+                f'(ndt_state={self.latest_ndt_state or "none"}, '
+                f'error={self.latest_ndt_error:.4f}, '
+                f'converged={self.latest_ndt_converged})')
+
     def _update_healthy(self, ndt_map_odom: dict, odom_body: dict):
         """
         HEALTHY 状态：NDT 定位正常
@@ -586,14 +824,47 @@ class LocalizationOdomFusion(Node):
                 self.last_healthy_odom_body = odom_body.copy()
                 self.last_healthy_time = time.monotonic()
 
+        # ── /pcl_pose 帧间跳变兜底检测 ──
+        # 即使 NDT status reason 未报 pose_jump，如果 /pcl_pose (map->odom)
+        # 在两帧之间跳变超过阈值，说明 NDT 静默改变了位姿估计。
+        # 几何混叠场景下 NDT 可能 fitness 极低但不报 pose_jump。
+        if self.pose_jump_degraded_from_pcl:
+            pcl = self.latest_pcl_map_odom
+            prev = self.prev_pcl_map_odom
+            if pcl is not None and prev is not None:
+                pcl_jump = math.hypot(pcl['x'] - prev['x'], pcl['y'] - prev['y'])
+                if pcl_jump > self.pose_jump_pcl_threshold_m:
+                    self.get_logger().warn(
+                        f'[HEALTHY] /pcl_pose 帧间跳变检测: '
+                        f'jump={pcl_jump:.3f}m > {self.pose_jump_pcl_threshold_m}m, '
+                        f'prev=({prev["x"]:.3f},{prev["y"]:.3f}) '
+                        f'curr=({pcl["x"]:.3f},{pcl["y"]:.3f})')
+                    self._pcl_pose_jump_detected = True
+                else:
+                    self._pcl_pose_jump_detected = False
+            if pcl is not None:
+                self.prev_pcl_map_odom = pcl.copy()
+
         # ── 退化检测 ──
         if self._is_degraded():
             self.consecutive_degraded += 1
             if (self.verbose_logging and
                 self.consecutive_degraded == 1):
+                degrade_triggers = []
+                if self.latest_ndt_error > self.degraded_error_threshold:
+                    degrade_triggers.append(f'error={self.latest_ndt_error:.4f}>{self.degraded_error_threshold}')
+                if self.latest_ndt_reason in ('pose_jump_candidate', 'confirmed_pose_jump'):
+                    degrade_triggers.append(f'ndt_reason={self.latest_ndt_reason}')
+                if self.latest_ndt_correction_translation > self.pose_jump_correction_threshold_m:
+                    degrade_triggers.append(
+                        f'correction={self.latest_ndt_correction_translation:.3f}m'
+                        f'>{self.pose_jump_correction_threshold_m}m')
+                if getattr(self, '_pcl_pose_jump_detected', False):
+                    degrade_triggers.append('pcl_pose_jump')
+                if not self.latest_ndt_converged and self.latest_ndt_error > 0.1:
+                    degrade_triggers.append('not_converged')
                 self.get_logger().warn(
-                    f'检测到 NDT 退化: error={self.latest_ndt_error:.4f} '
-                    f'> {self.degraded_error_threshold}，'
+                    f'检测到 NDT 退化: {", ".join(degrade_triggers)}，'
                     f'需连续{self.degraded_consecutive_frames}帧确认')
         else:
             self.consecutive_degraded = 0
@@ -608,14 +879,9 @@ class LocalizationOdomFusion(Node):
 
         行为:
         - 发布 frozen_map_odom 作为 map->odom TF（覆盖 NDT 的漂移值）
-        - 检查 NDT 是否恢复
+        - 锁定期内拒绝 NDT 恢复信号，防止假恢复循环
+        - 锁定期满后使用更严格的恢复条件验证 NDT
         - 检查超时/位移是否过大
-
-        关键设计决策:
-        - 我们不修改 map->odom（保持冻结值），只由 odom 提供运动
-        - TF 树: map_T_base = frozen_map_T_odom × 当前odom_T_body × body_T_base
-        - 这样做的好处: NDT 的 initial guess 仍然基于正确的 map->odom
-        - 当 NDT 恢复时，匹配结果接近正确值，不需要全局重定位
 
         Args:
             ndt_map_odom: 当前 NDT 的 map->odom（可能已经漂移）
@@ -629,22 +895,45 @@ class LocalizationOdomFusion(Node):
         if self.frozen_map_odom is not None:
             self._publish_map_odom_tf(self.frozen_map_odom)
 
-        # ── 检查恢复条件 ──
-        if self._is_healthy():
-            self.consecutive_healthy += 1
-            if self.verbose_logging and self.consecutive_healthy == 1:
-                self.get_logger().info(
-                    f'NDT 开始恢复: error={self.latest_ndt_error:.4f} '
-                    f'< {self.healthy_error_threshold}，'
-                    f'需连续{self.healthy_consecutive_frames}帧确认')
-        else:
-            self.consecutive_healthy = 0
+        # ── 锁定期内 NDT 帧统计 ──
+        in_lock = time.monotonic() < getattr(self, 'degraded_lock_until', 0)
+        if in_lock:
+            self._lock_ndt_total_frames += 1
+            if self._is_degraded():
+                self._lock_ndt_rejected_frames += 1
 
-        if self.consecutive_healthy >= self.healthy_consecutive_frames:
-            self._enter_transitioning()
-            return
+        # ── 检查恢复条件 (锁定期内跳过) ──
+        if not in_lock:
+            if self._is_healthy_strict():
+                self.consecutive_healthy += 1
+                if self.verbose_logging and self.consecutive_healthy == 1:
+                    self.get_logger().info(
+                        f'[锁定期后] NDT 开始恢复: error={self.latest_ndt_error:.4f}'
+                        f' reason={self.latest_ndt_reason}'
+                        f' corr={self.latest_ndt_correction_translation:.3f}m'
+                        f' 需连续{self.lock_recovery_healthy_consecutive_frames}帧确认')
+            else:
+                if self.consecutive_healthy > 0:
+                    # 给出不健康的具体原因
+                    reasons = []
+                    if self.latest_ndt_error > 0.15:
+                        reasons.append(f'error={self.latest_ndt_error:.4f}>0.15')
+                    if not self.latest_ndt_converged:
+                        reasons.append('未收敛')
+                    if self.latest_ndt_reason != 'ok':
+                        reasons.append(f'reason={self.latest_ndt_reason}')
+                    if self.latest_ndt_correction_translation > self.lock_recovery_max_correction_m:
+                        reasons.append(f'corr={self.latest_ndt_correction_translation:.3f}m'
+                                       f'>{self.lock_recovery_max_correction_m}m')
+                    self.get_logger().info(
+                        f'[锁定期后] NDT 恢复中断: {"; ".join(reasons)}')
+                self.consecutive_healthy = 0
 
-        # ── 检查超时条件（★ 导航感知: 导航中 vs 静止不同超时）──
+            if self.consecutive_healthy >= self.lock_recovery_healthy_consecutive_frames:
+                self._enter_transitioning()
+                return
+
+        # ── 检查超时条件 ──
         elapsed = time.monotonic() - self.degraded_start_time
         odom_displacement = self._compute_odom_displacement(odom_body)
 
@@ -652,24 +941,32 @@ class LocalizationOdomFusion(Node):
         if odom_displacement > self.total_odom_displacement:
             self.total_odom_displacement = odom_displacement
 
-        # ★ 根据导航状态选择不同的 LOST 超时
-        if self._is_robot_navigating():
-            lost_timeout = self.nav_active_lost_timeout_sec
-            timeout_label = 'nav_active'
-        else:
-            lost_timeout = self.nav_idle_lost_timeout_sec
-            timeout_label = 'nav_idle'
-            if self.latest_ndt_error > self.nav_idle_extreme_error:
-                lost_timeout = min(lost_timeout, self.nav_idle_lost_timeout_sec / 2.0)
-                timeout_label = 'nav_idle_extreme_error'
+        # ── LOST 触发条件 (按优先级排列) ──
 
-        if elapsed > lost_timeout:
-            self.get_logger().warn(
-                f'[DEGRADED→LOST] 超时 ({timeout_label}): {elapsed:.1f}s > '
-                f'{lost_timeout:.0f}s (nav_state={self.nav_state})')
+        # 条件1: 锁定期内 NDT 持续拒绝 → 提前 LOST
+        if (in_lock and
+            self._lock_ndt_total_frames >= self.lock_early_lost_min_frames and
+            self._lock_ndt_rejected_frames / self._lock_ndt_total_frames
+                >= self.lock_early_lost_rejection_rate):
+            self.get_logger().error(
+                f'[DEGRADED→LOST] 锁定期内 NDT 持续拒绝: '
+                f'{self._lock_ndt_rejected_frames}/{self._lock_ndt_total_frames}'
+                f' ({100*self._lock_ndt_rejected_frames/self._lock_ndt_total_frames:.0f}%)'
+                f' >= {100*self.lock_early_lost_rejection_rate:.0f}%'
+                f' → NDT 明显无法工作，提前触发 SC 全局重定位')
             self._enter_lost()
             return
 
+        # 条件2: DEGRADED 总超时
+        if elapsed > self.max_degraded_lock_sec:
+            self.get_logger().warn(
+                f'[DEGRADED→LOST] 总超时: {elapsed:.1f}s > '
+                f'{self.max_degraded_lock_sec:.0f}s '
+                f'(锁定期={self.min_degraded_lock_sec}s)')
+            self._enter_lost()
+            return
+
+        # 条件3: 单段 odom 位移过大
         if odom_displacement > self.max_odom_displacement_m:
             self.get_logger().warn(
                 f'[DEGRADED→LOST] 单段 odom 位移过大: {odom_displacement:.2f}m > '
@@ -677,7 +974,7 @@ class LocalizationOdomFusion(Node):
             self._enter_lost()
             return
 
-        # ★ 累计位移检查（永不重置，防止跨路点累积漂移）
+        # 条件4: 累计位移过大（永不重置，防止跨路点累积漂移）
         if self.total_odom_displacement > self.max_total_odom_displacement_m:
             self.get_logger().warn(
                 f'[DEGRADED→LOST] 累计 odom 位移过大: '
@@ -755,6 +1052,9 @@ class LocalizationOdomFusion(Node):
             self.consecutive_degraded = 0
             self.transition_from = None
             self.transition_to = None
+            self.degraded_lock_until = 0.0       # 平滑恢复成功后清理锁定期状态
+            self._lock_ndt_total_frames = 0
+            self._lock_ndt_rejected_frames = 0
             self._publish_fusion_status()
 
     def _update_lost(self, ndt_map_odom: dict, odom_body: dict):
@@ -775,7 +1075,7 @@ class LocalizationOdomFusion(Node):
             self.latest_ndt_map_odom = ndt_map_odom
 
         # 在 LOST 状态下不发布 map->odom
-        # 让 hdl_bootstrap_to_initialpose 的 recovery 机制接管
+        # 让 recovery bridge (SC/HDL) 发布 /initialpose 后由 NDT 重新建立定位
         # recovery 会: 清除缓存 → 等待静止 → 全局重定位 → 发布 initialpose → 恢复
 
         now = time.monotonic()
@@ -811,11 +1111,25 @@ class LocalizationOdomFusion(Node):
 
         self.state = FusionState.DEGRADED
         self.frozen_map_odom = self.last_healthy_map_odom.copy()
-        self.frozen_odom_body = (self.last_healthy_odom_body.copy()
-                                  if self.last_healthy_odom_body else None)
+        # ★ 存储 camera_init 帧下的 body 3D 位置 (x=左右, y=垂直, z=前后)
+        # 后续位移计算使用 (x, z) 作为 2D 水平面
+        if self.last_healthy_odom_body:
+            bod = self.last_healthy_odom_body
+            self.frozen_odom_body = (bod['x'], bod['y'], bod['z'])
+        else:
+            self.frozen_odom_body = None
         self.degraded_start_time = time.monotonic()
         self.total_odom_displacement = 0.0  # ★ 累计位移，永不重置
         self.consecutive_healthy = 0
+
+        # ── 锁定期初始化 ──
+        # 进入 DEGRADED 后进入锁定期，在此期间拒绝 NDT 的恢复信号
+        # 防止 NDT 快速 pose_jump→错误收敛→report ok 的假恢复
+        self.degraded_lock_until = time.monotonic() + self.min_degraded_lock_sec
+        # 锁定期内 NDT 帧统计（用于检测 NDT 持续不可用）
+        self._lock_ndt_total_frames = 0
+        self._lock_ndt_rejected_frames = 0
+
         frozen_yaw = quat_to_yaw(
             self.frozen_map_odom['qx'],
             self.frozen_map_odom['qy'],
@@ -838,23 +1152,37 @@ class LocalizationOdomFusion(Node):
         进入 TRANSITIONING 状态（DEGRADED→HEALTHY 的中间状态）
 
         使用当前 NDT 的 map->odom 作为过渡目标。
+        ★ 使用 /pcl_pose topic (latest_pcl_map_odom)，避免 TF 污染。
         如果 NDT 值不可用，保持 DEGRADED。
         """
-        if self.latest_ndt_map_odom is None:
+        pcl_odom = self.latest_pcl_map_odom
+        if pcl_odom is None:
             self.get_logger().warn(
-                '[DEGRADED→TRANSITIONING] 拒绝: 无法获取 NDT map->odom，保持 DEGRADED')
+                '[DEGRADED→TRANSITIONING] 拒绝: 无法获取 NDT map->odom (/pcl_pose)，保持 DEGRADED')
             self.consecutive_healthy = 0
             return
 
         self.state = FusionState.TRANSITIONING
         self.transition_start_time = time.monotonic()
         self.transition_from = self.frozen_map_odom.copy()
-        self.transition_to = self.latest_ndt_map_odom.copy()
+        self.transition_to = pcl_odom.copy()
 
         # 计算跳变距离（用于诊断）
         dx = self.transition_to['x'] - self.transition_from['x']
         dy = self.transition_to['y'] - self.transition_from['y']
         jump = math.hypot(dx, dy)
+
+        # ── 恢复位置跳变验证 ──
+        # NDT 跳变过大 → 可能收敛到错误位置 → 拒绝恢复
+        if jump > self.recovery_pose_jump_max_m:
+            self.get_logger().error(
+                f'[DEGRADED→TRANSITIONING] 拒绝: NDT 恢复位置跳变过大 '
+                f'({jump:.2f}m > {self.recovery_pose_jump_max_m}m), '
+                f'疑似错误收敛 → 升级为 LOST 并请求 SC 全局重定位')
+            self.state = FusionState.DEGRADED
+            self.consecutive_healthy = 0
+            self._enter_lost()
+            return
 
         self.get_logger().info(
             '========== [DEGRADED→TRANSITIONING] 开始平滑过渡 ==========\n'
@@ -890,16 +1218,16 @@ class LocalizationOdomFusion(Node):
 
     def _request_recovery(self):
         """
-        向 hdl_bootstrap 发送 recovery 请求 (通过 /localization/recovery_requests)
+        向 recovery 桥接节点发送请求 (通过 /localization/recovery_requests)
 
-        hdl_bootstrap 收到后会:
-        1. 准备 recovery prior (基于 trusted pose)
-        2. 等待机器人静止
-        3. 清除 HDL 缓存
-        4. 调用 /relocalize_with_prior_checked 全局重定位
-        5. 发布 /initialpose → NDT 重新初始化
+        兼容 SC (scancontext_to_initialpose) 和 HDL (hdl_bootstrap_to_initialpose):
+        1. recovery bridge 收到请求后开始全局重定位
+        2. 发布 /initialpose → NDT 重新初始化
+        3. NDT 验证 → 发布 /localization/recovery_status → fusion 恢复
         """
         now = time.monotonic()
+
+        # 冷却时间检查
         if (hasattr(self, 'last_recovery_request_time') and
             now - self.last_recovery_request_time < self.recovery_request_cooldown_sec):
             self.get_logger().info(
@@ -908,6 +1236,13 @@ class LocalizationOdomFusion(Node):
                 f'{self.recovery_request_cooldown_sec}s)')
             return
 
+        # 如果 recovery 已经在进行中，不重复请求
+        if getattr(self, '_recovery_in_progress', False):
+            self.get_logger().info(
+                '[LOST] recovery 已在执行中，跳过重复请求')
+            return
+
+        state_label = 'INITIALIZING' if self.state == FusionState.INITIALIZING else 'LOST'
         self.last_recovery_request_time = now
 
         import json as _json
@@ -920,8 +1255,8 @@ class LocalizationOdomFusion(Node):
         })
         self.recovery_request_pub.publish(request_msg)
         self.get_logger().warn(
-            '[LOST] 已发送 recovery 请求到 /localization/recovery_requests，'
-            '等待 hdl_bootstrap 执行全局重定位...')
+            f'[{state_label}] 已发送 recovery 请求到 /localization/recovery_requests，'
+            '等待 SC/hdl_bootstrap 执行全局重定位...')
 
     def _reset_state(self):
         """重置所有内部状态变量"""
@@ -932,6 +1267,13 @@ class LocalizationOdomFusion(Node):
         self.degraded_start_time = 0.0
         self.transition_from = None
         self.transition_to = None
+        self._recovery_in_progress = False
+        self._pcl_pose_jump_detected = False
+        self.prev_pcl_map_odom = None
+        # 清理锁定期状态
+        self.degraded_lock_until = 0.0
+        self._lock_ndt_total_frames = 0
+        self._lock_ndt_rejected_frames = 0
 
     # =========================================================================
     # 状态判断辅助函数
@@ -942,11 +1284,14 @@ class LocalizationOdomFusion(Node):
         判断当前 NDT 是否退化
 
         退化条件（满足任一即退化）:
+        0. NDT status reason 检测到位姿跳变 (pose_jump_candidate / confirmed_pose_jump)
+        0b. NDT correction_translation 超过阈值 (默认 0.5m, 比 NDT 的 0.8m 更敏感)
         1. matching_error > degraded_error_threshold (默认 0.5)
         2. NDT 未收敛
 
-        注意: 不使用 inlier_fraction 判断，因为在某些环境下 inlier
-        可能偏低但定位仍然正确
+        判据 0/0b 是 2026-05-26 新增: 几何混叠场景下 NDT 可能 fitness 极低
+        (0.003) 但收敛到错误位置, 仅靠 fitness_score 无法检测。NDT status JSON
+        已包含 reason/correction_translation 字段, 融合借此感知位姿跳变。
 
         Returns:
             True 如果 NDT 当前退化
@@ -954,7 +1299,25 @@ class LocalizationOdomFusion(Node):
         # NDT 状态数据过期检查（超过 3 秒没有新数据认为通信异常）
         status_age = time.monotonic() - self.latest_ndt_status_time
         if status_age > 3.0:
-            # 状态数据过期，保守起见认为退化
+            return True
+
+        # 判据 0: NDT status reason 检测到位姿跳变
+        # "pose_jump_candidate" — NDT 正在确认跳变, 仍在重发布旧 pose
+        #   此时进入 DEGRADED 可在 NDT 接受跳变前冻结正确位姿
+        # "confirmed_pose_jump" — NDT 已接受跳变, map->odom 已更新
+        if self.pose_jump_degraded_from_status and self.latest_ndt_reason in (
+            'pose_jump_candidate', 'confirmed_pose_jump'):
+            return True
+
+        # 判据 0b: NDT correction_translation 直接超标
+        # NDT 内部 threshold 是 0.8m, 这里用更低的 0.5m 提前拦截
+        if (self.pose_jump_degraded_from_status and
+            self.latest_ndt_correction_translation > self.pose_jump_correction_threshold_m):
+            return True
+
+        # 判据 0c: /pcl_pose 帧间跳变兜底
+        # NDT status 未报异常但 map->odom 静默跳变 → 几何混叠伪健康
+        if self.pose_jump_degraded_from_pcl and getattr(self, '_pcl_pose_jump_detected', False):
             return True
 
         # 主要判据: matching_error 是否超标
@@ -974,6 +1337,11 @@ class LocalizationOdomFusion(Node):
         健康条件（全部满足）:
         1. matching_error < healthy_error_threshold (默认 0.15)
         2. NDT 已收敛
+        3. (DEGRADED 恢复时) NDT 当前 map→odom 与冻结值偏差 < 0.8m
+           防止几何混叠导致的"低 error 但错位置"伪恢复
+
+        frozen_map_odom 和 latest_ndt_map_odom 都来自 TF 查询
+        map→odom，为标准 ROS 坐标系，可直接比较无需坐标转换。
 
         使用比 _is_degraded 更严格的阈值（0.15 vs 0.5），
         形成滞回区间，防止频繁振荡
@@ -981,25 +1349,177 @@ class LocalizationOdomFusion(Node):
         Returns:
             True 如果 NDT 当前健康
         """
-        return (self.latest_ndt_error < self.healthy_error_threshold and
-                self.latest_ndt_converged)
+        if not (self.latest_ndt_error < self.healthy_error_threshold and
+                self.latest_ndt_converged):
+            return False
+
+        # DEGRADED 恢复时: 检查 NDT 新 map->odom 是否与冻结值一致
+        # ★ 使用 /pcl_pose topic 数据 (latest_pcl_map_odom)，而非 TF 查询
+        #    因为 DEGRADED 期间融合自己也发布 map->odom，TF 查询会被污染
+        pcl_odom = self.latest_pcl_map_odom
+        if self.frozen_map_odom is not None and pcl_odom is not None:
+            ndt_dx = pcl_odom['x'] - self.frozen_map_odom['x']
+            ndt_dy = pcl_odom['y'] - self.frozen_map_odom['y']
+            pose_jump = math.hypot(ndt_dx, ndt_dy)
+            if pose_jump > 0.8:
+                return False
+
+        return True
+
+    def _is_healthy_strict(self) -> bool:
+        """
+        锁定期满后使用的严格恢复条件。
+
+        比 _is_healthy() 更严格:
+        1. NDT error < 0.15 (与 _is_healthy 相同)
+        2. NDT 已收敛
+        3. NDT reason 必须为 "ok"（拒绝 pose_jump/confirming 等过渡状态）
+        4. NDT correction_translation < lock_recovery_max_correction_m (默认 0.3m)
+           防止 NDT 微小跳变被忽略
+        5. frozen→NDT map→odom 偏差 < 0.8m (与 _is_healthy 相同)
+
+        Returns:
+            True 如果 NDT 满足严格恢复条件
+        """
+        # 基础条件: 误差低且已收敛
+        if not (self.latest_ndt_error < 0.15 and self.latest_ndt_converged):
+            return False
+
+        # 状态必须是 ok（不能是 pose_jump_candidate / confirming 等）
+        if self.latest_ndt_reason != 'ok':
+            return False
+
+        # correction 必须足够小（NDT 不再剧烈调整）
+        if self.latest_ndt_correction_translation > self.lock_recovery_max_correction_m:
+            return False
+
+        # DEGRADED 恢复时: 检查 NDT 新 map→odom 与冻结值一致
+        pcl_odom = self.latest_pcl_map_odom
+        if self.frozen_map_odom is not None and pcl_odom is not None:
+            ndt_dx = pcl_odom['x'] - self.frozen_map_odom['x']
+            ndt_dy = pcl_odom['y'] - self.frozen_map_odom['y']
+            pose_jump = math.hypot(ndt_dx, ndt_dy)
+            if pose_jump > 0.8:
+                return False
+
+        return True
+
+    def _validate_lost_recovery_soft(self) -> bool:
+        """
+        LOST recovery 的宽松最终验收。
+
+        目的不是用 odom 重新裁决 SC/NDT，而是只拦截明显错误的恢复结果：
+        - NDT 明显仍不健康时拒绝；
+        - 如果 odom/冻结位姿不完整或 odom 已累计较远，则跳过 odom 位置校验；
+        - 只检查恢复后的 map->odom 相对冻结点的距离是否超过 odom 位移 + 宽松余量；
+        - 不做 yaw 硬拒绝，避免走廊/角度 wrap/odom 漂移误伤正确重定位。
+        """
+        if not self.recovery_pose_soft_gate_enabled:
+            self.get_logger().warn('[LOST] recovery 软验收已关闭，直接接受 recovery 结果')
+            return True
+
+        now = time.monotonic()
+
+        if self.latest_ndt_status_time > 0.0:
+            status_age = now - self.latest_ndt_status_time
+            if status_age <= self.recovery_pose_max_status_age_sec:
+                ndt_rejected = self.latest_ndt_state == 'rejected'
+                ndt_bad = (
+                    ndt_rejected or
+                    not self.latest_ndt_converged or
+                    self.latest_ndt_error > self.degraded_error_threshold
+                )
+                if ndt_bad:
+                    self.get_logger().warn(
+                        '[LOST] recovery 软验收拒绝: NDT 状态仍不健康 '
+                        f'(state={self.latest_ndt_state}, '
+                        f'converged={self.latest_ndt_converged}, '
+                        f'error={self.latest_ndt_error:.4f})')
+                    return False
+            else:
+                self.get_logger().warn(
+                    '[LOST] recovery 软验收跳过 NDT 状态时效检查: '
+                    f'status_age={status_age:.2f}s')
+        else:
+            self.get_logger().warn(
+                '[LOST] recovery 软验收跳过 NDT 状态检查: 尚未收到 /localization/ndt_status')
+
+        pcl_odom = self.latest_pcl_map_odom
+        if pcl_odom is None:
+            self.get_logger().warn(
+                '[LOST] recovery 软验收放行: 无 /pcl_pose，使用 SC bridge 的 NDT 连续 accepted 结果')
+            return True
+
+        pcl_age = now - self.latest_pcl_pose_time
+        if self.latest_pcl_pose_time > 0.0 and pcl_age > self.recovery_pose_max_pcl_age_sec:
+            self.get_logger().warn(
+                '[LOST] recovery 软验收放行: /pcl_pose 较旧 '
+                f'({pcl_age:.2f}s)，不使用旧 pose 做硬拒绝')
+            return True
+
+        odom_body = self._lookup_odom_body()
+        if self.frozen_map_odom is None or self.frozen_odom_body is None or odom_body is None:
+            self.get_logger().warn(
+                '[LOST] recovery 软验收放行: frozen/odom 信息不完整，跳过 odom 位置校验')
+            return True
+
+        odom_displacement = self._compute_odom_displacement(odom_body)
+        if odom_displacement > self.recovery_pose_skip_odom_after_displacement_m:
+            self.get_logger().warn(
+                '[LOST] recovery 软验收放行: odom 位移已较大 '
+                f'({odom_displacement:.2f}m > '
+                f'{self.recovery_pose_skip_odom_after_displacement_m:.2f}m)，'
+                '不再用 odom 约束全局重定位')
+            return True
+
+        recovery_delta = math.hypot(
+            pcl_odom['x'] - self.frozen_map_odom['x'],
+            pcl_odom['y'] - self.frozen_map_odom['y'])
+        allowed_delta = odom_displacement + self.recovery_pose_max_xy_error_m
+        if recovery_delta <= allowed_delta:
+            self.get_logger().info(
+                '[LOST] recovery 软验收通过: '
+                f'recovery_delta={recovery_delta:.2f}m <= '
+                f'odom_displacement({odom_displacement:.2f}m)+'
+                f'margin({self.recovery_pose_max_xy_error_m:.2f}m), '
+                f'NDT error={self.latest_ndt_error:.4f}')
+            return True
+
+        if self.latest_ndt_error < self.recovery_pose_accept_if_ndt_error_below:
+            self.get_logger().warn(
+                '[LOST] recovery 软验收放行但报警: recovery_delta='
+                f'{recovery_delta:.2f}m > allowed={allowed_delta:.2f}m, '
+                f'但 NDT error={self.latest_ndt_error:.4f} < '
+                f'{self.recovery_pose_accept_if_ndt_error_below:.4f}')
+            return True
+
+        self.get_logger().warn(
+            '[LOST] recovery 软验收拒绝: recovery_delta='
+            f'{recovery_delta:.2f}m > allowed={allowed_delta:.2f}m, '
+            f'odom_displacement={odom_displacement:.2f}m, '
+            f'NDT error={self.latest_ndt_error:.4f}')
+        return False
 
     def _compute_odom_displacement(self, odom_body: dict) -> float:
         """
         计算从冻结点到当前位置的里程计累积位移（2D 水平面）
 
+        camera_init 坐标系 (非标准):
+          x = 左右 (left+),  y = 垂直 (down+),  z = 前后 (back+)
+        2D 水平面对应 (x, z) 平面, y 是高度不参与位移计算
+
         Args:
             odom_body: 当前 camera_init->body
 
         Returns:
-            2D 位移距离（米），如果 frozen_odom_body 为空则返回 0
+            2D 水平位移距离（米），如果 frozen_odom_body 为空则返回 0
         """
         if self.frozen_odom_body is None or odom_body is None:
             return 0.0
 
-        dx = odom_body['x'] - self.frozen_odom_body['x']
-        dy = odom_body['y'] - self.frozen_odom_body['y']
-        return math.hypot(dx, dy)
+        dx = odom_body['x'] - self.frozen_odom_body[0]   # 左右
+        dz = odom_body['z'] - self.frozen_odom_body[2]   # 前后 (back+)
+        return math.hypot(dx, dz)
 
     # =========================================================================
     # TF 发布
@@ -1062,7 +1582,8 @@ class LocalizationOdomFusion(Node):
             status['transition_progress'] = min(
                 elapsed / self.transition_duration_sec, 1.0)
 
-        msg.data = str(status)
+        import json as _json
+        msg.data = _json.dumps(status, ensure_ascii=False)
         self.fusion_status_pub.publish(msg)
 
     def _publish_diagnostics(self):

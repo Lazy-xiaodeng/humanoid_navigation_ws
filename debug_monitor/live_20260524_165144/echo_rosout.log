@@ -1,0 +1,372 @@
+# command: ros2 topic echo /rosout
+# started: 2026-05-24 16:51:45 +0800
+stamp:
+  sec: 1779612706
+  nanosec: 256553468
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform map ->  base_footprint: Invalid frame ID "map" passed to canTransform argument target_frame - frame does n...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612707
+  nanosec: 265789353
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform map ->  base_footprint: Invalid frame ID "map" passed to canTransform argument target_frame - frame does n...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612708
+  nanosec: 315999673
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform map ->  base_footprint: Invalid frame ID "map" passed to canTransform argument target_frame - frame does n...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612709
+  nanosec: 316238801
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform map ->  base_footprint: Invalid frame ID "map" passed to canTransform argument target_frame - frame does n...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612710
+  nanosec: 316468480
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform map ->  base_footprint: Could not find a connection between ''map'' and ''base_footprint'' because they are no...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612707
+  nanosec: 793971891
+level: 20
+name: hdl_bootstrap_to_initialpose
+msg: 'updated trusted pose for recovery prior: map->base=(6.054, 10.937, -1.184)'
+file: /home/ubuntu/humanoid_ws/build/humanoid_navigation2/humanoid_navigation2/hdl_bootstrap_to_initialpose.py
+function: update_trusted_pose_if_healthy
+line: 1706
+---
+stamp:
+  sec: 1779612702
+  nanosec: 188592096
+level: 20
+name: rviz
+msg: 'Message Filter dropping message: frame ''camera_init'' at time 1779611999.536 for reason ''the timestamp on the message is earlier ...'
+file: /opt/ros/jazzy/include/tf2_ros/tf2_ros/message_filter.hpp
+function: signalFailure
+line: 711
+---
+stamp:
+  sec: 1779612705
+  nanosec: 501352050
+level: 20
+name: rviz
+msg: 'Message Filter dropping message: frame ''camera_init'' at time 1779611999.536 for reason ''the timestamp on the message is earlier ...'
+file: /opt/ros/jazzy/include/tf2_ros/tf2_ros/message_filter.hpp
+function: signalFailure
+line: 711
+---
+stamp:
+  sec: 1779612708
+  nanosec: 346111995
+level: 20
+name: rviz
+msg: 'Message Filter dropping message: frame ''camera_init'' at time 1779611999.536 for reason ''the timestamp on the message is earlier ...'
+file: /opt/ros/jazzy/include/tf2_ros/tf2_ros/message_filter.hpp
+function: signalFailure
+line: 711
+---
+stamp:
+  sec: 1779612711
+  nanosec: 358828272
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform map ->  base_footprint: Could not find a connection between ''map'' and ''base_footprint'' because they are no...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612706
+  nanosec: 104521915
+level: 20
+name: tf2_echo
+msg: 'Waiting for transform map ->  odom: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist'
+file: ./src/tf2_echo.cpp
+function: main
+line: 170
+---
+stamp:
+  sec: 1779612707
+  nanosec: 781722936
+level: 20
+name: tf2_echo
+msg: 'Waiting for transform map ->  odom: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist'
+file: ./src/tf2_echo.cpp
+function: main
+line: 170
+---
+stamp:
+  sec: 1779612707
+  nanosec: 766542300
+level: 20
+name: tf2_echo
+msg: 'Waiting for transform odom ->  base_footprint: Invalid frame ID "odom" passed to canTransform argument target_frame - frame does...'
+file: ./src/tf2_echo.cpp
+function: main
+line: 170
+---
+stamp:
+  sec: 1779612708
+  nanosec: 777802417
+level: 20
+name: tf2_echo
+msg: 'Waiting for transform odom ->  base_footprint: Invalid frame ID "odom" passed to canTransform argument target_frame - frame does...'
+file: ./src/tf2_echo.cpp
+function: main
+line: 170
+---
+stamp:
+  sec: 1779612708
+  nanosec: 782875399
+level: 20
+name: tf2_echo
+msg: 'Waiting for transform map ->  odom: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist'
+file: ./src/tf2_echo.cpp
+function: main
+line: 170
+---
+stamp:
+  sec: 1779612710
+  nanosec: 768586077
+level: 20
+name: tf2_echo
+msg: 'Waiting for transform odom ->  base_footprint: Invalid frame ID "odom" passed to canTransform argument target_frame - frame does...'
+file: ./src/tf2_echo.cpp
+function: main
+line: 170
+---
+stamp:
+  sec: 1779612710
+  nanosec: 781452666
+level: 20
+name: tf2_echo
+msg: 'Waiting for transform map ->  odom: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist'
+file: ./src/tf2_echo.cpp
+function: main
+line: 170
+---
+stamp:
+  sec: 1779612711
+  nanosec: 567934039
+level: 20
+name: rviz
+msg: 'Message Filter dropping message: frame ''camera_init'' at time 1779611999.536 for reason ''the timestamp on the message is earlier ...'
+file: /opt/ros/jazzy/include/tf2_ros/tf2_ros/message_filter.hpp
+function: signalFailure
+line: 711
+---
+stamp:
+  sec: 1779612706
+  nanosec: 313897748
+level: 20
+name: tf2_echo
+msg: 'Waiting for transform map ->  base_footprint: Invalid frame ID "map" passed to canTransform argument target_frame - frame does n...'
+file: ./src/tf2_echo.cpp
+function: main
+line: 170
+---
+stamp:
+  sec: 1779612707
+  nanosec: 914358003
+level: 20
+name: tf2_echo
+msg: 'Waiting for transform map ->  base_footprint: Invalid frame ID "map" passed to canTransform argument target_frame - frame does n...'
+file: ./src/tf2_echo.cpp
+function: main
+line: 170
+---
+stamp:
+  sec: 1779612708
+  nanosec: 923599598
+level: 20
+name: tf2_echo
+msg: 'Waiting for transform map ->  base_footprint: Could not find a connection between ''map'' and ''base_footprint'' because they are no...'
+file: ./src/tf2_echo.cpp
+function: main
+line: 170
+---
+stamp:
+  sec: 1779612706
+  nanosec: 14622640
+level: 20
+name: tf2_echo
+msg: 'Waiting for transform map_ground ->  base_footprint: Invalid frame ID "map_ground" passed to canTransform argument target_frame ...'
+file: ./src/tf2_echo.cpp
+function: main
+line: 170
+---
+stamp:
+  sec: 1779612707
+  nanosec: 794109056
+level: 20
+name: tf2_echo
+msg: 'Waiting for transform map_ground ->  base_footprint: Invalid frame ID "map_ground" passed to canTransform argument target_frame ...'
+file: ./src/tf2_echo.cpp
+function: main
+line: 170
+---
+stamp:
+  sec: 1779612708
+  nanosec: 794117179
+level: 20
+name: tf2_echo
+msg: 'Waiting for transform map_ground ->  base_footprint: Invalid frame ID "map_ground" passed to canTransform argument target_frame ...'
+file: ./src/tf2_echo.cpp
+function: main
+line: 170
+---
+stamp:
+  sec: 1779612710
+  nanosec: 794170495
+level: 20
+name: tf2_echo
+msg: 'Waiting for transform map_ground ->  base_footprint: Could not find a connection between ''map_ground'' and ''base_footprint'' becau...'
+file: ./src/tf2_echo.cpp
+function: main
+line: 170
+---
+stamp:
+  sec: 1779612706
+  nanosec: 317996294
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform map ->  odom: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612707
+  nanosec: 325603854
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform map ->  odom: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612706
+  nanosec: 312997184
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform odom ->  base_footprint: Invalid frame ID "odom" passed to canTransform argument target_frame - frame does...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612707
+  nanosec: 316218697
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform odom ->  base_footprint: Invalid frame ID "odom" passed to canTransform argument target_frame - frame does...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612708
+  nanosec: 320427311
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform odom ->  base_footprint: Invalid frame ID "odom" passed to canTransform argument target_frame - frame does...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612709
+  nanosec: 329825550
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform odom ->  base_footprint: Could not find a connection between ''odom'' and ''base_footprint'' because they are ...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612710
+  nanosec: 331125929
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform odom ->  base_footprint: Could not find a connection between ''odom'' and ''base_footprint'' because they are ...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612706
+  nanosec: 775285894
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform map_ground ->  base_footprint: Invalid frame ID "map_ground" passed to canTransform argument target_frame ...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612707
+  nanosec: 780026424
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform map_ground ->  base_footprint: Invalid frame ID "map_ground" passed to canTransform argument target_frame ...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612708
+  nanosec: 780236944
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform map_ground ->  base_footprint: Invalid frame ID "map_ground" passed to canTransform argument target_frame ...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612709
+  nanosec: 780821112
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform map_ground ->  base_footprint: Could not find a connection between ''map_ground'' and ''base_footprint'' becau...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---
+stamp:
+  sec: 1779612710
+  nanosec: 782195461
+level: 20
+name: tf2_monitor_main
+msg: 'Waiting for transform map_ground ->  base_footprint: Could not find a connection between ''map_ground'' and ''base_footprint'' becau...'
+file: ./src/tf2_monitor.cpp
+function: TFMonitor
+line: 138
+---

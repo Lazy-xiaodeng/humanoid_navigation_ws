@@ -72,6 +72,12 @@ public:
     scan_matching_inlier_max_correspondence_distance = declare_parameter<double>("scan_matching_inlier_max_correspondence_distance", 0.5);
     max_scan_matching_correction_translation = declare_parameter<double>("max_scan_matching_correction_translation", -1.0);
     max_scan_matching_correction_yaw = declare_parameter<double>("max_scan_matching_correction_yaw", -1.0);
+    recovery_jump_gate_relax_frames = declare_parameter<int>("recovery_jump_gate_relax_frames", 8);
+    recovery_jump_gate_relax_sec = declare_parameter<double>("recovery_jump_gate_relax_sec", 5.0);
+    recovery_max_scan_matching_correction_translation =
+      declare_parameter<double>("recovery_max_scan_matching_correction_translation", 3.0);
+    recovery_max_scan_matching_correction_yaw =
+      declare_parameter<double>("recovery_max_scan_matching_correction_yaw", 1.2);
     scan_matching_jump_override_max_fitness_score = declare_parameter<double>("scan_matching_jump_override_max_fitness_score", 0.12);
     scan_matching_jump_override_min_inlier_fraction = declare_parameter<double>("scan_matching_jump_override_min_inlier_fraction", 0.90);
     scan_matching_rejected_log_throttle_ms = declare_parameter<int>("scan_matching_rejected_log_throttle_ms", 2000);
@@ -156,12 +162,15 @@ public:
     auto_relocalize_done = false;
     relocalize_requested = false;
     standby_mode = false;
+    recovery_jump_gate_relax_frames_remaining = 0;
+    recovery_jump_gate_relax_until = zero_time();
     consecutive_scan_matching_rejections = 0;
     have_last_accepted_pose = false;
     last_accepted_pose = Eigen::Matrix4f::Identity();
     have_external_recovery_prior = false;
     external_recovery_prior_pose = Eigen::Matrix4f::Identity();
     external_recovery_prior_time = zero_time();
+    external_recovery_prior_max_xy_override = -1.0;
     global_pose_probation_frames_remaining = 0;
     global_pose_probation_rejections = 0;
     if (use_global_localization) {
@@ -236,6 +245,11 @@ public:
         standby_server = create_service<std_srvs::srv::Empty>(
           "/hdl_bootstrap/standby",
           std::bind(&HdlLocalizationNodelet::standby, this, std::placeholders::_1, std::placeholders::_2),
+          rclcpp::ServicesQoS(),
+          global_localization_callback_group);
+        clear_relocalize_buffer_server = create_service<std_srvs::srv::Trigger>(
+          "/hdl_bootstrap/clear_relocalize_buffer",
+          std::bind(&HdlLocalizationNodelet::clear_relocalize_buffer, this, std::placeholders::_1, std::placeholders::_2),
           rclcpp::ServicesQoS(),
           global_localization_callback_group);
         if (auto_relocalize_on_start) {
@@ -412,6 +426,72 @@ private:
   }
 
 private:
+  bool recovery_jump_gate_relax_active() const {
+    if (recovery_jump_gate_relax_frames_remaining > 0) {
+      return true;
+    }
+    return (
+      recovery_jump_gate_relax_until.nanoseconds() != 0 &&
+      get_clock()->now() < recovery_jump_gate_relax_until);
+  }
+
+  double recovery_jump_gate_relax_remaining_sec() const {
+    if (recovery_jump_gate_relax_until.nanoseconds() == 0) {
+      return 0.0;
+    }
+    return std::max(0.0, (recovery_jump_gate_relax_until - get_clock()->now()).seconds());
+  }
+
+  double relaxed_jump_limit(double normal_limit, double recovery_limit) const {
+    if (!recovery_jump_gate_relax_active() || recovery_limit < 0.0) {
+      return normal_limit;
+    }
+
+    if (normal_limit <= 0.0) {
+      return normal_limit;
+    }
+
+    if (recovery_limit <= 0.0) {
+      return recovery_limit;
+    }
+
+    return std::max(normal_limit, recovery_limit);
+  }
+
+  void activate_recovery_jump_gate_relaxation(const std::string& reason) {
+    const int frames = std::max(0, recovery_jump_gate_relax_frames);
+    const double seconds = std::max(0.0, recovery_jump_gate_relax_sec);
+    if (frames <= 0 && seconds <= 0.0) {
+      return;
+    }
+
+    recovery_jump_gate_relax_frames_remaining =
+      std::max(recovery_jump_gate_relax_frames_remaining, frames);
+    if (seconds > 0.0) {
+      const rclcpp::Time relax_until =
+        get_clock()->now() + rclcpp::Duration::from_seconds(seconds);
+      if (
+        recovery_jump_gate_relax_until.nanoseconds() == 0 ||
+        recovery_jump_gate_relax_until < relax_until) {
+        recovery_jump_gate_relax_until = relax_until;
+      }
+    }
+    RCLCPP_WARN_STREAM(
+      get_logger(),
+      "temporarily relaxing scan matching jump gate for "
+        << recovery_jump_gate_relax_frames_remaining
+        << " frames / " << recovery_jump_gate_relax_remaining_sec()
+        << "s after " << reason
+        << ": translation_limit="
+        << relaxed_jump_limit(
+             max_scan_matching_correction_translation,
+             recovery_max_scan_matching_correction_translation)
+        << " yaw_limit="
+        << relaxed_jump_limit(
+             max_scan_matching_correction_yaw,
+             recovery_max_scan_matching_correction_yaw));
+  }
+
   void imu_callback(const sensor_msgs::msg::Imu::ConstSharedPtr imu_msg) {
     // RCLCPP_INFO(get_logger(), "----------------");
     // RCLCPP_INFO(get_logger(), "imu_callback");
@@ -599,14 +679,32 @@ private:
     bool correction_rejected_by_inlier = false;
     bool correction_jump_overridden = false;
     double scan_matching_inlier_fraction = std::numeric_limits<double>::quiet_NaN();
+    const bool recovery_jump_gate_relaxed = recovery_jump_gate_relax_active();
+    const double effective_max_correction_translation = relaxed_jump_limit(
+      max_scan_matching_correction_translation,
+      recovery_max_scan_matching_correction_translation);
+    const double effective_max_correction_yaw = relaxed_jump_limit(
+      max_scan_matching_correction_yaw,
+      recovery_max_scan_matching_correction_yaw);
+    if (recovery_jump_gate_relaxed) {
+      RCLCPP_INFO_STREAM_THROTTLE(
+        get_logger(),
+        *get_clock(),
+        1000,
+        "scan matching jump gate is relaxed during localization recovery: remaining_frames="
+          << recovery_jump_gate_relax_frames_remaining
+          << " remaining_sec=" << recovery_jump_gate_relax_remaining_sec()
+          << " translation_limit=" << effective_max_correction_translation
+          << " yaw_limit=" << effective_max_correction_yaw);
+    }
     auto aligned = pose_estimator->correct(
       stamp,
       filtered,
       reject_scan_matching_without_convergence,
       max_scan_matching_fitness_score,
       &correction_accepted,
-      max_scan_matching_correction_translation,
-      max_scan_matching_correction_yaw,
+      effective_max_correction_translation,
+      effective_max_correction_yaw,
       &correction_rejected_by_jump,
       min_scan_matching_inlier_fraction,
       scan_matching_inlier_max_correspondence_distance,
@@ -615,6 +713,10 @@ private:
       scan_matching_jump_override_max_fitness_score,
       scan_matching_jump_override_min_inlier_fraction,
       &correction_jump_overridden);
+    if (recovery_jump_gate_relax_frames_remaining > 0) {
+      recovery_jump_gate_relax_frames_remaining =
+        std::max(0, recovery_jump_gate_relax_frames_remaining - 1);
+    }
     if (!correction_accepted) {
       RCLCPP_WARN_THROTTLE(
         get_logger(),
@@ -899,6 +1001,8 @@ private:
     have_last_accepted_pose = false;
     last_accepted_pose = Eigen::Matrix4f::Identity();
     consecutive_scan_matching_rejections = 0;
+    recovery_jump_gate_relax_frames_remaining = 0;
+    recovery_jump_gate_relax_until = zero_time();
     global_pose_probation_frames_remaining = 0;
     global_pose_probation_rejections = 0;
     pending_global_localization_candidates.clear();
@@ -906,6 +1010,37 @@ private:
     auto_relocalize_done = true;
     standby_mode = true;
     RCLCPP_INFO(get_logger(), "HDL localization entered standby; scans are cached but local tracking is stopped");
+    return true;
+  }
+
+  bool clear_relocalize_buffer(
+    std::shared_ptr<std_srvs::srv::Trigger::Request> req,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
+    (void)req;
+
+    std::lock_guard<std::mutex> lock(pose_estimator_mutex);
+    if (relocalizing) {
+      res->success = false;
+      res->message = "global relocalization is already running";
+      RCLCPP_WARN(get_logger(), "ignore relocalize buffer clear while global relocalization is running");
+      return true;
+    }
+
+    const size_t cleared_scans = recent_scans.size();
+    const bool had_last_scan = static_cast<bool>(last_scan);
+    recent_scans.clear();
+    last_scan.reset();
+    pending_global_localization_candidates.clear();
+    if (delta_estimater) {
+      delta_estimater->reset();
+    }
+
+    res->success = true;
+    std::ostringstream ss;
+    ss << "cleared relocalize buffer: recent_scans=" << cleared_scans
+       << " last_scan=" << static_cast<int>(had_last_scan);
+    res->message = ss.str();
+    RCLCPP_WARN_STREAM(get_logger(), res->message);
     return true;
   }
 
@@ -1400,6 +1535,7 @@ private:
     global_pose_probation_frames_remaining = std::max(0, global_localization_post_accept_validation_frames);
     global_pose_probation_rejections = 0;
     pending_global_localization_candidates.clear();
+    activate_recovery_jump_gate_relaxation("accepted global relocalization");
     auto_relocalize_done = true;
     standby_mode = false;
 
@@ -1590,7 +1726,15 @@ private:
       prior_max_xy = global_localization_recovery_prior_max_xy;
       prior_max_yaw = global_localization_recovery_prior_max_yaw;
       prior_hard_gate = global_localization_recovery_prior_hard_gate;
-      return select_recovery_prior(prior_pose, prior_source);
+      const bool selected = select_recovery_prior(prior_pose, prior_source);
+      if (
+        selected &&
+        prior_source == "external trusted-pose" &&
+        external_recovery_prior_max_xy_override > 0.0 &&
+        std::isfinite(external_recovery_prior_max_xy_override)) {
+        prior_max_xy = external_recovery_prior_max_xy_override;
+      }
+      return selected;
     }
 
     return false;
@@ -1699,6 +1843,8 @@ private:
       relocalize_requested = true;
       global_pose_probation_frames_remaining = 0;
       global_pose_probation_rejections = 0;
+      recovery_jump_gate_relax_frames_remaining = 0;
+      recovery_jump_gate_relax_until = zero_time();
       consecutive_scan_matching_rejections = 0;
       return false;
     }
@@ -1768,6 +1914,7 @@ private:
 
     Eigen::Isometry3f prior_pose = pose_msg_to_isometry(pose.pose);
     apply_2d_constraints(prior_pose);
+    const double prior_max_xy_override = pose_msg->pose.covariance[1];
 
     std::lock_guard<std::mutex> lock(pose_estimator_mutex);
     external_recovery_prior_pose = prior_pose.matrix();
@@ -1775,13 +1922,18 @@ private:
     if (external_recovery_prior_time.nanoseconds() == 0) {
       external_recovery_prior_time = get_clock()->now();
     }
+    external_recovery_prior_max_xy_override =
+      std::isfinite(prior_max_xy_override) && prior_max_xy_override > 0.0 ?
+      prior_max_xy_override :
+      -1.0;
     have_external_recovery_prior = true;
 
     const auto& t = prior_pose.translation();
     RCLCPP_INFO_STREAM(
       get_logger(),
       "external recovery prior received: pose=("
-        << t.x() << ", " << t.y() << ", yaw=" << pose_yaw(prior_pose) << ")");
+        << t.x() << ", " << t.y() << ", yaw=" << pose_yaw(prior_pose)
+        << "), max_xy_override=" << external_recovery_prior_max_xy_override);
   }
 
   /**
@@ -1834,6 +1986,7 @@ private:
     have_last_accepted_pose = true;
     consecutive_scan_matching_rejections = 0;
     pending_global_localization_candidates.clear();
+    activate_recovery_jump_gate_relaxation("/initialpose reset");
     standby_mode = false;
   }
 
@@ -2084,6 +2237,7 @@ private:
   bool have_external_recovery_prior;
   Eigen::Matrix4f external_recovery_prior_pose;
   rclcpp::Time external_recovery_prior_time;
+  double external_recovery_prior_max_xy_override;
   int global_pose_probation_frames_remaining;
   int global_pose_probation_rejections;
   std::vector<PendingGlobalLocalizationCandidate> pending_global_localization_candidates;
@@ -2100,6 +2254,7 @@ private:
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr relocalize_with_prior_checked_server;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr relocalize_startup_origin_checked_server;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr standby_server;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr clear_relocalize_buffer_server;
   rclcpp::TimerBase::SharedPtr auto_relocalize_timer;
   RelocalizeReport last_relocalize_report;
 
@@ -2116,6 +2271,12 @@ private:
   double scan_matching_inlier_max_correspondence_distance;
   double max_scan_matching_correction_translation;
   double max_scan_matching_correction_yaw;
+  int recovery_jump_gate_relax_frames;
+  double recovery_jump_gate_relax_sec;
+  double recovery_max_scan_matching_correction_translation;
+  double recovery_max_scan_matching_correction_yaw;
+  int recovery_jump_gate_relax_frames_remaining;
+  rclcpp::Time recovery_jump_gate_relax_until;
   double scan_matching_jump_override_max_fitness_score;
   double scan_matching_jump_override_min_inlier_fraction;
   int scan_matching_rejected_log_throttle_ms;

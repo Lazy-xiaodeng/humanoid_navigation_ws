@@ -652,8 +652,8 @@ def generate_launch_description():
             {
                 'use_sim_time': use_sim_time,
                 'set_initial_pose': False,
-                'score_threshold': 2.0,
-                # ★ 融合模式必须开启: NDT跳变→拒帧→error升高→fusion检测→DEGRADED
+                'score_threshold': 0.3,
+                # ★ 严格阈值: odom兜底可靠,NDT宁可拒帧也不接受低质量匹配
                 'reject_pose_jump': True,
                 'max_pose_jump_translation': 0.80,
                 'max_pose_jump_yaw': 0.45,
@@ -720,7 +720,21 @@ def generate_launch_description():
             'nav_idle_extreme_error': 5.0,
             'nav_status_topic': '/navigation_status',
             'recovery_request_cooldown_sec': 15.0,  # LOST时重复请求recovery的冷却
+            'init_timeout_sec': 20.0,               # INITIALIZING超时，超时后主动请求recovery
+            # ★ NDT pose jump 检测 (几何混叠场景 fitness 极低但位姿错误)
+            'pose_jump_degraded_from_status': True,    # NDT status reason 检测
+            'pose_jump_degraded_from_pcl': True,       # /pcl_pose 帧间跳变兜底
+            'pose_jump_pcl_threshold_m': 0.5,          # /pcl_pose 跳变阈值(m)
+            'pose_jump_correction_threshold_m': 0.5,   # NDT correction_translation 阈值(m)
             'transition_duration_sec': 2.0,
+            # ★ DEGRADED 锁定期: 进入 DEGRADED 后强制冷静期，拒绝 NDT 假恢复
+            'min_degraded_lock_sec': 30.0,
+            'max_degraded_lock_sec': 180.0,
+            'lock_recovery_healthy_consecutive_frames': 10,
+            'lock_recovery_max_correction_m': 0.3,
+            'lock_early_lost_rejection_rate': 0.9,
+            'lock_early_lost_min_frames': 30,
+            'recovery_pose_jump_max_m': 5.0,
             'publish_rate_hz': 30.0,
             'verbose_logging': True,
         },

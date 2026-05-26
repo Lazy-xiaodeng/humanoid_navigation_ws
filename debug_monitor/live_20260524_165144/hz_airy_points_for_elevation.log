@@ -1,0 +1,5 @@
+# command: ros2 topic hz /airy_points_for_elevation --window 100
+# started: 2026-05-24 16:51:45 +0800
+WARNING: topic [/airy_points_for_elevation] does not appear to be published yet
+average rate: 1.410
+	min: 0.560s max: 0.821s std dev: 0.10979s window: 3
