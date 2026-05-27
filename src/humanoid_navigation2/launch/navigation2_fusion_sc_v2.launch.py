@@ -59,6 +59,8 @@ def generate_launch_description():
     pkg_global_loc = get_package_share_directory('humanoid_global_localization')
     pkg_lidar_loc = get_package_share_directory('lidar_localization_ros2')
     pkg_scancontext_loc = get_package_share_directory('humanoid_scancontext_global_localization')
+    pkg_hdl_global_loc = get_package_share_directory('hdl_global_localization')
+    pkg_hdl_loc = get_package_share_directory('hdl_localization')
 
     default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params_xy_yaw.yaml')
     nav2_params_file = LaunchConfiguration('nav2_params_file', default=default_nav2_params_file)
@@ -68,6 +70,7 @@ def generate_launch_description():
         pkg_scancontext_loc, 'config', 'scancontext_global_localization.yaml')
     scancontext_database_file = os.path.join(pkg_nav2, 'maps', 'hall_sc_fastlio_registered.bin')
     scancontext_pcd_map_file = os.path.join(pkg_nav2, 'pcd', 'hall.pcd')
+    hdl_globalmap_pcd = os.path.join(pkg_nav2, 'pcd', 'hall_localization_grounded.pcd')
     map_yaml_file = os.path.join(pkg_nav2, 'maps', 'hall.yaml')
     default_bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_xy_then_yaw.xml')
     bt_xml_file = LaunchConfiguration('bt_xml_file', default=default_bt_xml_file)
@@ -274,7 +277,7 @@ def generate_launch_description():
                 'global_recovery_service': '/scancontext_global_localization/trigger_global',
                 'global_recovery_sc_distance_threshold': 0.25,
                 'global_recovery_gicp_fitness_threshold': 0.09,
-                'global_recovery_min_gicp_fitness_gap': 0.02,
+                'global_recovery_min_gicp_fitness_gap': 0.006,
                 'global_recovery_same_solution_xy_tolerance': 0.5,
                 'global_recovery_same_solution_yaw_tolerance': 0.35,
                 'global_recovery_required_consistent_results': 4,
@@ -401,6 +404,91 @@ def generate_launch_description():
             'xy_covariance': 0.35,
             'yaw_covariance': 0.35,
         },
+    )
+
+    # ★★★ HDL 全局重定位服务 (FPFH+RANSAC) ★★★
+    # 提供 /relocalize 服务，供 hdl_bootstrap_to_initialpose 调用
+    hdl_global_localization_node = Node(
+        package='hdl_global_localization',
+        executable='hdl_global_localization_node',
+        namespace='hdl_global_localization',
+        name='global_localization_node',
+        output='screen',
+        arguments=['--ros-args', '--log-level', 'WARN'],
+        parameters=[
+            {
+                'use_sim_time': use_sim_time,
+                'global_localization_engine': 'FPFH_RANSAC',
+                'globalmap_downsample_resolution': 0.5,
+                'query_downsample_resolution': 0.5,
+                'fpfh/normal_estimation_radius': 1.0,
+                'fpfh/search_radius': 3.0,
+                'ransac/voxel_based': True,
+                'ransac/max_iterations': 80000,
+                'ransac/matching_budget': 2000,
+                'ransac/max_correspondence_distance': 0.8,
+                'ransac/similarity_threshold': 0.5,
+                'ransac/correspondence_randomness': 3,
+                'ransac/inlier_fraction': 0.12,
+                'bbs/map_min_z': 0.2,
+                'bbs/map_max_z': 1.8,
+                'bbs/scan_min_z': 0.2,
+                'bbs/scan_max_z': 1.8,
+                'bbs/map_width': 160,
+                'bbs/map_height': 160,
+                'bbs/map_resolution': 0.5,
+                'bbs/min_score_ratio': 0.65,
+                'bbs/min_tx': -50.0,
+                'bbs/max_tx': 50.0,
+                'bbs/min_ty': -50.0,
+                'bbs/max_ty': 50.0,
+                'bbs/min_theta': -3.15,
+                'bbs/max_theta': 3.15,
+            }
+        ],
+    )
+
+    # ★ HDL bootstrap 容器 — 细定位 NDT + PCD 地图服务
+    hdl_bootstrap_container = ComposableNodeContainer(
+        name='hdl_bootstrap_container',
+        namespace='',
+        package='rclcpp_components',
+        executable='component_container_mt',
+        composable_node_descriptions=[
+            ComposableNode(
+                package='hdl_localization',
+                plugin='hdl_localization::GlobalmapServerNodelet',
+                name='BootstrapGlobalmapServerNodelet',
+                parameters=[{
+                    'use_sim_time': use_sim_time,
+                    'globalmap_pcd': hdl_globalmap_pcd,
+                    'convert_utm_to_local': False,
+                    'downsample_resolution': 0.1,
+                }]
+            ),
+            ComposableNode(
+                package='hdl_localization',
+                plugin='hdl_localization::HdlLocalizationNodelet',
+                name='BootstrapHdlLocalizationNodelet',
+                remappings=[
+                    ('/ouster/points', '/fast_lio/cloud_registered'),
+                ],
+                parameters=[{
+                    'use_sim_time': use_sim_time,
+                    'odom_child_frame_id': 'base_footprint',
+                    'robot_odom_frame_id': 'odom',
+                    'odom_topic': '/hdl_bootstrap/odom',
+                    'send_tf_transforms': False,
+                    'use_imu': False,
+                    'enable_robot_odometry_prediction': True,
+                    'reg_method': 'NDT_OMP',
+                    'ndt_resolution': 1.0,
+                    'downsample_resolution': 0.1,
+                    'reject_scan_matching_without_convergence': True,
+                    'max_scan_matching_fitness_score': 0.20,
+                }]
+            ),
+        ],
     )
 
     # ★★★ Phase 1 NDT 定位节点 v2 ★★★
@@ -645,9 +733,14 @@ def generate_launch_description():
         map_server_node,
         map_server_lifecycle,
 
+        # HDL 全局重定位基础设施 (FPFH+RANSAC + 细定位 NDT)
+        # 必须在 hdl_bootstrap_to_initialpose 之前启动，否则 /relocalize 服务不可用
+        hdl_global_localization_node,
+        hdl_bootstrap_container,
+
         TimerAction(period=4.0, actions=[scancontext_global_localizer_node]),
         TimerAction(period=5.0, actions=[scancontext_to_initialpose_node]),
-        # ★ Phase 3: HDL fallback 桥接 (10s 延迟, 确保 SC bridge 先就绪)
+        # ★ Phase 3: HDL fallback 桥接 (10s 延迟, 确保 HDL 容器 + SC bridge 先就绪)
         TimerAction(period=10.0, actions=[hdl_bootstrap_to_initialpose_node]),
 
         TimerAction(period=5.0, actions=[ndt_localization_node]),
