@@ -486,6 +486,11 @@ def generate_launch_description():
                     'downsample_resolution': 0.1,
                     'reject_scan_matching_without_convergence': True,
                     'max_scan_matching_fitness_score': 0.20,
+                    # 该环境几何对称度高, 全局定位候选 fitness 几乎相同
+                    # (10个候选 fitness ~0.0057, margin ~2e-07 << 默认 0.05)
+                    # 禁用单帧 margin 检查, 改为依赖多帧一致性验证
+                    'global_localization_min_fitness_margin': 0.0,
+                    'global_localization_ambiguous_max_fitness_score': 0.01,
                 }]
             ),
         ],
