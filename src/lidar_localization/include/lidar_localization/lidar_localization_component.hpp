@@ -227,10 +227,14 @@ public:
   double pose_jump_candidate_x_{0.0}; ///< 待确认候选X
   double pose_jump_candidate_y_{0.0}; ///< 待确认候选Y
   double pose_jump_candidate_yaw_{0.0}; ///< 待确认候选yaw
+  double last_mean_corr_dist_{-1.0}; ///< 最近一次NDT匹配的平均关联距离(用于退化诊断)
+  int last_corr_count_{0}; ///< 最近一次NDT匹配的关联点对数
   double ndt_resolution_;         ///< NDT网格分辨率（米）
   double ndt_step_size_;          ///< NDT牛顿迭代步长
   double transform_epsilon_;      ///< 变换收敛阈值
   double voxel_leaf_size_;        ///< 体素滤波叶子大小（米）
+  double ndt_outlier_ratio_{0.55};     ///< NDT离群点比率: 越高越"宽容"但曲面越平坦，标准PCL=0.35
+  double ndt_max_corr_dist_{0.0};      ///< NDT最大关联距离(m): 超过此距的点-格配对跳过，0=禁用
   bool use_pcd_map_{false};       ///< 是否使用PCD地图文件
   std::string map_path_;          ///< PCD地图文件路径
   bool set_initial_pose_{false};  ///< 是否启动时设置初始位姿
@@ -245,6 +249,9 @@ public:
   bool use_odom_{false};          ///< 是否使用里程计
   double last_odom_received_time_; ///< 上次里程计时间戳
   bool use_imu_{false};           ///< 是否使用IMU
+  bool ndt_rotation_prior_enabled_{false};   ///< 是否启用 NDT 旋转先验(roll/pitch约束)
+  double ndt_rotation_prior_weight_{0.0};    ///< 旋转先验权重: 0=不约束, 10=强约束
+  bool ndt_rotation_prior_roll_pitch_only_{true}; ///< 旋转先验仅约束roll/pitch(yaw留给NDT)
   bool enable_debug_{false};      ///< 是否启用调试输出
   bool force_2d_pose_{false};     ///< 是否将发布给导航的位姿约束到2D平面
   bool force_2d_fixed_z_{true};   ///< 2D约束时是否固定Z坐标

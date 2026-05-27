@@ -54,7 +54,7 @@ lidar_localization (NDT)
 localization_odom_fusion
   subscribes: /pcl_pose, /localization/ndt_status, /localization/recovery_status
   publishes: map→odom (DEGRADED/TRANSITIONING/LOST 时, 冻结值)
-             /fusion_status_json            ★ 已是 JSON: {state, ndt_error, ...}
+             /localization/fusion_status     ★ JSON: {state, ndt_error, ...}
              /localization/recovery_requests ★ MOD: 附带推算位姿先验
 
 TF ownership 分工 (Plan B 过渡架构):
@@ -566,9 +566,9 @@ def _enter_degraded(self):
   超时: 15s
 
 双引擎输出统一:
-  两个引擎都通过发布 /initialpose 的方式输出结果
-  包含 pose + covariance
-  NDT 不区分来源，统一处理
+  SC bridge 是唯一 /initialpose 发布者 (见下方仲裁机制)。
+  SC 输出最终候选; HDL 只输出候选位姿给 SC bridge，不直接发布 /initialpose。
+  NDT 只接收最终仲裁后的 /initialpose，不区分候选来源。
 ```
 
 #### 仲裁机制
@@ -751,33 +751,38 @@ ros2 topic echo /tf --field transforms | grep -A5 "map.*odom"
 
 ### Phase 2: 推算位姿先验 + SC 先验搜索
 
+**状态**: ✅ **已实施** (2026-05-27)
+
 **目标**: 用 odom 推算位姿缩小 SC 搜索范围
 
-**修改**:
-| 文件 | 改动 | 量级 |
+**实际修改**:
+| 文件 | 改动 | 状态 |
 |------|------|------|
-| `localization_odom_fusion.py` | 计算 prior_pose，写入 recovery_requests | ~25行 |
-| `scancontext_to_initialpose` | 接收 prior，局部搜索时用 prior 约束 | ~20行 |
-| `navigation2_fusion_sc_v2.launch.py` | SC 参数微调 | ~5行 |
+| `localization_odom_fusion.py` | 新增 `_compute_prior_pose()` 通过 TF chain `map→body` 查询; `_request_recovery()` 附带 prior 到 recovery_requests JSON | ✅ |
+| `scancontext_to_initialpose` | `recovery_request_callback` 解析 prior; `publish_recovery_status` 记录 prior 来源; `start_recovery`/`complete_recovery` 管理 prior 生命周期 | ✅ |
+| `navigation2_fusion_sc_v2.launch.py` | SC bridge 无新增参数 (prior 通过 recovery_request 动态传递) | ✅ |
 
 **验收**:
 ```bash
 # 检查 recovery_requests 包含 prior
 ros2 topic echo /localization/recovery_requests
-# 应包含 prior: {x, y, yaw, radius_m}
+# 应包含 prior: {x, y, radius_m, source, odom_displacement_m, ...}
 ```
 
 ### Phase 3: HDL 兜底 + NDT 校验增强 + Waypoint 保留
 
+**状态**: ✅ **已实施** (2026-05-27)
+
 **目标**: SC 失败后 HDL 兜底，恢复后正确继续导航
 
-**修改**:
-| 文件 | 改动 | 量级 |
+**实际修改**:
+| 文件 | 改动 | 状态 |
 |------|------|------|
-| `navigation2_fusion_sc_v2.launch.py` | 启用 HDL 节点 + 参数 | ~30行 |
-| `scancontext_to_initialpose` | HDL fallback 触发逻辑 | ~30行 |
-| `lidar_localization_component.cpp` | 删除 initialpose 后强制旧帧匹配 | ~5行 |
-| `navigation_state_manager_fusion.py` | Waypoint 保留 + 恢复后 resume | ~20行 |
+| `navigation2_fusion_sc_v2.launch.py` | 新增 `hdl_bootstrap_to_initialpose` 桥接节点 (monitor_localization=false, allow_full_global_recovery_without_prior=true); SC bridge 新增 `hdl_fallback_request_topic` 参数 | ✅ |
+| `scancontext_to_initialpose` | 新增 `_trigger_hdl_fallback()` + HDL publisher; `timer_callback` 全局搜索超限触发 HDL; `ndt_status_callback` NDT 拒绝后触发 HDL | ✅ |
+| `hdl_bootstrap_to_initialpose.py` | 新增 `hdl_fallback_callback` 订阅 `/localization/hdl_fallback_request`; fallback 触发时允许无先验全图搜索 (复用现有 1979 行 HDL 流水线, 不新写桥接节点) | ✅ |
+| `lidar_localization_component.cpp` | `initialPoseReceived()` 删除 `cloudReceived(last_scan_ptr_)` 调用 — 等下一帧自然到达 | ✅ |
+| `navigation_state_manager_fusion.py` | `try_resume_after_localization_recovery()` 恢复前清除 waypoint_arrived 标志 + 验证 current_waypoint 数据完整性 | ✅ |
 
 ## 8. 审计闭环 — 内审 + 外审问题汇总
 
@@ -847,12 +852,12 @@ ros2 topic echo /localization/recovery_requests
 | 推算位姿先验偏差过大 | SC 先验搜索失败后自动退回全局搜索 (3 次) |
 | 两个引擎结果不一致被 NDT 拒绝 | NDT 的多帧一致性校验会自动滤掉不一致的候选 |
 | 导航恢复后走错方向 | 恢复后 Nav2 重新规划，不依赖恢复前的 plan |
-| NDT 永久抑制 TF（fusion 崩溃） | fusion_status 超时 5s → 恢复默认 HEALTHY |
+| NDT 永久抑制 TF（fusion 崩溃） | FUSION_TIMEOUT 下默认继续抑制 TF，navigator 保持 blocked；需人工重启 fusion 或设 allow_ndt_tf_when_fusion_timeout=true 才降级放行 |
 | fusion 重启导致短暂 TF 抑制 | NDT 只抑制 DEGRADED/TRANSITIONING/LOST，不抑制 INITIALIZING |
 | SC 和 HDL 同时响应 recovery_request | HDL `enable_runtime_auto_recovery: false`，仅由 SC 显式 fallback 触发 |
 | IDLE 态定位异常时 APP 发新点位 | navigation 入口检测 fusion_state != HEALTHY → 缓存请求 + 告知 APP "pending"，恢复后自动执行 |
 | fUSION_TIMEOUT 下 NDT 继续抑制，长时间无 TF | navigator + NDT 双端超时检测，5s 阈值。可人工介入重启 fusion |
-| 冻结快照 frozen_map_body 查询失败 (启动瞬间 DEGRADED) | fallback: 只用 frozen_map_odom 做先验中心 (半径扩大至 5m)。记录 warning 日志 |
+| 冻结快照 frozen_map_body 查询失败 (启动瞬间 DEGRADED) | 不使用 frozen_map_odom 作为机器人位置；标记 prior unavailable，SC/HDL 直接进入扩大半径或全局搜索。记录 warning 日志 |
 | SC bridge 本身崩溃 (唯一 /initialpose 发布者挂了) | Phase 3 后可由 HDL 接管发布。Phase 1-2 期间: fusion 持续重发 recovery_request, SC 重启后自动恢复 |
 | 评审建议的部分优化未纳入 Phase 1 | §8.3 已列出预留项。不影响 Phase 1 核心功能 |
 

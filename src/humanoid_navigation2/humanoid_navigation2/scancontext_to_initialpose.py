@@ -169,6 +169,12 @@ class ScanContextToInitialPose(Node):
 
         self.pub = self.create_publisher(PoseWithCovarianceStamped, self.initialpose_topic, 10)
         self.recovery_status_pub = self.create_publisher(String, self.recovery_status_topic, 10)
+        # ★ Phase 3: HDL fallback request publisher
+        self.hdl_fallback_request_topic = self.declare_parameter(
+            "hdl_fallback_request_topic", "/localization/hdl_fallback_request"
+        ).value
+        self.hdl_fallback_pub = self.create_publisher(String, self.hdl_fallback_request_topic, 10)
+        self.hdl_fallback_triggered = False
         self.sub = self.create_subscription(
             PoseWithCovarianceStamped, self.best_pose_topic, self.best_pose_callback, 10
         )
@@ -194,6 +200,8 @@ class ScanContextToInitialPose(Node):
         self.global_trigger_client = self.create_client(Trigger, self.global_trigger_service)
         self.timer = self.create_timer(0.2, self.timer_callback)
         self.publish_timer = self.create_timer(self.publish_period_sec, self.publish_timer_callback)
+        # ★ Phase 2: prior tracking
+        self.recovery_prior = None
         self.get_logger().info(
             f"scancontext_to_initialpose started: {self.best_pose_topic} -> {self.initialpose_topic}"
         )
@@ -263,6 +271,14 @@ class ScanContextToInitialPose(Node):
         self.last_trigger_time = now
         self.relocalize_attempts += 1
         self.active_service_name = service_name
+        # ★ Phase 3: SC 全局搜索耗尽 → 触发 HDL fallback
+        # 启动阶段宽松 (SC 始终 global, 需更多尝试), 运行阶段收紧
+        hdl_trigger_extra = 5 if startup else 2
+        if (not self.hdl_fallback_triggered and use_global and
+            self.relocalize_attempts > self.global_recovery_after_attempts + hdl_trigger_extra):
+            self._trigger_hdl_fallback(
+                f"SC global search exhausted ({self.relocalize_attempts} attempts, "
+                f"no accepted candidate, startup={startup})")
         mode = "global ScanContext recovery" if use_global else "ScanContext relocalize"
         self.publish_recovery_status("localization_relocalize_requested", f"requested {mode}")
         future = client.call_async(Trigger.Request())
@@ -355,6 +371,11 @@ class ScanContextToInitialPose(Node):
             "localization_relocalize_failed",
             f"NDT rejected ScanContext initialpose {rejected_count} consecutive frames: {reason}",
         )
+        # ★ Phase 3: SC 全局搜索多次被 NDT 拒绝 → 触发 HDL fallback
+        if (not self.hdl_fallback_triggered and
+            self.recovery_count >= self.global_recovery_after_attempts):
+            self._trigger_hdl_fallback(
+                f"SC recovery #{self.recovery_count} failed NDT validation: {reason}")
         self.start_recovery(
             f"NDT rejected ScanContext initialpose {rejected_count} consecutive frames: {reason}"
         )
@@ -363,11 +384,20 @@ class ScanContextToInitialPose(Node):
     def recovery_request_callback(self, msg):
         self.external_recovery_until = time.monotonic() + self.external_recovery_request_duration_sec
         reason = "external localization recovery request"
+        prior = None
         try:
             data = json.loads(msg.data)
             reason = data.get("reason", reason)
+            # ★ Phase 2: 解析 prior 信息
+            prior = data.get("prior", None)
+            if prior is not None:
+                self.get_logger().info(
+                    f'[SC bridge] recovery_request 携带 prior: '
+                    f'x={prior.get("x", "?")}, y={prior.get("y", "?")}, '
+                    f'radius={prior.get("radius_m", "?")}m, source={prior.get("source", "?")}')
         except Exception:
             pass
+        self.recovery_prior = prior
         if not self.recovery_active:
             self.start_recovery(reason)
 
@@ -426,6 +456,13 @@ class ScanContextToInitialPose(Node):
         self.recovery_count += 1
         self.relocalize_attempts = 0
         self.active_service_name = self.trigger_service
+        self.hdl_fallback_triggered = False  # ★ Phase 3
+        # ★ Phase 2: prior is already set by recovery_request_callback before start_recovery
+        if self.recovery_prior is not None:
+            self.get_logger().info(
+                f'[SC bridge] recovery with prior: x={self.recovery_prior.get("x", "?")}, '
+                f'y={self.recovery_prior.get("y", "?")}, '
+                f'radius={self.recovery_prior.get("radius_m", "?")}m')
         self.get_logger().info(
             f'[SC bridge] recovery #{self.recovery_count} started: {reason}')
         self.publish_recovery_status("localization_recovery_started", reason)
@@ -439,6 +476,8 @@ class ScanContextToInitialPose(Node):
         self.pending_initialpose = None
         self.pending_count = 0
         self.ndt_recovery_stable_status_count = 0
+        self.recovery_prior = None  # ★ Phase 2
+        self.hdl_fallback_triggered = False  # ★ Phase 3
 
     def publish_recovery_status(self, event_type, reason):
         payload = {
@@ -449,12 +488,48 @@ class ScanContextToInitialPose(Node):
             "recovery_count": self.recovery_count,
             "relocalize_attempts": self.relocalize_attempts,
             "active_service": self.active_service_name if self.recovery_active else None,
-            "use_prior": False,
+            "use_prior": self.recovery_prior is not None,
+            "prior_source": self.recovery_prior.get("source", "") if self.recovery_prior else "",
             "source": "scancontext_to_initialpose",
         }
         msg = String()
         msg.data = json.dumps(payload, ensure_ascii=False)
         self.recovery_status_pub.publish(msg)
+
+    # ★ Phase 3: HDL fallback 触发
+    def _trigger_hdl_fallback(self, reason: str):
+        """SC 全局搜索用尽仍失败 → 触发 HDL 作为 fallback 引擎。
+
+        HDL 执行 FPFH+RANSAC 几何搜索，结果通过 /initialpose 发布后
+        由 NDT 多帧验收。HDL 不直接响应 /localization/recovery_requests，
+        只由 SC bridge 显式触发。
+        """
+        if self.hdl_fallback_triggered:
+            return
+        self.hdl_fallback_triggered = True
+        prior_info = {}
+        if self.recovery_prior is not None:
+            prior_info = {
+                'prior_x': self.recovery_prior.get('x'),
+                'prior_y': self.recovery_prior.get('y'),
+                'prior_radius_m': self.recovery_prior.get('radius_m', 5.0),
+                'prior_source': self.recovery_prior.get('source', ''),
+            }
+        payload = {
+            'event_type': 'hdl_fallback_request',
+            'reason': reason,
+            'timestamp': time.time(),
+            'recovery_count': self.recovery_count,
+            'source': 'scancontext_to_initialpose',
+            **prior_info,
+        }
+        msg = String()
+        msg.data = json.dumps(payload, ensure_ascii=False)
+        self.hdl_fallback_pub.publish(msg)
+        self.get_logger().error(
+            f'[SC bridge] ★ 触发 HDL fallback: {reason} '
+            f'(recovery#{self.recovery_count}, prior={bool(self.recovery_prior)})')
+        self.publish_recovery_status("hdl_fallback_triggered", reason)
 
     def convert_pose(self, msg):
         out = PoseWithCovarianceStamped()

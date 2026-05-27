@@ -431,6 +431,7 @@ class LocalizationOdomFusion(Node):
 
         # Recovery 状态跟踪（防止重复请求）
         self._recovery_in_progress = False    # SC/HDL 正在执行 recovery
+        self._init_recovery_count = 0          # INITIALIZING 中 recovery 请求计数
         self.init_start_time = time.monotonic()  # INITIALIZING 启动时间，用于超时检测
 
         # 累计 odom 位移追踪（从进入 DEGRADED 算起，永不重置）
@@ -767,9 +768,14 @@ class LocalizationOdomFusion(Node):
         be rejected/error=inf for an extended period. This should NOT be
         interpreted as degradation from HEALTHY.
 
-        Timeout protection: if NDT doesn't become healthy within init_timeout_sec,
-        proactively request SC recovery to prevent deadlock.
-        (SC bridge waits for fusion -> fusion waits for NDT -> NDT waits for SC bridge)
+        Recovery strategy (revised 2026-05-27):
+        - ndt_state='none': NDT hasn't received /initialpose yet. DO NOT trigger
+          recovery — HDL bootstrap is still running startup relocalization.
+          Recovery would reset HDL's bootstrap and poison the correct initialpose.
+        - ndt_state='rejected' with finite error: NDT has received /initialpose
+          but can't converge. Recovery MAY help (re-publish with prior).
+        - After 3 failed recovery attempts: stop and request manual intervention
+          to prevent infinite recovery loop poisoning.
         """
         if ndt_map_odom is not None:
             self.latest_ndt_map_odom = ndt_map_odom
@@ -782,6 +788,7 @@ class LocalizationOdomFusion(Node):
             self.state = FusionState.HEALTHY
             self.consecutive_healthy = 0
             self.consecutive_degraded = 0
+            self._init_recovery_count = 0
             self.get_logger().info(
                 '========== [INITIALIZING→HEALTHY] 首次定位成功 ==========\n'
                 f'  NDT error: {self.latest_ndt_error:.4f}\n'
@@ -789,31 +796,75 @@ class LocalizationOdomFusion(Node):
             self._publish_fusion_status()
             return
 
-        # ★ 超时保护: INITIALIZING 超时后主动请求 SC recovery
-        #    防止启动死锁: 如果 SC bridge 的 startup 窗口已过,
-        #    fusion 必须主动触发 recovery 而不是被动等待
         now = time.monotonic()
         init_elapsed = now - self.init_start_time
-        if init_elapsed > self.init_timeout_sec:
+
+        # Recovery decision: only trigger if NDT has actually received status
+        # and is showing degraded results (not just "never started").
+        ndt_has_status = self.latest_ndt_status_time > 0.0
+        ndt_is_degraded = (
+            ndt_has_status and
+            (self.latest_ndt_state == 'rejected' or
+             (self.latest_ndt_error < float('inf') and not self.latest_ndt_converged))
+        )
+        ndt_never_started = not ndt_has_status or self.latest_ndt_state in ('', 'none')
+
+        init_recovery_count = getattr(self, '_init_recovery_count', 0)
+        max_init_recovery = 3  # hard stop after this many failed recovery attempts
+
+        if init_recovery_count >= max_init_recovery:
+            # Already tried recovery enough times — don't keep poisoning the pose
+            if self.verbose_logging and now - self.last_state_log_time > self.state_log_interval_sec:
+                self.last_state_log_time = now
+                self.get_logger().error(
+                    f'[INITIALIZING] 已请求 {init_recovery_count} 次 recovery 均失败, '
+                    f'停止自动恢复. 请手动设置 /initialpose 或检查 HDL/NDT 节点状态. '
+                    f'(ndt_state={self.latest_ndt_state or "none"}, '
+                    f'error={self.latest_ndt_error:.4f})')
+            return
+
+        # Condition A: NDT has never started — wait longer, don't interfere with HDL bootstrap
+        if ndt_never_started:
+            # Use a much longer timeout (90s) when NDT hasn't even started
+            # because recovery would reset HDL's startup bootstrap
+            if init_elapsed > 90.0:
+                last_req = getattr(self, 'last_recovery_request_time', 0.0)
+                cooldown = self.recovery_request_cooldown_sec * (2 ** init_recovery_count)
+                cooldown = min(cooldown, 120.0)  # cap at 120s
+                if now - last_req > cooldown:
+                    self.get_logger().warn(
+                        f'[INITIALIZING] NDT 启动超时 ({init_elapsed:.0f}s > 90s), '
+                        f'ndt_state 从未到达, 尝试 #{init_recovery_count + 1}/{max_init_recovery} recovery...')
+                    self._request_recovery()
+            return
+
+        # Condition B: NDT has status and is degraded — recovery may help
+        if ndt_is_degraded and init_elapsed > self.init_timeout_sec:
             last_req = getattr(self, 'last_recovery_request_time', 0.0)
-            if now - last_req > self.recovery_request_cooldown_sec:
+            cooldown = self.recovery_request_cooldown_sec * (2 ** init_recovery_count)
+            cooldown = min(cooldown, 120.0)
+            if now - last_req > cooldown:
                 self.get_logger().warn(
-                    f'[INITIALIZING] 启动超时 ({init_elapsed:.0f}s > '
-                    f'{self.init_timeout_sec:.0f}s)，主动请求 SC recovery...')
+                    f'[INITIALIZING] NDT 已收到 status 但持续退化 '
+                    f'({init_elapsed:.0f}s > {self.init_timeout_sec:.0f}s), '
+                    f'尝试 #{init_recovery_count + 1}/{max_init_recovery} recovery...')
                 self._request_recovery()
 
         if self.verbose_logging and now - self.last_state_log_time > self.state_log_interval_sec:
             self.last_state_log_time = now
             reason = '等待 /initialpose 后 NDT 首次 accepted'
-            if self.latest_ndt_status_time <= 0.0:
-                reason = '等待 NDT 状态'
+            if not ndt_has_status:
+                reason = '等待 NDT 状态 (NDT 尚未收到 /initialpose, HDL bootstrap 进行中)'
             elif initial_pose is None:
                 reason = '等待 map->odom 或 /pcl_pose'
             elif odom_body is None:
                 reason = '等待 odom->body TF'
-            elif init_elapsed > self.init_timeout_sec:
-                reason = (f'启动超时 ({init_elapsed:.0f}s), '
-                          f'已请求 recovery, 等待 NDT 接受 /initialpose')
+            elif ndt_never_started and init_elapsed > 90.0:
+                reason = (f'NDT 长时间无状态 ({init_elapsed:.0f}s), '
+                          f'已请求 recovery #{init_recovery_count}')
+            elif init_recovery_count >= max_init_recovery:
+                reason = (f'recovery 已达上限 ({max_init_recovery}次), '
+                          f'等待手动 /initialpose')
             self.get_logger().info(
                 f'[INITIALIZING] {reason} '
                 f'(ndt_state={self.latest_ndt_state or "none"}, '
@@ -1349,18 +1400,32 @@ class LocalizationOdomFusion(Node):
         state_label = 'INITIALIZING' if self.state == FusionState.INITIALIZING else 'LOST'
         self.last_recovery_request_time = now
 
+        # Track INITIALIZING recovery count for exponential backoff and hard stop
+        if self.state == FusionState.INITIALIZING:
+            self._init_recovery_count = getattr(self, '_init_recovery_count', 0) + 1
+
+        # ★ Phase 2: 计算先验位姿并附带到 recovery_requests
+        prior = self._compute_prior_pose()
+        prior_log = ''
+        if prior is not None:
+            prior_log = (f'(prior: x={prior["x"]:.2f}, y={prior["y"]:.2f}, '
+                         f'radius={prior["radius_m"]:.1f}m, source={prior["source"]})')
+
         import json as _json
         request_msg = String()
-        request_msg.data = _json.dumps({
+        request_data = {
             'reason': 'fusion odom fallback exhausted (timeout or displacement limit)',
             'source': 'localization_odom_fusion',
             'event_type': 'fusion_lost',
             'search_radius_m': 5.0,
-        })
+        }
+        if prior is not None:
+            request_data['prior'] = prior
+        request_msg.data = _json.dumps(request_data)
         self.recovery_request_pub.publish(request_msg)
         self.get_logger().warn(
             f'[{state_label}] 已发送 recovery 请求到 /localization/recovery_requests，'
-            '等待 SC/hdl_bootstrap 执行全局重定位...')
+            f'等待 SC/hdl_bootstrap 执行全局重定位... {prior_log}')
 
     def _reset_state(self):
         """重置所有内部状态变量"""
@@ -1372,6 +1437,7 @@ class LocalizationOdomFusion(Node):
         self.transition_from = None
         self.transition_to = None
         self._recovery_in_progress = False
+        self._init_recovery_count = 0
         self._pcl_pose_jump_detected = False
         self.prev_pcl_map_odom = None
         # 清理锁定期状态
@@ -1460,7 +1526,8 @@ class LocalizationOdomFusion(Node):
             True 如果 NDT 当前健康
         """
         if not (self.latest_ndt_error < self.healthy_error_threshold and
-                self.latest_ndt_converged):
+                self.latest_ndt_converged and
+                self.latest_ndt_state == 'accepted'):
             return False
 
         # DEGRADED 恢复时: 检查 NDT 新 map->odom 是否与冻结值一致
@@ -1630,6 +1697,70 @@ class LocalizationOdomFusion(Node):
         dx = odom_body['x'] - self.frozen_odom_body[0]   # 左右
         dz = odom_body['z'] - self.frozen_odom_body[2]   # 前后 (back+)
         return math.hypot(dx, dz)
+
+    # =========================================================================
+    # Phase 2: 推算位姿先验
+    # =========================================================================
+
+    def _compute_prior_pose(self) -> dict:
+        """通过 TF 链直接查询 body 在 map 帧的位置，作为重定位先验中心。
+
+        不需要手工坐标转换: TF 库自动处理 camera_init 非标准轴到 ROS 轴的旋转。
+        查询失败时 fallback 到 frozen_map_body (已在 _enter_degraded 保存)。
+
+        Returns:
+            dict with prior info, or None if completely unavailable
+        """
+        displacement = 0.0
+        now = time.monotonic()
+
+        try:
+            body_in_map = self.tf_buffer.lookup_transform(
+                'map', 'body', rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=0.1))
+        except Exception:
+            # TF 链断裂 → fallback: 使用冻结时保存的 map_T_body
+            if self.frozen_map_body is None:
+                return None
+            frozen_yaw = quat_to_yaw(
+                self.frozen_map_body['qx'], self.frozen_map_body['qy'],
+                self.frozen_map_body['qz'], self.frozen_map_body['qw'])
+            return {
+                'x': self.frozen_map_body['x'],
+                'y': self.frozen_map_body['y'],
+                'radius_m': 5.0,
+                'yaw_constrained': False,
+                'search_mode': 'full_360',
+                'source': 'frozen_map_body_no_tf',
+                'frozen_age_sec': now - self.frozen_body_stamp,
+                'odom_displacement_m': 0.0,
+            }
+
+        prior_x = body_in_map.transform.translation.x
+        prior_y = body_in_map.transform.translation.y
+        prior_stamp_sec = (body_in_map.header.stamp.sec +
+                           body_in_map.header.stamp.nanosec * 1e-9)
+
+        # 搜索半径 = odom 累计位移 + 2m 安全余量, 夹在 [2, 5]m
+        current_odom = self._lookup_odom_body()
+        if current_odom is not None and self.frozen_odom_body is not None:
+            displacement = self._compute_odom_displacement(current_odom)
+
+        radius = max(displacement + 2.0, 2.0)
+        radius = min(radius, 5.0)
+
+        return {
+            'x': prior_x,
+            'y': prior_y,
+            'radius_m': radius,
+            'yaw_constrained': False,
+            'search_mode': 'full_360',
+            'source': 'frozen_tf_chain',
+            'odom_displacement_m': displacement,
+            'frozen_age_sec': now - self.frozen_body_stamp if self.frozen_body_stamp > 0 else -1.0,
+            'ndt_correction_at_freeze_m': self.ndt_correction_at_freeze,
+            'stamp': prior_stamp_sec,
+        }
 
     # =========================================================================
     # TF 发布

@@ -639,3 +639,359 @@ navigation blocked ownership: navigation_state_manager
 ```
 
 只要这三条边界不清楚，系统就容易从“抢 TF”演化成“抢 initialpose”“抢导航状态”。先把 ownership 定清，再做双引擎协作，整体架构才会稳定。
+
+## 10. 第二轮复审：2026-05-27 02:47:45 CST
+
+评审对象：用户修订后的 `DUAL_ENGINE_RECOVERY_DESIGN.md`。  
+结论：新版已经采纳了上一轮大部分阻断意见，整体可行性明显提高。Plan B 过渡 TF ownership、set-based navigation blocked、FUSION_TIMEOUT、`frozen_map_body` fallback、pending 请求覆盖语义、多层恢复验收都已经补上。当前剩余问题主要是文档前后不一致和实现时容易踩到的边界漏洞。
+
+### 10.1 Topic 名不一致
+
+位置：`DUAL_ENGINE_RECOVERY_DESIGN.md` 第 57 行。
+
+当前写法：
+
+```text
+/fusion_status_json
+```
+
+但现有代码和全文其他位置使用的是：
+
+```text
+/localization/fusion_status
+```
+
+风险：
+
+```text
+NDT 订阅不到 fusion 状态
+→ 非 HEALTHY 时不抑制 TF
+→ navigation_state_manager 也无法进入 blocked
+→ test3 的 TF 竞争和继续导航问题可能复现
+```
+
+建议修正：
+
+```text
+统一使用 /localization/fusion_status。
+```
+
+如果确实要改 topic 名，必须同步修改：
+
+```text
+lidar_localization
+localization_odom_fusion
+navigation_state_manager
+launch 参数
+bag/debug monitor
+```
+
+### 10.2 `/initialpose` ownership 仍有冲突
+
+位置：`DUAL_ENGINE_RECOVERY_DESIGN.md` 第 568-571 行。
+
+当前仍写：
+
+```text
+两个引擎都通过发布 /initialpose 的方式输出结果
+```
+
+这和新版架构中的“SC bridge 是唯一 `/initialpose` 发布者”冲突。
+
+风险：
+
+```text
+SC 发布 initialpose A
+HDL 随后发布 initialpose B
+NDT reacquire 被打断
+fusion 看到 /pcl_pose 跳变
+系统进入反复 recovery 或假恢复
+```
+
+建议修正：
+
+```text
+只有 SC bridge 或 recovery_arbiter 发布 /initialpose。
+HDL 只输出候选位姿给 SC bridge/recovery_arbiter。
+NDT 不区分候选来源，只接收最终仲裁后的 /initialpose。
+```
+
+建议替换原段落为：
+
+```text
+双引擎输出统一:
+  SC 输出候选或最终结果。
+  HDL 只输出候选位姿，不直接发布 /initialpose。
+  SC bridge/recovery_arbiter 是唯一 /initialpose 发布者。
+  NDT 只接收最终仲裁后的 initialpose。
+```
+
+### 10.3 FUSION_TIMEOUT 风险表与正文冲突
+
+位置：`DUAL_ENGINE_RECOVERY_DESIGN.md` 第 845 行。
+
+当前风险表仍写：
+
+```text
+fusion_status 超时 5s → 恢复默认 HEALTHY
+```
+
+但正文已经改成 FUSION_TIMEOUT，默认继续抑制 TF。这两处冲突。
+
+风险：
+
+```text
+实施者按风险表实现
+→ fusion 在 DEGRADED/LOST 崩溃后，NDT 5s 后恢复发 TF
+→ 错误 NDT TF 重新进入系统
+```
+
+建议修正：
+
+```text
+fusion 在非健康态崩溃后:
+  NDT 默认继续抑制 map->odom TF。
+  navigation_state_manager 保持 localization_blocked。
+  系统等待 fusion 重启、人工介入或显式降级参数放行。
+```
+
+建议风险表改为：
+
+```text
+NDT 永久抑制 TF（fusion 崩溃） |
+FUSION_TIMEOUT 下默认继续抑制 TF，navigator 保持 blocked；
+需要人工重启 fusion 或显式设置 allow_ndt_tf_when_fusion_timeout=true 才降级放行。
+```
+
+### 10.4 `frozen_map_odom` fallback 又被写回风险表
+
+位置：`DUAL_ENGINE_RECOVERY_DESIGN.md` 第 850 行。
+
+当前风险表写：
+
+```text
+fallback: 只用 frozen_map_odom 做先验中心 (半径扩大至 5m)
+```
+
+这和正文第 415-499 行已经修正的逻辑冲突。`frozen_map_odom` 是 odom 原点在 map 中的位置，不是机器人位置。
+
+风险：
+
+```text
+机器人已经离 odom 原点很远
+→ fallback 把 prior 圆心放到 odom 原点附近
+→ SC/HDL 先验搜索被错误约束
+→ 局部搜索必然失败，甚至误召回错误区域
+```
+
+建议修正：
+
+```text
+fallback 优先使用 frozen_map_body。
+如果 frozen_map_body 不存在，不允许把 frozen_map_odom 当机器人位置。
+此时应标记 prior unavailable，进入扩大半径或全局搜索。
+```
+
+建议风险表改为：
+
+```text
+冻结快照 frozen_map_body 查询失败 |
+不使用 frozen_map_odom 作为机器人位置；标记 prior unavailable，
+SC/HDL 直接进入大半径或全局搜索，并记录 warning 日志。
+```
+
+### 10.5 Navigation blocked 状态建议包含 FUSION_TIMEOUT 和 UNKNOWN
+
+位置：`DUAL_ENGINE_RECOVERY_DESIGN.md` 第 130 行。
+
+当前：
+
+```python
+BLOCKED_STATES = {"DEGRADED", "TRANSITIONING", "LOST"}
+```
+
+建议：
+
+```python
+HEALTHY_STATES = {"HEALTHY"}
+BLOCKED_STATES = {"DEGRADED", "TRANSITIONING", "LOST", "FUSION_TIMEOUT", "UNKNOWN"}
+```
+
+理由：
+
+```text
+对 navigation_state_manager 来说，只要定位不是明确 HEALTHY，就不应允许新导航启动。
+```
+
+注意：NDT 端为了兼容独立模式，可以继续区分“fusion 从未出现”和“fusion 非健康崩溃”。但 navigation 端最好更保守。
+
+建议增加参数：
+
+```yaml
+fusion_required_for_navigation: true
+```
+
+语义：
+
+```text
+true:
+  navigator 必须收到新鲜 HEALTHY fusion_status 才允许导航。
+
+false:
+  兼容独立 NDT 模式，fusion 从未出现时允许导航。
+```
+
+### 10.6 参数表前后不一致
+
+位置：
+
+- `DUAL_ENGINE_RECOVERY_DESIGN.md` 第 699-700 行。
+- `DUAL_ENGINE_RECOVERY_DESIGN.md` 第 725 行。
+
+前面写：
+
+```text
+max_degraded_lock_sec: 30 → 10
+min_degraded_lock_sec: 30 → 10
+```
+
+后面 Phase 1 表仍写：
+
+```text
+max_degraded_lock_sec: 30
+min_degraded_lock_sec: 15
+```
+
+风险：
+
+```text
+实施时按错参数
+→ DEGRADED 后等待时间不可控
+→ recovery 触发延迟
+```
+
+建议统一为同一组参数，并避免“lock_sec”同时表达停车等待和 recovery 重试。
+
+更清晰的参数拆分：
+
+```yaml
+degraded_to_recovery_timeout_sec: 2.0-3.0
+runtime_stationary_settle_sec: 1.0
+runtime_relocalize_buffer_refill_sec: 1.0-1.5
+recovery_retry_timeout_sec: 10.0-30.0
+```
+
+### 10.7 LOST 超时语义需要拆开
+
+位置：`DUAL_ENGINE_RECOVERY_DESIGN.md` 第 838 行。
+
+当前写：
+
+```text
+LOST 超时 30s 后自动触发 recovery
+```
+
+但 launch 参数已经倾向于 10s，而且“进入 recovery 前等待多久”和“recovery 失败后多久告警/重试”是两个不同语义。
+
+建议拆成：
+
+```text
+degraded_to_recovery_timeout_sec:
+  定位不健康且机器人已停车后，多久触发 recovery。
+  建议 2.0-3.0s。
+
+recovery_attempt_timeout_sec:
+  一次 SC/HDL recovery 尝试多久算失败。
+  建议 SC 局部 2-3s，SC 全局 5-10s，HDL 15s。
+
+recovery_total_timeout_sec:
+  总恢复多久仍失败后进入人工等待。
+  建议 30-60s，根据现场需求定。
+```
+
+### 10.8 `/tf` publisher 验收项表述不准确
+
+位置：`DUAL_ENGINE_RECOVERY_DESIGN.md` 第 729-731 行。
+
+当前写：
+
+```text
+ros2 topic info /tf -v
+应只有 fusion 一个 publisher
+```
+
+这不准确。`/tf` 上通常会有 Fast-LIO、robot_state_publisher、其他传感器节点。验收目标不是 `/tf` 只有一个 publisher，而是 `map->odom` 这条边在 DEGRADED/LOST 期间只有 fusion/rusion 的数值流。
+
+建议改成：
+
+```text
+ros2 topic info /tf -v 用于查看 NDT/fusion 是否都在发布 /tf。
+真正验收需要过滤 TF message:
+  header.frame_id == "map"
+  child_frame_id == "odom"
+
+DEGRADED/LOST 期间:
+  map->odom 数值应保持冻结或按 fusion 策略变化。
+  不应出现 NDT /pcl_pose 漂移值插入 map->odom。
+```
+
+建议增加 bag 检查脚本指标：
+
+```text
+map->odom 帧间跳变统计
+map->odom 与 /pcl_pose 漂移值是否交替
+DEGRADED/LOST 时间窗内 map->odom 是否恒定
+/cmd_vel 在 localization_blocked 后是否归零
+/initialpose publisher 是否唯一
+```
+
+### 10.9 可行性判断
+
+修订后的方案整体可行，适合作为 Plan B 过渡架构推进：
+
+```text
+HEALTHY:
+  NDT 发布 map->odom。
+
+DEGRADED/TRANSITIONING/LOST:
+  NDT 抑制 TF。
+  fusion 发布冻结 map->odom。
+  navigation_state_manager blocked + zero cmd。
+  recovery 使用 prior + SC/HDL。
+```
+
+它可以显著降低 test3 的主要问题：
+
+```text
+NDT 漂移后继续走
+TF 在 NDT/fusion 之间跳源
+recovery 等不到静止
+全局重定位无 prior
+恢复后 waypoint 被跳过
+```
+
+剩余最大技术风险：
+
+```text
+SC 错误高置信候选仍可能通过第一阶段链路。
+```
+
+当前方案依赖 NDT 多帧验收兜底，这可以先跑，但不应作为最终形态。长廊/重复结构场景下，应尽快补 Phase 3：
+
+```text
+SC top-K candidates
+→ HDL/GICP 几何验证
+→ margin 足够才发布 /initialpose
+→ NDT 多帧最终验收
+```
+
+### 10.10 第二轮结论
+
+可以进入实施，但建议先修掉以下四个文档冲突，再开始写代码：
+
+1. 统一 fusion status topic：`/localization/fusion_status`。
+2. 删除“两引擎都发布 `/initialpose`”的表述，明确 SC bridge/recovery_arbiter 唯一发布。
+3. 风险表中 FUSION_TIMEOUT 不得写成“恢复 HEALTHY”。
+4. 风险表中 fallback 不得使用 `frozen_map_odom` 作为机器人位置。
+
+这四项如果不修，后续实现很容易按错误段落落地。

@@ -526,6 +526,13 @@ def generate_launch_description():
                 # NDT拒帧时不重发旧TF，避免与fusion DEGRADED冻结TF冲突
                 'republish_last_good_tf_on_failure': False,
                 'max_last_good_tf_age_sec': 0.5,
+                # ★ NDT 鲁棒性参数 (退化区域防漂移)
+                'ndt_outlier_ratio': 0.30,                  # 降低离群率 → 更强约束
+                'ndt_max_corr_dist': 2.0,                   # 2m外关联直接跳过
+                'ndt_rotation_prior_enabled': True,         # 启用 roll/pitch 先验
+                'ndt_rotation_prior_weight': 10.0,          # roll/pitch 正则化权重
+                'ndt_rotation_prior_roll_pitch_only': True, # 只约束 roll/pitch（yaw 给 NDT）
+                # ★ 退化诊断指标（在 ndt_status JSON 里自动输出 mean_corr_dist）
             }
         ],
         remappings=[('/cloud', '/fast_lio/cloud_registered')],

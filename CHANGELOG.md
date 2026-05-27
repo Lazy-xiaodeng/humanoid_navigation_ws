@@ -1,6 +1,19 @@
 # 变更记录
 
-## [2026-05-27 19:55:00] v2 引擎设为默认 + NDT漂移诊断工具
+## [2026-05-27 20:30:00] 修复 Recovery Loop 死锁导致位姿被反复拉偏的根因
+
+- **修改文件**:
+  - `src/humanoid_navigation2/humanoid_navigation2/localization_odom_fusion.py` —
+    (a) `_update_initializing()`: 重写 recovery 触发逻辑。区分 "NDT 从未收到 /initialpose (state=none)" vs "NDT 收到但持续退化"。前者等待更长时间(90s)再请求 recovery，避免打断 HDL 的 startup bootstrap；后者保持 20s 快速触发。
+    (b) 新增 `_init_recovery_count` 计数器 + 指数退避: 冷却时间 = 15s × 2^n (cap 120s)。3次失败后硬停止自动 recovery，等待手动 /initialpose。
+    (c) `_reset_state()` / `_request_recovery()`: 正确管理 counter 生命周期。
+  - `src/humanoid_navigation2/humanoid_navigation2/hdl_bootstrap_to_initialpose.py` —
+    (a) `recovery_request_callback()`: 新增防位姿污染 guard。startup bootstrap 进行中 (recovery_count==0) 收到无 prior 的外部 recovery 请求时，拒绝执行 start_recovery()。防止外部请求重置 bootstrap_done 并切换到 runtime recovery mode，打断正在进行的 startup relocalization。
+    (b) 优先级: 让 HDL 自己的 startup loop 自然完成，而不是被外部触发反复重置。
+
+- **根因**: fusion INITIALIZING 超时(20s) → 向 HDL 发送无 prior 的 recovery 请求 → HDL `start_recovery()` 重置 `bootstrap_done=False` → 打断正在进行的启动重定位 → 重新发布可能错误的 /initialpose → NDT 收敛到错误位置 → 用户手动纠正后又被覆盖 → 死循环。
+
+- **修复效果**: 启动时 fusion 不再打断 HDL 的启动重定位；recovery 请求有指数退避和硬停止上限；HDL 在启动阶段拒绝无 prior 的外部 recovery 请求。
 
 - **修改文件**:
   - `src/humanoid_bringup/launch/robot_real.launch.py` — (a) 新增 `v2` 作为第三个引擎选项 (默认); (b) `relocalization_engine` 三选一: v2(默认)/sc/hdl; (c) v2→`navigation2_fusion_sc_v2.launch.py`, v2/sc 共享 app 层 `navigation_fusion_sc.launch.py`

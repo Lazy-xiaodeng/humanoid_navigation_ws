@@ -342,6 +342,15 @@ class HdlBootstrapToInitialPose(Node):
             self.recovery_request_callback,
             10,
         )
+        # ★ Phase 3: HDL fallback 订阅 (由 SC bridge 显式触发)
+        self.hdl_fallback_request_topic = self.declare_parameter(
+            'hdl_fallback_request_topic', '/localization/hdl_fallback_request').value
+        self.hdl_fallback_sub = self.create_subscription(
+            String,
+            self.hdl_fallback_request_topic,
+            self.hdl_fallback_callback,
+            10,
+        )
 
         self.start_time = time.monotonic()
         self.last_relocalize_request_time = 0.0
@@ -868,6 +877,24 @@ class HdlBootstrapToInitialPose(Node):
             return
 
         now = time.monotonic()
+
+        # ★ 防位姿污染: 如果仍在 startup bootstrap (recovery_count==0),
+        #    且请求没有 prior, 则拒绝外部 recovery 请求。
+        #    此时 HDL 自己的 startup bootstrap loop 正在做同样的事,
+        #    start_recovery() 会重置 bootstrap_done 并切换到 runtime recovery mode,
+        #    打断正在进行的 startup relocalization。
+        if self.recovery_count == 0:
+            prior_available = bool(
+                request.get('prior_pose') or request.get('prior'))
+            if not prior_available:
+                self.get_logger().warn(
+                    'ignore external recovery request during startup bootstrap: '
+                    'startup relocalization already in progress, '
+                    'external request has no prior and would reset bootstrap state. '
+                    f'reason={request.get("reason", "unknown")}',
+                    throttle_duration_sec=5.0)
+                return
+
         if (
             self.need_relocalize and
             now - self.last_external_recovery_request_time < self.external_recovery_request_cooldown_sec
@@ -908,26 +935,116 @@ class HdlBootstrapToInitialPose(Node):
             trigger_event=request.get('event_type', ''),
         )
 
+    # ★ Phase 3: SC bridge 显式触发 HDL fallback
+    def hdl_fallback_callback(self, msg):
+        """SC bridge 全局搜索耗尽后显式触发 HDL 作为 fallback 引擎。
+
+        与 recovery_request 的关键区别:
+          - recovery_request 要求 prior (allow_full_global_recovery_without_prior=false)
+          - hdl_fallback 允许无先验全图搜索 (allow_full_global_recovery_without_prior=true)
+          - SC bridge 已尝试过 SC 全局搜索并失败, HDL 做最后兜底
+          - 启动前检查: 如果 NDT 已恢复 (/pcl_pose 近期更新), 跳过 HDL
+        """
+        try:
+            data = json.loads(msg.data)
+        except json.JSONDecodeError:
+            data = {}
+        reason = data.get('reason', 'SC exhausted, HDL fallback triggered')
+        prior = data.get('prior', None)
+
+        now = time.monotonic()
+        # ★ 竞态保护: SC 可能在发送 fallback 请求后自己成功了
+        # 检查 NDT status 是否最近有 accepted → 定位可能已由 SC 恢复
+        if (self.last_ndt_status is not None and
+            self.last_ndt_status_time > 0 and
+            now - self.last_ndt_status_time < 3.0):
+            ndt_state = self.last_ndt_status.get('state', '')
+            if ndt_state == 'accepted':
+                self.get_logger().warn(
+                    f'[HDL] 跳过 SC fallback: NDT status 最近为 accepted '
+                    f'({now - self.last_ndt_status_time:.1f}s ago), '
+                    f'定位可能已由 SC 恢复')
+                return
+
+        self.get_logger().warn(
+            f'[HDL] 收到 SC fallback 请求: {reason} '
+            f'(prior_available={prior is not None})')
+
+        if (self.need_relocalize and
+            now - self.last_external_recovery_request_time < self.external_recovery_request_cooldown_sec):
+            self.get_logger().warn('[HDL] SC fallback 忽略: 已在 relocalization 中')
+            return
+
+        prior_ok = False
+        prior_reason = 'no prior from SC bridge fallback'
+        if prior is not None:
+            prior_pose = {
+                'position': {'x': prior['x'], 'y': prior['y'], 'z': 0.0},
+                'orientation': {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0},
+            }
+            request = {
+                'prior_pose': prior_pose,
+                'prior_source': prior.get('source', 'sc_bridge_fallback'),
+                'search_radius_m': prior.get('radius_m', 5.0),
+            }
+            prior_ok, prior_reason = self.prepare_external_prior_from_request(request)
+
+        if not prior_ok:
+            self.get_logger().warn(
+                f'[HDL] SC fallback 无可用 prior ({prior_reason}), '
+                f'直接启动 HDL 全图搜索')
+            # ★ HDL fallback 的独特语义: 允许无 prior 全图搜索
+            self.allow_full_global_recovery_without_prior = True
+
+        self.last_external_recovery_request_time = now
+        failure_reason = f'SC bridge fallback: {reason}'
+        self.start_recovery(
+            failure_reason,
+            use_prior=prior_ok,
+            prior_reason=prior_reason,
+            request_source=data.get('source', 'scancontext_to_initialpose'),
+            search_radius_m=float(data.get('prior_radius_m', 5.0)),
+            trigger_event='hdl_fallback_request',
+        )
+
     def prepare_external_prior_from_request(self, request):
         self.pending_external_prior = None
         self.pending_external_prior_reason = ''
 
+        # ★ Phase 3 fix: 支持两种 prior 格式
+        #   格式A (旧): {prior_pose: {position: {x,y,z}, orientation: {x,y,z,w}}}
+        #   格式B (新, fusion Phase 2): {prior: {x, y, radius_m, source, ...}}
         pose_data = request.get('prior_pose')
-        if not isinstance(pose_data, dict):
-            return False, 'request has no prior_pose'
+        if isinstance(pose_data, dict):
+            position = pose_data.get('position') or {}
+            orientation = pose_data.get('orientation') or {}
+            try:
+                x = float(position['x'])
+                y = float(position['y'])
+                z = float(position.get('z', 0.0))
+                qx = float(orientation.get('x', 0.0))
+                qy = float(orientation.get('y', 0.0))
+                qz = float(orientation.get('z', 0.0))
+                qw = float(orientation.get('w', 1.0))
+            except (KeyError, TypeError, ValueError) as exc:
+                pose_data = None  # fall through to format B
+            else:
+                pass  # format A parsed successfully
+        else:
+            pose_data = None  # no format A, try format B
 
-        position = pose_data.get('position') or {}
-        orientation = pose_data.get('orientation') or {}
-        try:
-            x = float(position['x'])
-            y = float(position['y'])
-            z = float(position.get('z', 0.0))
-            qx = float(orientation.get('x', 0.0))
-            qy = float(orientation.get('y', 0.0))
-            qz = float(orientation.get('z', 0.0))
-            qw = float(orientation.get('w', 1.0))
-        except (KeyError, TypeError, ValueError) as exc:
-            return False, f'invalid prior_pose: {exc}'
+        if pose_data is None:
+            prior = request.get('prior')
+            if isinstance(prior, dict) and 'x' in prior and 'y' in prior:
+                try:
+                    x = float(prior['x'])
+                    y = float(prior['y'])
+                    z = 0.0
+                    qx, qy, qz, qw = 0.0, 0.0, 0.0, 1.0
+                except (KeyError, TypeError, ValueError) as exc:
+                    return False, f'invalid prior format B: {exc}'
+            else:
+                return False, 'request has no prior_pose or prior'
 
         qx, qy, qz, qw = normalize_quaternion(qx, qy, qz, qw)
         msg = PoseWithCovarianceStamped()
