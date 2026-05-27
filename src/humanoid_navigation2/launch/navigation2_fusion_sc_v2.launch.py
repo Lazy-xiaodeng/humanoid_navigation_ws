@@ -117,7 +117,8 @@ def generate_launch_description():
             ('/CloudPoints', '/airy_points'),
             ('/Imu', '/airy_imu'),
             ('/Odometry', '/odom'),
-            ('/cloud_registered', '/fast_lio/cloud_registered')
+            ('/cloud_registered', '/fast_lio/cloud_registered'),
+            ('/cloud_registered_body', '/fast_lio/cloud_registered_body')
         ]
     )
 
@@ -256,9 +257,9 @@ def generate_launch_description():
                 'use_sim_time': use_sim_time,
                 'database_path': scancontext_database_file,
                 'pcd_map_path': scancontext_pcd_map_file,
-                'cloud_topic': '/fast_lio/cloud_registered',
+                'cloud_topic': '/fast_lio/cloud_registered_body',
                 'odom_topic': '/odom',
-                'cloud_frame_mode': 'registered',
+                'cloud_frame_mode': 'local',
                 'map_frame': 'camera_init',
                 'publish_initialpose': False,
                 'query_on_cloud': False,
@@ -305,9 +306,11 @@ def generate_launch_description():
             'trigger_service': '/scancontext_global_localization/trigger',
             'global_trigger_service': '/scancontext_global_localization/trigger_global',
             'global_recovery_after_attempts': 3,
+            'startup_hdl_fallback_after_attempts': 20,
+            'runtime_hdl_fallback_after_attempts': 5,
             'startup_trigger_period_sec': 2.0,
             'runtime_trigger_period_sec': 8.0,
-            'startup_duration_sec': 30.0,
+            'startup_duration_sec': 60.0,
             'monitor_localization': True,
             'localization_pose_stale_sec': 2.5,
             'recovery_settle_sec': 6.0,
@@ -355,6 +358,8 @@ def generate_launch_description():
             'map_frame': 'map',
             'odom_frame': 'odom',
             'base_frame': 'base_footprint',
+            # SC is the startup owner. HDL only runs after an explicit SC fallback request.
+            'enable_startup_bootstrap': False,
             'startup_delay_sec': 2.0,
             'relocalize_retry_sec': 6.0,
             'startup_relocalize_retry_sec': 1.0,
@@ -521,11 +526,11 @@ def generate_launch_description():
                 'initial_pose_z': 0.0,
                 'score_threshold': 0.3,
                 'reject_pose_jump': True,
-                'max_pose_jump_translation': 0.40,
-                'max_pose_jump_yaw': 0.30,
+                'max_pose_jump_translation': 0.80,    # 0.40→0.80: 避免正常运动被误判跳变
+                'max_pose_jump_yaw': 0.60,            # 0.30→0.60: 转向容忍度
                 'initialpose_relax_duration_sec': 4.0,
                 'initialpose_max_pose_jump_translation': 2.00,
-                'initialpose_max_pose_jump_yaw': 1.20,
+                'initialpose_max_pose_jump_yaw': 3.00,  # 1.20→3.00: recovery允许大角度纠正
                 'pose_jump_reacquire_enabled': True,
                 'pose_jump_reacquire_max_translation': 0.80,
                 'pose_jump_reacquire_max_yaw': 0.30,
@@ -535,8 +540,16 @@ def generate_launch_description():
                 'pose_jump_reacquire_yaw_tolerance': 0.25,
                 'min_scan_points': 50,
                 'localization_status_topic': '/localization/ndt_status',
-                'republish_last_good_tf_on_failure': False,
-                'max_last_good_tf_age_sec': 0.5,
+                'republish_last_good_tf_on_failure': True,   # R3: NDT拒绝后保持last_good TF, 维持TF树
+                'max_last_good_tf_age_sec': 5.0,         # 0.5→5.0: 覆盖典型DEGRADED窗口
+                # ★ Plan B: Fast-LIO delta guess — 防止 init_guess 冻结
+                'use_fastlio_delta_guess': True,
+                'fastlio_camera_frame': 'camera_init',
+                'fastlio_body_frame': 'body',
+                'tf_max_stamp_mismatch_sec': 0.2,
+                'fastlio_max_delta_translation': 0.20,
+                'fastlio_max_delta_yaw': 0.25,
+                'fastlio_max_dead_reckon_sec': 2.0,
                 # ★ NDT 鲁棒性参数 (退化区域防漂移)
                 'ndt_outlier_ratio': 0.30,
                 'ndt_max_corr_dist': 2.0,

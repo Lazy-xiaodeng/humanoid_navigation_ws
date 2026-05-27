@@ -187,6 +187,27 @@ public:
   bool initialpose_reacquire_active_{false}; ///< 初始位姿后是否处于NDT重新捕获窗口
   int consecutive_rejected_frames_{0}; ///< 连续被拒绝的扫描匹配帧数
 
+  // Fast-LIO delta guess (Plan B): 用 camera_init→body TF 的位姿差推进 init_guess
+  // 注意：启用后 corrent_pose_with_cov_stamped_ptr_ 不再是"当前可信定位"，而是内部 rolling guess
+  bool use_fastlio_delta_guess_{false};
+  std::string fastlio_camera_frame_{"camera_init"};
+  std::string fastlio_body_frame_{"body"};
+  double tf_max_stamp_mismatch_sec_{0.2};
+  double fastlio_max_delta_translation_{0.20};
+  double fastlio_max_delta_yaw_{0.25};
+  double fastlio_max_dead_reckon_sec_{2.0};
+  bool has_prev_body_pose_{false};
+  double prev_body_x_{0.0}, prev_body_y_{0.0}, prev_body_z_{0.0};
+  double prev_body_qx_{0.0}, prev_body_qy_{0.0}, prev_body_qz_{0.0}, prev_body_qw_{0.0};
+  rclcpp::Time prev_cloud_stamp_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time last_accept_time_{0, 0, RCL_ROS_TIME};
+  // Per-frame debug fields (set in cloudReceived, read by publishLocalizationStatus)
+  bool fastlio_delta_applied_{false};
+  std::string fastlio_delta_reject_reason_;
+  double fastlio_delta_translation_debug_{0.0};
+  double fastlio_delta_yaw_debug_{0.0};
+  double fastlio_dead_reckon_age_debug_{0.0};
+
 
   // ========== ROS参数 ==========
   std::string global_frame_id_;   ///< 全局坐标系ID（如"map"）
