@@ -1,5 +1,20 @@
 # 变更记录
 
+## [2026-05-28 11:29:00] Plan B 代码审查修复 + 方案 C 门限收紧
+
+- **修改文件**:
+  - `src/lidar_localization/src/lidar_localization_component.cpp` —
+    (a) `initialPoseReceived()`: 新增 `last_accept_time_ = this->now()`，与 `has_prev_body_pose_` 同步重置，防止 /initialpose 恢复后立即触发 dead_reckon_timeout。
+    (b) `mapReceived()`: 新增 `last_accept_time_ = this->now()`，新地图后避免立刻 timeout。
+    (c) TF/cloud stamp 时间差计算包 try-catch，clock type 不一致时设 `fastlio_delta_reject_reason_ = "tf_clock_mismatch"` 并跳过本帧 delta。
+    (d) `max_delta_exceeded` 分支：在重置 `has_prev_body_pose_` 前先填 `fastlio_delta_translation_debug_` 和 `fastlio_delta_yaw_debug_`，实机排查时可观测超限幅度。
+  - `src/humanoid_navigation2/launch/navigation2_fusion_sc_v2.launch.py` —
+    (a) `max_pose_jump_translation`: 0.80→0.50, `max_pose_jump_yaw`: 0.60→0.40, `pose_jump_reacquire_max_translation`: 0.80→0.50（方案 C 门限收紧，delta guess 压低 correction 后不再需要宽门限）。
+
+- **修改原因**: 代码审查发现 5 项问题：dead-reckon 计时在 recovery 后未重置、TF 时间差计算缺异常保护、超限 debug 字段空白、launch 参数未按方案 C 收紧。
+
+- **影响范围**: 定位恢复后的 delta guess 连续性、TF 异常场景的鲁棒性、NDT 错误匹配的拦截灵敏度。
+
 ## [2026-05-28 10:28:00] Plan B — Fast-LIO delta guess 防止 NDT init_guess 冻结
 
 - **修改文件**:
