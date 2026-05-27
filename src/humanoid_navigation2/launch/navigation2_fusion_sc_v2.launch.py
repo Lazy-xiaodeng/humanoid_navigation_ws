@@ -366,7 +366,9 @@ def generate_launch_description():
             'runtime_stationary_settle_sec': 1.0,
             'runtime_stationary_max_xy_delta': 0.08,
             'runtime_stationary_max_yaw_delta': 0.08,
-            'publish_zero_cmd_vel_during_recovery': True,
+            # ★ 统一暂停架构: nav_state_manager 是唯一 cmd_vel 零速源
+            # hdl_bootstrap 不再发零速度, 避免与 controller_server + nav_state_manager 三方冲突
+            'publish_zero_cmd_vel_during_recovery': False,
             'recovery_stop_cmd_vel_topic': '/cmd_vel',
             'recovery_stop_cmd_vel_period_sec': 0.1,
             'max_relocalize_attempts': 0,
