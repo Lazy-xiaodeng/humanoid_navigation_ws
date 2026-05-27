@@ -58,6 +58,11 @@ PCLLocalization::PCLLocalization(const rclcpp::NodeOptions & options)
   declare_parameter("ndt_max_iterations", 35);      // 配准算法最大迭代次数
   declare_parameter("ndt_num_threads", 4);          // OMP版本的线程数，>0时使用指定线程数，<=0时使用最大可用线程数
   declare_parameter("transform_epsilon", 0.01);     // 变换收敛阈值，两次迭代间变换小于此值认为收敛
+  declare_parameter("ndt_outlier_ratio", 0.55);     // NDT离群点比率: 越低约束越强, 标准PCL=0.35; 0.55=更宽容
+  declare_parameter("ndt_max_corr_dist", 0.0);      // NDT最大关联距离(m): 0=禁用; 设置2.0可剔除远距离错误关联
+  declare_parameter("ndt_rotation_prior_enabled", false);  // 是否启用 roll/pitch 先验约束
+  declare_parameter("ndt_rotation_prior_weight", 0.0);     // roll/pitch 先验权重: 10~20 推荐
+  declare_parameter("ndt_rotation_prior_roll_pitch_only", true); // true=仅约束roll/pitch(yaw留给NDT)
   
   // ========== 点云滤波参数 ==========
   declare_parameter("voxel_leaf_size", 0.2);        // 体素滤波叶子大小（米），用于降采样，越大点越少
@@ -318,6 +323,11 @@ void PCLLocalization::initializeParameters()
   
   // 获取点云处理参数
   get_parameter("voxel_leaf_size", voxel_leaf_size_);   // 体素滤波叶子大小
+  get_parameter("ndt_outlier_ratio", ndt_outlier_ratio_);
+  get_parameter("ndt_max_corr_dist", ndt_max_corr_dist_);
+  get_parameter("ndt_rotation_prior_enabled", ndt_rotation_prior_enabled_);
+  get_parameter("ndt_rotation_prior_weight", ndt_rotation_prior_weight_);
+  get_parameter("ndt_rotation_prior_roll_pitch_only", ndt_rotation_prior_roll_pitch_only_);
   get_parameter("scan_max_range", scan_max_range_);     // 点云最大距离
   get_parameter("scan_min_range", scan_min_range_);     // 点云最小距离
   get_parameter("min_scan_points", min_scan_points_);   // NDT最少有效点数
@@ -409,6 +419,11 @@ void PCLLocalization::initializeParameters()
   RCLCPP_INFO(get_logger(),"ndt_num_threads: %d", ndt_num_threads_);
   RCLCPP_INFO(get_logger(),"transform_epsilon: %lf", transform_epsilon_);
   RCLCPP_INFO(get_logger(),"voxel_leaf_size: %lf", voxel_leaf_size_);
+  RCLCPP_INFO(get_logger(),"ndt_outlier_ratio: %lf", ndt_outlier_ratio_);
+  RCLCPP_INFO(get_logger(),"ndt_max_corr_dist: %lf", ndt_max_corr_dist_);
+  RCLCPP_INFO(get_logger(),"ndt_rotation_prior_enabled: %d", ndt_rotation_prior_enabled_);
+  RCLCPP_INFO(get_logger(),"ndt_rotation_prior_weight: %lf", ndt_rotation_prior_weight_);
+  RCLCPP_INFO(get_logger(),"ndt_rotation_prior_roll_pitch_only: %d", ndt_rotation_prior_roll_pitch_only_);
   RCLCPP_INFO(get_logger(),"scan_max_range: %lf", scan_max_range_);
   RCLCPP_INFO(get_logger(),"scan_min_range: %lf", scan_min_range_);
   RCLCPP_INFO(get_logger(),"min_scan_points: %d", min_scan_points_);
@@ -575,6 +590,10 @@ void PCLLocalization::publishLocalizationStatus(
     << "\"pose_jump_reacquire_required_frames\":" << pose_jump_reacquire_required_frames_ << ","
     << "\"pose_jump_candidate_count\":" << pose_jump_candidate_count_ << ","
     << "\"filtered_points\":" << filtered_points << ","
+    << "\"mean_corr_dist\":" << last_mean_corr_dist_ << ","   // NDT退化诊断关键指标
+    << "\"ndt_outlier_ratio\":" << ndt_outlier_ratio_ << ","
+    << "\"ndt_max_corr_dist\":" << ndt_max_corr_dist_ << ","
+    << "\"ndt_rotation_prior_weight\":" << ndt_rotation_prior_weight_ << ","
     << "\"consecutive_rejected_frames\":" << consecutive_rejected_frames_
     << "}";
 
@@ -674,6 +693,7 @@ void PCLLocalization::initializeRegistration()
     ndt->setStepSize(ndt_step_size_);        // 牛顿迭代步长
     ndt->setResolution(ndt_resolution_);     // NDT网格分辨率
     ndt->setTransformationEpsilon(transform_epsilon_);  // 收敛阈值
+    ndt->setOulierRatio(ndt_outlier_ratio_); // 离群点比率
     registration_ = ndt;
   }
   else if (registration_method_ == "NDT_OMP") {
@@ -683,6 +703,10 @@ void PCLLocalization::initializeRegistration()
     ndt_omp->setStepSize(ndt_step_size_);
     ndt_omp->setResolution(ndt_resolution_);
     ndt_omp->setTransformationEpsilon(transform_epsilon_);
+    ndt_omp->setOulierRatio(ndt_outlier_ratio_);     // 离群点比率
+    if (ndt_max_corr_dist_ > 0.0) {
+      ndt_omp->setMaxCorrespondenceDistance(ndt_max_corr_dist_);  // 最大关联距离
+    }
     // 设置线程数
     if (ndt_num_threads_ > 0) {
       ndt_omp->setNumThreads(ndt_num_threads_);  // 使用指定线程数
@@ -759,10 +783,23 @@ void PCLLocalization::initialPoseReceived(const geometry_msgs::msg::PoseWithCova
         initial_pose_msg->pose.pose.position.z,
         tf2::getYaw(initial_pose_msg->pose.pose.orientation) * 180.0 / M_PI);
     } catch (tf2::TransformException & ex) {
-      RCLCPP_WARN(
-        this->get_logger(), "Failed to transform initialpose from %s to %s: %s",
-        msg->header.frame_id.c_str(), global_frame_id_.c_str(), ex.what());
-      return;
+      // 当 map 帧尚未存在时 (NDT 还未发布 map->odom),
+      // map_ground 帧的位姿在 x/y/yaw 上与 map 一致 (仅 z 投影到地面),
+      // 直接接受初始位姿以避免"鸡生蛋"死锁。
+      if (global_frame_id_ == "map" && msg->header.frame_id == "map_ground") {
+        RCLCPP_WARN(
+          this->get_logger(),
+          "map frame not available yet, accepting map_ground initialpose directly "
+          "(map_ground is aligned with map in xy+yaw): x=%.3f y=%.3f z=%.3f yaw=%.1fdeg",
+          msg->pose.pose.position.x, msg->pose.pose.position.y,
+          msg->pose.pose.position.z,
+          tf2::getYaw(msg->pose.pose.orientation) * 180.0 / M_PI);
+      } else {
+        RCLCPP_WARN(
+          this->get_logger(), "Failed to transform initialpose from %s to %s: %s",
+          msg->header.frame_id.c_str(), global_frame_id_.c_str(), ex.what());
+        return;
+      }
     }
   }
 
@@ -783,8 +820,11 @@ void PCLLocalization::initialPoseReceived(const geometry_msgs::msg::PoseWithCova
   consecutive_rejected_frames_ = 0;
   pose_pub_->publish(*corrent_pose_with_cov_stamped_ptr_);  // 发布初始位姿
 
+  // Phase 3: 不强制用旧帧点云匹配 — 等下一帧自然到达
+  // 旧帧可能来自 DEGRADED 期间的污染点云, 强制匹配会导致 NDT 在错误位姿初始化
+  // initialpose 已保存, cloudReceived 回调会在下一帧新点云到达时自然触发匹配
   if (last_scan_ptr_) {
-    cloudReceived(last_scan_ptr_);  // 使用最后一帧点云进行首次定位
+    RCLCPP_INFO(get_logger(), "Initial pose stored, waiting for next scan frame for matching.");
   } else {
     RCLCPP_WARN(get_logger(), "No scan received yet, initial pose stored only.");
   }
@@ -1095,12 +1135,41 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
   tf2::fromMsg(corrent_pose_with_cov_stamped_ptr_->pose.pose, affine);
   Eigen::Matrix4f init_guess = affine.matrix().cast<float>();
 
+  // NDT 旋转先验: 用当前位姿的 roll/pitch 约束 NDT 优化，减少退化区域漂移
+  bool rotation_prior_was_set = false;
+  if (ndt_rotation_prior_enabled_ && ndt_rotation_prior_weight_ > 0.0) {
+    if (auto * ndt_omp_ptr =
+          dynamic_cast<pclomp::NormalDistributionsTransform<pcl::PointXYZI, pcl::PointXYZI> *>(
+            registration_.get())) {
+      Eigen::Matrix3d rot_init = init_guess.block<3, 3>(0, 0).cast<double>();
+      double roll = std::atan2(rot_init(2, 1), rot_init(2, 2));
+      double pitch = std::asin(std::max(-1.0, std::min(1.0, -rot_init(2, 0))));
+      double yaw = std::atan2(rot_init(1, 0), rot_init(0, 0));
+      Eigen::Vector3d prior_rpy(roll, pitch, yaw);
+      ndt_omp_ptr->setRotationPrior(
+        prior_rpy, ndt_rotation_prior_weight_, ndt_rotation_prior_roll_pitch_only_);
+      rotation_prior_was_set = true;
+    }
+  }
+
   // 执行配准算法
   pcl::PointCloud<pcl::PointXYZI>::Ptr output_cloud(new pcl::PointCloud<pcl::PointXYZI>);
   rclcpp::Clock system_clock;
   rclcpp::Time time_align_start = system_clock.now();  // 记录开始时间
   registration_->align(*output_cloud, init_guess);
   rclcpp::Time time_align_end = system_clock.now();  // 记录结束时间
+
+  // 提取 NDT_OMP 诊断信息 (退化监控用)
+  // mean_corr_dist 是重要退化指标: <0.5=匹配紧密, >1.5=可能退化
+  last_mean_corr_dist_ = -1.0;
+  if (auto * ndt_diag =
+        dynamic_cast<pclomp::NormalDistributionsTransform<pcl::PointXYZI, pcl::PointXYZI> *>(
+          registration_.get())) {
+    last_mean_corr_dist_ = ndt_diag->getLastMeanCorrespondenceDistance();
+    if (rotation_prior_was_set) {
+      ndt_diag->clearRotationPrior();
+    }
+  }
 
   // 检查配准结果
   bool has_converged = registration_->hasConverged();  // 是否收敛

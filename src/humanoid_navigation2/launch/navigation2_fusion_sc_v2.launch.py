@@ -503,7 +503,10 @@ def generate_launch_description():
             localization_params_file,
             {
                 'use_sim_time': use_sim_time,
-                'set_initial_pose': False,
+                'set_initial_pose': True,
+                'initial_pose_x': 0.0,
+                'initial_pose_y': 0.0,
+                'initial_pose_z': 0.0,
                 'score_threshold': 0.3,
                 'reject_pose_jump': True,
                 'max_pose_jump_translation': 0.40,
