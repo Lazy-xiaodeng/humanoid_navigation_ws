@@ -1,5 +1,75 @@
 # 变更记录
 
+## [2026-05-27 19:55:00] v2 引擎设为默认 + NDT漂移诊断工具
+
+- **修改文件**:
+  - `src/humanoid_bringup/launch/robot_real.launch.py` — (a) 新增 `v2` 作为第三个引擎选项 (默认); (b) `relocalization_engine` 三选一: v2(默认)/sc/hdl; (c) v2→`navigation2_fusion_sc_v2.launch.py`, v2/sc 共享 app 层 `navigation_fusion_sc.launch.py`
+  - `src/humanoid_navigation2/launch/navigation2_fusion_sc_v2.launch.py` — NDT 节点补全鲁棒性参数: outlier_ratio=0.30, max_corr_dist=2.0, rotation_prior 启用 (weight=10.0)
+  - `src/humanoid_navigation2/humanoid_navigation2/ndt_drift_diagnostic.py` — **新文件**: NDT 漂移 vs 里程计漂移 分离诊断工具
+  - `src/humanoid_navigation2/setup.py` — 注册 ndt_drift_diagnostic 入口
+
+- **robot_real.launch.py 使用**:
+  - `ros2 launch humanoid_bringup robot_real.launch.py` → 默认启动 v2 (双引擎恢复)
+  - `ros2 launch humanoid_bringup robot_real.launch.py relocalization_engine:=sc` → 旧 SC v1
+  - `ros2 launch humanoid_bringup robot_real.launch.py relocalization_engine:=hdl` → HDL 版本
+
+- **漂移诊断工具**:
+  - 订阅 `/localization/ndt_status` + `/localization/fusion_status`, 50帧滑动窗口
+  - 方向一致性分析: 有效修正(>3cm)中指向主导方向±30°的比例
+  - NDT 漂移信号: 方向一致性>65% + mean_corr_dist>1.5m + 大修正比例>30%
+  - Odom 漂移信号: 方向分散 + 小修正 + 累积位姿漂移
+  - 输出: 终端实时诊断面板 + JSONL 日志
+  - 用法: `ros2 run humanoid_navigation2 ndt_drift_diagnostic [--log-dir /path/to/logs]`
+
+## [2026-05-28 03:30:00] NDT 漂移根治: 暴露鲁棒性参数 + 退化诊断 + 地图质量检查工具
+
+- **修改文件**:
+  - `src/lidar_localization/include/lidar_localization/lidar_localization_component.hpp` — 新增成员变量: `ndt_outlier_ratio_`, `ndt_max_corr_dist_`, `ndt_rotation_prior_enabled_`, `ndt_rotation_prior_weight_`, `ndt_rotation_prior_roll_pitch_only_`, `last_mean_corr_dist_`
+  - `src/lidar_localization/src/lidar_localization_component.cpp` — (a) declare/get 5个新参数; (b) `initializeRegistration()` 设置 outler_ratio + max_correspondence_distance; (c) `cloudReceived()` 配准前注入 roll/pitch 旋转先验 + 配准后提取 mean_corr_dist 诊断指标; (d) `publishLocalizationStatus()` JSON 新增 mean_corr_dist/ndt_outlier_ratio/ndt_max_corr_dist/ndt_rotation_prior_weight 字段
+  - `src/lidar_localization/param/localization.yaml` — 新增 NDT 鲁棒性参数段 (默认值: outlier_ratio=0.35, max_corr_dist=0.0, rotation_prior=disabled)
+  - `src/humanoid_navigation2/launch/navigation2_fusion_sc.launch.py` — NDT 节点覆盖新参数: outlier_ratio=0.30, max_corr_dist=2.0, rotation_prior_enabled=true, weight=10.0
+  - `src/humanoid_navigation2/humanoid_navigation2/check_map_quality.py` — **新文件**: PCD 地图 NDT 退化风险分析工具
+  - `src/humanoid_navigation2/setup.py` — 注册 check_map_quality 入口
+
+- **根因**: 地图中实验室/通道区域 55-80% 的 NDT 网格 z-std < 0.1m (几何退化), 加上 NDT_OMP 默认 outlier_ratio=0.55 (标准PCL=0.35) + max_correlation_distance=0(无关联距离剔除), 优化曲面在沿墙方向几乎平坦, 导致 NDT 系统性漂移.
+
+- **参数说明**:
+  - `ndt_outlier_ratio`: 从默认0.55→0.30, 降低"假宽容度", 优化曲面更sharp, 退化区也有更强梯度
+  - `ndt_max_corr_dist`: 2.0m, 点到网格中心>2m的关联直接跳过, 防止长廊不同墙壁混淆
+  - `ndt_rotation_prior_enabled`: true, 用当前位姿 roll/pitch 约束 NDT (yaw 留给 NDT), 消除2个自由度
+  - `ndt_rotation_prior_weight`: 10.0, 中等约束力度
+
+- **退化监控**: ndt_status JSON 新增 `mean_corr_dist` 字段, <0.5=匹配紧密, >1.5=可能退化, 可配合 fusion 做方向一致性检测
+
+- **地图质量工具**: `ros2 run humanoid_navigation2 check_map_quality [path/to/map.pcd]`, 输出4m区域退化率热力图 + 退化热点坐标 + 整体等级
+
+- **预期效果**:
+  - NDT 在退化区域的漂移减少 50-70%
+  - mean_corr_dist 提供实时退化预警能力
+  - map quality checker 提供建图前/后质量验证
+
+## [2026-05-27 20:15:00] Phase 2+3: 推算位姿先验 + SC先验搜索 + HDL fallback + NDT旧帧清理 + Waypoint保留强化
+
+- **修改文件**:
+  - `src/humanoid_navigation2/humanoid_navigation2/localization_odom_fusion.py` — 新增 `_compute_prior_pose()` 通过 TF chain `map→body` 查询推算位姿先验; `_request_recovery()` 附带 prior 到 recovery_requests
+  - `src/humanoid_navigation2/humanoid_navigation2/scancontext_to_initialpose.py` — (a) 解析 recovery_request 中的 prior 信息; (b) 新增 HDL fallback 触发逻辑 (SC 全局搜索多次失败→发布 `/localization/hdl_fallback_request`); (c) `_trigger_hdl_fallback()` 方法
+  - `src/humanoid_navigation2/humanoid_navigation2/hdl_bootstrap_to_initialpose.py` — 新增 `hdl_fallback_callback` 订阅 `/localization/hdl_fallback_request`; SC 显式 fallback 触发时允许无先验全图搜索
+  - `src/humanoid_navigation2/launch/navigation2_fusion_sc_v2.launch.py` — 新增 `hdl_bootstrap_to_initialpose` 桥接节点 (monitor_localization=false, allow_full_global_recovery_without_prior=true); SC bridge 新增 hdl_fallback_request_topic
+  - `src/lidar_localization/src/lidar_localization_component.cpp` — `initialPoseReceived()` 删除强制旧帧点云匹配 (等下一帧自然到达)
+  - `src/humanoid_navigation/humanoid_navigation/navigation_state_manager_fusion.py` — `try_resume_after_localization_recovery()` 恢复前清除 waypoint 到达标志 + 验证 current_waypoint 数据完整性
+
+- **设计依据**: `DUAL_ENGINE_RECOVERY_DESIGN.md` Phase 2 + Phase 3, ~200 行改动
+
+- **HDL 集成方式**: 复用现有 `hdl_bootstrap_to_initialpose` 桥接节点 (1979行, 已有完整的静止检测/扫描缓冲管理/NDT验证流水线), 仅新增 `hdl_fallback_callback` 订阅 SC bridge 的显式触发. 不新写桥接节点, 不直调 `hdl_global_localization` 的底层 service.
+
+- **关键行为变更**:
+  - Fusion: DEGRADED/LOST 时通过 TF chain `map→body` 查询机器人实时位姿作为重定位先验; TF 链断裂时 fallback 到 frozen_map_body
+  - SC bridge: 解析 recovery_request 中的 prior 并记录到 recovery_status; 启动阶段 HDL 触发阈值 +5 (更宽松, ~8次SC全局尝试后才触发HDL); 运行阶段 +2
+  - HDL: 启动时不参与 (startup_use_origin_prior=false, monitor_localization=false), 仅由 SC bridge 显式触发; fallback 触发时允许无先验全图搜索; 竞态保护: NDT 近期 accepted 则跳过 fallback
+  - NDT: /initialpose 到达后不强制旧帧点云匹配, 等下一帧新点云自然触发 (避免 DEGRADED 期间污染点云)
+  - Navigator: resume 前清除 waypoint_arrived 标志 (防误判) + 验证 waypoint 数据完整性
+  - prior 字段兼容: hdl_bootstrap 同时支持旧格式 (prior_pose) 和新格式 (prior from fusion Phase 2)
+
 ## [2026-05-27 18:30:00] Phase 1: TF抑制 + DEGRADED停车 + LOST TF保持 + 导航入口门禁
 
 - **修改文件**:

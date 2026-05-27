@@ -1,13 +1,15 @@
 """
-完整导航栈 Launch 文件 v2 — NDT + Odom Fusion + ScanContext 全局重定位
+完整导航栈 Launch 文件 v2 — NDT + Odom Fusion + ScanContext + HDL 双引擎全局重定位
 Phase 1: TF 抑制 + DEGRADED 停车 + LOST TF 保持
+Phase 2: 推算位姿先验 + SC 先验搜索
+Phase 3: HDL fallback + NDT 旧帧点云清理 + Waypoint 保留强化
 
 与 v1 (navigation2_fusion_sc.launch.py) 的关键差异:
   1. NDT 新增 fusion_status 超时参数 (fusion_status_timeout_sec, allow_ndt_tf_when_fusion_timeout)
   2. fusion 锁定期缩短 (min/max_degraded_lock_sec: 10)
-  3. fusion 新增 fusion_status_timeout_sec 参数供 navigator 同步超时检测
-  4. HDL global localization 明确 disable_runtime_auto_recovery (当 HDL 启用时)
-  5. max_odom_displacement_m: 30 → 5 (缩短接管距离)
+  3. HDL global localization: enable_runtime_auto_recovery=false (仅 SC 显式 fallback 触发)
+  4. max_odom_displacement_m: 30 → 5 (缩短接管距离)
+  5. SC bridge: prior 解析 + HDL fallback 触发
 
 系统架构：
   TF树: map → odom → camera_init → body → base_footprint → base_link → 传感器
@@ -55,8 +57,6 @@ def generate_launch_description():
     # ========== 路径配置 ==========
     pkg_nav2 = get_package_share_directory('humanoid_navigation2')
     pkg_global_loc = get_package_share_directory('humanoid_global_localization')
-    pkg_hdl_loc = get_package_share_directory('hdl_localization')
-    pkg_hdl_global_loc = get_package_share_directory('hdl_global_localization')
     pkg_lidar_loc = get_package_share_directory('lidar_localization_ros2')
     pkg_scancontext_loc = get_package_share_directory('humanoid_scancontext_global_localization')
 
@@ -68,8 +68,6 @@ def generate_launch_description():
         pkg_scancontext_loc, 'config', 'scancontext_global_localization.yaml')
     scancontext_database_file = os.path.join(pkg_nav2, 'maps', 'hall_sc_fastlio_registered.bin')
     scancontext_pcd_map_file = os.path.join(pkg_nav2, 'pcd', 'hall.pcd')
-    hdl_globalmap_pcd = '/home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall_localization_grounded.pcd'
-
     map_yaml_file = os.path.join(pkg_nav2, 'maps', 'hall.yaml')
     default_bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_xy_then_yaw.xml')
     bt_xml_file = LaunchConfiguration('bt_xml_file', default=default_bt_xml_file)
@@ -321,7 +319,88 @@ def generate_launch_description():
             'xy_covariance': 0.25,
             'z_covariance': 0.04,
             'yaw_covariance': 0.10,
+            # ★ Phase 3: HDL fallback topic
+            'hdl_fallback_request_topic': '/localization/hdl_fallback_request',
         }
+    )
+
+    # ★★★ Phase 3: HDL fallback 桥接节点 ★★★
+    # HDL 作为双引擎的 fallback 引擎: SC bridge 全局搜索耗尽后
+    # 通过 /localization/hdl_fallback_request 显式触发 HDL 全图重定位。
+    # 正常运行时 (monitor_localization=false) 不主动监控定位健康,
+    # 只在收到 SC bridge 的显式 fallback 请求时才启动 HDL recovery。
+    hdl_bootstrap_to_initialpose_node = nav2_python_node(
+        'hdl_bootstrap_to_initialpose',
+        'hdl_bootstrap_to_initialpose',
+        {
+            'hdl_odom_topic': '/hdl_bootstrap/odom',
+            'initialpose_topic': '/initialpose',
+            'relocalize_service': '/relocalize',
+            'relocalize_with_prior_service': '/relocalize_with_prior',
+            'relocalize_checked_service': '/relocalize_checked',
+            'relocalize_with_prior_checked_service': '/relocalize_with_prior_checked',
+            'startup_origin_relocalize_checked_service': '/relocalize_startup_origin_checked',
+            'use_checked_relocalize_service': True,
+            'hdl_standby_service': '/hdl_bootstrap/standby',
+            'hdl_clear_relocalize_buffer_service': '/hdl_bootstrap/clear_relocalize_buffer',
+            'external_relocalize_prior_topic': '/hdl_relocalize_prior',
+            'recovery_request_topic': '/localization/recovery_requests',
+            'recovery_status_topic': '/localization/recovery_status',
+            'ndt_status_topic': '/localization/ndt_status',
+            # ★ Phase 3: SC bridge 显式 fallback 触发
+            'hdl_fallback_request_topic': '/localization/hdl_fallback_request',
+            'map_frame': 'map',
+            'odom_frame': 'odom',
+            'base_frame': 'base_footprint',
+            'startup_delay_sec': 2.0,
+            'relocalize_retry_sec': 6.0,
+            'startup_relocalize_retry_sec': 1.0,
+            'runtime_relocalize_retry_sec': 2.0,
+            'runtime_relocalize_start_delay_sec': 0.5,
+            'clear_relocalize_buffer_on_runtime_recovery': True,
+            'runtime_relocalize_buffer_refill_sec': 1.5,
+            'wait_stationary_before_runtime_relocalize': True,
+            'runtime_stationary_settle_sec': 1.0,
+            'runtime_stationary_max_xy_delta': 0.08,
+            'runtime_stationary_max_yaw_delta': 0.08,
+            'publish_zero_cmd_vel_during_recovery': True,
+            'recovery_stop_cmd_vel_topic': '/cmd_vel',
+            'recovery_stop_cmd_vel_period_sec': 0.1,
+            'max_relocalize_attempts': 0,
+            'startup_max_relocalize_attempts': 0,
+            'max_runtime_relocalize_attempts': 0,
+            'runtime_recovery_failure_cooldown_sec': 10.0,
+            'startup_use_origin_prior': False,
+            'startup_origin_prior_max_attempts': 3,
+            'startup_origin_prior_timeout_sec': 8.0,
+            'required_stable_samples': 3,
+            'startup_required_stable_samples': 3,
+            'runtime_required_stable_samples': 3,
+            'stable_xy_tolerance': 0.20,
+            'stable_yaw_tolerance': 0.12,
+            'sample_wait_timeout_sec': 5.0,
+            'startup_sample_wait_timeout_sec': 5.0,
+            'runtime_sample_wait_timeout_sec': 4.0,
+            'publish_repetitions': 8,
+            'startup_publish_repetitions': 8,
+            'runtime_publish_repetitions': 8,
+            'publish_period_sec': 0.25,
+            'exit_after_publish': False,
+            'monitor_localization': False,
+            'ndt_failure_triggers_recovery': False,
+            'ndt_rejected_recovery_count': 2,
+            'localization_pose_topic': '/pcl_pose',
+            'localization_pose_stale_sec': 2.5,
+            'recovery_settle_sec': 6.0,
+            'require_ndt_stable_status_for_recovery': True,
+            'ndt_recovery_required_stable_status_count': 3,
+            'use_prior_relocalize_on_recovery': True,
+            'allow_full_global_recovery_without_prior': True,
+            'compare_with_hdl': False,
+            'hdl_divergence_triggers_recovery': False,
+            'xy_covariance': 0.35,
+            'yaw_covariance': 0.35,
+        },
     )
 
     # ★★★ Phase 1 NDT 定位节点 v2 ★★★
@@ -355,6 +434,12 @@ def generate_launch_description():
                 'localization_status_topic': '/localization/ndt_status',
                 'republish_last_good_tf_on_failure': False,
                 'max_last_good_tf_age_sec': 0.5,
+                # ★ NDT 鲁棒性参数 (退化区域防漂移)
+                'ndt_outlier_ratio': 0.30,
+                'ndt_max_corr_dist': 2.0,
+                'ndt_rotation_prior_enabled': True,
+                'ndt_rotation_prior_weight': 10.0,
+                'ndt_rotation_prior_roll_pitch_only': True,
                 # ★ Phase 1 新增: fusion_status 超时保护
                 'fusion_status_timeout_sec': 5.0,
                 'allow_ndt_tf_when_fusion_timeout': False,
@@ -562,6 +647,8 @@ def generate_launch_description():
 
         TimerAction(period=4.0, actions=[scancontext_global_localizer_node]),
         TimerAction(period=5.0, actions=[scancontext_to_initialpose_node]),
+        # ★ Phase 3: HDL fallback 桥接 (10s 延迟, 确保 SC bridge 先就绪)
+        TimerAction(period=10.0, actions=[hdl_bootstrap_to_initialpose_node]),
 
         TimerAction(period=5.0, actions=[ndt_localization_node]),
         TimerAction(period=12.0, actions=[ndt_lifecycle_manager]),

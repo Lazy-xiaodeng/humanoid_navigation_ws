@@ -5,7 +5,7 @@ from launch.actions import GroupAction, IncludeLaunchDescription, DeclareLaunchA
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch.substitutions import LaunchConfiguration, PythonExpression
-from launch.conditions import IfCondition, UnlessCondition
+from launch.conditions import IfCondition
 
 def generate_launch_description():
     # 1. 获取各个功能包的路径
@@ -18,10 +18,13 @@ def generate_launch_description():
     # 2. 声明参数
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     use_rviz = LaunchConfiguration('rviz', default='true')
-    reloc_engine = LaunchConfiguration('relocalization_engine', default='hdl')
+    reloc_engine = LaunchConfiguration('relocalization_engine', default='v2')
 
-    # 条件表达式: 是否使用 SC (否则用 HDL)
+    # 条件表达式: v2 / SC / HDL 三引擎
+    use_v2 = PythonExpression(["'", reloc_engine, "' == 'v2'"])
     use_sc = PythonExpression(["'", reloc_engine, "' == 'sc'"])
+    # v2 和 SC 共用 app 层 (都基于 ScanContext + waypoint 管理)
+    use_fusion_sc_app = PythonExpression(["'", reloc_engine, "' != 'hdl'"])
 
     # ================= 第一阶段：基础设施 =================
     launch_description = GroupAction(
@@ -38,6 +41,14 @@ def generate_launch_description():
     )
 
     # ================= 第二阶段：导航栈（延迟6秒）=================
+    # v2 版本 (relocalization_engine:=v2, 默认) — NDT+Fusion+SC+HDL 双引擎恢复
+    launch_nav2_v2 = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg_navigation2, 'launch', 'navigation2_fusion_sc_v2.launch.py')),
+        launch_arguments={'use_sim_time': use_sim_time}.items(),
+        condition=IfCondition(use_v2)
+    )
+
     # SC 版本 (relocalization_engine:=sc)
     launch_nav2_sc = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -46,26 +57,26 @@ def generate_launch_description():
         condition=IfCondition(use_sc)
     )
 
-    # HDL 版本 (relocalization_engine:=hdl, 默认)
+    # HDL 版本 (relocalization_engine:=hdl)
     launch_nav2_hdl = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_navigation2, 'launch', 'navigation2_fusion.launch.py')),
         launch_arguments={'use_sim_time': use_sim_time}.items(),
-        condition=UnlessCondition(use_sc)
+        condition=IfCondition(PythonExpression(["'", reloc_engine, "' == 'hdl'"]))
     )
 
     launch_nav2_stack = TimerAction(
         period=6.0,
-        actions=[launch_nav2_sc, launch_nav2_hdl]
+        actions=[launch_nav2_v2, launch_nav2_sc, launch_nav2_hdl]
     )
 
     # ================= 第三阶段：应用层（延迟9秒）=================
-    # SC 版本 APP 层
+    # v2/SC 版本 APP 层 (共用)
     launch_app_sc = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_navigation, 'launch', 'navigation_fusion_sc.launch.py')),
         launch_arguments={'use_sim_time': use_sim_time}.items(),
-        condition=IfCondition(use_sc)
+        condition=IfCondition(use_fusion_sc_app)
     )
 
     # HDL 版本 APP 层
@@ -73,7 +84,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(pkg_navigation, 'launch', 'navigation_fusion.launch.py')),
         launch_arguments={'use_sim_time': use_sim_time}.items(),
-        condition=UnlessCondition(use_sc)
+        condition=IfCondition(PythonExpression(["'", reloc_engine, "' == 'hdl'"]))
     )
 
     launch_app_layer = TimerAction(
@@ -112,8 +123,8 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('rviz', default_value='true', description='Whether to start RViz'),
-        DeclareLaunchArgument('relocalization_engine', default_value='hdl',
-                              description='Global relocalization engine: hdl (FPFH+RANSAC) or sc (ScanContext)'),
+        DeclareLaunchArgument('relocalization_engine', default_value='v2',
+                              description='Nav2 stack: v2 (NDT+Fusion+SC+HDL, default) | sc (SC v1) | hdl (FPFH+RANSAC)'),
 
         # 按顺序启动
         launch_description,

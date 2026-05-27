@@ -61,6 +61,8 @@ setup(
             'imu_transformer = humanoid_navigation2.imu_transformer:main',
             'pcd_converter = humanoid_navigation2.pcd_converter:main',
             'ndt_fusion_monitor = humanoid_navigation2.ndt_fusion_monitor:main',
+            'check_map_quality = humanoid_navigation2.check_map_quality:main',
+            'ndt_drift_diagnostic = humanoid_navigation2.ndt_drift_diagnostic:main',
         ],
     },
 )
