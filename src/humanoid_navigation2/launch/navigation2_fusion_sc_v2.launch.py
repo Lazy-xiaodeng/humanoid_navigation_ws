@@ -543,9 +543,6 @@ def generate_launch_description():
                 'ndt_rotation_prior_enabled': True,
                 'ndt_rotation_prior_weight': 10.0,
                 'ndt_rotation_prior_roll_pitch_only': True,
-                # ★ Phase 1 新增: fusion_status 超时保护
-                'fusion_status_timeout_sec': 5.0,
-                'allow_ndt_tf_when_fusion_timeout': False,
             }
         ],
         remappings=[('/cloud', '/fast_lio/cloud_registered')],
@@ -562,51 +559,6 @@ def generate_launch_description():
         }]
     )
 
-    # ★★★ Phase 1 fusion 节点 v2 ★★★
-    # 关键参数变更 (相对 v1):
-    #   min_degraded_lock_sec: 30 → 10     (缩短锁定期, 机器人已静止)
-    #   max_degraded_lock_sec: 180 → 10    (同上)
-    #   max_odom_displacement_m: 30 → 5    (缩短接管距离)
-    localization_odom_fusion_node = nav2_python_node(
-        'localization_odom_fusion',
-        'localization_odom_fusion',
-        {
-            'degraded_error_threshold': 0.5,
-            'healthy_error_threshold': 0.15,
-            'healthy_consecutive_frames': 3,
-            'degraded_consecutive_frames': 2,
-            'max_degraded_duration_sec': 120.0,
-            'max_odom_displacement_m': 5.0,        # ★ v2: 30→5, 缩短接管距离
-            'max_total_odom_displacement_m': 100.0,
-            'nav_active_lost_timeout_sec': 120.0,
-            'nav_idle_lost_timeout_sec': 600.0,
-            'nav_idle_extreme_error': 5.0,
-            'nav_status_topic': '/navigation_status',
-            'recovery_request_cooldown_sec': 15.0,
-            'init_timeout_sec': 20.0,
-            'recovery_pose_soft_gate_enabled': True,
-            'recovery_pose_max_xy_error_m': 5.0,
-            'recovery_pose_accept_if_ndt_error_below': 0.03,
-            'recovery_pose_skip_odom_after_displacement_m': 20.0,
-            'recovery_pose_max_status_age_sec': 2.0,
-            'recovery_pose_max_pcl_age_sec': 2.0,
-            'pose_jump_degraded_from_status': True,
-            'pose_jump_degraded_from_pcl': True,
-            'pose_jump_pcl_threshold_m': 0.5,
-            'pose_jump_correction_threshold_m': 0.35,
-            'transition_duration_sec': 2.0,
-            # ★ v2: 缩短锁定期 (机器人 DEGRADED 后立即停车, 不需要长锁定期)
-            'min_degraded_lock_sec': 10.0,           # ★ v2: 30→10
-            'max_degraded_lock_sec': 10.0,           # ★ v2: 180→10
-            'lock_recovery_healthy_consecutive_frames': 10,
-            'lock_recovery_max_correction_m': 0.3,
-            'lock_early_lost_rejection_rate': 0.9,
-            'lock_early_lost_min_frames': 30,
-            'recovery_pose_jump_max_m': 5.0,
-            'publish_rate_hz': 30.0,
-            'verbose_logging': True,
-        },
-    )
 
     # =========================================================================
     # 第四部分：辅助节点
@@ -729,8 +681,6 @@ def generate_launch_description():
         DeclareLaunchArgument('enable_periodic_clearing', default_value='true'),
         DeclareLaunchArgument('enable_fastdds_shm', default_value='true',
                               description='Enable FastDDS shared memory optimization'),
-        DeclareLaunchArgument('fusion_mode', default_value='false',
-                              description='Enable NDT+odometry fusion mode'),
 
         *fastdds_env_setup,
 
@@ -761,7 +711,7 @@ def generate_launch_description():
         TimerAction(period=5.0, actions=[ndt_localization_node]),
         TimerAction(period=12.0, actions=[ndt_lifecycle_manager]),
 
-        TimerAction(period=8.0, actions=[localization_odom_fusion_node]),
+
 
         TimerAction(period=7.5, actions=[robot_realpose_publisher]),
 

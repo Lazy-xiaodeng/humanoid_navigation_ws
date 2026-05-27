@@ -896,11 +896,7 @@ class HdlBootstrapToInitialPose(Node):
                 return
 
         # P0-3: navigation_context_segment prior 有权覆盖正在进行的 recovery
-        # frozen_tf_chain 可能已被 NDT TF 覆盖污染, 而导航上下文先验
-        # (路点线段投影) 更可靠, 应允许刷新当前 recovery 的 prior。
-        # prior_source 可能来自两个位置:
-        #   - fusion Format B: request['prior']['source'] = 'frozen_tf_chain'
-        #   - nav_state_manager: request['prior_source'] = 'navigation_context_segment'
+        # (路点线段投影) 是目前唯一的 prior 来源 (已去掉 fusion)
         new_prior_source = request.get('prior_source', '')
         if not new_prior_source:
             prior_obj = request.get('prior')

@@ -41,7 +41,7 @@ def generate_launch_description():
     )
 
     # ================= 第二阶段：导航栈（延迟6秒）=================
-    # v2 版本 (relocalization_engine:=v2, 默认) — NDT+Fusion+SC+HDL 双引擎恢复
+    # v2 版本 (relocalization_engine:=v2, 默认) — NDT+SC+HDL 双引擎恢复 (已去 fusion)
     launch_nav2_v2 = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_navigation2, 'launch', 'navigation2_fusion_sc_v2.launch.py')),
