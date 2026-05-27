@@ -1,5 +1,32 @@
 # 变更记录
 
+## [2026-05-28 10:28:00] Plan B — Fast-LIO delta guess 防止 NDT init_guess 冻结
+
+- **修改文件**:
+  - `src/lidar_localization/src/lidar_localization_component.cpp` —
+    (a) 构造函数: 新增 7 个 fastlio 参数声明 (use_fastlio_delta_guess, fastlio_camera_frame, fastlio_body_frame, tf_max_stamp_mismatch_sec, fastlio_max_delta_translation, fastlio_max_delta_yaw, fastlio_max_dead_reckon_sec)。
+    (b) `initializeParameters()`: 加载 fastlio 参数，启用时重置 has_prev_body_pose_ 和 last_accept_time_。
+    (c) `cloudReceived()`: 在 init_guess 构建前插入 ~100 行 delta guess 逻辑——TF 时间戳查询 → camera_init→body 位姿差 → R_cam_to_ros 旋转到 ROS 系 → 异常检测 (0.20m/0.25rad) → 推进 corrent_pose (xy+yaw) → dead reckoning 时间检查 (2.0s)。
+    (d) `initialPoseReceived()`: /initialpose 到达时重置 has_prev_body_pose_。
+    (e) `mapReceived()`: 新地图加载时重置 has_prev_body_pose_。
+    (f) NDT accept 路径: 更新 last_accept_time_ 重置 dead reckoning 计时。
+    (g) `publishLocalizationStatus()`: ndt_status JSON 新增 5 个 fastlio debug 字段 (delta_applied, delta_reject_reason, dead_reckon_age_sec, delta_translation, delta_yaw)。
+  - `src/lidar_localization/include/lidar_localization/lidar_localization_component.hpp` —
+    (a) 新增 fastlio 成员变量: 参数存储 (8个) + 状态存储 (prev_body_pose 基准, last_accept_time_) + 逐帧 debug 字段 (5个)。
+  - `src/humanoid_navigation2/launch/navigation2_fusion_sc_v2.launch.py` —
+    (a) 新增 fastlio 参数配置 (use_fastlio_delta_guess=True, max_delta=0.20m/0.25rad, dead_reckon=2.0s)。
+    (b) max_last_good_tf_age_sec: 0.5→5.0 (方案 C TF 延长)。
+  - `NDT_POSEJUMP_ROOTCAUSE_AND_FIX_PROPOSAL.md` —
+    (a) §4 参数快照更新为 HEAD 实际值 (gate 0.80m/0.60rad, republish=true)。
+    (b) §5.3 方案 C 重写: 门限"放宽"→"收紧" (0.80→0.50)，因 f302565 已做放宽。
+    (c) §9.2/§12 风险矩阵和实施方案同步更新。
+
+- **修改原因**: NDT 98% 帧被拒的根因是长间隙期间 init_guess 冻结 (corrent_pose 不更新) → 恢复后 NDT correction > pose_jump gate → 死亡螺旋 (34 次 recovery/23分钟)。Fast-LIO camera_init→body TF 提供高频位姿差，每帧推进 init_guess 使其始终接近真实位置，消除冻结。
+
+- **影响范围**: NDT 定位初始化猜测 (init_guess) 的计算方式。不影响 /pcl_pose 发布语义 (仅在 NDT accept 时发布)、TF 发布、nav_state_manager 决策。所有 fastlio 参数默认关闭，launch 文件显式开启。
+
+- **未测试项**: 方案 B 尚未实机验证。建议按文档 §10 (先 log 不推进 → 推进不改门限 → 全功能) 三阶段验证。方案 C 门限收紧 (0.80→0.50) 待方案 B 验证通过后执行。
+
 ## [2026-05-27 23:00:00] P0/P1 定位恢复链路修复 — 导航感知门禁 + prior 污染防护 + cmd_vel 竞态
 
 - **修改文件**:
