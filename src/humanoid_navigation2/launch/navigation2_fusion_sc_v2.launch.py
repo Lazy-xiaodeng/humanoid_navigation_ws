@@ -493,6 +493,11 @@ def generate_launch_description():
                     # 禁用单帧 margin 检查, 改为依赖多帧一致性验证
                     'global_localization_min_fitness_margin': 0.0,
                     'global_localization_ambiguous_max_fitness_score': 0.01,
+                    # P1-2: 外部 recovery prior 有效期从默认 3s 延长到 8s
+                    # 一次完整 HDL 全局搜索 (FPFH+RANSAC+NDT 精匹配 10 候选)
+                    # 耗时约 2-4s，3s 的 TTL 在候选选择时刚好过期。
+                    # 8s 覆盖两次重试的裕量。
+                    'external_recovery_prior_max_age_sec': 8.0,
                 }]
             ),
         ],

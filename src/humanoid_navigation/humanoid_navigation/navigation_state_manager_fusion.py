@@ -494,7 +494,8 @@ class NavigationStateManagerFusion(Node):
         self.create_timer(0.5, self.try_resume_after_localization_recovery)
 
         # 定位恢复期间持续压零速度，避免异步 cancel 期间沿旧 cmd_vel 继续走
-        self.create_timer(0.1, self.enforce_localization_stop)
+        # P1-1: 提高到 30Hz 压制 Nav2 controller (20Hz), 防止竞态导致 robot 继续移动
+        self.create_timer(0.033, self.enforce_localization_stop)
     
     def navigation_request_callback(self, msg: String):
         """处理路点管理器的导航请求"""
@@ -1820,7 +1821,10 @@ class NavigationStateManagerFusion(Node):
             self.localization_stop_until,
             now + max(0.0, self.localization_stop_hold_sec)
         )
-        self.publish_zero_cmd_vel()
+        # P1-1: 连续发 3 帧零速度 (间隔 0.01s), 压制 Nav2 controller 的残余非零 cmd_vel
+        for _ in range(3):
+            self.publish_zero_cmd_vel()
+            time.sleep(0.01)
 
     def enforce_localization_stop(self):
         now = time.time()

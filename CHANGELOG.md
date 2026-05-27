@@ -1,5 +1,24 @@
 # 变更记录
 
+## [2026-05-27 23:00:00] P0/P1 定位恢复链路修复 — 导航感知门禁 + prior 污染防护 + cmd_vel 竞态
+
+- **修改文件**:
+  - `src/humanoid_navigation2/humanoid_navigation2/localization_odom_fusion.py` —
+    (a) **P0-1**: `_update_healthy()` 新增两层门禁。① 导航未开始时 (not `_is_robot_navigating()`) 直通模式，不检测跳变/退化；② 进入 HEALTHY 后 10s 宽限期内也不检测。确保启动阶段 NDT 正常收敛不被误判为退化。
+    (b) **P0-2**: `_compute_prior_pose()` 在 DEGRADED/LOST 期间不再查询 `map→body` TF 链（会被 NDT 发布的 TF 覆盖），改用内存 `frozen_map_odom` + `odom→body` 手工合成 prior。消除 prior 从 (15.15,18.23) 跳变到 (10.58,18.27) 的污染路径。
+    (c) **P1-3**: `last_healthy_map_odom` 快照仅在 `FusionState.HEALTHY` 时更新，防止 DEGRADED/LOST 期间被错误 TF 覆盖。
+    (d) 所有 HEALTHY 入口点 (init/lost/transitioning→healthy) 设置 `_healthy_since` 时间戳。
+    (e) 新增参数 `boot_grace_period_sec` (默认 10s)。
+  - `src/humanoid_navigation2/humanoid_navigation2/hdl_bootstrap_to_initialpose.py` —
+    (a) **P0-3**: `recovery_request_callback()` 中检测到 navigation_context_segment prior 时，清零冷却计时器允许 prior 刷新，不再被 "duplicate recovery request" 丢弃。
+  - `src/humanoid_navigation/humanoid_navigation/navigation_state_manager_fusion.py` —
+    (a) **P1-1**: `enforce_localization_stop` 频率 10Hz→30Hz，压制 Nav2 controller (20Hz) 的 cmd_vel 竞态。
+    (b) `begin_localization_stop_hold` 连发 3 帧零速 (间隔 0.01s)。
+  - `src/humanoid_navigation2/launch/navigation2_fusion_sc_v2.launch.py` —
+    (a) **P1-2**: HDL `external_recovery_prior_max_age_sec` 3.0→8.0，覆盖全局搜索耗时。
+
+- **根因**: (P0-1) Fusion 无导航感知——启动阶段 NDT 刚收敛 1.3s 后 0.5m 微调被判跳变→DEGRADED。 (P0-2) NDT 在 LOST 期间继续往 /tf 发 map→odom，覆盖 fusion frozen TF，`_compute_prior_pose()` 查 TF 树读到了错误值。 (P0-3) navigation_context_segment 比 frozen_tf_chain 更可靠但被 blindly 丢弃。 (P1-1) 10Hz 零速 vs 20Hz Nav2 controller 在最坏情况下有 3× 竞态窗口期。
+
 ## [2026-05-27 20:30:00] 修复 Recovery Loop 死锁导致位姿被反复拉偏的根因
 
 - **修改文件**:

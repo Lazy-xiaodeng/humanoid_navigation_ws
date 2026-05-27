@@ -895,15 +895,31 @@ class HdlBootstrapToInitialPose(Node):
                     throttle_duration_sec=5.0)
                 return
 
+        # P0-3: navigation_context_segment prior 有权覆盖正在进行的 recovery
+        # frozen_tf_chain 可能已被 NDT TF 覆盖污染, 而导航上下文先验
+        # (路点线段投影) 更可靠, 应允许刷新当前 recovery 的 prior。
+        # prior_source 可能来自两个位置:
+        #   - fusion Format B: request['prior']['source'] = 'frozen_tf_chain'
+        #   - nav_state_manager: request['prior_source'] = 'navigation_context_segment'
+        new_prior_source = request.get('prior_source', '')
+        if not new_prior_source:
+            prior_obj = request.get('prior')
+            if isinstance(prior_obj, dict):
+                new_prior_source = prior_obj.get('source', '')
         if (
             self.need_relocalize and
             now - self.last_external_recovery_request_time < self.external_recovery_request_cooldown_sec
         ):
-            self.get_logger().warn(
-                'ignore duplicate localization recovery request while relocalization is already pending',
-                throttle_duration_sec=2.0,
-            )
-            return
+            if new_prior_source == 'navigation_context_segment':
+                self.get_logger().info(
+                    'navigation_context_segment prior preempts pending recovery, refreshing prior')
+                self.last_external_recovery_request_time = 0.0  # 清冷却, 允许通过此次
+            else:
+                self.get_logger().warn(
+                    'ignore duplicate localization recovery request while relocalization is already pending',
+                    throttle_duration_sec=2.0,
+                )
+                return
 
         prior_ok, prior_reason = self.prepare_external_prior_from_request(request)
         if prior_ok and not self.use_prior_relocalize_on_recovery:

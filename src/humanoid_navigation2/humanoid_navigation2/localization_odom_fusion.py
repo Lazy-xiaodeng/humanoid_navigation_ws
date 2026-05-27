@@ -208,6 +208,15 @@ class LocalizationOdomFusion(Node):
         self.init_timeout_sec = float(
             self.declare_parameter('init_timeout_sec', 20.0).value)
 
+        # ── P0-1: 启动/导航感知门禁 ──
+        # HEALTHY 状态下跳变检测需要满足两个条件:
+        #   1. 导航已开始 (_is_robot_navigating() == True)
+        #   2. 进入 HEALTHY 超过 boot_grace_period_sec 秒
+        # 启动阶段 NDT 刚拿到 initialpose, 正常微调 (0.5m 级) 不应判为退化。
+        self.boot_grace_period_sec = float(
+            self.declare_parameter('boot_grace_period_sec', 10.0).value)
+        self._healthy_since = 0.0  # 最近一次进入 HEALTHY 的时间戳
+
         # ── LOST recovery 软验收参数 ──
         # 只拦截明显离谱的重定位结果；不使用 yaw 硬阈值，避免 odom/冻结TF 误差导致正确恢复被拒。
         self.recovery_pose_soft_gate_enabled = bool(
@@ -582,6 +591,7 @@ class LocalizationOdomFusion(Node):
                 f'error={self.latest_ndt_error:.4f})')
             self._reset_state()
             self.state = FusionState.HEALTHY
+            self._healthy_since = time.monotonic()
             self._recovery_in_progress = False
             self._publish_fusion_status()
 
@@ -786,6 +796,7 @@ class LocalizationOdomFusion(Node):
             self.last_healthy_odom_body = odom_body.copy()
             self.last_healthy_time = time.monotonic()
             self.state = FusionState.HEALTHY
+            self._healthy_since = time.monotonic()
             self.consecutive_healthy = 0
             self.consecutive_degraded = 0
             self._init_recovery_count = 0
@@ -892,11 +903,31 @@ class LocalizationOdomFusion(Node):
             # 使用更严格的阈值（healthy_error_threshold）确保快照质量
             if (self.latest_ndt_error < self.healthy_error_threshold and
                 odom_body is not None):
-                self.last_healthy_map_odom = ndt_map_odom.copy()
-                self.last_healthy_odom_body = odom_body.copy()
-                self.last_healthy_time = time.monotonic()
+                # ★ P1-3: 仅在 HEALTHY 状态下更新快照，LOST/DEGRADED 期间禁止
+                if self.state == FusionState.HEALTHY:
+                    self.last_healthy_map_odom = ndt_map_odom.copy()
+                    self.last_healthy_odom_body = odom_body.copy()
+                    self.last_healthy_time = time.monotonic()
 
-        # ── /pcl_pose 帧间跳变兜底检测 ──
+        # ── P0-1: 导航感知门禁 ──
+        # 启动阶段 + 未导航时 fusion 直通转发，不检测跳变/退化。
+        # 只有当导航 ACTIVE 且 HEALTHY 稳定超过 boot_grace_period_sec 后才激活检监测。
+        if not self._is_robot_navigating():
+            # 导航未开始: 纯直通模式，清除退化和跳变累积
+            self.consecutive_degraded = 0
+            self._pcl_pose_jump_detected = False
+            if self.prev_pcl_map_odom is None and self.latest_pcl_map_odom is not None:
+                self.prev_pcl_map_odom = self.latest_pcl_map_odom.copy()
+            return
+
+        healthy_elapsed = time.monotonic() - self._healthy_since
+        if healthy_elapsed < self.boot_grace_period_sec:
+            # 宽限期内: 直通但不检测跳变
+            if self.prev_pcl_map_odom is None and self.latest_pcl_map_odom is not None:
+                self.prev_pcl_map_odom = self.latest_pcl_map_odom.copy()
+            return
+
+        # ── 以下为导航中 + 宽限期后的正常退化检测 ──
         # 即使 NDT status reason 未报 pose_jump，如果 /pcl_pose (map->odom)
         # 在两帧之间跳变超过阈值，说明 NDT 静默改变了位姿估计。
         # 几何混叠场景下 NDT 可能 fitness 极低但不报 pose_jump。
@@ -1167,6 +1198,7 @@ class LocalizationOdomFusion(Node):
                 self.last_healthy_odom_body = odom_body.copy() if odom_body else None
                 self.last_healthy_time = time.monotonic()
             self.state = FusionState.HEALTHY
+            self._healthy_since = time.monotonic()
             self.consecutive_healthy = 0
             self.consecutive_degraded = 0
             self.transition_from = None
@@ -1703,23 +1735,89 @@ class LocalizationOdomFusion(Node):
     # =========================================================================
 
     def _compute_prior_pose(self) -> dict:
-        """通过 TF 链直接查询 body 在 map 帧的位置，作为重定位先验中心。
+        """推算 LOST recovery 先验位姿（body 在 map 帧中的位置）。
 
-        不需要手工坐标转换: TF 库自动处理 camera_init 非标准轴到 ROS 轴的旋转。
-        查询失败时 fallback 到 frozen_map_body (已在 _enter_degraded 保存)。
+        P0-2 修复: DEGRADED/LOST 期间 NDT 自己也发布 map→odom TF，
+        会覆盖 fusion 的 frozen TF。此时 TF 树查询可能返回 NDT 的错误值，
+        导致 prior 污染。因此在 DEGRADED/LOST 中直接用内存冻结值手工合成，
+        不信任 TF 树的 map→body 查询。
 
         Returns:
             dict with prior info, or None if completely unavailable
         """
         displacement = 0.0
         now = time.monotonic()
+        use_frozen_bypass = self.state in (FusionState.DEGRADED, FusionState.LOST)
 
+        # ── P0-2: DEGRADED/LOST 期间用冻结值手工合成 prior ──
+        if use_frozen_bypass and self.frozen_map_odom is not None:
+            # 只查 odom→body (Fast-LIO, 不受 NDT 污染), 不查 map→body
+            try:
+                odom_to_body = self.tf_buffer.lookup_transform(
+                    FRAME_ODOM, FRAME_BODY, rclpy.time.Time(),
+                    timeout=rclpy.duration.Duration(seconds=0.1))
+            except Exception:
+                odom_to_body = None
+
+            if odom_to_body is None:
+                if self.frozen_map_body is not None:
+                    frozen_yaw = quat_to_yaw(
+                        self.frozen_map_body['qx'], self.frozen_map_body['qy'],
+                        self.frozen_map_body['qz'], self.frozen_map_body['qw'])
+                    return {
+                        'x': self.frozen_map_body['x'],
+                        'y': self.frozen_map_body['y'],
+                        'radius_m': 5.0,
+                        'yaw_constrained': False,
+                        'search_mode': 'full_360',
+                        'source': 'frozen_map_body_no_odom',
+                        'frozen_age_sec': now - self.frozen_body_stamp,
+                        'odom_displacement_m': 0.0,
+                    }
+                return None
+
+            # odom 帧 (ROS 标准: X=forward Y=left) 中的 body 位置
+            ob_x = odom_to_body.transform.translation.x
+            ob_y = odom_to_body.transform.translation.y
+
+            frozen_yaw = quat_to_yaw(
+                self.frozen_map_odom['qx'], self.frozen_map_odom['qy'],
+                self.frozen_map_odom['qz'], self.frozen_map_odom['qw'])
+            cos_yaw = math.cos(frozen_yaw)
+            sin_yaw = math.sin(frozen_yaw)
+
+            prior_x = (self.frozen_map_odom['x'] +
+                       cos_yaw * ob_x - sin_yaw * ob_y)
+            prior_y = (self.frozen_map_odom['y'] +
+                       sin_yaw * ob_x + cos_yaw * ob_y)
+
+            # odom 位移: 仍用 camera_init 帧的 _lookup_odom_body/XZ 计算
+            cam_body = self._lookup_odom_body()
+            if cam_body is not None and self.frozen_odom_body is not None:
+                displacement = self._compute_odom_displacement(cam_body)
+
+            radius = max(displacement + 2.0, 2.0)
+            radius = min(radius, 5.0)
+
+            return {
+                'x': prior_x,
+                'y': prior_y,
+                'radius_m': radius,
+                'yaw_constrained': False,
+                'search_mode': 'full_360',
+                'source': 'frozen_tf_chain_mem',
+                'odom_displacement_m': displacement,
+                'frozen_age_sec': now - self.frozen_body_stamp if self.frozen_body_stamp > 0 else -1.0,
+                'ndt_correction_at_freeze_m': self.ndt_correction_at_freeze,
+                'stamp': now,
+            }
+
+        # ── HEALTHY / INITIALIZING: 正常通过 TF 查询 ──
         try:
             body_in_map = self.tf_buffer.lookup_transform(
                 'map', 'body', rclpy.time.Time(),
                 timeout=rclpy.duration.Duration(seconds=0.1))
         except Exception:
-            # TF 链断裂 → fallback: 使用冻结时保存的 map_T_body
             if self.frozen_map_body is None:
                 return None
             frozen_yaw = quat_to_yaw(
@@ -1741,7 +1839,6 @@ class LocalizationOdomFusion(Node):
         prior_stamp_sec = (body_in_map.header.stamp.sec +
                            body_in_map.header.stamp.nanosec * 1e-9)
 
-        # 搜索半径 = odom 累计位移 + 2m 安全余量, 夹在 [2, 5]m
         current_odom = self._lookup_odom_body()
         if current_odom is not None and self.frozen_odom_body is not None:
             displacement = self._compute_odom_displacement(current_odom)

@@ -149,27 +149,63 @@ prior: x=10.58, y=18.27, radius=2.0m, source=frozen_tf_chain
 - `NDT error` 低但 `inlier=0.000` 长期存在，说明匹配质量指标不一致，容易产生虚假健康。
 - 软验收拒绝错误候选后，后续 prior 仍可能被错误 TF/frozen pose 污染。
 
-## 建议修复
+## 已实施的修复 (2026-05-27)
 
-1. 延长 recovery prior TTL。
+修复了 6 个问题，涉及 4 个文件：
 
-   建议至少覆盖一次 HDL 查询耗时，例如从 3 秒提高到 8-10 秒，或者让 prior 在一次 service call 生命周期内保持有效。
+### P0-1: Fusion 导航感知门禁 + 启动宽限期
 
-2. 已有 recovery pending 时允许刷新 prior。
+**文件**: [localization_odom_fusion.py](src/humanoid_navigation2/humanoid_navigation2/localization_odom_fusion.py)
 
-   `navigation_context_segment` 比旧的 `frozen_tf_chain` 更符合业务上下文。已有 pending 时不应直接丢弃，应允许更新当前 recovery 的 prior。
+**问题**: INITIALIZING→HEALTHY 后立即启动跳变检测，不区分"是否在导航"。启动阶段 NDT 刚收敛的正常抖动被判为退化。
 
-3. 对带 prior 的 recovery 增加硬约束。
+**修改**:
+1. 新增参数 `boot_grace_period_sec` (默认 10s)
+2. `_update_healthy()` 开头加两层门禁：
+   - 导航未开始 (`_is_robot_navigating() == False`) → 直通模式，跳过所有跳变/退化检测
+   - 刚进入 HEALTHY 不到 10s → 宽限期，也不检测
+3. 三个 HEALTHY 入口点均设置 `_healthy_since` 时间戳
 
-   如果请求是 `/relocalize_with_prior_checked`，prior 过期或不可用时，不应自动退回 full global candidates。更安全的行为是返回失败，让上层重新发 fresh prior。
+### P0-2: 防止 NDT TF 覆盖 frozen TF 导致 prior 污染
 
-4. recovery 软验收拒绝后清理错误候选影响。
+**文件**: [localization_odom_fusion.py](src/humanoid_navigation2/humanoid_navigation2/localization_odom_fusion.py)
 
-   软验收拒绝说明本次候选不可接受，应避免它污染后续 `frozen_tf_chain` 或 recovery prior。
+**问题**: DEGRADED/LOST 期间 NDT 也往 /tf 发 map→odom，覆盖 fusion 的 frozen 值。`_compute_prior_pose()` 查 TF 树时可能读到 NDT 的错误值 → prior 跳变。
 
-5. 修复 NDT 健康判据。
+**修改**: DEGRADED/LOST 期间，`_compute_prior_pose()` 直接用内存中的 `frozen_map_odom` + `odom→body` 手工合成 prior，不查 `map→body` TF 链。
 
-   需要排查为什么 `NDT error` 很低时 `inlier=0.000`。在 inlier 长期为 0 的情况下，不应仅凭低 error 判定可恢复或健康。
+### P0-3: navigation_context_segment 优先权
+
+**文件**: [hdl_bootstrap_to_initialpose.py](src/humanoid_navigation2/humanoid_navigation2/hdl_bootstrap_to_initialpose.py)
+
+**问题**: recovery 已在 pending 时，navigation_context_segment prior 被 "duplicate recovery request" 直接丢弃。
+
+**修改**: 当新请求的 prior_source 为 `navigation_context_segment` 时，清零冷却计时器，允许 prior 刷新当前 recovery。
+
+### P1-1: /cmd_vel 竞态修复
+
+**文件**: [navigation_state_manager_fusion.py](src/humanoid_navigation/humanoid_navigation/navigation_state_manager_fusion.py)
+
+**修改**:
+1. `enforce_localization_stop` 频率 10Hz→30Hz (0.1s→0.033s)
+2. `begin_localization_stop_hold` 连发 3 帧零速 (间隔 0.01s)
+
+### P1-2: HDL prior TTL 延长
+
+**文件**: [navigation2_fusion_sc_v2.launch.py](src/humanoid_navigation2/launch/navigation2_fusion_sc_v2.launch.py)
+
+**修改**: `external_recovery_prior_max_age_sec`: 3.0 → 8.0
+
+### P1-3: 软验收拒后冻结值不变
+
+**文件**: [localization_odom_fusion.py](src/humanoid_navigation2/humanoid_navigation2/localization_odom_fusion.py)
+
+**修改**: `last_healthy_map_odom` 快照仅在 `FusionState.HEALTHY` 时更新，防止 DEGRADED/LOST 期间被 NDT 的错误 TF 污染。
+
+### 未修复的遗留问题
+
+- NDT `inlier=0.000` 恒存在的问题，需要排查 C++ 端 `force_2d_pose` + `force_2d_fixed_z` 下的 inlier 计算逻辑
+- `_enter_degraded()` 中的 `frozen_map_body` TF 查询也有被 NDT 污染的风险（但仅在 odom 不可用的 fallback 路径使用，风险低）
 
 ## 一句话总结
 
