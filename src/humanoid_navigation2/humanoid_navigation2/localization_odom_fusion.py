@@ -216,6 +216,7 @@ class LocalizationOdomFusion(Node):
         self.boot_grace_period_sec = float(
             self.declare_parameter('boot_grace_period_sec', 10.0).value)
         self._healthy_since = 0.0  # 最近一次进入 HEALTHY 的时间戳
+        self._grace_period_consumed = False  # 本 HEALTHY 生命周期是否已使用宽限期
 
         # ── LOST recovery 软验收参数 ──
         # 只拦截明显离谱的重定位结果；不使用 yaw 硬阈值，避免 odom/冻结TF 误差导致正确恢复被拒。
@@ -592,6 +593,7 @@ class LocalizationOdomFusion(Node):
             self._reset_state()
             self.state = FusionState.HEALTHY
             self._healthy_since = time.monotonic()
+            self._grace_period_consumed = False
             self._recovery_in_progress = False
             self._publish_fusion_status()
 
@@ -624,10 +626,23 @@ class LocalizationOdomFusion(Node):
 
             self.nav_state = new_state
 
-            # ★ 到达点位时重置 DEGRADED 超时计时器
-            # 旧状态是导航中，新状态是空闲 → 机器人刚到达一个路点
             navigating_states = ('EXECUTING', 'PLANNING', 'MOVING', 'RUNNING')
             idle_states = ('IDLE', 'COMPLETED')
+
+            # ★ P0-1 补充: 首次导航启动时，重置宽限期时钟
+            # 每个 HEALTHY 生命周期只允许一次宽限期，防止路点切换 (IDLE→EXECUTING)
+            # 反复重置导致每段前 10s 不检测漂移。
+            # _grace_period_consumed 在每次进入 HEALTHY 时重置为 False。
+            was_navigating = old_state in navigating_states
+            is_navigating = new_state in navigating_states
+            if (not was_navigating and is_navigating and
+                not getattr(self, '_grace_period_consumed', False)):
+                self._healthy_since = time.monotonic()
+                self._grace_period_consumed = True
+                self.get_logger().info(
+                    f'[P0-1] 导航冷启动，重置宽限期时钟: '
+                    f'boot_grace_period={self.boot_grace_period_sec}s '
+                    f'(导航状态 {old_state}→{new_state})')
 
             if (old_state in navigating_states and
                 new_state in idle_states and
@@ -797,6 +812,7 @@ class LocalizationOdomFusion(Node):
             self.last_healthy_time = time.monotonic()
             self.state = FusionState.HEALTHY
             self._healthy_since = time.monotonic()
+            self._grace_period_consumed = False
             self.consecutive_healthy = 0
             self.consecutive_degraded = 0
             self._init_recovery_count = 0
@@ -1199,6 +1215,7 @@ class LocalizationOdomFusion(Node):
                 self.last_healthy_time = time.monotonic()
             self.state = FusionState.HEALTHY
             self._healthy_since = time.monotonic()
+            self._grace_period_consumed = False
             self.consecutive_healthy = 0
             self.consecutive_degraded = 0
             self.transition_from = None
