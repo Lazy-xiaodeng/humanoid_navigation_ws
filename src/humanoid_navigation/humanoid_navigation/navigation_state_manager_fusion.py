@@ -385,13 +385,23 @@ class NavigationStateManagerFusion(Node):
             if self.current_goal_handle:
                 self.cancel_navigation()
 
-            self.publish_status_update("navigation_paused", {
+            event_data = {
                 "pause_source": "fusion_blocked",
                 "fusion_state": blocked_state,
                 "reason": self.localization_recovery_reason,
                 "current_waypoint_id": self.current_waypoint.get("id", ""),
+                "current_waypoint_name": self.current_waypoint.get("name", ""),
                 "waypoint_index": self.current_waypoint_index,
-            })
+                "total_waypoints": self.total_waypoints,
+            }
+            self.publish_status_update("navigation_paused", event_data)
+            # ★ 统一走 /navigation/acknowledgments → navigation_command_result 通道推给 APP
+            self.send_acknowledgment(
+                "navigation_auto_paused",
+                "success",
+                "定位异常，已暂停导航并开始自动重定位",
+                event_data
+            )
             self.get_logger().warn(
                 f'[FUSION] 定位进入 {blocked_state} 状态, 暂停导航 + zero cmd hold')
         # else: IDLE 态 → 不暂停 (由导航入口门禁拦截新点位)
@@ -1681,6 +1691,23 @@ class NavigationStateManagerFusion(Node):
         }
         reverse_resume, reverse_context = self.should_reverse_resume_to_current_waypoint()
         event_data.update(reverse_context)
+
+        # ★ Phase 3: Waypoint 保留强化
+        # 1. 清除 waypoint 到达标志 — 防止 recovery 期间 pose 跳变导致误判到达
+        self.waypoint_arrived_by_position = False
+        self.waypoint_arrived_locked = False
+        # 2. 验证 current_waypoint 数据完整性
+        if not isinstance(self.current_waypoint, dict) or "position" not in self.current_waypoint:
+            self.get_logger().error(
+                '[FUSION] current_waypoint 数据损坏, 无法恢复导航')
+            self.localization_resume_pending = False
+            self.localization_auto_paused = False
+            self.localization_stop_until = 0.0
+            self.send_acknowledgment(
+                "navigation_resumed", "error",
+                "无法恢复导航: waypoint 数据损坏, 请联系管理员")
+            self.reset_navigation_state()
+            return
 
         self.localization_resume_pending = False
         self.localization_auto_paused = False
