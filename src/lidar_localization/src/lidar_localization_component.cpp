@@ -843,6 +843,7 @@ void PCLLocalization::initialPoseReceived(const geometry_msgs::msg::PoseWithCova
   has_last_good_transform_ = false;
   consecutive_rejected_frames_ = 0;
   has_prev_body_pose_ = false;  // Fast-LIO delta guess: /initialpose 重置基准
+  last_accept_time_ = this->now();  // 同步重置 dead-reckon 计时
   pose_pub_->publish(*corrent_pose_with_cov_stamped_ptr_);  // 发布初始位姿
 
   // Phase 3: 不强制用旧帧点云匹配 — 等下一帧自然到达
@@ -898,6 +899,7 @@ void PCLLocalization::mapReceived(const sensor_msgs::msg::PointCloud2::SharedPtr
 
   map_recieved_ = true;  // 标记地图已接收
   has_prev_body_pose_ = false;  // Fast-LIO delta guess: 新地图重置基准
+  last_accept_time_ = this->now();
   RCLCPP_INFO(get_logger(), "mapReceived end");
 }
 
@@ -1122,12 +1124,16 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
       try {
         tf_body_in_cam = tfbuffer_.lookupTransform(
           fastlio_camera_frame_, fastlio_body_frame_, tf2::TimePointZero);
-        rclcpp::Time tf_stamp = tf_body_in_cam.header.stamp;
-        double stamp_diff = std::abs((cloud_stamp - tf_stamp).seconds());
-        if (stamp_diff > tf_max_stamp_mismatch_sec_) {
-          fastlio_delta_reject_reason_ = "tf_stamp_mismatch";
-        } else {
-          tf_ok = true;
+        try {
+          rclcpp::Time tf_stamp = tf_body_in_cam.header.stamp;
+          double stamp_diff = std::abs((cloud_stamp - tf_stamp).seconds());
+          if (stamp_diff > tf_max_stamp_mismatch_sec_) {
+            fastlio_delta_reject_reason_ = "tf_stamp_mismatch";
+          } else {
+            tf_ok = true;
+          }
+        } catch (const std::exception& e) {
+          fastlio_delta_reject_reason_ = "tf_clock_mismatch";
         }
       } catch (const tf2::TransformException& ex2) {
         fastlio_delta_reject_reason_ = "tf_lookup_failed";
@@ -1184,6 +1190,9 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
         if (std::abs(dx_ros) > fastlio_max_delta_translation_ ||
             std::abs(dy_ros) > fastlio_max_delta_translation_ ||
             std::abs(dyaw) > fastlio_max_delta_yaw_) {
+          // 先填 debug 值再重置基准, 否则实机排查时不知道超限了多少
+          fastlio_delta_translation_debug_ = std::hypot(dx_ros, dy_ros);
+          fastlio_delta_yaw_debug_ = dyaw;
           has_prev_body_pose_ = false;
           fastlio_delta_reject_reason_ = "max_delta_exceeded";
         } else {

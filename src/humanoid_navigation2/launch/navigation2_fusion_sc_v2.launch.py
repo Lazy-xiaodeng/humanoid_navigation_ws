@@ -526,13 +526,13 @@ def generate_launch_description():
                 'initial_pose_z': 0.0,
                 'score_threshold': 0.3,
                 'reject_pose_jump': True,
-                'max_pose_jump_translation': 0.80,    # 0.40→0.80: 避免正常运动被误判跳变
-                'max_pose_jump_yaw': 0.60,            # 0.30→0.60: 转向容忍度
+                'max_pose_jump_translation': 0.50,    # Plan C: 0.80→0.50 (delta guess压低correction后收紧)
+                'max_pose_jump_yaw': 0.40,            # Plan C: 0.60→0.40
                 'initialpose_relax_duration_sec': 4.0,
                 'initialpose_max_pose_jump_translation': 2.00,
                 'initialpose_max_pose_jump_yaw': 3.00,  # 1.20→3.00: recovery允许大角度纠正
                 'pose_jump_reacquire_enabled': True,
-                'pose_jump_reacquire_max_translation': 0.80,
+                'pose_jump_reacquire_max_translation': 0.50,    # Plan C: 0.80→0.50
                 'pose_jump_reacquire_max_yaw': 0.30,
                 'pose_jump_reacquire_max_fitness': 0.08,
                 'pose_jump_reacquire_required_frames': 2,
