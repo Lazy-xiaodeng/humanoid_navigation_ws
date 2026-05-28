@@ -187,18 +187,22 @@ public:
   bool initialpose_reacquire_active_{false}; ///< 初始位姿后是否处于NDT重新捕获窗口
   int consecutive_rejected_frames_{0}; ///< 连续被拒绝的扫描匹配帧数
 
-  // Fast-LIO delta guess (Plan B): 用 camera_init→body TF 的位姿差推进 init_guess
-  // 注意：启用后 corrent_pose_with_cov_stamped_ptr_ 不再是"当前可信定位"，而是内部 rolling guess
+  // Fast-LIO delta guess: 仅作为短时 NDT init_guess 预测，不作为最终定位结果。
+  // mode=map_body_to_map_odom 时先预测 map->body，再反推 map->odom，避免把 body 运动直接加到 map->odom。
   bool use_fastlio_delta_guess_{false};
+  std::string fastlio_delta_guess_mode_{"disabled"};
   std::string fastlio_camera_frame_{"camera_init"};
   std::string fastlio_body_frame_{"body"};
   double tf_max_stamp_mismatch_sec_{0.2};
   double fastlio_max_delta_translation_{0.20};
   double fastlio_max_delta_yaw_{0.25};
+  double fastlio_max_delta_dt_{0.50};
   double fastlio_max_dead_reckon_sec_{2.0};
   bool has_prev_body_pose_{false};
+  bool has_prev_odom_body_pose_{false};
   double prev_body_x_{0.0}, prev_body_y_{0.0}, prev_body_z_{0.0};
   double prev_body_qx_{0.0}, prev_body_qy_{0.0}, prev_body_qz_{0.0}, prev_body_qw_{0.0};
+  Eigen::Affine3d prev_T_odom_body_{Eigen::Affine3d::Identity()};
   rclcpp::Time prev_cloud_stamp_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_accept_time_{0, 0, RCL_ROS_TIME};
   // Per-frame debug fields (set in cloudReceived, read by publishLocalizationStatus)
@@ -207,6 +211,9 @@ public:
   double fastlio_delta_translation_debug_{0.0};
   double fastlio_delta_yaw_debug_{0.0};
   double fastlio_dead_reckon_age_debug_{0.0};
+  bool fastlio_odom_body_used_debug_{false};
+  double fastlio_delta_dt_debug_{0.0};
+  double fastlio_map_odom_guess_shift_debug_{0.0};
 
 
   // ========== ROS参数 ==========

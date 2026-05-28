@@ -542,13 +542,15 @@ def generate_launch_description():
                 'localization_status_topic': '/localization/ndt_status',
                 'republish_last_good_tf_on_failure': True,   # R3: NDT拒绝后保持last_good TF, 维持TF树
                 'max_last_good_tf_age_sec': 5.0,         # 0.5→5.0: 覆盖典型DEGRADED窗口
-                # ★ Plan B: Fast-LIO delta guess — 防止 init_guess 冻结
-                'use_fastlio_delta_guess': True,
+                # ★ Plan B: Fast-LIO delta guess (当前关闭 — map_body_to_map_odom 模式待验证)
+                'use_fastlio_delta_guess': False,
+                'fastlio_delta_guess_mode': 'disabled',
                 'fastlio_camera_frame': 'camera_init',
                 'fastlio_body_frame': 'body',
                 'tf_max_stamp_mismatch_sec': 0.2,
                 'fastlio_max_delta_translation': 0.20,
                 'fastlio_max_delta_yaw': 0.25,
+                'fastlio_max_delta_dt': 0.50,
                 'fastlio_max_dead_reckon_sec': 2.0,
                 # ★ NDT 鲁棒性参数 (退化区域防漂移)
                 'ndt_outlier_ratio': 0.30,

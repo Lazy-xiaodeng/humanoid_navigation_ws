@@ -102,11 +102,13 @@ PCLLocalization::PCLLocalization(const rclcpp::NodeOptions & options)
 
   // ========== Fast-LIO delta guess 参数 (Plan B) ==========
   declare_parameter("use_fastlio_delta_guess", false);
+  declare_parameter("fastlio_delta_guess_mode", "disabled");
   declare_parameter("fastlio_camera_frame", "camera_init");
   declare_parameter("fastlio_body_frame", "body");
   declare_parameter("tf_max_stamp_mismatch_sec", 0.2);
   declare_parameter("fastlio_max_delta_translation", 0.20);
   declare_parameter("fastlio_max_delta_yaw", 0.25);
+  declare_parameter("fastlio_max_delta_dt", 0.50);
   declare_parameter("fastlio_max_dead_reckon_sec", 2.0);
 }
 
@@ -401,20 +403,37 @@ void PCLLocalization::initializeParameters()
 
   // Fast-LIO delta guess 参数 (Plan B)
   get_parameter("use_fastlio_delta_guess", use_fastlio_delta_guess_);
+  get_parameter("fastlio_delta_guess_mode", fastlio_delta_guess_mode_);
   get_parameter("fastlio_camera_frame", fastlio_camera_frame_);
   get_parameter("fastlio_body_frame", fastlio_body_frame_);
   get_parameter("tf_max_stamp_mismatch_sec", tf_max_stamp_mismatch_sec_);
   get_parameter("fastlio_max_delta_translation", fastlio_max_delta_translation_);
   get_parameter("fastlio_max_delta_yaw", fastlio_max_delta_yaw_);
+  get_parameter("fastlio_max_delta_dt", fastlio_max_delta_dt_);
   get_parameter("fastlio_max_dead_reckon_sec", fastlio_max_dead_reckon_sec_);
+  if (use_fastlio_delta_guess_ && fastlio_delta_guess_mode_ == "disabled") {
+    fastlio_delta_guess_mode_ = "map_body_to_map_odom";
+    RCLCPP_WARN(
+      get_logger(),
+      "use_fastlio_delta_guess=true with fastlio_delta_guess_mode=disabled; using map_body_to_map_odom for backward compatibility.");
+  }
+  if (use_fastlio_delta_guess_ && fastlio_delta_guess_mode_ != "map_body_to_map_odom") {
+    RCLCPP_WARN(
+      get_logger(),
+      "Unsupported fastlio_delta_guess_mode='%s'; disabling Fast-LIO delta guess.",
+      fastlio_delta_guess_mode_.c_str());
+    use_fastlio_delta_guess_ = false;
+  }
   if (use_fastlio_delta_guess_) {
     has_prev_body_pose_ = false;
+    has_prev_odom_body_pose_ = false;
     last_accept_time_ = this->now();
     RCLCPP_INFO(get_logger(),
-      "Fast-LIO delta guess enabled: camera=%s body=%s max_delta_trans=%.3f max_delta_yaw=%.3f "
-      "dead_reckon=%.1fs",
-      fastlio_camera_frame_.c_str(), fastlio_body_frame_.c_str(),
-      fastlio_max_delta_translation_, fastlio_max_delta_yaw_, fastlio_max_dead_reckon_sec_);
+      "Fast-LIO delta guess enabled: mode=%s camera=%s body=%s max_delta_trans=%.3f max_delta_yaw=%.3f "
+      "max_delta_dt=%.3f dead_reckon=%.1fs",
+      fastlio_delta_guess_mode_.c_str(), fastlio_camera_frame_.c_str(), fastlio_body_frame_.c_str(),
+      fastlio_max_delta_translation_, fastlio_max_delta_yaw_, fastlio_max_delta_dt_,
+      fastlio_max_dead_reckon_sec_);
   }
 
   // 打印参数值到日志，方便调试
@@ -622,7 +641,11 @@ void PCLLocalization::publishLocalizationStatus(
     << "\"fastlio_delta_reject_reason\":\"" << fastlio_delta_reject_reason_ << "\","
     << "\"fastlio_dead_reckon_age_sec\":" << fastlio_dead_reckon_age_debug_ << ","
     << "\"fastlio_delta_translation\":" << fastlio_delta_translation_debug_ << ","
-    << "\"fastlio_delta_yaw\":" << fastlio_delta_yaw_debug_
+    << "\"fastlio_delta_yaw\":" << fastlio_delta_yaw_debug_ << ","
+    << "\"fastlio_delta_guess_mode\":\"" << fastlio_delta_guess_mode_ << "\","
+    << "\"fastlio_odom_body_used\":" << (fastlio_odom_body_used_debug_ ? "true" : "false") << ","
+    << "\"fastlio_delta_dt_sec\":" << fastlio_delta_dt_debug_ << ","
+    << "\"fastlio_map_odom_guess_shift\":" << fastlio_map_odom_guess_shift_debug_
     << "}";
 
   std_msgs::msg::String msg;
@@ -843,6 +866,7 @@ void PCLLocalization::initialPoseReceived(const geometry_msgs::msg::PoseWithCova
   has_last_good_transform_ = false;
   consecutive_rejected_frames_ = 0;
   has_prev_body_pose_ = false;  // Fast-LIO delta guess: /initialpose 重置基准
+  has_prev_odom_body_pose_ = false;
   last_accept_time_ = this->now();  // 同步重置 dead-reckon 计时
   pose_pub_->publish(*corrent_pose_with_cov_stamped_ptr_);  // 发布初始位姿
 
@@ -899,6 +923,7 @@ void PCLLocalization::mapReceived(const sensor_msgs::msg::PointCloud2::SharedPtr
 
   map_recieved_ = true;  // 标记地图已接收
   has_prev_body_pose_ = false;  // Fast-LIO delta guess: 新地图重置基准
+  has_prev_odom_body_pose_ = false;
   last_accept_time_ = this->now();
   RCLCPP_INFO(get_logger(), "mapReceived end");
 }
@@ -1108,39 +1133,72 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
   fastlio_delta_translation_debug_ = 0.0;
   fastlio_delta_yaw_debug_ = 0.0;
   fastlio_dead_reckon_age_debug_ = (this->now() - last_accept_time_).seconds();
+  fastlio_odom_body_used_debug_ = false;
+  fastlio_delta_dt_debug_ = 0.0;
+  fastlio_map_odom_guess_shift_debug_ = 0.0;
 
   if (use_fastlio_delta_guess_ && corrent_pose_with_cov_stamped_ptr_) {
     rclcpp::Time cloud_stamp = msg->header.stamp;
     geometry_msgs::msg::TransformStamped tf_body_in_cam;
+    geometry_msgs::msg::TransformStamped tf_odom_body_curr;
     bool tf_ok = false;
+    bool odom_body_tf_ok = false;
+
+    auto reset_fastlio_delta_baseline = [this]() {
+      has_prev_body_pose_ = false;
+      has_prev_odom_body_pose_ = false;
+    };
+
+    auto transform_to_affine = [](const geometry_msgs::msg::Transform & transform) {
+      Eigen::Affine3d affine = Eigen::Affine3d::Identity();
+      affine.translation() = Eigen::Vector3d(
+        transform.translation.x, transform.translation.y, transform.translation.z);
+      Eigen::Quaterniond q(
+        transform.rotation.w, transform.rotation.x, transform.rotation.y, transform.rotation.z);
+      q.normalize();
+      affine.linear() = q.toRotationMatrix();
+      return affine;
+    };
+
+    auto lookup_tf_with_fallback = [&](
+      const std::string & target_frame,
+      const std::string & source_frame,
+      geometry_msgs::msg::TransformStamped & out,
+      const char * prefix) -> bool {
+      try {
+        out = tfbuffer_.lookupTransform(target_frame, source_frame, cloud_stamp);
+        return true;
+      } catch (const tf2::TransformException& ex) {
+        try {
+          out = tfbuffer_.lookupTransform(target_frame, source_frame, tf2::TimePointZero);
+          try {
+            const rclcpp::Time tf_stamp = out.header.stamp;
+            const double stamp_diff = std::abs((cloud_stamp - tf_stamp).seconds());
+            if (stamp_diff > tf_max_stamp_mismatch_sec_) {
+              fastlio_delta_reject_reason_ = std::string(prefix) + "_stamp_mismatch";
+              return false;
+            }
+            return true;
+          } catch (const std::exception& e) {
+            fastlio_delta_reject_reason_ = std::string(prefix) + "_clock_mismatch";
+            return false;
+          }
+        } catch (const tf2::TransformException& ex2) {
+          fastlio_delta_reject_reason_ = std::string(prefix) + "_lookup_failed";
+          return false;
+        }
+      }
+    };
 
     // Step 1: 按点云时间戳查 TF
-    try {
-      tf_body_in_cam = tfbuffer_.lookupTransform(
-        fastlio_camera_frame_, fastlio_body_frame_, cloud_stamp);
-      tf_ok = true;
-    } catch (const tf2::TransformException& ex) {
-      // 降级: 用最新可用 TF
-      try {
-        tf_body_in_cam = tfbuffer_.lookupTransform(
-          fastlio_camera_frame_, fastlio_body_frame_, tf2::TimePointZero);
-        try {
-          rclcpp::Time tf_stamp = tf_body_in_cam.header.stamp;
-          double stamp_diff = std::abs((cloud_stamp - tf_stamp).seconds());
-          if (stamp_diff > tf_max_stamp_mismatch_sec_) {
-            fastlio_delta_reject_reason_ = "tf_stamp_mismatch";
-          } else {
-            tf_ok = true;
-          }
-        } catch (const std::exception& e) {
-          fastlio_delta_reject_reason_ = "tf_clock_mismatch";
-        }
-      } catch (const tf2::TransformException& ex2) {
-        fastlio_delta_reject_reason_ = "tf_lookup_failed";
-      }
+    tf_ok = lookup_tf_with_fallback(
+      fastlio_camera_frame_, fastlio_body_frame_, tf_body_in_cam, "fastlio_tf");
+    if (tf_ok) {
+      odom_body_tf_ok = lookup_tf_with_fallback(
+        odom_frame_id_, fastlio_body_frame_, tf_odom_body_curr, "odom_body_tf");
     }
 
-    if (tf_ok) {
+    if (tf_ok && odom_body_tf_ok) {
       double body_x = tf_body_in_cam.transform.translation.x;
       double body_y = tf_body_in_cam.transform.translation.y;
       double body_z = tf_body_in_cam.transform.translation.z;
@@ -1149,72 +1207,97 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
       double body_qz = tf_body_in_cam.transform.rotation.z;
       double body_qw = tf_body_in_cam.transform.rotation.w;
 
-      if (!has_prev_body_pose_) {
+      Eigen::Affine3d T_odom_body_curr = transform_to_affine(tf_odom_body_curr.transform);
+      fastlio_odom_body_used_debug_ = true;
+
+      if (!has_prev_body_pose_ || !has_prev_odom_body_pose_) {
         // Step 2: 第一帧只建立基准
         prev_body_x_ = body_x;  prev_body_y_ = body_y;  prev_body_z_ = body_z;
         prev_body_qx_ = body_qx; prev_body_qy_ = body_qy;
         prev_body_qz_ = body_qz; prev_body_qw_ = body_qw;
         prev_cloud_stamp_ = cloud_stamp;
+        prev_T_odom_body_ = T_odom_body_curr;
         has_prev_body_pose_ = true;
+        has_prev_odom_body_pose_ = true;
         fastlio_delta_reject_reason_ = "no_prev_pose";
       } else if (fastlio_dead_reckon_age_debug_ > fastlio_max_dead_reckon_sec_) {
         // Step 3: dead reckoning 超时, 停止推进
+        reset_fastlio_delta_baseline();
         fastlio_delta_reject_reason_ = "dead_reckon_timeout";
       } else {
-        // Step 4a: delta in camera_init frame
-        double dx_cam = body_x - prev_body_x_;
-        double dy_cam = body_y - prev_body_y_;
-        double dz_cam = body_z - prev_body_z_;
-
-        // Step 4b: 旋转到 ROS 系
-        // R_cam_to_ros = [[0,0,-1],[1,0,0],[0,-1,0]]
-        double dx_ros = -dz_cam;
-        double dy_ros =  dx_cam;
-
-        // Step 4c: yaw delta (在 ROS 系内计算相对旋转)
-        Eigen::Quaterniond q_cam_to_ros(0.5, -0.5, -0.5, 0.5);
-        Eigen::Quaterniond q_cam_to_ros_inv(0.5, 0.5, 0.5, -0.5);
-
-        Eigen::Quaterniond q_prev_cam(prev_body_qw_, prev_body_qx_, prev_body_qy_, prev_body_qz_);
-        Eigen::Quaterniond q_curr_cam(body_qw, body_qx, body_qy, body_qz);
-
-        Eigen::Quaterniond q_prev_ros = q_cam_to_ros * q_prev_cam * q_cam_to_ros_inv;
-        Eigen::Quaterniond q_curr_ros = q_cam_to_ros * q_curr_cam * q_cam_to_ros_inv;
-
-        Eigen::Quaterniond delta_q_ros = q_prev_ros.inverse() * q_curr_ros;
-        double dyaw = std::atan2(
-          2.0 * (delta_q_ros.w() * delta_q_ros.z() + delta_q_ros.x() * delta_q_ros.y()),
-          1.0 - 2.0 * (delta_q_ros.y() * delta_q_ros.y() + delta_q_ros.z() * delta_q_ros.z()));
-
-        // Step 4e: 单帧异常检测 (平移 + yaw 同时检查)
-        if (std::abs(dx_ros) > fastlio_max_delta_translation_ ||
-            std::abs(dy_ros) > fastlio_max_delta_translation_ ||
-            std::abs(dyaw) > fastlio_max_delta_yaw_) {
-          // 先填 debug 值再重置基准, 否则实机排查时不知道超限了多少
-          fastlio_delta_translation_debug_ = std::hypot(dx_ros, dy_ros);
-          fastlio_delta_yaw_debug_ = dyaw;
-          has_prev_body_pose_ = false;
-          fastlio_delta_reject_reason_ = "max_delta_exceeded";
+        fastlio_delta_dt_debug_ = (cloud_stamp - prev_cloud_stamp_).seconds();
+        if (fastlio_delta_dt_debug_ < 0.0 || fastlio_delta_dt_debug_ > fastlio_max_delta_dt_) {
+          reset_fastlio_delta_baseline();
+          fastlio_delta_reject_reason_ = "delta_dt_exceeded";
+          fastlio_delta_translation_debug_ = 0.0;
+          fastlio_delta_yaw_debug_ = 0.0;
         } else {
-          // Step 4f: 推进 corrent_pose
-          corrent_pose_with_cov_stamped_ptr_->pose.pose.position.x += dx_ros;
-          corrent_pose_with_cov_stamped_ptr_->pose.pose.position.y += dy_ros;
 
-          double current_yaw = tf2::getYaw(
-            corrent_pose_with_cov_stamped_ptr_->pose.pose.orientation);
-          double new_yaw = current_yaw + dyaw;
-          new_yaw = std::atan2(std::sin(new_yaw), std::cos(new_yaw));
-          tf2::Quaternion q_new;
-          q_new.setRPY(0.0, 0.0, new_yaw);
-          corrent_pose_with_cov_stamped_ptr_->pose.pose.orientation = tf2::toMsg(q_new);
+          // Step 4a: 构建 camera_init->body 的完整位姿，并统一转换到 ROS 标准系。
+          Eigen::Affine3d T_cam_body_prev = Eigen::Affine3d::Identity();
+          T_cam_body_prev.translation() = Eigen::Vector3d(prev_body_x_, prev_body_y_, prev_body_z_);
+          Eigen::Quaterniond q_prev_cam(prev_body_qw_, prev_body_qx_, prev_body_qy_, prev_body_qz_);
+          q_prev_cam.normalize();
+          T_cam_body_prev.linear() = q_prev_cam.toRotationMatrix();
 
-          if (force_2d_fixed_z_) {
-            corrent_pose_with_cov_stamped_ptr_->pose.pose.position.z = force_2d_z_;
+          Eigen::Affine3d T_cam_body_curr = Eigen::Affine3d::Identity();
+          T_cam_body_curr.translation() = Eigen::Vector3d(body_x, body_y, body_z);
+          Eigen::Quaterniond q_curr_cam(body_qw, body_qx, body_qy, body_qz);
+          q_curr_cam.normalize();
+          T_cam_body_curr.linear() = q_curr_cam.toRotationMatrix();
+
+          const Eigen::Quaterniond q_cam_to_ros(0.5, -0.5, -0.5, 0.5);
+          Eigen::Affine3d R_cam_to_ros = Eigen::Affine3d::Identity();
+          R_cam_to_ros.linear() = q_cam_to_ros.normalized().toRotationMatrix();
+          const Eigen::Affine3d R_cam_to_ros_inv = R_cam_to_ros.inverse();
+
+          const Eigen::Affine3d T_body_prev_ros =
+            R_cam_to_ros * T_cam_body_prev * R_cam_to_ros_inv;
+          const Eigen::Affine3d T_body_curr_ros =
+            R_cam_to_ros * T_cam_body_curr * R_cam_to_ros_inv;
+
+          // Step 4b: body-local 相对运动。后续右乘到上一帧 map->body。
+          const Eigen::Affine3d T_delta_ros =
+            T_body_prev_ros.inverse() * T_body_curr_ros;
+
+          const Eigen::Vector3d delta_translation = T_delta_ros.translation();
+          const Eigen::Matrix3d delta_rot = T_delta_ros.rotation();
+          const double delta_trans = std::hypot(delta_translation.x(), delta_translation.y());
+          const double dyaw = std::atan2(delta_rot(1, 0), delta_rot(0, 0));
+
+          // Step 4c: 单帧异常检测。超限直接重置基准，不推进。
+          if (std::abs(delta_translation.x()) > fastlio_max_delta_translation_ ||
+              std::abs(delta_translation.y()) > fastlio_max_delta_translation_ ||
+              std::abs(dyaw) > fastlio_max_delta_yaw_) {
+            // 先填 debug 值再重置基准, 否则实机排查时不知道超限了多少
+            fastlio_delta_translation_debug_ = delta_trans;
+            fastlio_delta_yaw_debug_ = dyaw;
+            reset_fastlio_delta_baseline();
+            fastlio_delta_reject_reason_ = "max_delta_exceeded";
+          } else {
+            // Step 4d: map_body_to_map_odom — 正确的 init_guess 预测
+            // 公式: T_map_odom_guess = T_map_odom_prev * T_odom_body_prev * T_delta_ros * T_odom_body_curr^(-1)
+            // 原理: 先由 body 运动 delta 预测 map->body, 再用当前 odom->body 反推 map->odom
+
+            // T_map_odom_prev 从 corrent_pose 提取
+            Eigen::Affine3d T_map_odom_prev;
+            tf2::fromMsg(corrent_pose_with_cov_stamped_ptr_->pose.pose, T_map_odom_prev);
+
+            // 核心公式: T_map_odom_guess = T_map_odom_prev * T_odom_body_prev * T_delta_ros * T_odom_body_curr^(-1)
+            Eigen::Affine3d T_map_odom_guess =
+              T_map_odom_prev * prev_T_odom_body_ * T_delta_ros * T_odom_body_curr.inverse();
+
+            fastlio_map_odom_guess_shift_debug_ = std::hypot(
+              T_map_odom_guess.translation().x() - T_map_odom_prev.translation().x(),
+              T_map_odom_guess.translation().y() - T_map_odom_prev.translation().y());
+
+            corrent_pose_with_cov_stamped_ptr_->pose.pose = tf2::toMsg(T_map_odom_guess);
+            applyPlanarPoseConstraint(corrent_pose_with_cov_stamped_ptr_->pose.pose);
+
+            fastlio_delta_applied_ = true;
+            fastlio_delta_translation_debug_ = delta_trans;
+            fastlio_delta_yaw_debug_ = dyaw;
           }
-
-          fastlio_delta_applied_ = true;
-          fastlio_delta_translation_debug_ = std::hypot(dx_ros, dy_ros);
-          fastlio_delta_yaw_debug_ = dyaw;
         }
       }
 
@@ -1223,8 +1306,11 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
         prev_body_x_ = body_x;  prev_body_y_ = body_y;  prev_body_z_ = body_z;
         prev_body_qx_ = body_qx; prev_body_qy_ = body_qy;
         prev_body_qz_ = body_qz; prev_body_qw_ = body_qw;
+        prev_T_odom_body_ = T_odom_body_curr;
         prev_cloud_stamp_ = cloud_stamp;
       }
+    } else if (!fastlio_delta_reject_reason_.empty()) {
+      reset_fastlio_delta_baseline();
     }
   }
 
