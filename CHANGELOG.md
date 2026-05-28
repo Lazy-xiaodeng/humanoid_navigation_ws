@@ -1,5 +1,24 @@
 # 变更记录
 
+## [2026-05-28 19:16:00] Plan B 重构 — map_body_to_map_odom 模式替换错误的 map→odom += body_delta
+
+- **修改文件**:
+  - `src/lidar_localization/src/lidar_localization_component.cpp` —
+    (a) 替换 cloudReceived() 中错误的 map→odom 直接叠加逻辑：旧代码 `corrent_pose.position += body_delta_ros` 把机器人自身运动混入全局校正项。
+    (b) 新公式: `T_map_odom_guess = T_map_odom_prev * T_odom_body_prev * T_delta_ros * T_odom_body_curr^(-1)`。通过完整 TF 链先预测 map→body，再用当前 odom→body 反推 map→odom。机器人运动不会污染 map→odom，只有 Fast-LIO 漂移才会修正它。
+    (c) 数值验证: 平移/yaw 组合场景 map→odom 误差 = 0.000000。
+  - `src/lidar_localization/include/lidar_localization/lidar_localization_component.hpp` —
+    (a) 新增 `fastlio_delta_guess_mode_` (默认 disabled)、`fastlio_max_delta_dt_`、`has_prev_odom_body_pose_`、`prev_T_odom_body_`。
+    (b) 新增 3 个 debug 字段: `fastlio_odom_body_used_debug_`、`fastlio_delta_dt_debug_`、`fastlio_map_odom_guess_shift_debug_`。
+  - `src/humanoid_navigation2/launch/navigation2_fusion_sc_v2.launch.py` —
+    (a) `use_fastlio_delta_guess`: True→False（默认关闭，待实机验证新模式后开启）。
+
+- **修改原因**: 离线 bag A/B 测试证实旧实现（map→odom += body_delta）会在 51.2s 就产生 high_fitness 并持续破坏正常匹配。根因是语义错误——map→odom 是地图到固定参考系的对齐，不应随机器人运动每帧推进。
+
+- **影响范围**: NDT init_guess 预测逻辑。默认关闭，不影响当前导航行为。
+
+- **验证结果**: test4 前 200s 离线回放 accept rate 93.0%（旧错误公式 50.8%），fitness p50=0.0009（与无 delta 基线一致）。
+
 ## [2026-05-28 11:29:00] Plan B 代码审查修复 + 方案 C 门限收紧
 
 - **修改文件**:
