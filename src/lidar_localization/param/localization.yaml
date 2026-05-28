@@ -51,6 +51,25 @@
       ndt_rotation_prior_roll_pitch_only: true  # true=只约束 roll/pitch（推荐）
 
       # ==========================================
+      # 旋转保护与多帧匹配
+      # ==========================================
+      # rotation_guard: 原地旋转/settle 期间不让低 fitness 的大平移跳变直接触发 recovery。
+      # 多帧匹配初版在现有固定轴转换后的 ROS 标准系点云上累积，适合 /fast_lio/cloud_registered。
+      rotation_guard_enabled: false
+      rotation_guard_use_cmd_vel_fallback: false
+      rotation_guard_navigation_status_topic: "/navigation/status"
+      rotation_guard_angular_threshold: 0.20
+      rotation_guard_linear_threshold: 0.05
+      rotation_guard_settle_sec: 1.0
+      rotation_guard_max_duration_sec: 8.0
+      multi_frame_matching_enabled: false
+      multi_frame_use_only_when_rotating: true
+      multi_frame_window_sec: 0.6
+      multi_frame_max_frames: 8
+      multi_frame_voxel_leaf_size: 0.20
+      multi_frame_max_points: 40000
+
+      # ==========================================
       # 匹配阈值与过滤
       # ==========================================
       # 匹配得分阈值 (Score Threshold)。
@@ -102,7 +121,7 @@
 
       # 是否启动时自动设置初始位姿（用于重定位）。
       # 如果为 true，机器人启动时会假设自己在 initial_pose_x/y/z 的位置。
-      set_initial_pose: true
+      set_initial_pose: false
       initial_pose_x: 0.0
       initial_pose_y: 0.0
       initial_pose_z: 0.0       # ★ 地面高度

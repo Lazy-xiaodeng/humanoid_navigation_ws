@@ -36,6 +36,7 @@ PCLLocalization::PCLLocalization(const rclcpp::NodeOptions & options)
   declare_parameter("global_frame_id", "map");    // 全局坐标系ID，通常为"map"
   declare_parameter("odom_frame_id", "odom");     // 里程计坐标系ID
   declare_parameter("base_frame_id", "odom");     // 机器人基坐标系ID，通常设置为"odom"或"base_link"
+  declare_parameter("initialpose_base_frame_id", "base_footprint");
   
   // ========== 配准方法参数 ==========
   declare_parameter("registration_method", "NDT");  // 配准方法：NDT, NDT_OMP, GICP, GICP_OMP
@@ -53,6 +54,19 @@ PCLLocalization::PCLLocalization(const rclcpp::NodeOptions & options)
   declare_parameter("pose_jump_reacquire_required_frames", 2);
   declare_parameter("pose_jump_reacquire_xy_tolerance", 0.35);
   declare_parameter("pose_jump_reacquire_yaw_tolerance", 0.12);
+  declare_parameter("rotation_guard_enabled", false);
+  declare_parameter("rotation_guard_use_cmd_vel_fallback", false);
+  declare_parameter("rotation_guard_navigation_status_topic", "/navigation/status");
+  declare_parameter("rotation_guard_angular_threshold", 0.20);
+  declare_parameter("rotation_guard_linear_threshold", 0.05);
+  declare_parameter("rotation_guard_settle_sec", 1.0);
+  declare_parameter("rotation_guard_max_duration_sec", 8.0);
+  declare_parameter("multi_frame_matching_enabled", false);
+  declare_parameter("multi_frame_use_only_when_rotating", true);
+  declare_parameter("multi_frame_window_sec", 0.6);
+  declare_parameter("multi_frame_max_frames", 8);
+  declare_parameter("multi_frame_voxel_leaf_size", 0.20);
+  declare_parameter("multi_frame_max_points", 40000);
   declare_parameter("ndt_resolution", 1.0);         // NDT算法的体素网格分辨率（米），控制NDT网格大小
   declare_parameter("ndt_step_size", 0.1);          // NDT算法的牛顿迭代步长，越大收敛越快但可能不稳定
   declare_parameter("ndt_max_iterations", 35);      // 配准算法最大迭代次数
@@ -257,6 +271,8 @@ CallbackReturn PCLLocalization::on_cleanup(const rclcpp_lifecycle::State &)
   odom_sub_.reset();
   cloud_sub_.reset();
   imu_sub_.reset();
+  cmd_vel_sub_.reset();
+  navigation_status_sub_.reset();
 
   RCLCPP_INFO(get_logger(), "Cleaning Up end");
   return CallbackReturn::SUCCESS;
@@ -306,6 +322,7 @@ void PCLLocalization::initializeParameters()
   get_parameter("global_frame_id", global_frame_id_);  // 全局坐标系（地图坐标系）
   get_parameter("odom_frame_id", odom_frame_id_);      // 里程计坐标系
   get_parameter("base_frame_id", base_frame_id_);      // 机器人基坐标系
+  get_parameter("initialpose_base_frame_id", initialpose_base_frame_id_);
   get_parameter("localization_status_topic", localization_status_topic_);
   
   // 获取配准算法参数
@@ -324,6 +341,19 @@ void PCLLocalization::initializeParameters()
   get_parameter("pose_jump_reacquire_required_frames", pose_jump_reacquire_required_frames_);
   get_parameter("pose_jump_reacquire_xy_tolerance", pose_jump_reacquire_xy_tolerance_);
   get_parameter("pose_jump_reacquire_yaw_tolerance", pose_jump_reacquire_yaw_tolerance_);
+  get_parameter("rotation_guard_enabled", rotation_guard_enabled_);
+  get_parameter("rotation_guard_use_cmd_vel_fallback", rotation_guard_use_cmd_vel_fallback_);
+  get_parameter("rotation_guard_navigation_status_topic", rotation_guard_navigation_status_topic_);
+  get_parameter("rotation_guard_angular_threshold", rotation_guard_angular_threshold_);
+  get_parameter("rotation_guard_linear_threshold", rotation_guard_linear_threshold_);
+  get_parameter("rotation_guard_settle_sec", rotation_guard_settle_sec_);
+  get_parameter("rotation_guard_max_duration_sec", rotation_guard_max_duration_sec_);
+  get_parameter("multi_frame_matching_enabled", multi_frame_matching_enabled_);
+  get_parameter("multi_frame_use_only_when_rotating", multi_frame_use_only_when_rotating_);
+  get_parameter("multi_frame_window_sec", multi_frame_window_sec_);
+  get_parameter("multi_frame_max_frames", multi_frame_max_frames_);
+  get_parameter("multi_frame_voxel_leaf_size", multi_frame_voxel_leaf_size_);
+  get_parameter("multi_frame_max_points", multi_frame_max_points_);
   get_parameter("ndt_resolution", ndt_resolution_);     // NDT网格分辨率
   get_parameter("ndt_step_size", ndt_step_size_);       // NDT牛顿迭代步长
   get_parameter("ndt_num_threads", ndt_num_threads_);   // OMP线程数
@@ -376,6 +406,14 @@ void PCLLocalization::initializeParameters()
   pose_jump_reacquire_required_frames_ = std::max(1, pose_jump_reacquire_required_frames_);
   pose_jump_reacquire_xy_tolerance_ = std::max(0.0, pose_jump_reacquire_xy_tolerance_);
   pose_jump_reacquire_yaw_tolerance_ = std::max(0.0, pose_jump_reacquire_yaw_tolerance_);
+  rotation_guard_angular_threshold_ = std::max(0.0, rotation_guard_angular_threshold_);
+  rotation_guard_linear_threshold_ = std::max(0.0, rotation_guard_linear_threshold_);
+  rotation_guard_settle_sec_ = std::max(0.0, rotation_guard_settle_sec_);
+  rotation_guard_max_duration_sec_ = std::max(0.1, rotation_guard_max_duration_sec_);
+  multi_frame_window_sec_ = std::max(0.0, multi_frame_window_sec_);
+  multi_frame_max_frames_ = std::max(1, multi_frame_max_frames_);
+  multi_frame_voxel_leaf_size_ = std::max(0.01, multi_frame_voxel_leaf_size_);
+  multi_frame_max_points_ = std::max(1000, multi_frame_max_points_);
   
   // 获取地图参数
   get_parameter("use_pcd_map", use_pcd_map_);  // 是否使用PCD地图
@@ -440,6 +478,7 @@ void PCLLocalization::initializeParameters()
   RCLCPP_INFO(get_logger(),"global_frame_id: %s", global_frame_id_.c_str());
   RCLCPP_INFO(get_logger(),"odom_frame_id: %s", odom_frame_id_.c_str());
   RCLCPP_INFO(get_logger(),"base_frame_id: %s", base_frame_id_.c_str());
+  RCLCPP_INFO(get_logger(),"initialpose_base_frame_id: %s", initialpose_base_frame_id_.c_str());
   RCLCPP_INFO(get_logger(),"localization_status_topic: %s", localization_status_topic_.c_str());
   RCLCPP_INFO(get_logger(),"registration_method: %s", registration_method_.c_str());
   RCLCPP_INFO(get_logger(),"score_threshold: %lf", score_threshold_);
@@ -456,6 +495,19 @@ void PCLLocalization::initializeParameters()
   RCLCPP_INFO(get_logger(),"pose_jump_reacquire_required_frames: %d", pose_jump_reacquire_required_frames_);
   RCLCPP_INFO(get_logger(),"pose_jump_reacquire_xy_tolerance: %lf", pose_jump_reacquire_xy_tolerance_);
   RCLCPP_INFO(get_logger(),"pose_jump_reacquire_yaw_tolerance: %lf", pose_jump_reacquire_yaw_tolerance_);
+  RCLCPP_INFO(get_logger(),"rotation_guard_enabled: %d", rotation_guard_enabled_);
+  RCLCPP_INFO(get_logger(),"rotation_guard_use_cmd_vel_fallback: %d", rotation_guard_use_cmd_vel_fallback_);
+  RCLCPP_INFO(get_logger(),"rotation_guard_navigation_status_topic: %s", rotation_guard_navigation_status_topic_.c_str());
+  RCLCPP_INFO(get_logger(),"rotation_guard_angular_threshold: %lf", rotation_guard_angular_threshold_);
+  RCLCPP_INFO(get_logger(),"rotation_guard_linear_threshold: %lf", rotation_guard_linear_threshold_);
+  RCLCPP_INFO(get_logger(),"rotation_guard_settle_sec: %lf", rotation_guard_settle_sec_);
+  RCLCPP_INFO(get_logger(),"rotation_guard_max_duration_sec: %lf", rotation_guard_max_duration_sec_);
+  RCLCPP_INFO(get_logger(),"multi_frame_matching_enabled: %d", multi_frame_matching_enabled_);
+  RCLCPP_INFO(get_logger(),"multi_frame_use_only_when_rotating: %d", multi_frame_use_only_when_rotating_);
+  RCLCPP_INFO(get_logger(),"multi_frame_window_sec: %lf", multi_frame_window_sec_);
+  RCLCPP_INFO(get_logger(),"multi_frame_max_frames: %d", multi_frame_max_frames_);
+  RCLCPP_INFO(get_logger(),"multi_frame_voxel_leaf_size: %lf", multi_frame_voxel_leaf_size_);
+  RCLCPP_INFO(get_logger(),"multi_frame_max_points: %d", multi_frame_max_points_);
   RCLCPP_INFO(get_logger(),"ndt_resolution: %lf", ndt_resolution_);
   RCLCPP_INFO(get_logger(),"ndt_step_size: %lf", ndt_step_size_);
   RCLCPP_INFO(get_logger(),"ndt_num_threads: %d", ndt_num_threads_);
@@ -645,7 +697,26 @@ void PCLLocalization::publishLocalizationStatus(
     << "\"fastlio_delta_guess_mode\":\"" << fastlio_delta_guess_mode_ << "\","
     << "\"fastlio_odom_body_used\":" << (fastlio_odom_body_used_debug_ ? "true" : "false") << ","
     << "\"fastlio_delta_dt_sec\":" << fastlio_delta_dt_debug_ << ","
-    << "\"fastlio_map_odom_guess_shift\":" << fastlio_map_odom_guess_shift_debug_
+    << "\"fastlio_map_odom_guess_shift\":" << fastlio_map_odom_guess_shift_debug_ << ","
+    << "\"ndt_candidate_pose_valid\":" << (ndt_candidate_pose_valid_debug_ ? "true" : "false") << ","
+    << "\"ndt_candidate_x\":" << ndt_candidate_x_debug_ << ","
+    << "\"ndt_candidate_y\":" << ndt_candidate_y_debug_ << ","
+    << "\"ndt_candidate_yaw\":" << ndt_candidate_yaw_debug_ << ","
+    << "\"ndt_init_guess_x\":" << ndt_init_guess_x_debug_ << ","
+    << "\"ndt_init_guess_y\":" << ndt_init_guess_y_debug_ << ","
+    << "\"ndt_init_guess_yaw\":" << ndt_init_guess_yaw_debug_ << ","
+    << "\"ndt_candidate_has_prev\":" << (ndt_prev_candidate_valid_debug_ ? "true" : "false") << ","
+    << "\"ndt_candidate_delta_prev_xy\":" << ndt_candidate_delta_prev_xy_debug_ << ","
+    << "\"ndt_candidate_delta_prev_yaw\":" << ndt_candidate_delta_prev_yaw_debug_ << ","
+    << "\"ndt_candidate_delta_last_good_xy\":" << ndt_candidate_delta_last_good_xy_debug_ << ","
+    << "\"ndt_candidate_delta_last_good_yaw\":" << ndt_candidate_delta_last_good_yaw_debug_ << ","
+    << "\"rotation_guard_active\":" << (rotation_guard_active_debug_ ? "true" : "false") << ","
+    << "\"rotation_guard_settle\":" << (rotation_guard_settle_debug_ ? "true" : "false") << ","
+    << "\"rotation_guard_age_sec\":" << rotation_guard_age_debug_ << ","
+    << "\"rotation_guard_source\":\"" << rotation_guard_source_debug_ << "\","
+    << "\"rotation_guard_hold_count\":" << rotation_guard_hold_count_ << ","
+    << "\"multi_frame_source_frames\":" << multi_frame_source_frames_debug_ << ","
+    << "\"multi_frame_source_points\":" << multi_frame_source_points_debug_
     << "}";
 
   std_msgs::msg::String msg;
@@ -708,6 +779,13 @@ void PCLLocalization::initializePubSub()
     "imu", rclcpp::SensorDataQoS(),
     std::bind(&PCLLocalization::imuReceived, this, std::placeholders::_1));
 
+  cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>(
+    "/cmd_vel", rclcpp::SensorDataQoS(),
+    std::bind(&PCLLocalization::cmdVelReceived, this, std::placeholders::_1));
+
+  navigation_status_sub_ = create_subscription<std_msgs::msg::String>(
+    rotation_guard_navigation_status_topic_, rclcpp::QoS(rclcpp::KeepLast(10)).reliable(),
+    std::bind(&PCLLocalization::navigationStatusReceived, this, std::placeholders::_1));
 
   RCLCPP_INFO(get_logger(), "initializePubSub end");
 }
@@ -851,14 +929,49 @@ void PCLLocalization::initialPoseReceived(const geometry_msgs::msg::PoseWithCova
   }
 
   applyPlanarPoseConstraint(initial_pose_msg->pose.pose);
+
+  try {
+    const auto odom_to_base = tfbuffer_.lookupTransform(
+      odom_frame_id_, initialpose_base_frame_id_, tf2::TimePointZero);
+
+    Eigen::Affine3d T_map_base = Eigen::Affine3d::Identity();
+    tf2::fromMsg(initial_pose_msg->pose.pose, T_map_base);
+    const Eigen::Affine3d T_odom_base = tf2::transformToEigen(odom_to_base);
+    const Eigen::Affine3d T_map_odom = T_map_base * T_odom_base.inverse();
+
+    const auto map_odom_pose = tf2::toMsg(T_map_odom);
+    RCLCPP_INFO(
+      get_logger(),
+      "Converted initialpose map->%s to internal map->%s: "
+      "base=(%.3f, %.3f, yaw=%.1fdeg) odom_pose=(%.3f, %.3f, yaw=%.1fdeg)",
+      initialpose_base_frame_id_.c_str(), odom_frame_id_.c_str(),
+      initial_pose_msg->pose.pose.position.x,
+      initial_pose_msg->pose.pose.position.y,
+      tf2::getYaw(initial_pose_msg->pose.pose.orientation) * 180.0 / M_PI,
+      map_odom_pose.position.x,
+      map_odom_pose.position.y,
+      tf2::getYaw(map_odom_pose.orientation) * 180.0 / M_PI);
+
+    initial_pose_msg->pose.pose = map_odom_pose;
+  } catch (tf2::TransformException & ex) {
+    RCLCPP_WARN(
+      get_logger(),
+      "Failed to convert initialpose map->%s into map->%s using TF %s->%s: %s. "
+      "Keeping the input pose as the internal NDT guess for compatibility.",
+      initialpose_base_frame_id_.c_str(), odom_frame_id_.c_str(),
+      odom_frame_id_.c_str(), initialpose_base_frame_id_.c_str(), ex.what());
+  }
+
   RCLCPP_INFO(
-    get_logger(), "initialpose stored: frame=%s x=%.3f y=%.3f z=%.3f yaw=%.1fdeg",
+    get_logger(), "initialpose stored as internal map->%s guess: frame=%s x=%.3f y=%.3f z=%.3f yaw=%.1fdeg",
+    odom_frame_id_.c_str(),
     initial_pose_msg->header.frame_id.c_str(),
     initial_pose_msg->pose.pose.position.x,
     initial_pose_msg->pose.pose.position.y,
     initial_pose_msg->pose.pose.position.z,
     tf2::getYaw(initial_pose_msg->pose.pose.orientation) * 180.0 / M_PI);
   
+  initial_pose_msg->header.stamp = this->now();
   initialpose_recieved_ = true;  // 标记已接收初始位姿
   corrent_pose_with_cov_stamped_ptr_ = initial_pose_msg;  // 保存当前位姿
   last_initialpose_time_ = this->now();
@@ -867,6 +980,13 @@ void PCLLocalization::initialPoseReceived(const geometry_msgs::msg::PoseWithCova
   consecutive_rejected_frames_ = 0;
   has_prev_body_pose_ = false;  // Fast-LIO delta guess: /initialpose 重置基准
   has_prev_odom_body_pose_ = false;
+  has_last_ndt_candidate_debug_ = false;
+  scan_frame_buffer_.clear();
+  rotation_guard_active_ = false;
+  rotation_guard_state_active_ = false;
+  rotation_guard_rotating_now_ = false;
+  rotation_guard_source_.clear();
+  rotation_guard_hold_count_ = 0;
   last_accept_time_ = this->now();  // 同步重置 dead-reckon 计时
   pose_pub_->publish(*corrent_pose_with_cov_stamped_ptr_);  // 发布初始位姿
 
@@ -924,6 +1044,12 @@ void PCLLocalization::mapReceived(const sensor_msgs::msg::PointCloud2::SharedPtr
   map_recieved_ = true;  // 标记地图已接收
   has_prev_body_pose_ = false;  // Fast-LIO delta guess: 新地图重置基准
   has_prev_odom_body_pose_ = false;
+  scan_frame_buffer_.clear();
+  rotation_guard_active_ = false;
+  rotation_guard_state_active_ = false;
+  rotation_guard_rotating_now_ = false;
+  rotation_guard_source_.clear();
+  rotation_guard_hold_count_ = 0;
   last_accept_time_ = this->now();
   RCLCPP_INFO(get_logger(), "mapReceived end");
 }
@@ -1048,6 +1174,195 @@ void PCLLocalization::imuReceived(const sensor_msgs::msg::Imu::ConstSharedPtr ms
   lidar_undistortion_.getImu(angular_velo, acc, quat, imu_time); // 去畸变处理
 }
 
+void PCLLocalization::enterRotationGuard(const char * source)
+{
+  if (!rotation_guard_enabled_) {
+    return;
+  }
+
+  const rclcpp::Time now = this->now();
+  if (!rotation_guard_active_) {
+    rotation_guard_start_time_ = now;
+    rotation_guard_hold_count_ = 0;
+    RCLCPP_INFO(get_logger(), "NDT rotation guard entered by %s.", source ? source : "unknown");
+  }
+  rotation_guard_active_ = true;
+  rotation_guard_source_ = source ? source : "unknown";
+  rotation_guard_settle_until_ = now + rclcpp::Duration::from_seconds(rotation_guard_settle_sec_);
+}
+
+void PCLLocalization::cmdVelReceived(const geometry_msgs::msg::Twist::ConstSharedPtr msg)
+{
+  if (!rotation_guard_enabled_ || !rotation_guard_use_cmd_vel_fallback_ || !msg) {
+    return;
+  }
+
+  last_cmd_vel_time_ = this->now();
+  const double linear_xy = std::hypot(msg->linear.x, msg->linear.y);
+  rotation_guard_rotating_now_ =
+    std::abs(msg->angular.z) >= rotation_guard_angular_threshold_ &&
+    linear_xy <= rotation_guard_linear_threshold_;
+
+  if (rotation_guard_rotating_now_) {
+    enterRotationGuard("cmd_vel");
+  }
+}
+
+void PCLLocalization::navigationStatusReceived(const std_msgs::msg::String::ConstSharedPtr msg)
+{
+  if (!rotation_guard_enabled_ || !msg) {
+    return;
+  }
+
+  const std::string & data = msg->data;
+  const bool has_current_state = data.find("\"current_state\"") != std::string::npos;
+  const bool navigation_active =
+    !has_current_state ||
+    data.find("\"current_state\":\"executing\"") != std::string::npos ||
+    data.find("\"current_state\": \"executing\"") != std::string::npos ||
+    data.find("\"current_state\":\"planning\"") != std::string::npos ||
+    data.find("\"current_state\": \"planning\"") != std::string::npos;
+  const bool turning =
+    navigation_active &&
+    (data.find("\"detailed_state\"") != std::string::npos ||
+     data.find("\"current_detailed_state\"") != std::string::npos) &&
+    data.find("TURNING") != std::string::npos;
+
+  if (turning) {
+    rotation_guard_state_active_ = true;
+    rotation_guard_rotating_now_ = true;
+    enterRotationGuard("navigation_status");
+  } else if (rotation_guard_state_active_) {
+    rotation_guard_state_active_ = false;
+    rotation_guard_rotating_now_ = false;
+    rotation_guard_settle_until_ =
+      this->now() + rclcpp::Duration::from_seconds(rotation_guard_settle_sec_);
+    RCLCPP_INFO(get_logger(), "NDT rotation guard state ended; entering settle window.");
+  }
+}
+
+void PCLLocalization::updateRotationGuard()
+{
+  rotation_guard_active_debug_ = false;
+  rotation_guard_settle_debug_ = false;
+  rotation_guard_age_debug_ = 0.0;
+  rotation_guard_source_debug_.clear();
+
+  if (!rotation_guard_enabled_ || !rotation_guard_active_) {
+    return;
+  }
+
+  const rclcpp::Time now = this->now();
+  const double age_sec = (now - rotation_guard_start_time_).seconds();
+  rotation_guard_age_debug_ = age_sec;
+
+  if (age_sec < 0.0 || age_sec > rotation_guard_max_duration_sec_) {
+    RCLCPP_WARN(
+      get_logger(),
+      "NDT rotation guard expired after %.2f sec; pose_jump checks are enabled again.",
+      age_sec);
+    rotation_guard_active_ = false;
+    rotation_guard_state_active_ = false;
+    rotation_guard_rotating_now_ = false;
+    rotation_guard_hold_count_ = 0;
+    return;
+  }
+
+  if (now > rotation_guard_settle_until_) {
+    rotation_guard_active_ = false;
+    rotation_guard_state_active_ = false;
+    rotation_guard_rotating_now_ = false;
+    rotation_guard_hold_count_ = 0;
+    RCLCPP_INFO(get_logger(), "NDT rotation guard settled.");
+    return;
+  }
+
+  rotation_guard_active_debug_ = true;
+  rotation_guard_settle_debug_ = !rotation_guard_state_active_ && !rotation_guard_rotating_now_;
+  rotation_guard_source_debug_ = rotation_guard_source_;
+}
+
+bool PCLLocalization::rotationGuardActive()
+{
+  updateRotationGuard();
+  return rotation_guard_active_debug_;
+}
+
+bool PCLLocalization::rotationGuardInSettle()
+{
+  updateRotationGuard();
+  return rotation_guard_settle_debug_;
+}
+
+pcl::PointCloud<pcl::PointXYZI>::Ptr PCLLocalization::buildMultiFrameSource(
+  const pcl::PointCloud<pcl::PointXYZI>::Ptr & current_cloud,
+  const rclcpp::Time & stamp,
+  bool rotation_guard_active)
+{
+  multi_frame_source_frames_debug_ = 1;
+  multi_frame_source_points_debug_ = current_cloud ? static_cast<int>(current_cloud->size()) : 0;
+
+  if (!current_cloud) {
+    return current_cloud;
+  }
+
+  if (!multi_frame_matching_enabled_ ||
+      (multi_frame_use_only_when_rotating_ && !rotation_guard_active)) {
+    scan_frame_buffer_.clear();
+    return current_cloud;
+  }
+
+  ScanFrame frame;
+  frame.stamp = stamp;
+  frame.cloud.reset(new pcl::PointCloud<pcl::PointXYZI>(*current_cloud));
+  scan_frame_buffer_.push_back(frame);
+
+  while (!scan_frame_buffer_.empty()) {
+    const double age = (stamp - scan_frame_buffer_.front().stamp).seconds();
+    if (age <= multi_frame_window_sec_ &&
+        static_cast<int>(scan_frame_buffer_.size()) <= multi_frame_max_frames_) {
+      break;
+    }
+    scan_frame_buffer_.pop_front();
+  }
+
+  if (scan_frame_buffer_.size() <= 1) {
+    return current_cloud;
+  }
+
+  pcl::PointCloud<pcl::PointXYZI>::Ptr merged(new pcl::PointCloud<pcl::PointXYZI>());
+  for (const auto & buffered_frame : scan_frame_buffer_) {
+    if (buffered_frame.cloud) {
+      *merged += *buffered_frame.cloud;
+    }
+  }
+
+  pcl::PointCloud<pcl::PointXYZI>::Ptr downsampled(new pcl::PointCloud<pcl::PointXYZI>());
+  pcl::VoxelGrid<pcl::PointXYZI> multi_frame_filter;
+  multi_frame_filter.setLeafSize(
+    multi_frame_voxel_leaf_size_, multi_frame_voxel_leaf_size_, multi_frame_voxel_leaf_size_);
+  multi_frame_filter.setInputCloud(merged);
+  multi_frame_filter.filter(*downsampled);
+
+  if (static_cast<int>(downsampled->size()) > multi_frame_max_points_) {
+    pcl::PointCloud<pcl::PointXYZI>::Ptr capped(new pcl::PointCloud<pcl::PointXYZI>());
+    capped->reserve(multi_frame_max_points_);
+    const double stride =
+      static_cast<double>(downsampled->size()) / static_cast<double>(multi_frame_max_points_);
+    for (int i = 0; i < multi_frame_max_points_; ++i) {
+      const size_t index = std::min(
+        downsampled->size() - 1,
+        static_cast<size_t>(std::floor(static_cast<double>(i) * stride)));
+      capped->push_back((*downsampled)[index]);
+    }
+    downsampled = capped;
+  }
+
+  multi_frame_source_frames_debug_ = static_cast<int>(scan_frame_buffer_.size());
+  multi_frame_source_points_debug_ = static_cast<int>(downsampled->size());
+  return downsampled;
+}
+
 /**
  * @brief 接收点云消息回调（核心函数）
  *
@@ -1120,9 +1435,26 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
       static_cast<int>(tmp_ptr->size()), rclcpp::Time(msg->header.stamp));
     return;
   }
+
+  const bool rotation_guard_active = rotationGuardActive();
+  const bool rotation_guard_settle = rotation_guard_settle_debug_;
+  pcl::PointCloud<pcl::PointXYZI>::Ptr source_cloud_ptr =
+    buildMultiFrameSource(tmp_ptr, rclcpp::Time(msg->header.stamp), rotation_guard_active);
+  if (static_cast<int>(source_cloud_ptr->size()) < min_scan_points_) {
+    pose_jump_candidate_active_ = false;
+    pose_jump_candidate_count_ = 0;
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 2000,
+      "Rejecting NDT scan after multi-frame build: effective_points=%zu < min_scan_points=%d.",
+      source_cloud_ptr->size(), min_scan_points_);
+    publishLocalizationStatus(
+      "rejected", "too_few_multiframe_points", false, -1.0,
+      static_cast<int>(source_cloud_ptr->size()), rclcpp::Time(msg->header.stamp));
+    return;
+  }
   
   // 设置配准源点云
-  registration_->setInputSource(tmp_ptr);
+  registration_->setInputSource(source_cloud_ptr);
 
   // =====================================================================
   // Plan B: Fast-LIO delta guess — 用 camera_init→body TF 的位姿差推进 init_guess
@@ -1136,6 +1468,12 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
   fastlio_odom_body_used_debug_ = false;
   fastlio_delta_dt_debug_ = 0.0;
   fastlio_map_odom_guess_shift_debug_ = 0.0;
+  ndt_candidate_pose_valid_debug_ = false;
+  ndt_prev_candidate_valid_debug_ = false;
+  ndt_candidate_delta_prev_xy_debug_ = 0.0;
+  ndt_candidate_delta_prev_yaw_debug_ = 0.0;
+  ndt_candidate_delta_last_good_xy_debug_ = 0.0;
+  ndt_candidate_delta_last_good_yaw_debug_ = 0.0;
 
   if (use_fastlio_delta_guess_ && corrent_pose_with_cov_stamped_ptr_) {
     rclcpp::Time cloud_stamp = msg->header.stamp;
@@ -1233,32 +1571,11 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
           fastlio_delta_yaw_debug_ = 0.0;
         } else {
 
-          // Step 4a: 构建 camera_init->body 的完整位姿，并统一转换到 ROS 标准系。
-          Eigen::Affine3d T_cam_body_prev = Eigen::Affine3d::Identity();
-          T_cam_body_prev.translation() = Eigen::Vector3d(prev_body_x_, prev_body_y_, prev_body_z_);
-          Eigen::Quaterniond q_prev_cam(prev_body_qw_, prev_body_qx_, prev_body_qy_, prev_body_qz_);
-          q_prev_cam.normalize();
-          T_cam_body_prev.linear() = q_prev_cam.toRotationMatrix();
-
-          Eigen::Affine3d T_cam_body_curr = Eigen::Affine3d::Identity();
-          T_cam_body_curr.translation() = Eigen::Vector3d(body_x, body_y, body_z);
-          Eigen::Quaterniond q_curr_cam(body_qw, body_qx, body_qy, body_qz);
-          q_curr_cam.normalize();
-          T_cam_body_curr.linear() = q_curr_cam.toRotationMatrix();
-
-          const Eigen::Quaterniond q_cam_to_ros(0.5, -0.5, -0.5, 0.5);
-          Eigen::Affine3d R_cam_to_ros = Eigen::Affine3d::Identity();
-          R_cam_to_ros.linear() = q_cam_to_ros.normalized().toRotationMatrix();
-          const Eigen::Affine3d R_cam_to_ros_inv = R_cam_to_ros.inverse();
-
-          const Eigen::Affine3d T_body_prev_ros =
-            R_cam_to_ros * T_cam_body_prev * R_cam_to_ros_inv;
-          const Eigen::Affine3d T_body_curr_ros =
-            R_cam_to_ros * T_cam_body_curr * R_cam_to_ros_inv;
-
-          // Step 4b: body-local 相对运动。后续右乘到上一帧 map->body。
+          // Step 4a: 直接使用 TF 链得到的 odom->body 前后帧差。
+          // odom->camera_init 静态 TF 已经把 Fast-LIO 非标轴接到标准 odom 轴上，
+          // 因此这里不能再对 odom->body 做手工轴变换。
           const Eigen::Affine3d T_delta_ros =
-            T_body_prev_ros.inverse() * T_body_curr_ros;
+            prev_T_odom_body_.inverse() * T_odom_body_curr;
 
           const Eigen::Vector3d delta_translation = T_delta_ros.translation();
           const Eigen::Matrix3d delta_rot = T_delta_ros.rotation();
@@ -1283,7 +1600,6 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
             Eigen::Affine3d T_map_odom_prev;
             tf2::fromMsg(corrent_pose_with_cov_stamped_ptr_->pose.pose, T_map_odom_prev);
 
-            // 核心公式: T_map_odom_guess = T_map_odom_prev * T_odom_body_prev * T_delta_ros * T_odom_body_curr^(-1)
             Eigen::Affine3d T_map_odom_guess =
               T_map_odom_prev * prev_T_odom_body_ * T_delta_ros * T_odom_body_curr.inverse();
 
@@ -1374,8 +1690,9 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
     pose_jump_candidate_count_ = 0;
     RCLCPP_WARN(get_logger(), "The fitness score is over %lf, skip this result.", score_threshold_);
     publishLocalizationStatus(
-      "rejected", "high_fitness", has_converged, fitness_score,
-      static_cast<int>(tmp_ptr->size()), rclcpp::Time(msg->header.stamp));
+      "rejected", rotation_guard_active ? "rotation_guard_high_fitness" : "high_fitness",
+      has_converged, fitness_score,
+      static_cast<int>(source_cloud_ptr->size()), rclcpp::Time(msg->header.stamp));
     publishLastGoodTransformIfFresh("high fitness score");
     // ★ 匹配质量差时不发布新TF，避免位姿跳变
     return;  // 放弃此次结果，不发布不可靠的新TF变换
@@ -1395,6 +1712,39 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
   const double result_yaw = std::atan2(result_rot(1, 0), result_rot(0, 0));
   const double yaw_error = result_yaw - init_yaw;
   const double correction_yaw = std::abs(std::atan2(std::sin(yaw_error), std::cos(yaw_error)));
+  const double candidate_x = static_cast<double>(navigation_transformation(0, 3));
+  const double candidate_y = static_cast<double>(navigation_transformation(1, 3));
+
+  ndt_candidate_pose_valid_debug_ = true;
+  ndt_candidate_x_debug_ = candidate_x;
+  ndt_candidate_y_debug_ = candidate_y;
+  ndt_candidate_yaw_debug_ = result_yaw;
+  ndt_init_guess_x_debug_ = static_cast<double>(init_guess(0, 3));
+  ndt_init_guess_y_debug_ = static_cast<double>(init_guess(1, 3));
+  ndt_init_guess_yaw_debug_ = init_yaw;
+  ndt_prev_candidate_valid_debug_ = has_last_ndt_candidate_debug_;
+  if (has_last_ndt_candidate_debug_) {
+    ndt_candidate_delta_prev_xy_debug_ =
+      std::hypot(candidate_x - last_ndt_candidate_x_debug_, candidate_y - last_ndt_candidate_y_debug_);
+    const double prev_yaw_error = result_yaw - last_ndt_candidate_yaw_debug_;
+    ndt_candidate_delta_prev_yaw_debug_ =
+      std::abs(std::atan2(std::sin(prev_yaw_error), std::cos(prev_yaw_error)));
+  }
+  if (has_last_good_transform_) {
+    const auto & last_t = last_good_transform_.transform.translation;
+    const auto & last_q = last_good_transform_.transform.rotation;
+    ndt_candidate_delta_last_good_xy_debug_ =
+      std::hypot(candidate_x - last_t.x, candidate_y - last_t.y);
+    const double last_good_yaw = tf2::getYaw(last_q);
+    const double last_good_yaw_error = result_yaw - last_good_yaw;
+    ndt_candidate_delta_last_good_yaw_debug_ =
+      std::abs(std::atan2(std::sin(last_good_yaw_error), std::cos(last_good_yaw_error)));
+  }
+  last_ndt_candidate_x_debug_ = candidate_x;
+  last_ndt_candidate_y_debug_ = candidate_y;
+  last_ndt_candidate_yaw_debug_ = result_yaw;
+  has_last_ndt_candidate_debug_ = true;
+
   const bool initialpose_reacquiring = initialPoseReacquireActive();
   const double pose_jump_translation_limit =
     initialpose_reacquiring ? initialpose_max_pose_jump_translation_ : max_pose_jump_translation_;
@@ -1405,6 +1755,26 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
     reject_pose_jump_ && has_last_good_transform_ &&
     (correction_translation > pose_jump_translation_limit ||
      correction_yaw > pose_jump_yaw_limit);
+  if (pose_jump_exceeded && rotation_guard_active && !initialpose_reacquiring) {
+    rotation_guard_hold_count_ += 1;
+    pose_jump_candidate_active_ = false;
+    pose_jump_candidate_count_ = 0;
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 500,
+      "Holding NDT pose jump during rotation guard%s: translation=%.3f limit=%.3f "
+      "yaw=%.3f limit=%.3f fitness=%.3f holds=%d",
+      rotation_guard_settle ? " settle" : "",
+      correction_translation, pose_jump_translation_limit,
+      correction_yaw, pose_jump_yaw_limit, fitness_score, rotation_guard_hold_count_);
+    publishLocalizationStatus(
+      "confirming",
+      rotation_guard_settle ? "rotation_guard_settle" : "rotation_guard_hold",
+      has_converged, fitness_score,
+      static_cast<int>(source_cloud_ptr->size()), rclcpp::Time(msg->header.stamp),
+      correction_translation, correction_yaw);
+    publishLastGoodTransformIfFresh("rotation guard pose jump");
+    return;
+  }
   if (pose_jump_exceeded) {
     const bool can_confirm_pose_jump =
       pose_jump_reacquire_enabled_ &&
@@ -1414,8 +1784,6 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
       correction_yaw <= pose_jump_reacquire_max_yaw_;
 
     if (can_confirm_pose_jump) {
-      const double candidate_x = static_cast<double>(navigation_transformation(0, 3));
-      const double candidate_y = static_cast<double>(navigation_transformation(1, 3));
       const double candidate_yaw = result_yaw;
       const double candidate_xy_delta = pose_jump_candidate_active_ ?
         std::hypot(candidate_x - pose_jump_candidate_x_, candidate_y - pose_jump_candidate_y_) :
@@ -1461,7 +1829,7 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
           pose_jump_candidate_count_, pose_jump_reacquire_required_frames_);
         publishLocalizationStatus(
           "confirming", "pose_jump_candidate", has_converged, fitness_score,
-          static_cast<int>(tmp_ptr->size()), rclcpp::Time(msg->header.stamp),
+          static_cast<int>(source_cloud_ptr->size()), rclcpp::Time(msg->header.stamp),
           correction_translation, correction_yaw);
         publishLastGoodTransformIfFresh("pose jump candidate");
         return;
@@ -1484,7 +1852,7 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
       correction_yaw, pose_jump_yaw_limit, fitness_score);
     publishLocalizationStatus(
       "rejected", "pose_jump", has_converged, fitness_score,
-      static_cast<int>(tmp_ptr->size()), rclcpp::Time(msg->header.stamp),
+      static_cast<int>(source_cloud_ptr->size()), rclcpp::Time(msg->header.stamp),
       correction_translation, correction_yaw);
     publishLastGoodTransformIfFresh("pose jump");
     return;
@@ -1514,7 +1882,7 @@ void PCLLocalization::cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSh
   pose_pub_->publish(*corrent_pose_with_cov_stamped_ptr_);
   publishLocalizationStatus(
     "accepted", accepted_confirmed_pose_jump ? "confirmed_pose_jump" : "ok", has_converged, fitness_score,
-    static_cast<int>(tmp_ptr->size()), rclcpp::Time(msg->header.stamp),
+    static_cast<int>(source_cloud_ptr->size()), rclcpp::Time(msg->header.stamp),
     correction_translation, correction_yaw);
 
   // ========== 发布TF变换 ==========

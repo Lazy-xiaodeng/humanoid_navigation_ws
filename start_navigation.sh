@@ -194,7 +194,7 @@ export RMW_FASTRTPS_USE_QOS_FROM_XML="${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
 python3 - <<'PY'
 import importlib.metadata as metadata
 
-required = ("humanoid-navigation", "humanoid-websocket")
+required = ("humanoid-navigation", "humanoid-navigation2", "humanoid-websocket")
 missing = []
 for package_name in required:
     try:

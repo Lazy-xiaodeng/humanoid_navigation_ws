@@ -88,6 +88,10 @@ class NavigationStateManagerFusion(Node):
             ('auto_pause_on_localization_recovery', True),
             ('localization_stop_hold_sec', 2.0),
             ('localization_resume_settle_sec', 1.0),
+            ('localization_auto_resume_require_recovery_done', True),
+            ('localization_resume_ndt_stable_frames', 8),
+            ('localization_resume_max_fitness', 0.05),
+            ('localization_resume_max_correction_translation', 0.25),
             ('localization_recovery_status_topic', '/localization/recovery_status'),
             ('localization_recovery_request_topic', '/localization/recovery_requests'),
             ('request_localization_recovery_on_nav_failure', True),
@@ -134,6 +138,14 @@ class NavigationStateManagerFusion(Node):
             self.get_parameter('localization_stop_hold_sec').value)
         self.localization_resume_settle_sec = float(
             self.get_parameter('localization_resume_settle_sec').value)
+        self.localization_auto_resume_require_recovery_done = bool(
+            self.get_parameter('localization_auto_resume_require_recovery_done').value)
+        self.localization_resume_ndt_stable_frames = int(
+            self.get_parameter('localization_resume_ndt_stable_frames').value)
+        self.localization_resume_max_fitness = float(
+            self.get_parameter('localization_resume_max_fitness').value)
+        self.localization_resume_max_correction_translation = float(
+            self.get_parameter('localization_resume_max_correction_translation').value)
         self.reverse_navigation_bt_xml = str(self.get_parameter('reverse_navigation_bt_xml').value)
         self.localization_recovery_status_topic = str(
             self.get_parameter('localization_recovery_status_topic').value)
@@ -227,6 +239,10 @@ class NavigationStateManagerFusion(Node):
         self.localization_recovery_last_status = {}
         self.localization_stop_until = 0.0
         self.localization_recovered_at = 0.0
+        self.localization_recovery_done = False
+        self.localization_resume_ndt_stable_count = 0
+        self.last_ndt_status_summary = {}
+        self.last_resume_wait_log_time = 0.0
         self.last_localization_recovery_request_time = 0.0
         self.last_navigation_context_recovery_request_time = 0.0
         self.last_navigation_context_recovery_key = ""
@@ -320,8 +336,12 @@ class NavigationStateManagerFusion(Node):
     # NDT 状态直接监听 (去掉 fusion 中间层)
     # =========================================================================
 
-    # 触发暂停的 ndt_status reason 值
-    NDT_DEGRADED_REASONS = {"pose_jump_candidate", "confirmed_pose_jump"}
+    # 触发暂停的 ndt_status reason 值。
+    # pose_jump_candidate 是 NDT confirmed-reacquire 的观察窗口，不立即暂停；
+    # 只有 NDT 最终拒绝为 pose_jump 时才触发自动暂停和 recovery。
+    NDT_DEGRADED_REASONS = {"pose_jump"}
+    # "confirmed_pose_jump" 是 NDT 成功 reacquire, 不触发暂停
+    # "pose_jump" 是 NDT 拒帧 (跳变已确认), 需要暂停
     # 恢复需要的连续健康帧数
     NDT_HEALTHY_CONSECUTIVE_FRAMES = 3
     # inlier=0 虚假健康: 持续超过此时间 → recovery
@@ -342,11 +362,21 @@ class NavigationStateManagerFusion(Node):
         fitness = float(data.get('fitness_score', 1.0))
         inlier = float(data.get('inlier_fraction', 0.0))
         converged = bool(data.get('has_converged', False))
+        correction_translation = float(data.get('correction_translation', 999.0))
+        self.last_ndt_status_summary = {
+            "state": ndt_state,
+            "reason": ndt_reason,
+            "fitness_score": fitness,
+            "has_converged": converged,
+            "correction_translation": correction_translation,
+            "stamp_sec": data.get("stamp_sec", 0.0),
+        }
 
         # ── 1. pose_jump 检测 → 暂停导航 ──
         if ndt_reason in self.NDT_DEGRADED_REASONS:
             self._ndt_pose_jump_count += 1
             self._ndt_healthy_count = 0
+            self.localization_resume_ndt_stable_count = 0
             if self._ndt_pose_jump_count >= 2:
                 # 连续 2 帧 pose_jump → 触发暂停
                 self._handle_ndt_degraded(ndt_reason)
@@ -356,33 +386,35 @@ class NavigationStateManagerFusion(Node):
             if (ndt_state == 'accepted' and converged
                     and fitness < 0.3 and ndt_reason == 'ok'):
                 self._ndt_healthy_count += 1
+                if self.is_ndt_stable_enough_for_localization_resume(
+                        fitness, correction_translation):
+                    self.localization_resume_ndt_stable_count += 1
+                else:
+                    self.localization_resume_ndt_stable_count = 0
                 if self._ndt_healthy_count >= self.NDT_HEALTHY_CONSECUTIVE_FRAMES:
                     self._handle_ndt_recovered()
             else:
                 self._ndt_healthy_count = 0
+                self.localization_resume_ndt_stable_count = 0
 
-            # ── 3. inlier=0 虚假健康检测 ──
-            if (inlier <= 0.0 and fitness < self.INLIER_ZERO_FITNESS_CEILING
-                    and ndt_state == 'accepted'):
-                if self._inlier_zero_start <= 0.0:
-                    self._inlier_zero_start = time.time()
-                self._inlier_zero_elapsed = time.time() - self._inlier_zero_start
-                if self._inlier_zero_elapsed > self.INLIER_ZERO_LOST_SEC:
-                    self.get_logger().error(
-                        f'[NDT] inlier=0 虚假健康检测: '
-                        f'inlier=0, fitness={fitness:.4f}<{self.INLIER_ZERO_FITNESS_CEILING}, '
-                        f'持续{self._inlier_zero_elapsed:.0f}s>{self.INLIER_ZERO_LOST_SEC}s → recovery')
-                    self._inlier_zero_start = 0.0
-                    self._inlier_zero_elapsed = 0.0
-                    self._handle_ndt_degraded('inlier_zero_false_healthy')
-            else:
-                self._inlier_zero_start = 0.0
-                self._inlier_zero_elapsed = 0.0
+            # ── 3. inlier=0 虚假健康检测 (已禁用) ──
+            # NDT status JSON 当前不发布 inlier_fraction 字段,
+            # 该字段在 NDT_OMP 中有但 lidar_localization 未提取输出。
+            # TODO: NDT 发布 inlier_fraction 后重新启用此判据。
+            # 当前慢漂移只能由 Nav2 障碍物超时间接触发。
 
         # 更新健康标志
         is_healthy = (ndt_state == 'accepted' and converged
                       and fitness < 0.3 and ndt_reason == 'ok')
         self._is_ndt_healthy = is_healthy
+
+    def is_ndt_stable_enough_for_localization_resume(
+            self, fitness: float, correction_translation: float) -> bool:
+        """Stricter NDT gate for restarting Nav2 after localization recovery."""
+        return (
+            fitness <= self.localization_resume_max_fitness and
+            correction_translation <= self.localization_resume_max_correction_translation
+        )
 
     def _check_ndt_status_timeout(self):
         """NDT status 超时检测: 3s 无更新 → 视为异常"""
@@ -404,7 +436,10 @@ class NavigationStateManagerFusion(Node):
         self.localization_auto_paused = True
         self.localization_resume_pending = False
         self.localization_recovery_active = True
+        self.localization_recovery_done = False
+        self.localization_resume_ndt_stable_count = 0
         self.localization_recovery_reason = f"NDT异常: {reason}"
+        self.localization_recovered_at = 0.0
 
         self.current_state = NavigationState.PAUSED
         self.current_detailed_state = "LOCALIZATION_RECOVERY"
@@ -440,7 +475,23 @@ class NavigationStateManagerFusion(Node):
         """NDT 恢复健康: resume 被中断的导航"""
         if not self.localization_auto_paused:
             return
+        if self.localization_auto_resume_require_recovery_done and not self.localization_recovery_done:
+            now = time.time()
+            if now - self.last_resume_wait_log_time > 2.0:
+                self.last_resume_wait_log_time = now
+                self.publish_status_update("navigation_localization_resume_waiting", {
+                    "reason": "NDT出现健康帧，但定位恢复流程尚未确认完成，暂不恢复导航",
+                    "localization_event": self.localization_recovery_last_status.get("event_type", ""),
+                    "ndt_stable_count": self.localization_resume_ndt_stable_count,
+                    "required_ndt_stable_frames": self.localization_resume_ndt_stable_frames,
+                    "ndt_status": self.last_ndt_status_summary,
+                })
+            return
         self._ndt_healthy_count = 0
+        if not self.localization_resume_pending:
+            self.localization_resume_pending = True     # R4: try_resume依赖此标志
+        if self.localization_recovered_at <= 0.0:
+            self.localization_recovered_at = time.time()
         self.get_logger().info('[NDT] 定位恢复健康, 尝试 resume 导航')
         self.try_resume_after_localization_recovery()
 
@@ -841,6 +892,11 @@ class NavigationStateManagerFusion(Node):
             return
 
         if self.current_state != NavigationState.IDLE:
+            # R5: 定位恢复期间(PAUSED+LOCALIZATION_RECOVERY)不清除pending,
+            # 等待恢复后执行。其他非IDLE状态才是真正的冲突。
+            if (self.current_state == NavigationState.PAUSED and
+                self.localization_auto_paused):
+                return  # 等待定位恢复
             pending_request = self.pending_navigation_request
             self.pending_navigation_request = None
             self.pending_navigation_reason = ""
@@ -1547,8 +1603,11 @@ class NavigationStateManagerFusion(Node):
         # recovery_started 事件仅用于 track 状态 + 发送 nav_context prior
         reason = status.get("reason", "定位异常，正在重定位")
         self.localization_recovery_active = True
+        self.localization_recovery_done = False
+        self.localization_resume_ndt_stable_count = 0
         self.localization_recovery_reason = reason
         self.localization_recovery_started_at = time.time()
+        self.localization_recovered_at = 0.0
 
         if self.current_state in (NavigationState.EXECUTING, NavigationState.PLANNING):
             self.localization_auto_paused = True
@@ -1601,7 +1660,11 @@ class NavigationStateManagerFusion(Node):
 
     def handle_localization_recovery_failed(self, status: Dict[str, Any]):
         self.localization_recovery_active = True
+        self.localization_recovery_done = False
+        self.localization_resume_pending = False
+        self.localization_resume_ndt_stable_count = 0
         self.localization_recovery_reason = status.get("reason", self.localization_recovery_reason)
+        self.localization_recovered_at = 0.0
         self.publish_status_update("navigation_localization_recovery_failed", {
             "reason": self.localization_recovery_reason,
             "current_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
@@ -1613,6 +1676,9 @@ class NavigationStateManagerFusion(Node):
 
     def handle_localization_manual_initialpose_override(self, status: Dict[str, Any]):
         self.localization_recovery_active = False
+        self.localization_recovery_done = False
+        self.localization_resume_pending = False
+        self.localization_resume_ndt_stable_count = 0
         self.localization_recovery_reason = status.get("reason", "人工重定位已接管")
 
         self.publish_status_update("navigation_localization_manual_override", {
@@ -1628,6 +1694,8 @@ class NavigationStateManagerFusion(Node):
 
     def handle_localization_recovered(self, status: Dict[str, Any]):
         self.localization_recovery_active = False
+        self.localization_recovery_done = True
+        self.localization_resume_ndt_stable_count = 0
         self.localization_recovery_reason = status.get("reason", "定位已恢复")
         self.localization_recovered_at = time.time()
 
@@ -1655,6 +1723,18 @@ class NavigationStateManagerFusion(Node):
             self.localization_resume_pending = False
             return
 
+        if self.localization_auto_resume_require_recovery_done and (
+                self.localization_recovery_active or not self.localization_recovery_done):
+            self.publish_status_update("navigation_localization_resume_waiting", {
+                "reason": "定位恢复流程尚未确认完成，暂不恢复导航",
+                "localization_event": self.localization_recovery_last_status.get("event_type", ""),
+                "current_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
+                "current_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
+                "waypoint_index": self.current_waypoint_index,
+                "total_waypoints": self.total_waypoints,
+            })
+            return
+
         if not self.current_waypoint:
             self.localization_resume_pending = False
             self.localization_auto_paused = False
@@ -1668,6 +1748,24 @@ class NavigationStateManagerFusion(Node):
         if block_reason:
             self.publish_status_update("navigation_localization_resume_waiting", {
                 "reason": block_reason,
+                "current_waypoint_id": self.current_waypoint.get("id", ""),
+                "current_waypoint_name": self.current_waypoint.get("name", ""),
+                "waypoint_index": self.current_waypoint_index,
+                "total_waypoints": self.total_waypoints,
+            })
+            return
+
+        required_stable_frames = max(0, self.localization_resume_ndt_stable_frames)
+        if (not self._is_ndt_healthy or
+                self.localization_resume_ndt_stable_count < required_stable_frames):
+            self.publish_status_update("navigation_localization_resume_waiting", {
+                "reason": (
+                    f"等待 NDT 稳定帧 "
+                    f"{self.localization_resume_ndt_stable_count}/{required_stable_frames}"
+                ),
+                "ndt_stable_count": self.localization_resume_ndt_stable_count,
+                "required_ndt_stable_frames": required_stable_frames,
+                "ndt_status": self.last_ndt_status_summary,
                 "current_waypoint_id": self.current_waypoint.get("id", ""),
                 "current_waypoint_name": self.current_waypoint.get("name", ""),
                 "waypoint_index": self.current_waypoint_index,
@@ -2645,6 +2743,13 @@ class NavigationStateManagerFusion(Node):
     
     def nav2_log_callback(self, msg):
         """解析 Nav2 行为树日志，识别当前正在进行的具体动作"""
+        if self.current_state not in (NavigationState.EXECUTING, NavigationState.PLANNING):
+            if self.nav2_blockage_suppression_nodes:
+                self.nav2_blockage_suppression_nodes.clear()
+            if self.current_detailed_state in {"RECOVERING", "TURNING"}:
+                self.current_detailed_state = self.current_state.value
+            return
+
         for event in msg.event_log:
             # 检测是否正在执行会主动驱动机器人运动的行为
             if self.is_nav2_blockage_suppression_node(event.node_name):
@@ -2919,6 +3024,7 @@ class NavigationStateManagerFusion(Node):
     def reset_navigation_state(self):
         """重置导航状态"""
         self.current_state = NavigationState.IDLE
+        self.current_detailed_state = "IDLE"
         self.current_navigation_mode = None
         self.current_sequence_id = None
         self.current_waypoint_index = 0

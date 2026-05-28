@@ -1,20 +1,20 @@
 {
   "waypoints": {
     "navigation_target": {
-      "912": {
-        "id": "912",
+      "948": {
+        "id": "948",
         "name": "点位1",
         "type": "navigation_target",
         "position": [
-          0.002,
-          -0.021,
+          8.764,
+          13.982,
           0
         ],
         "orientation": [
           0.0,
           0.0,
-          0.0,
-          1.0
+          0.7934,
+          0.6088
         ],
         "frame_id": "map",
         "properties": {
@@ -28,23 +28,23 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1779783369.3397605,
-        "last_modified": 1779783369.3397608
+        "created_time": 1779954226.1324227,
+        "last_modified": 1779954226.1324232
       },
-      "913": {
-        "id": "913",
+      "949": {
+        "id": "949",
         "name": "点位2",
         "type": "navigation_target",
         "position": [
-          0.094,
-          -8.642,
+          8.464,
+          17.432,
           0
         ],
         "orientation": [
           0.0,
           0.0,
-          -0.9994,
-          0.0349
+          -0.7193,
+          0.6947
         ],
         "frame_id": "map",
         "properties": {
@@ -58,23 +58,23 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1779783369.339766,
-        "last_modified": 1779783369.3397663
+        "created_time": 1779954226.1386998,
+        "last_modified": 1779954226.1387002
       },
-      "914": {
-        "id": "914",
+      "950": {
+        "id": "950",
         "name": "点位3",
         "type": "navigation_target",
         "position": [
-          -0.12,
-          -11.477,
+          13.65,
+          16.781,
           0
         ],
         "orientation": [
           0.0,
           0.0,
-          0.9272,
-          0.3746
+          -0.6361,
+          0.7716
         ],
         "frame_id": "map",
         "properties": {
@@ -88,23 +88,23 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1779783369.3397686,
-        "last_modified": 1779783369.3397686
+        "created_time": 1779954226.1450381,
+        "last_modified": 1779954226.1450384
       },
-      "915": {
-        "id": "915",
+      "951": {
+        "id": "951",
         "name": "点位4",
         "type": "navigation_target",
         "position": [
-          -3.473,
-          -11.238,
+          18.85,
+          16.372,
           0
         ],
         "orientation": [
           0.0,
           0.0,
-          0.4147,
-          0.91
+          -0.7604,
+          0.6494
         ],
         "frame_id": "map",
         "properties": {
@@ -118,23 +118,23 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1779783369.33977,
-        "last_modified": 1779783369.33977
+        "created_time": 1779954226.1544843,
+        "last_modified": 1779954226.1544845
       },
-      "916": {
-        "id": "916",
+      "952": {
+        "id": "952",
         "name": "点位5",
         "type": "navigation_target",
         "position": [
-          -5.298,
-          -9.521,
+          23.264,
+          15.382,
           0
         ],
         "orientation": [
           0.0,
           0.0,
-          0.1994,
-          0.9799
+          -0.809,
+          0.5878
         ],
         "frame_id": "map",
         "properties": {
@@ -148,23 +148,23 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1779783369.3397715,
-        "last_modified": 1779783369.3397715
+        "created_time": 1779954226.1621892,
+        "last_modified": 1779954226.1621897
       },
-      "917": {
-        "id": "917",
+      "953": {
+        "id": "953",
         "name": "点位6",
         "type": "navigation_target",
         "position": [
-          -4.398,
-          -5.754,
+          24.764,
+          12.182,
           0
         ],
         "orientation": [
           0.0,
           0.0,
-          0.0,
-          1.0
+          0.9833,
+          0.1822
         ],
         "frame_id": "map",
         "properties": {
@@ -178,23 +178,23 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1779783369.3397727,
-        "last_modified": 1779783369.339773
+        "created_time": 1779954226.1675699,
+        "last_modified": 1779954226.16757
       },
-      "918": {
-        "id": "918",
+      "954": {
+        "id": "954",
         "name": "点位7",
         "type": "navigation_target",
         "position": [
-          -4.373,
-          -2.127,
+          21.414,
+          12.582,
           0
         ],
         "orientation": [
           0.0,
           0.0,
-          0.0,
-          1.0
+          0.9613,
+          0.2756
         ],
         "frame_id": "map",
         "properties": {
@@ -208,878 +208,8 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1779783369.339774,
-        "last_modified": 1779783369.339774
-      },
-      "919": {
-        "id": "919",
-        "name": "点位8",
-        "type": "navigation_target",
-        "position": [
-          -4.298,
-          6.229,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.3397746,
-        "last_modified": 1779783369.339775
-      },
-      "920": {
-        "id": "920",
-        "name": "点位9",
-        "type": "navigation_target",
-        "position": [
-          -3.998,
-          11.129,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.3502,
-          0.9367
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.3397758,
-        "last_modified": 1779783369.3397758
-      },
-      "921": {
-        "id": "921",
-        "name": "点位10",
-        "type": "navigation_target",
-        "position": [
-          1.53,
-          10.64,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.5446,
-          0.8387
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.3397768,
-        "last_modified": 1779783369.3397768
-      },
-      "922": {
-        "id": "922",
-        "name": "点位11",
-        "type": "navigation_target",
-        "position": [
-          6.102,
-          11.429,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          0.6691,
-          0.7431
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.3397775,
-        "last_modified": 1779783369.3397777
-      },
-      "923": {
-        "id": "923",
-        "name": "点位12",
-        "type": "navigation_target",
-        "position": [
-          6.204,
-          14.277,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          0.7826,
-          0.6225
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.3397787,
-        "last_modified": 1779783369.339779
-      },
-      "924": {
-        "id": "924",
-        "name": "点位13",
-        "type": "navigation_target",
-        "position": [
-          4.98,
-          18.518,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.454,
-          0.891
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.3397799,
-        "last_modified": 1779783369.3397799
-      },
-      "925": {
-        "id": "925",
-        "name": "点位14",
-        "type": "navigation_target",
-        "position": [
-          8.01,
-          18.294,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.7254,
-          0.6884
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.3397808,
-        "last_modified": 1779783369.339781
-      },
-      "926": {
-        "id": "926",
-        "name": "点位15",
-        "type": "navigation_target",
-        "position": [
-          11.502,
-          18.629,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.7071,
-          0.7071
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.339782,
-        "last_modified": 1779783369.3397822
-      },
-      "927": {
-        "id": "927",
-        "name": "点位16",
-        "type": "navigation_target",
-        "position": [
-          14.452,
-          18.379,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.7254,
-          0.6884
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.3397832,
-        "last_modified": 1779783369.3397832
-      },
-      "928": {
-        "id": "928",
-        "name": "点位17",
-        "type": "navigation_target",
-        "position": [
-          20.602,
-          18.829,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.6561,
-          0.7547
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.3397841,
-        "last_modified": 1779783369.3397841
-      },
-      "929": {
-        "id": "929",
-        "name": "点位18",
-        "type": "navigation_target",
-        "position": [
-          23.162,
-          16.766,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          0.9816,
-          0.1908
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.339785,
-        "last_modified": 1779783369.339785
-      },
-      "930": {
-        "id": "930",
-        "name": "点位19",
-        "type": "navigation_target",
-        "position": [
-          22.659,
-          14.919,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          0.9659,
-          0.2588
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.339786,
-        "last_modified": 1779783369.339786
-      },
-      "931": {
-        "id": "931",
-        "name": "点位20",
-        "type": "navigation_target",
-        "position": [
-          18.452,
-          16.229,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          1.0,
-          0.0
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.339787,
-        "last_modified": 1779783369.339787
-      },
-      "932": {
-        "id": "932",
-        "name": "点位21",
-        "type": "navigation_target",
-        "position": [
-          6.42,
-          15.29,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.7547,
-          0.6561
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.339788,
-        "last_modified": 1779783369.339788
-      },
-      "933": {
-        "id": "933",
-        "name": "点位22",
-        "type": "navigation_target",
-        "position": [
-          5.938,
-          10.655,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.9426,
-          0.3338
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.339789,
-        "last_modified": 1779783369.3397892
-      },
-      "934": {
-        "id": "934",
-        "name": "点位23",
-        "type": "navigation_target",
-        "position": [
-          0.852,
-          7.479,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.9563,
-          0.2924
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.339932,
-        "last_modified": 1779783369.339932
-      },
-      "935": {
-        "id": "935",
-        "name": "点位24",
-        "type": "navigation_target",
-        "position": [
-          -1.548,
-          3.829,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.2672,
-          0.9636
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779783369.3399339,
-        "last_modified": 1779783369.3399339
-      },
-      "936": {
-        "id": "936",
-        "name": "点位1",
-        "type": "navigation_target",
-        "position": [
-          6.052,
-          10.679,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          0.6494,
-          0.7604
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779784161.5906572,
-        "last_modified": 1779784161.5906582
-      },
-      "937": {
-        "id": "937",
-        "name": "点位2",
-        "type": "navigation_target",
-        "position": [
-          6.452,
-          14.229,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          0.766,
-          0.6428
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779784161.612625,
-        "last_modified": 1779784161.6126251
-      },
-      "938": {
-        "id": "938",
-        "name": "点位3",
-        "type": "navigation_target",
-        "position": [
-          4.971,
-          18.418,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.4305,
-          0.9026
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779784161.6270554,
-        "last_modified": 1779784161.6270554
-      },
-      "939": {
-        "id": "939",
-        "name": "点位4",
-        "type": "navigation_target",
-        "position": [
-          8.202,
-          18.229,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.6428,
-          0.766
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779784161.6356757,
-        "last_modified": 1779784161.6356757
-      },
-      "940": {
-        "id": "940",
-        "name": "点位5",
-        "type": "navigation_target",
-        "position": [
-          12.052,
-          18.129,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.6293,
-          0.7771
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779784161.6528683,
-        "last_modified": 1779784161.6528685
-      },
-      "941": {
-        "id": "941",
-        "name": "点位6",
-        "type": "navigation_target",
-        "position": [
-          14.889,
-          18.359,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.5664,
-          0.8241
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779784161.660393,
-        "last_modified": 1779784161.6603932
-      },
-      "942": {
-        "id": "942",
-        "name": "点位7",
-        "type": "navigation_target",
-        "position": [
-          20.449,
-          18.298,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.8434,
-          0.5373
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779784161.6852603,
-        "last_modified": 1779784161.6852603
-      },
-      "943": {
-        "id": "943",
-        "name": "点位8",
-        "type": "navigation_target",
-        "position": [
-          23.342,
-          16.566,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          0.9962,
-          0.0872
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779784161.695601,
-        "last_modified": 1779784161.695601
-      },
-      "944": {
-        "id": "944",
-        "name": "点位9",
-        "type": "navigation_target",
-        "position": [
-          22.802,
-          14.429,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          0.9426,
-          0.3338
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779784161.7047396,
-        "last_modified": 1779784161.7047398
-      },
-      "945": {
-        "id": "945",
-        "name": "点位10",
-        "type": "navigation_target",
-        "position": [
-          16.502,
-          15.629,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          0.9925,
-          0.1219
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779784161.723951,
-        "last_modified": 1779784161.7239513
-      },
-      "946": {
-        "id": "946",
-        "name": "点位11",
-        "type": "navigation_target",
-        "position": [
-          6.826,
-          15.265,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.8039,
-          0.5948
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779784161.7325218,
-        "last_modified": 1779784161.732522
-      },
-      "947": {
-        "id": "947",
-        "name": "点位12",
-        "type": "navigation_target",
-        "position": [
-          6.204,
-          10.22,
-          0
-        ],
-        "orientation": [
-          0.0,
-          0.0,
-          -0.7373,
-          0.6756
-        ],
-        "frame_id": "map",
-        "properties": {
-          "color": [
-            1.0,
-            1.0,
-            0.0,
-            1.0
-          ],
-          "description": "机器人需要在此处停留",
-          "stay_time": 30.0,
-          "walk_direction": "forward"
-        },
-        "created_time": 1779784161.7397714,
-        "last_modified": 1779784161.7397716
+        "created_time": 1779954226.1729457,
+        "last_modified": 1779954226.1729457
       }
     },
     "exhibition_point": {},
@@ -1089,5 +219,5 @@
     "landmark_point": {}
   },
   "sequences": {},
-  "timestamp": 1779784161.7398176
+  "timestamp": 1779954226.1729553
 }

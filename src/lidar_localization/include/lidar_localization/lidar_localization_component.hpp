@@ -12,6 +12,7 @@
  */
 
 #include <chrono>
+#include <deque>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -42,6 +43,7 @@
 // ROS2消息类型
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
+#include "geometry_msgs/msg/twist.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "sensor_msgs/msg/imu.hpp"
@@ -127,6 +129,14 @@ public:
   Eigen::Matrix4f applyPlanarTransformConstraint(const Eigen::Matrix4f & transform) const;
   bool initialPoseReacquireActive();
   bool publishLastGoodTransformIfFresh(const char * reject_reason);
+  bool rotationGuardActive();
+  bool rotationGuardInSettle();
+  void enterRotationGuard(const char * source);
+  void updateRotationGuard();
+  pcl::PointCloud<pcl::PointXYZI>::Ptr buildMultiFrameSource(
+    const pcl::PointCloud<pcl::PointXYZI>::Ptr & current_cloud,
+    const rclcpp::Time & stamp,
+    bool rotation_guard_active);
   void publishLocalizationStatus(
     const char * state,
     const char * reason,
@@ -142,6 +152,8 @@ public:
   void mapReceived(const sensor_msgs::msg::PointCloud2::SharedPtr msg);                          ///< 地图回调
   void odomReceived(const nav_msgs::msg::Odometry::ConstSharedPtr msg);                          ///< 里程计回调
   void imuReceived(const sensor_msgs::msg::Imu::ConstSharedPtr msg);                             ///< IMU回调
+  void cmdVelReceived(const geometry_msgs::msg::Twist::ConstSharedPtr msg);                      ///< 速度命令回调
+  void navigationStatusReceived(const std_msgs::msg::String::ConstSharedPtr msg);                ///< 导航状态回调
   void cloudReceived(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg);                   ///< 点云回调（核心）
 
   // ========== 成员变量 ==========
@@ -169,6 +181,10 @@ public:
     cloud_sub_;  ///< 点云订阅者
   rclcpp::Subscription<sensor_msgs::msg::Imu>::ConstSharedPtr
     imu_sub_;  ///< IMU订阅者
+  rclcpp::Subscription<geometry_msgs::msg::Twist>::ConstSharedPtr
+    cmd_vel_sub_;  ///< 速度命令订阅者，用于旋转保护
+  rclcpp::Subscription<std_msgs::msg::String>::ConstSharedPtr
+    navigation_status_sub_;  ///< 导航状态订阅者，用于BT状态触发旋转保护
   // 配准和滤波
   boost::shared_ptr<pcl::Registration<pcl::PointXYZI, pcl::PointXYZI>> registration_;  ///< 配准算法对象
   pcl::VoxelGrid<pcl::PointXYZI> voxel_grid_filter_;  ///< 体素滤波器，用于降采样
@@ -178,6 +194,13 @@ public:
   nav_msgs::msg::Path::SharedPtr path_ptr_;            ///< 路径数据
   sensor_msgs::msg::PointCloud2::ConstSharedPtr last_scan_ptr_;  ///< 最后一次扫描数据
   geometry_msgs::msg::TransformStamped last_good_transform_;  ///< 最后一次可信定位TF
+
+  struct ScanFrame
+  {
+    rclcpp::Time stamp;
+    pcl::PointCloud<pcl::PointXYZI>::Ptr cloud;
+  };
+  std::deque<ScanFrame> scan_frame_buffer_;
 
   bool map_recieved_{false};         ///< 标记是否已接收地图
   bool initialpose_recieved_{false}; ///< 标记是否已接收初始位姿
@@ -214,12 +237,35 @@ public:
   bool fastlio_odom_body_used_debug_{false};
   double fastlio_delta_dt_debug_{0.0};
   double fastlio_map_odom_guess_shift_debug_{0.0};
+  bool ndt_candidate_pose_valid_debug_{false};
+  double ndt_candidate_x_debug_{0.0};
+  double ndt_candidate_y_debug_{0.0};
+  double ndt_candidate_yaw_debug_{0.0};
+  double ndt_init_guess_x_debug_{0.0};
+  double ndt_init_guess_y_debug_{0.0};
+  double ndt_init_guess_yaw_debug_{0.0};
+  bool ndt_prev_candidate_valid_debug_{false};
+  double ndt_candidate_delta_prev_xy_debug_{0.0};
+  double ndt_candidate_delta_prev_yaw_debug_{0.0};
+  double ndt_candidate_delta_last_good_xy_debug_{0.0};
+  double ndt_candidate_delta_last_good_yaw_debug_{0.0};
+  bool has_last_ndt_candidate_debug_{false};
+  double last_ndt_candidate_x_debug_{0.0};
+  double last_ndt_candidate_y_debug_{0.0};
+  double last_ndt_candidate_yaw_debug_{0.0};
+  bool rotation_guard_active_debug_{false};
+  bool rotation_guard_settle_debug_{false};
+  double rotation_guard_age_debug_{0.0};
+  std::string rotation_guard_source_debug_;
+  int multi_frame_source_frames_debug_{1};
+  int multi_frame_source_points_debug_{0};
 
 
   // ========== ROS参数 ==========
   std::string global_frame_id_;   ///< 全局坐标系ID（如"map"）
   std::string odom_frame_id_;     ///< 里程计坐标系ID
   std::string base_frame_id_;     ///< 机器人基坐标系ID
+  std::string initialpose_base_frame_id_; ///< /initialpose 表示的机器人位姿坐标系
   std::string localization_status_topic_; ///< 定位质量状态话题
   std::string registration_method_;  ///< 配准方法名称（NDT/GICP等）
   double scan_max_range_;         ///< 点云最大有效距离（米）
@@ -247,6 +293,27 @@ public:
   double pose_jump_candidate_yaw_{0.0}; ///< 待确认候选yaw
   double last_mean_corr_dist_{-1.0}; ///< 最近一次NDT匹配的平均关联距离(用于退化诊断)
   int last_corr_count_{0}; ///< 最近一次NDT匹配的关联点对数
+  bool rotation_guard_enabled_{false};
+  bool rotation_guard_use_cmd_vel_fallback_{false};
+  std::string rotation_guard_navigation_status_topic_{"/navigation/status"};
+  double rotation_guard_angular_threshold_{0.20};
+  double rotation_guard_linear_threshold_{0.05};
+  double rotation_guard_settle_sec_{1.0};
+  double rotation_guard_max_duration_sec_{8.0};
+  rclcpp::Time rotation_guard_start_time_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time rotation_guard_settle_until_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time last_cmd_vel_time_{0, 0, RCL_ROS_TIME};
+  bool rotation_guard_active_{false};
+  bool rotation_guard_state_active_{false};
+  bool rotation_guard_rotating_now_{false};
+  std::string rotation_guard_source_;
+  int rotation_guard_hold_count_{0};
+  bool multi_frame_matching_enabled_{false};
+  bool multi_frame_use_only_when_rotating_{true};
+  double multi_frame_window_sec_{0.6};
+  int multi_frame_max_frames_{8};
+  double multi_frame_voxel_leaf_size_{0.20};
+  int multi_frame_max_points_{40000};
   double ndt_resolution_;         ///< NDT网格分辨率（米）
   double ndt_step_size_;          ///< NDT牛顿迭代步长
   double transform_epsilon_;      ///< 变换收敛阈值

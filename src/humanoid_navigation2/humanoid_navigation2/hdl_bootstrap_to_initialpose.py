@@ -1,6 +1,7 @@
 import math
 import time
 import json
+import copy
 from collections import deque
 
 import numpy as np
@@ -159,6 +160,8 @@ class HdlBootstrapToInitialPose(Node):
             'recovery_status_topic', '/localization/recovery_status').value
 
         self.startup_delay_sec = float(self.declare_parameter('startup_delay_sec', 2.0).value)
+        self.enable_startup_bootstrap = bool(
+            self.declare_parameter('enable_startup_bootstrap', True).value)
         self.relocalize_retry_sec = float(self.declare_parameter('relocalize_retry_sec', 10.0).value)
         self.startup_relocalize_retry_sec = float(
             self.declare_parameter('startup_relocalize_retry_sec', self.relocalize_retry_sec).value)
@@ -280,6 +283,14 @@ class HdlBootstrapToInitialPose(Node):
             self.declare_parameter('ndt_recovery_max_correction_translation', 0.35).value)
         self.ndt_recovery_max_correction_yaw = float(
             self.declare_parameter('ndt_recovery_max_correction_yaw', 0.20).value)
+        self.ndt_recovery_wait_timeout_sec = float(
+            self.declare_parameter('ndt_recovery_wait_timeout_sec', 8.0).value)
+        self.publish_prior_initialpose_on_recovery = bool(
+            self.declare_parameter('publish_prior_initialpose_on_recovery', True).value)
+        self.prior_initialpose_max_attempts = int(
+            self.declare_parameter('prior_initialpose_max_attempts', 1).value)
+        self.prior_relocalize_attempts_before_full_global = int(
+            self.declare_parameter('prior_relocalize_attempts_before_full_global', 3).value)
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -371,7 +382,7 @@ class HdlBootstrapToInitialPose(Node):
         self.startup_origin_prior_first_attempt_time = 0.0
         self.startup_origin_prior_disabled_reason = ''
         self.accept_hdl_samples = False
-        self.need_relocalize = True
+        self.need_relocalize = self.enable_startup_bootstrap
         self.bootstrap_done = False
         self.samples = deque(maxlen=max(
             1,
@@ -406,10 +417,13 @@ class HdlBootstrapToInitialPose(Node):
         self.last_hdl_standby_request_time = 0.0
         self.last_stop_cmd_vel_publish_time = 0.0
         self.recovery_waiting_for_ndt = False
+        self.recovery_waiting_since = 0.0
         self.recovery_healthy_count = 0
         self.ndt_recovery_stable_status_count = 0
         self.last_ndt_recovery_stable_status_time = 0.0
         self.recovery_count = 0
+        self.prior_initialpose_attempts = 0
+        self.pending_initialpose_reason = ''
 
         self.timer = self.create_timer(0.2, self.timer_callback)
         self.get_logger().info(
@@ -639,14 +653,28 @@ class HdlBootstrapToInitialPose(Node):
                 self.startup_origin_relocalize_checked_client,
                 self.startup_origin_relocalize_checked_service,
             )
-        if self.use_prior_for_next_relocalize and self.use_prior_relocalize_on_recovery:
+        if (
+            self.use_prior_for_next_relocalize and
+            self.use_prior_relocalize_on_recovery and
+            not self.runtime_should_use_full_global_search()
+        ):
             return self.relocalize_with_prior_checked_client, self.relocalize_with_prior_checked_service
         return self.relocalize_checked_client, self.relocalize_checked_service
 
     def legacy_relocalize_client_for_mode(self):
-        if self.use_prior_for_next_relocalize and self.use_prior_relocalize_on_recovery:
+        if (
+            self.use_prior_for_next_relocalize and
+            self.use_prior_relocalize_on_recovery and
+            not self.runtime_should_use_full_global_search()
+        ):
             return self.relocalize_with_prior_client, self.relocalize_with_prior_service
         return self.relocalize_client, self.relocalize_service
+
+    def runtime_should_use_full_global_search(self):
+        if not self.is_runtime_recovery_mode() or not self.use_prior_for_next_relocalize:
+            return False
+        limit = int(self.prior_relocalize_attempts_before_full_global)
+        return limit >= 0 and self.relocalize_attempts >= limit
 
     def select_relocalize_client(self):
         if self.use_checked_relocalize_service:
@@ -746,6 +774,7 @@ class HdlBootstrapToInitialPose(Node):
         self.accept_hdl_samples = False
         self.samples.clear()
         self.pending_initialpose = None
+        self.pending_initialpose_reason = ''
         self.pending_publish_count = 0
         self.sample_wait_start_time = 0.0
         self.relocalize_future = None
@@ -762,6 +791,7 @@ class HdlBootstrapToInitialPose(Node):
         self.last_hdl_status_time = None
         self.last_external_prior_publish_time = 0.0
         self.recovery_waiting_for_ndt = True
+        self.recovery_waiting_since = now
         self.recovery_healthy_count = 0
         self.ndt_recovery_stable_status_count = 0
         self.last_ndt_recovery_stable_status_time = 0.0
@@ -1099,6 +1129,46 @@ class HdlBootstrapToInitialPose(Node):
         )
         return True, self.pending_external_prior_reason
 
+    def prepare_initialpose_from_external_prior(self):
+        if self.pending_external_prior is None:
+            return False
+        if self.pending_external_prior.header.frame_id not in ('', self.map_frame):
+            self.get_logger().warn(
+                f'cannot publish prior directly to NDT: prior frame is '
+                f'{self.pending_external_prior.header.frame_id}, expected {self.map_frame}'
+            )
+            return False
+
+        msg = PoseWithCovarianceStamped()
+        msg.header.frame_id = self.map_frame
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.pose.pose = copy.deepcopy(self.pending_external_prior.pose.pose)
+        msg.pose.covariance[0] = self.xy_covariance
+        msg.pose.covariance[7] = self.xy_covariance
+        msg.pose.covariance[14] = self.z_covariance
+        msg.pose.covariance[35] = self.yaw_covariance
+
+        self.pending_initialpose = msg
+        self.pending_initialpose_reason = 'published trusted recovery prior as map base initial pose'
+        self.pending_publish_count = self.current_publish_repetitions()
+        self.last_publish_time = 0.0
+        self.prior_initialpose_attempts += 1
+        self.get_logger().info(
+            'prepared map base initial pose from trusted recovery prior: '
+            f'map_pose=({msg.pose.pose.position.x:.3f}, {msg.pose.pose.position.y:.3f}, '
+            f'yaw={yaw_from_pose(msg.pose.pose):.3f}); source={self.pending_external_prior_reason}'
+        )
+        self.publish_recovery_status(
+            'localization_prior_initialpose_prepared',
+            reason=self.pending_initialpose_reason,
+            prior_reason=self.pending_external_prior_reason,
+            prior_initialpose_attempts=self.prior_initialpose_attempts,
+            map_pose_x=float(msg.pose.pose.position.x),
+            map_pose_y=float(msg.pose.pose.position.y),
+            map_pose_yaw=float(yaw_from_pose(msg.pose.pose)),
+        )
+        return True
+
     def request_hdl_standby(self, reason):
         now = time.monotonic()
         if now - self.last_hdl_standby_request_time < 1.0:
@@ -1257,6 +1327,13 @@ class HdlBootstrapToInitialPose(Node):
                 self.check_recovery_completion()
             self.monitor_localization_health()
             return
+        if not self.enable_startup_bootstrap and not (
+            self.need_relocalize
+            or self.accept_hdl_samples
+            or self.pending_initialpose is not None
+            or self.relocalize_future is not None
+        ):
+            return
         if time.monotonic() - self.start_time < self.startup_delay_sec:
             return
 
@@ -1360,15 +1437,18 @@ class HdlBootstrapToInitialPose(Node):
             self.monitor_suppressed_until = settle_until
             self.recovery_ndt_check_after = settle_until
             self.recovery_waiting_for_ndt = True
+            self.recovery_waiting_since = time.monotonic()
             self.recovery_healthy_count = 0
             self.ndt_recovery_stable_status_count = 0
             self.last_ndt_recovery_stable_status_time = 0.0
-            self.request_hdl_standby('verified HDL pose has been handed off to NDT')
+            reason = self.pending_initialpose_reason or 'published verified HDL pose as NDT initial pose'
+            self.request_hdl_standby(reason)
             self.publish_recovery_status(
                 'localization_initialpose_published',
-                reason='published verified HDL pose as NDT initial pose',
+                reason=reason,
                 ndt_settle_sec=settle_sec,
             )
+            self.pending_initialpose_reason = ''
             if self.exit_after_publish:
                 self.get_logger().info('bootstrap initial pose published; exiting helper node')
                 rclpy.try_shutdown()
@@ -1462,6 +1542,18 @@ class HdlBootstrapToInitialPose(Node):
             return
         if not self.ensure_runtime_robot_stationary(now):
             return
+        if (
+            self.is_runtime_recovery_mode() and
+            self.publish_prior_initialpose_on_recovery and
+            self.use_prior_for_next_relocalize and
+            self.pending_external_prior is not None and
+            self.prior_initialpose_attempts < max(0, self.prior_initialpose_max_attempts)
+        ):
+            if self.prepare_initialpose_from_external_prior():
+                self.need_relocalize = False
+                self.bootstrap_done = True
+                return
+            return
         if not self.ensure_runtime_relocalize_buffer_cleared(now):
             return
         if now < self.next_relocalize_allowed_time:
@@ -1485,6 +1577,18 @@ class HdlBootstrapToInitialPose(Node):
             self.startup_origin_relocalize_checked_service,
         }
         using_startup_origin_prior = service_name == self.startup_origin_relocalize_checked_service
+        if self.runtime_should_use_full_global_search() and self.use_prior_for_next_relocalize:
+            self.publish_recovery_status(
+                'localization_recovery_full_global_stage',
+                reason=(
+                    f'prior-local HDL attempts exhausted '
+                    f'({self.relocalize_attempts}/{self.prior_relocalize_attempts_before_full_global}); '
+                    'switching to full global HDL search'
+                ),
+                throttle_key='full_global_stage',
+                throttle_sec=2.0,
+                prior_attempt_limit=self.prior_relocalize_attempts_before_full_global,
+            )
 
         if using_prior_service and not using_startup_origin_prior and self.pending_external_prior is not None:
             self.pending_external_prior.header.stamp = self.get_clock().now().to_msg()
@@ -1567,10 +1671,12 @@ class HdlBootstrapToInitialPose(Node):
         self.active_relocalize_counted_as_attempt = False
         self.active_startup_origin_prior_attempt = False
         self.recovery_waiting_for_ndt = False
+        self.recovery_waiting_since = 0.0
         self.recovery_healthy_count = 0
         self.ndt_recovery_stable_status_count = 0
         self.last_ndt_recovery_stable_status_time = 0.0
         self.recovery_ndt_check_after = 0.0
+        self.pending_initialpose_reason = ''
         self.monitor_suppressed_until = max(
             self.monitor_suppressed_until,
             time.monotonic() + max(0.0, self.runtime_recovery_failure_cooldown_sec),
@@ -1727,12 +1833,15 @@ class HdlBootstrapToInitialPose(Node):
         self.last_hdl_status_time = None
         self.last_external_prior_publish_time = 0.0
         self.pending_initialpose = None
+        self.pending_initialpose_reason = ''
         self.pending_publish_count = 0
         self.bootstrap_done = False
         self.recovery_waiting_for_ndt = False
+        self.recovery_waiting_since = 0.0
         self.recovery_healthy_count = 0
         self.ndt_recovery_stable_status_count = 0
         self.last_ndt_recovery_stable_status_time = 0.0
+        self.prior_initialpose_attempts = 0
         self.get_logger().warn(
             f'localization unhealthy: {failure_reason}; starting HDL recovery #{self.recovery_count}; '
             f'prior={self.use_prior_for_next_relocalize} ({prior_reason})'
@@ -1760,6 +1869,8 @@ class HdlBootstrapToInitialPose(Node):
 
         ndt_stability_reason = self.ndt_recovery_stability_reason()
         if ndt_stability_reason is not None:
+            if self.handle_ndt_recovery_wait_timeout(now_mono, ndt_stability_reason):
+                return
             self.recovery_healthy_count = 0
             self.publish_recovery_status(
                 'localization_recovery_waiting',
@@ -1771,6 +1882,8 @@ class HdlBootstrapToInitialPose(Node):
 
         failure_reason = self.localization_failure_reason()
         if failure_reason is not None:
+            if self.handle_ndt_recovery_wait_timeout(now_mono, failure_reason):
+                return
             self.recovery_healthy_count = 0
             self.publish_recovery_status(
                 'localization_recovery_waiting',
@@ -1791,6 +1904,46 @@ class HdlBootstrapToInitialPose(Node):
             'localization_recovered',
             reason='NDT pose and map->odom TF are healthy after relocalization',
         )
+
+    def handle_ndt_recovery_wait_timeout(self, now_mono, reason):
+        timeout_sec = max(0.0, self.ndt_recovery_wait_timeout_sec)
+        if timeout_sec <= 0.0:
+            return False
+        if self.recovery_waiting_since <= 0.0:
+            self.recovery_waiting_since = now_mono
+            return False
+        elapsed = now_mono - self.recovery_waiting_since
+        if elapsed < timeout_sec:
+            return False
+
+        self.recovery_waiting_for_ndt = False
+        self.recovery_waiting_since = 0.0
+        self.recovery_healthy_count = 0
+        self.ndt_recovery_stable_status_count = 0
+        self.last_ndt_recovery_stable_status_time = 0.0
+        self.recovery_ndt_check_after = 0.0
+        self.need_relocalize = True
+        self.bootstrap_done = False
+        self.accept_hdl_samples = False
+        self.samples.clear()
+        self.sample_wait_start_time = 0.0
+        self.next_relocalize_allowed_time = now_mono
+        self.relocalize_start_after = max(
+            self.relocalize_start_after,
+            now_mono + max(0.0, self.runtime_relocalize_start_delay_sec),
+        )
+        self.reset_stationary_gate()
+        self.publish_recovery_status(
+            'localization_recovery_ndt_validation_timeout',
+            reason=(
+                f'NDT did not validate recovery within {timeout_sec:.1f}s: {reason}; '
+                'continuing with HDL prior-local/full-global relocalization sequence'
+            ),
+            ndt_wait_elapsed_sec=elapsed,
+            ndt_wait_timeout_sec=timeout_sec,
+            next_stage='hdl_prior_or_full_global',
+        )
+        return True
 
     def update_trusted_pose_if_healthy(self):
         now_mono = time.monotonic()
@@ -2021,32 +2174,11 @@ class HdlBootstrapToInitialPose(Node):
 
     def prepare_initialpose_from_latest_sample(self):
         latest = self.samples[-1]
-        try:
-            odom_to_base = self.tf_buffer.lookup_transform(
-                self.odom_frame,
-                self.base_frame,
-                Time(),
-                timeout=Duration(seconds=self.tf_lookup_timeout_sec),
-            )
-        except TransformException as exc:
-            self.get_logger().warn(f'cannot compute map->odom from HDL odom yet: {exc}', throttle_duration_sec=2.0)
-            return False
-
-        map_to_base = pose_to_matrix(latest.pose.pose)
-        odom_to_base_matrix = transform_to_matrix(odom_to_base)
-        map_to_odom = map_to_base @ np.linalg.inv(odom_to_base_matrix)
 
         msg = PoseWithCovarianceStamped()
         msg.header.frame_id = self.map_frame
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.pose.pose.position.x = float(map_to_odom[0, 3])
-        msg.pose.pose.position.y = float(map_to_odom[1, 3])
-        msg.pose.pose.position.z = float(map_to_odom[2, 3])
-        qx, qy, qz, qw = matrix_to_quaternion(map_to_odom[:3, :3])
-        msg.pose.pose.orientation.x = qx
-        msg.pose.pose.orientation.y = qy
-        msg.pose.pose.orientation.z = qz
-        msg.pose.pose.orientation.w = qw
+        msg.pose.pose = copy.deepcopy(latest.pose.pose)
         msg.pose.covariance[0] = self.xy_covariance
         msg.pose.covariance[7] = self.xy_covariance
         msg.pose.covariance[14] = self.z_covariance
@@ -2058,7 +2190,7 @@ class HdlBootstrapToInitialPose(Node):
         self.use_prior_for_next_relocalize = False
         self.get_logger().info(
             'prepared A initial pose from HDL bootstrap/recovery: '
-            f'map->odom=({msg.pose.pose.position.x:.3f}, {msg.pose.pose.position.y:.3f}, '
+            f'map_pose=({msg.pose.pose.position.x:.3f}, {msg.pose.pose.position.y:.3f}, '
             f'yaw={yaw_from_pose(msg.pose.pose):.3f})'
         )
         return True

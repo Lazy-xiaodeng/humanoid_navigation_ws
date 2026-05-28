@@ -215,6 +215,36 @@ NDT 已有 pose_jump_reacquire 机制:
 | 5 | 去掉 fusion 后丢失 TRANSITIONING 平滑过渡 | 极低 | robot 静止时直接切换, 不需要平滑 |
 | 6 | NDT 假 pose_jump (正常运动产生的位姿变化) | 低 | 阈值 0.4m/0.3rad 对正常帧间运动已足够 |
 
+### 5.1 当前实现审查新增风险
+
+| # | 风险 | 等级 | 缓解 |
+|---|---|---|---|
+| 7 | NDT 拒绝跳变时 reason 是 `pose_jump`, 但 nav_state_manager 只监听 `pose_jump_candidate`/`confirmed_pose_jump` | 高 | degraded reason 必须包含 `pose_jump`; `confirmed_pose_jump` 应视为 NDT 自恢复/接受结果 |
+| 8 | inlier=0 判据依赖 `inlier_fraction`, 但 NDT status 当前未发布该字段 | 高 | NDT 增加 `inlier_fraction`/`corr_count`, 或先禁用该判据 |
+| 9 | launch 中 `republish_last_good_tf_on_failure` 仍可能被覆盖为 false | 高 | 所有入口统一参数: 要么启用 last_good TF, 要么文档和恢复逻辑改成不依赖冻结 TF |
+| 10 | NDT 自身恢复时 nav_state_manager 可能不会 resume | 中 | `_handle_ndt_recovered()` 设置 `localization_resume_pending` 和 `localization_recovered_at`, 或只由 recovery_status 统一恢复 |
+| 11 | prior 失败后没有真正切换 full global, 可能进入失败冷却 | 高 | hdl_bootstrap 消费 `allow_full_global_fallback`, prior 尝试失败后自动切到无 prior 全局搜索 |
+| 12 | 旧 launch 仍可能启动 fusion | 中 | 清理/废弃所有仍引用 `localization_odom_fusion` 的 launch, 保证 map->odom 单一发布源 |
+
+### 5.2 异常恢复链路必须满足的时序
+
+```
+NDT rejected/pose_jump
+  → nav_state_manager 立即进入 PAUSED + LOCALIZATION_RECOVERY
+  → 30Hz zero cmd_vel + cancel Nav2
+  → 等机器人静止
+  → 发布 navigation_context prior
+  → HDL/SC 带 prior 搜索
+  → prior 失败则 full global 搜索
+  → /initialpose
+  → NDT initialpose_relax
+  → NDT accepted + TF fresh 连续验收
+  → localization_recovered
+  → resume 当前 waypoint 或执行 pending 请求
+```
+
+以上链路中任一环节缺失, 都会出现“停了但不恢复”、“恢复了但不续航”、“prior 失败后卡住”或“旧 fusion 抢 TF”的问题。
+
 ---
 
 ## 6. 优缺点

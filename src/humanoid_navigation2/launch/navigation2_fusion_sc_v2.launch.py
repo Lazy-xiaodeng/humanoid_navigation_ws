@@ -1,19 +1,18 @@
 """
-完整导航栈 Launch 文件 v2 — NDT + Odom Fusion + ScanContext + HDL 双引擎全局重定位
-Phase 1: TF 抑制 + DEGRADED 停车 + LOST TF 保持
-Phase 2: 推算位姿先验 + SC 先验搜索
+完整导航栈 Launch 文件 v2 — NDT + ScanContext + HDL 双引擎全局重定位
+Phase 1: navigation_state_manager 直接监听 NDT 状态并暂停导航
+Phase 2: 导航上下文/定位状态推算位姿先验 + SC/HDL recovery
 Phase 3: HDL fallback + NDT 旧帧点云清理 + Waypoint 保留强化
 
 与 v1 (navigation2_fusion_sc.launch.py) 的关键差异:
-  1. NDT 新增 fusion_status 超时参数 (fusion_status_timeout_sec, allow_ndt_tf_when_fusion_timeout)
-  2. fusion 锁定期缩短 (min/max_degraded_lock_sec: 10)
-  3. HDL global localization: enable_runtime_auto_recovery=false (仅 SC 显式 fallback 触发)
-  4. max_odom_displacement_m: 30 → 5 (缩短接管距离)
-  5. SC bridge: prior 解析 + HDL fallback 触发
+  1. navigation_state_manager 直接订阅 /localization/ndt_status
+  2. NDT pose_jump/状态超时触发暂停、零速保持和 recovery request
+  3. SC bridge: prior 解析 + HDL fallback 触发
+  4. HDL bridge: trusted prior 直接 /initialpose + prior-local/full-global fallback
 
 系统架构：
   TF树: map → odom → camera_init → body → base_footprint → base_link → 传感器
-  TF ownership (Plan B): NDT 在 HEALTHY 发 map->odom, fusion 在 DEGRADED+/LOST 发冻结 map->odom
+  TF ownership: NDT 独占发布 map->odom；recovery bridge 只发布 /initialpose
 
 使用方式：
   ros2 launch humanoid_navigation2 navigation2_fusion_sc_v2.launch.py use_sim_time:=false
@@ -297,6 +296,8 @@ def generate_launch_description():
         'scancontext_to_initialpose',
         {
             'map_frame': 'map',
+            'odom_frame': 'odom',
+            'base_frame': 'base_footprint',
             'best_pose_topic': '/scancontext_global_localization/best_pose',
             'localization_pose_topic': '/pcl_pose',
             'ndt_status_topic': '/localization/ndt_status',
@@ -308,6 +309,7 @@ def generate_launch_description():
             'global_recovery_after_attempts': 3,
             'startup_hdl_fallback_after_attempts': 20,
             'runtime_hdl_fallback_after_attempts': 5,
+            'hdl_fallback_after_ndt_rejected_recoveries': 1,
             'startup_trigger_period_sec': 2.0,
             'runtime_trigger_period_sec': 8.0,
             'startup_duration_sec': 60.0,
@@ -317,6 +319,9 @@ def generate_launch_description():
             'require_ndt_stable_status_for_recovery': True,
             'ndt_recovery_required_stable_status_count': 3,
             'ndt_rejected_recovery_count': 2,
+            'ndt_recovery_wait_timeout_sec': 8.0,
+            'publish_prior_initialpose_on_recovery': True,
+            'prior_initialpose_max_attempts': 1,
             'external_recovery_request_duration_sec': 12.0,
             'enable_runtime_auto_recovery': False,
             'publish_repetitions': 8,
@@ -364,13 +369,13 @@ def generate_launch_description():
             'relocalize_retry_sec': 6.0,
             'startup_relocalize_retry_sec': 1.0,
             'runtime_relocalize_retry_sec': 2.0,
-            'runtime_relocalize_start_delay_sec': 0.5,
+            'runtime_relocalize_start_delay_sec': 2.0,
             'clear_relocalize_buffer_on_runtime_recovery': True,
             'runtime_relocalize_buffer_refill_sec': 1.5,
             'wait_stationary_before_runtime_relocalize': True,
-            'runtime_stationary_settle_sec': 1.0,
-            'runtime_stationary_max_xy_delta': 0.08,
-            'runtime_stationary_max_yaw_delta': 0.08,
+            'runtime_stationary_settle_sec': 1.5,
+            'runtime_stationary_max_xy_delta': 0.18,
+            'runtime_stationary_max_yaw_delta': 0.15,
             # ★ 统一暂停架构: nav_state_manager 是唯一 cmd_vel 零速源
             # hdl_bootstrap 不再发零速度, 避免与 controller_server + nav_state_manager 三方冲突
             'publish_zero_cmd_vel_during_recovery': False,
@@ -378,7 +383,7 @@ def generate_launch_description():
             'recovery_stop_cmd_vel_period_sec': 0.1,
             'max_relocalize_attempts': 0,
             'startup_max_relocalize_attempts': 0,
-            'max_runtime_relocalize_attempts': 0,
+            'max_runtime_relocalize_attempts': 1,
             'runtime_recovery_failure_cooldown_sec': 10.0,
             'startup_use_origin_prior': False,
             'startup_origin_prior_max_attempts': 3,
@@ -404,6 +409,10 @@ def generate_launch_description():
             'recovery_settle_sec': 6.0,
             'require_ndt_stable_status_for_recovery': True,
             'ndt_recovery_required_stable_status_count': 3,
+            'ndt_recovery_wait_timeout_sec': 8.0,
+            'publish_prior_initialpose_on_recovery': True,
+            'prior_initialpose_max_attempts': 1,
+            'prior_relocalize_attempts_before_full_global': 3,
             'use_prior_relocalize_on_recovery': True,
             'allow_full_global_recovery_without_prior': True,
             'compare_with_hdl': False,
@@ -492,6 +501,7 @@ def generate_launch_description():
                     'ndt_resolution': 1.0,
                     'downsample_resolution': 0.1,
                     'reject_scan_matching_without_convergence': True,
+                    'auto_relocalize_after_rejections': 0,
                     'max_scan_matching_fitness_score': 0.20,
                     # 该环境几何对称度高, 全局定位候选 fitness 几乎相同
                     # (10个候选 fitness ~0.0057, margin ~2e-07 << 默认 0.05)
@@ -509,9 +519,6 @@ def generate_launch_description():
     )
 
     # ★★★ Phase 1 NDT 定位节点 v2 ★★★
-    # 新增参数:
-    #   fusion_status_timeout_sec: 5.0       — fusion_status 超时阈值
-    #   allow_ndt_tf_when_fusion_timeout: false — 超时后继续抑制 TF (安全优先)
     ndt_localization_node = Node(
         package='lidar_localization_ros2',
         executable='lidar_localization_node',
@@ -520,7 +527,7 @@ def generate_launch_description():
             localization_params_file,
             {
                 'use_sim_time': use_sim_time,
-                'set_initial_pose': True,
+                'set_initial_pose': False,
                 'initial_pose_x': 0.0,
                 'initial_pose_y': 0.0,
                 'initial_pose_z': 0.0,
@@ -531,20 +538,41 @@ def generate_launch_description():
                 'initialpose_relax_duration_sec': 4.0,
                 'initialpose_max_pose_jump_translation': 2.00,
                 'initialpose_max_pose_jump_yaw': 3.00,  # 1.20→3.00: recovery允许大角度纠正
+                # Let NDT accept a larger correction only after several
+                # consecutive low-fitness frames converge to the same candidate.
                 'pose_jump_reacquire_enabled': True,
-                'pose_jump_reacquire_max_translation': 0.50,    # Plan C: 0.80→0.50
-                'pose_jump_reacquire_max_yaw': 0.30,
-                'pose_jump_reacquire_max_fitness': 0.08,
-                'pose_jump_reacquire_required_frames': 2,
-                'pose_jump_reacquire_xy_tolerance': 0.50,
-                'pose_jump_reacquire_yaw_tolerance': 0.25,
+                'pose_jump_reacquire_max_translation': 1.50,
+                'pose_jump_reacquire_max_yaw': 0.12,
+                'pose_jump_reacquire_max_fitness': 0.03,
+                'pose_jump_reacquire_required_frames': 4,
+                'pose_jump_reacquire_xy_tolerance': 0.30,
+                'pose_jump_reacquire_yaw_tolerance': 0.08,
+                # ★ Scheme 1: rotation guard. During SpinToPose/cmd_vel yaw-only
+                # rotation from /navigation/status TURNING, hold large translation corrections instead of turning
+                # them into immediate pose_jump recovery.
+                'rotation_guard_enabled': True,
+                'rotation_guard_use_cmd_vel_fallback': False,
+                'rotation_guard_navigation_status_topic': '/navigation/status',
+                'rotation_guard_angular_threshold': 0.20,
+                'rotation_guard_linear_threshold': 0.05,
+                'rotation_guard_settle_sec': 1.2,
+                'rotation_guard_max_duration_sec': 8.0,
+                # ★ Scheme 2: multi-frame source cloud. /fast_lio/cloud_registered
+                # is already registered in the Fast-LIO world frame; lidar_localization
+                # applies the same fixed axis conversion before buffering.
+                'multi_frame_matching_enabled': True,
+                'multi_frame_use_only_when_rotating': True,
+                'multi_frame_window_sec': 0.6,
+                'multi_frame_max_frames': 8,
+                'multi_frame_voxel_leaf_size': 0.20,
+                'multi_frame_max_points': 40000,
                 'min_scan_points': 50,
                 'localization_status_topic': '/localization/ndt_status',
                 'republish_last_good_tf_on_failure': True,   # R3: NDT拒绝后保持last_good TF, 维持TF树
                 'max_last_good_tf_age_sec': 5.0,         # 0.5→5.0: 覆盖典型DEGRADED窗口
-                # ★ Plan B: Fast-LIO delta guess (当前关闭 — map_body_to_map_odom 模式待验证)
-                'use_fastlio_delta_guess': False,
-                'fastlio_delta_guess_mode': 'disabled',
+                # ★ Plan B: Fast-LIO delta guess
+                'use_fastlio_delta_guess': True,
+                'fastlio_delta_guess_mode': 'map_body_to_map_odom',
                 'fastlio_camera_frame': 'camera_init',
                 'fastlio_body_frame': 'body',
                 'tf_max_stamp_mismatch_sec': 0.2,
