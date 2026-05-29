@@ -548,15 +548,23 @@ def generate_launch_description():
                 'pose_jump_reacquire_xy_tolerance': 0.30,
                 'pose_jump_reacquire_yaw_tolerance': 0.08,
                 # ★ Scheme 1: rotation guard. During SpinToPose/cmd_vel yaw-only
-                # rotation from /navigation/status TURNING, hold large translation corrections instead of turning
-                # them into immediate pose_jump recovery.
+                # rotation, freeze all NDT pose corrections and keep the last good
+                # map->odom transform until the rotation settle window expires.
+                # rotation_guard_recovery_gate_enabled=True: 旋转保护结束后先验证 NDT，
+                # 验证不通过就持续发布冻结 TF，验证通过才恢复 NDT。
                 'rotation_guard_enabled': True,
-                'rotation_guard_use_cmd_vel_fallback': False,
+                'rotation_guard_use_cmd_vel_fallback': True,
+                'rotation_guard_freeze_corrections': True,
+                'rotation_guard_recovery_gate_enabled': True,
                 'rotation_guard_navigation_status_topic': '/navigation/status',
                 'rotation_guard_angular_threshold': 0.20,
                 'rotation_guard_linear_threshold': 0.05,
-                'rotation_guard_settle_sec': 1.2,
+                'rotation_guard_settle_sec': 2.0,
                 'rotation_guard_max_duration_sec': 8.0,
+                'rotation_guard_recovery_max_translation': 0.15,
+                'rotation_guard_recovery_max_yaw': 0.05,
+                'rotation_guard_recovery_required_frames': 4,
+                'rotation_guard_recovery_max_duration_sec': 6.0,
                 # ★ Scheme 2: multi-frame source cloud. /fast_lio/cloud_registered
                 # is already registered in the Fast-LIO world frame; lidar_localization
                 # applies the same fixed axis conversion before buffering.
@@ -569,7 +577,7 @@ def generate_launch_description():
                 'min_scan_points': 50,
                 'localization_status_topic': '/localization/ndt_status',
                 'republish_last_good_tf_on_failure': True,   # R3: NDT拒绝后保持last_good TF, 维持TF树
-                'max_last_good_tf_age_sec': 5.0,         # 0.5→5.0: 覆盖典型DEGRADED窗口
+                'max_last_good_tf_age_sec': 5.0,         # 兼容旧参数；last_good TF 不再因 age 超时停发
                 # ★ Plan B: Fast-LIO delta guess
                 'use_fastlio_delta_guess': True,
                 'fastlio_delta_guess_mode': 'map_body_to_map_odom',

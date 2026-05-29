@@ -53,15 +53,21 @@
       # ==========================================
       # 旋转保护与多帧匹配
       # ==========================================
-      # rotation_guard: 原地旋转/settle 期间不让低 fitness 的大平移跳变直接触发 recovery。
+      # rotation_guard: 原地旋转/settle 期间可冻结 NDT 修正，避免低 fitness 的平移漂移进入 TF。
       # 多帧匹配初版在现有固定轴转换后的 ROS 标准系点云上累积，适合 /fast_lio/cloud_registered。
       rotation_guard_enabled: false
       rotation_guard_use_cmd_vel_fallback: false
+      rotation_guard_freeze_corrections: true
+      rotation_guard_recovery_gate_enabled: true
       rotation_guard_navigation_status_topic: "/navigation/status"
       rotation_guard_angular_threshold: 0.20
       rotation_guard_linear_threshold: 0.05
       rotation_guard_settle_sec: 1.0
       rotation_guard_max_duration_sec: 8.0
+      rotation_guard_recovery_max_translation: 0.15
+      rotation_guard_recovery_max_yaw: 0.05
+      rotation_guard_recovery_required_frames: 4
+      rotation_guard_recovery_max_duration_sec: 6.0
       multi_frame_matching_enabled: false
       multi_frame_use_only_when_rotating: true
       multi_frame_window_sec: 0.6
@@ -147,7 +153,8 @@
       force_2d_fixed_z: true
       force_2d_z: 0.0
 
-      # 短时间 NDT 退化时，重发最后一个可信 map->odom，避免 Nav2 立刻因为 TF 断档失败。
-      # 超过该时间仍不能匹配，应停车并触发重定位，而不是继续延长旧 TF。
+      # NDT 退化或验证未通过时，重发最后一个可信 map->odom，避免 Nav2 因 TF 断档失败。
+      # 当前实机策略依赖里程计短期稳定性，持续用当前时间发布冻结 TF，直到 NDT 验证通过。
       republish_last_good_tf_on_failure: true
+      # 兼容旧参数；当前策略为验证未通过时持续用当前时间重发 last_good TF。
       max_last_good_tf_age_sec: 3.0
