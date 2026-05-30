@@ -413,6 +413,16 @@ def generate_launch_description():
             'pose_timeout_sec': 0.8,
             'accept_zero_stamp': True,
             'allow_initial_pose': True,
+            # 方案 4：优先从 axis_adapter 输出的标准轴 odom cache 按 stamp 插值，
+            # 得到同一时刻 odom->prior_open3d_base。这样可以避免 TF buffer 因
+            # pose 比 TF 早到约 0.1s 而拒绝更新；fallback 保留旧 TF 查询链路。
+            'use_odom_cache': True,
+            'odom_cache_topic': '/prior_localization/open3d_input_odom',
+            'odom_cache_duration_sec': 5.0,
+            'odom_interpolation_max_gap_sec': 0.25,
+            'odom_lookup_tolerance_sec': 0.03,
+            'odom_future_wait_sec': 0.20,
+            'fallback_to_tf_lookup': True,
             # 小修正直接接受；这是正常地图锚定或慢漂修正。
             'max_small_correction_translation': 0.25,
             'max_small_correction_yaw': 0.12,

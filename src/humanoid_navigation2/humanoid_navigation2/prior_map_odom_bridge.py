@@ -33,6 +33,7 @@ prior_map_odom_bridge.py
 
 import json
 import math
+from collections import deque
 from typing import Optional, Tuple
 
 import numpy as np
@@ -115,6 +116,59 @@ def matrix_to_quaternion(rotation: np.ndarray) -> Tuple[float, float, float, flo
     return normalize_quaternion(x, y, z, w)
 
 
+def quaternion_tuple_from_pose(pose) -> Tuple[float, float, float, float]:
+    """从 ROS Pose 中取出并归一化四元数，返回 (x, y, z, w)。"""
+    return normalize_quaternion(
+        pose.orientation.x,
+        pose.orientation.y,
+        pose.orientation.z,
+        pose.orientation.w,
+    )
+
+
+def quaternion_slerp(
+    qa: Tuple[float, float, float, float],
+    qb: Tuple[float, float, float, float],
+    ratio: float,
+) -> Tuple[float, float, float, float]:
+    """
+    两个四元数之间做球面插值。
+
+    bridge 的 odom cache 用它在两个 odom 采样之间恢复“同一时间戳”的
+    odom->localized_frame。这里不做坐标轴变换，只在 axis_adapter 已经输出的
+    标准 ROS 坐标系内插值。
+    """
+    ax, ay, az, aw = normalize_quaternion(*qa)
+    bx, by, bz, bw = normalize_quaternion(*qb)
+    dot = ax * bx + ay * by + az * bz + aw * bw
+
+    # 四元数 q 和 -q 表示同一个旋转。取夹角较小的一侧，避免插值绕远路。
+    if dot < 0.0:
+        bx, by, bz, bw = -bx, -by, -bz, -bw
+        dot = -dot
+
+    ratio = max(0.0, min(1.0, ratio))
+    if dot > 0.9995:
+        x = ax + ratio * (bx - ax)
+        y = ay + ratio * (by - ay)
+        z = az + ratio * (bz - az)
+        w = aw + ratio * (bw - aw)
+        return normalize_quaternion(x, y, z, w)
+
+    theta_0 = math.acos(max(-1.0, min(1.0, dot)))
+    sin_theta_0 = math.sin(theta_0)
+    theta = theta_0 * ratio
+    sin_theta = math.sin(theta)
+    scale_a = math.cos(theta) - dot * sin_theta / sin_theta_0
+    scale_b = sin_theta / sin_theta_0
+    return normalize_quaternion(
+        scale_a * ax + scale_b * bx,
+        scale_a * ay + scale_b * by,
+        scale_a * az + scale_b * bz,
+        scale_a * aw + scale_b * bw,
+    )
+
+
 def yaw_from_matrix(transform: np.ndarray) -> float:
     """从 4x4 位姿矩阵中提取平面 yaw。"""
     return math.atan2(transform[1, 0], transform[0, 0])
@@ -128,6 +182,11 @@ def pose_to_matrix(pose) -> np.ndarray:
     transform[1, 3] = pose.position.y
     transform[2, 3] = pose.position.z
     return transform
+
+
+def odom_msg_to_matrix(msg: Odometry) -> np.ndarray:
+    """把 Odometry.pose.pose 转成 4x4 齐次矩阵。"""
+    return pose_to_matrix(msg.pose.pose)
 
 
 def transform_to_matrix(transform_stamped: TransformStamped) -> np.ndarray:
@@ -206,6 +265,30 @@ class PriorMapOdomBridge(Node):
         self.allow_initial_pose = bool(self.declare_parameter("allow_initial_pose", True).value)
 
         # ==============================
+        # odom cache 时间同步参数
+        # ==============================
+        # 方案 4：bridge 直接订阅 axis_adapter 输出的标准轴 odom，并按 prior pose
+        # 的 stamp 插值出同一时刻的 odom->localized_frame。
+        #
+        # 注意：这里订阅的不是原始 /odom，而是 fastlio_open3d_axis_adapter
+        # 输出的 /prior_localization/open3d_input_odom。它已经把本系统 raw Fast-LIO
+        # 的 x左/y下/z后坐标轴转换成 ROS 标准导航坐标轴，并且 child_frame_id
+        # 应该等于 localized_frame。
+        self.use_odom_cache = bool(self.declare_parameter("use_odom_cache", True).value)
+        self.odom_cache_topic = self.declare_parameter(
+            "odom_cache_topic", "/prior_localization/open3d_input_odom").value
+        self.odom_cache_duration_sec = float(
+            self.declare_parameter("odom_cache_duration_sec", 5.0).value)
+        self.odom_interpolation_max_gap_sec = float(
+            self.declare_parameter("odom_interpolation_max_gap_sec", 0.25).value)
+        self.odom_lookup_tolerance_sec = float(
+            self.declare_parameter("odom_lookup_tolerance_sec", 0.03).value)
+        self.odom_future_wait_sec = float(
+            self.declare_parameter("odom_future_wait_sec", 0.20).value)
+        self.fallback_to_tf_lookup = bool(
+            self.declare_parameter("fallback_to_tf_lookup", True).value)
+
+        # ==============================
         # 修正门控参数
         # ==============================
         # 小修正：认为是正常地图约束漂移修正，直接接受。
@@ -264,6 +347,8 @@ class PriorMapOdomBridge(Node):
         )
         self.odom_sub = self.create_subscription(
             Odometry, self.prior_odom_topic, self.on_odometry, 10)
+        self.odom_cache_sub = self.create_subscription(
+            Odometry, self.odom_cache_topic, self.on_odom_cache, 100)
         self.confidence_sub = self.create_subscription(
             Float32, self.confidence_topic, self.on_confidence, 10)
         self.navigation_status_sub = self.create_subscription(
@@ -282,6 +367,9 @@ class PriorMapOdomBridge(Node):
         self.pending_large_count = 0
         self.latest_confidence: Optional[float] = None
         self.latest_confidence_time: Optional[Time] = None
+        self.odom_cache = deque()
+        self.pending_odom_candidates = deque()
+        self.last_odom_cache_failure = ""
         self.spin_guard_active = False
         self.spin_guard_turning = False
         self.spin_guard_start_time: Optional[Time] = None
@@ -292,7 +380,8 @@ class PriorMapOdomBridge(Node):
             "prior_map_odom_bridge started: "
             f"input={self.prior_pose_topic}, {self.prior_pose_with_covariance_topic}, "
             f"or {self.prior_odom_topic}, "
-            f"localized_frame={self.localized_frame}, publishing {self.map_frame}->{self.odom_frame}"
+            f"localized_frame={self.localized_frame}, publishing {self.map_frame}->{self.odom_frame}, "
+            f"use_odom_cache={self.use_odom_cache}, odom_cache_topic={self.odom_cache_topic}"
         )
 
     def on_pose_stamped(self, msg: PoseStamped):
@@ -316,6 +405,55 @@ class PriorMapOdomBridge(Node):
         启动 launch 时把 localized_frame 设为 body 即可。
         """
         self.handle_candidate_pose(msg.header, msg.pose.pose)
+
+    def on_odom_cache(self, msg: Odometry):
+        """
+        缓存 odom->localized_frame，用于按 prior pose 的 stamp 精确取同一时刻 odom。
+
+        这里必须非常严格地检查 frame：
+          - header.frame_id 必须是 odom_frame；
+          - child_frame_id 必须是 localized_frame；
+        否则就可能把不同坐标轴或不同机器人基准混进 map->odom 计算。
+        """
+        if not self.use_odom_cache:
+            return
+
+        if msg.header.frame_id and msg.header.frame_id != self.odom_frame:
+            self.publish_status(
+                f"REJECTED odom_cache_wrong_frame frame_id={msg.header.frame_id} expected={self.odom_frame}"
+            )
+            return
+
+        if msg.child_frame_id and msg.child_frame_id != self.localized_frame:
+            self.publish_status(
+                "REJECTED odom_cache_wrong_child "
+                f"child_frame_id={msg.child_frame_id} expected={self.localized_frame}"
+            )
+            return
+
+        stamp = Time.from_msg(msg.header.stamp).nanoseconds * 1e-9
+        if stamp <= 0.0:
+            return
+
+        entry = (stamp, odom_msg_to_matrix(msg), msg)
+        if self.odom_cache and stamp < self.odom_cache[-1][0]:
+            # bag 或仿真偶发乱序时保持时间有序，方便后面做插值。
+            inserted = False
+            for index, cached in enumerate(self.odom_cache):
+                if stamp < cached[0]:
+                    self.odom_cache.insert(index, entry)
+                    inserted = True
+                    break
+            if not inserted:
+                self.odom_cache.append(entry)
+        else:
+            self.odom_cache.append(entry)
+
+        cutoff = stamp - self.odom_cache_duration_sec
+        while self.odom_cache and self.odom_cache[0][0] < cutoff:
+            self.odom_cache.popleft()
+
+        self.process_pending_odom_candidates()
 
     def on_confidence(self, msg: Float32):
         """记录外部定位节点的最新匹配置信度。"""
@@ -353,6 +491,193 @@ class PriorMapOdomBridge(Node):
             return navigation_active and detailed_state == "TURNING"
         except (TypeError, ValueError):
             return "TURNING" in data and "SpinToPose" in data
+
+    def lookup_odom_to_localized_matrix(self, lookup_time: Time, is_zero_stamp: bool) -> Optional[np.ndarray]:
+        """
+        取得 odom->localized_frame 矩阵。
+
+        优先使用 odom cache，因为它直接来自 axis_adapter 输出给 open3d_loc 的
+        同一个标准轴 odom 话题，避免 TF buffer 中 0.1s future extrapolation。
+        如果 cache 不可用，再按参数 fallback 到 TF 查询，保证兼容旧链路。
+        """
+        self.last_odom_cache_failure = ""
+        if self.use_odom_cache:
+            cached = self.lookup_odom_cache_matrix(lookup_time, is_zero_stamp)
+            if cached is not None:
+                return cached
+            if self.last_odom_cache_failure == "future":
+                return None
+            if not self.fallback_to_tf_lookup:
+                return None
+
+        try:
+            tf_lookup_time = Time() if is_zero_stamp else lookup_time
+            odom_to_localized = self.tf_buffer.lookup_transform(
+                self.odom_frame,
+                self.localized_frame,
+                tf_lookup_time,
+                timeout=Duration(seconds=self.tf_lookup_timeout_sec),
+            )
+            return transform_to_matrix(odom_to_localized)
+        except TransformException as exc:
+            self.publish_status(
+                f"REJECTED missing_tf {self.odom_frame}->{self.localized_frame}: {exc}")
+            return None
+
+    def lookup_odom_cache_matrix(self, lookup_time: Time, is_zero_stamp: bool) -> Optional[np.ndarray]:
+        """
+        从缓存中按时间戳取 odom->localized_frame。
+
+        - zero stamp：使用缓存中最新 odom，和原 TF latest 语义一致；
+        - 精确命中：直接返回对应 odom；
+        - 两帧之间：线性插值平移，slerp 插值姿态；
+        - 小幅越界：在 tolerance 内允许使用最近一帧；
+        - 大幅越界：拒绝，避免拿不同时间的 odom 硬凑导致 map->odom 误差。
+        """
+        if not self.odom_cache:
+            self.last_odom_cache_failure = "empty"
+            self.publish_status("REJECTED odom_cache_empty")
+            return None
+
+        if is_zero_stamp:
+            return self.odom_cache[-1][1]
+
+        target = lookup_time.nanoseconds * 1e-9
+        first_time = self.odom_cache[0][0]
+        last_time = self.odom_cache[-1][0]
+
+        if target < first_time:
+            if first_time - target <= self.odom_lookup_tolerance_sec:
+                return self.odom_cache[0][1]
+            self.last_odom_cache_failure = "too_old"
+            self.publish_status(
+                f"REJECTED odom_cache_too_old target={target:.6f} first={first_time:.6f}"
+            )
+            return None
+
+        if target > last_time:
+            if target - last_time <= self.odom_lookup_tolerance_sec:
+                return self.odom_cache[-1][1]
+            self.last_odom_cache_failure = "future"
+            return None
+
+        previous = None
+        following = None
+        for entry in self.odom_cache:
+            if entry[0] <= target:
+                previous = entry
+            if entry[0] >= target:
+                following = entry
+                break
+
+        if previous is None or following is None:
+            self.last_odom_cache_failure = "lookup_failed"
+            self.publish_status("REJECTED odom_cache_lookup_failed")
+            return None
+
+        previous_time, previous_matrix, previous_msg = previous
+        following_time, following_matrix, following_msg = following
+
+        if abs(target - previous_time) <= 1e-6:
+            return previous_matrix
+        if abs(following_time - target) <= 1e-6:
+            return following_matrix
+
+        gap = following_time - previous_time
+        if gap <= 1e-9 or gap > self.odom_interpolation_max_gap_sec:
+            self.last_odom_cache_failure = "gap"
+            self.publish_status(
+                f"REJECTED odom_cache_gap gap={gap:.3f}s max={self.odom_interpolation_max_gap_sec:.3f}s"
+            )
+            return None
+
+        ratio = (target - previous_time) / gap
+        interpolated = np.eye(4)
+        interpolated[:3, 3] = (
+            previous_matrix[:3, 3]
+            + ratio * (following_matrix[:3, 3] - previous_matrix[:3, 3])
+        )
+        qa = quaternion_tuple_from_pose(previous_msg.pose.pose)
+        qb = quaternion_tuple_from_pose(following_msg.pose.pose)
+        qx, qy, qz, qw = quaternion_slerp(qa, qb, ratio)
+
+        class QuaternionLike:
+            pass
+
+        q = QuaternionLike()
+        q.x = qx
+        q.y = qy
+        q.z = qz
+        q.w = qw
+        interpolated[:3, :3] = quaternion_to_matrix(q)
+        return interpolated
+
+    def queue_pending_odom_candidate(self, lookup_time: Time, map_to_localized: np.ndarray) -> bool:
+        """
+        prior pose 已经到了，但同 stamp 的 odom 还没进 cache 时，短暂挂起候选。
+
+        这是方案 4 的关键：不使用“最新 odom”硬凑，也不立刻丢帧，而是等
+        axis_adapter 的标准轴 odom 到达后，用同一时间戳重新计算 map->odom。
+        """
+        if not self.use_odom_cache or not self.odom_cache:
+            return False
+
+        target = lookup_time.nanoseconds * 1e-9
+        latest = self.odom_cache[-1][0]
+        future_gap = target - latest
+        if future_gap <= 0.0 or future_gap > self.odom_future_wait_sec:
+            return False
+
+        self.pending_odom_candidates.append(
+            {
+                "target": target,
+                "lookup_time": lookup_time,
+                "map_to_localized": map_to_localized,
+                "queued_at": self.get_clock().now(),
+            }
+        )
+        # open3d_loc 约 1Hz 输出，队列不需要很大；保留最近候选即可防止异常堆积。
+        while len(self.pending_odom_candidates) > 10:
+            self.pending_odom_candidates.popleft()
+        self.publish_status(
+            f"PENDING wait_odom_cache gap={future_gap:.3f}s max={self.odom_future_wait_sec:.3f}s"
+        )
+        return True
+
+    def process_pending_odom_candidates(self):
+        """每次 odom cache 更新后，尝试处理之前因 future odom 挂起的候选。"""
+        if not self.pending_odom_candidates or not self.odom_cache:
+            return
+
+        now = self.get_clock().now()
+        latest = self.odom_cache[-1][0]
+        remaining = deque()
+
+        while self.pending_odom_candidates:
+            item = self.pending_odom_candidates.popleft()
+            queued_age = (now - item["queued_at"]).nanoseconds * 1e-9
+            if queued_age > self.odom_future_wait_sec + 0.10:
+                self.publish_status(
+                    f"REJECTED odom_cache_pending_timeout age={queued_age:.3f}s"
+                )
+                continue
+
+            if latest + self.odom_lookup_tolerance_sec < item["target"]:
+                remaining.append(item)
+                continue
+
+            odom_to_localized_matrix = self.lookup_odom_cache_matrix(item["lookup_time"], False)
+            if odom_to_localized_matrix is None:
+                # 如果 cache 已经覆盖目标时间但仍无法插值，说明数据间隔或时间范围异常。
+                if self.last_odom_cache_failure == "future":
+                    remaining.append(item)
+                continue
+
+            candidate = item["map_to_localized"] @ np.linalg.inv(odom_to_localized_matrix)
+            candidate = self.apply_output_constraints(candidate)
+            self.evaluate_candidate(candidate)
+
+        self.pending_odom_candidates = remaining
 
     def enter_spin_guard(self, now: Time, source: str):
         """进入 SpinToPose 冻结窗口，并刷新旋转结束后的 settle 截止时间。"""
@@ -397,20 +722,17 @@ class PriorMapOdomBridge(Node):
                 self.publish_status(f"REJECTED stale_pose age={pose_age:.3f}s")
                 return
 
-        try:
-            odom_to_localized = self.tf_buffer.lookup_transform(
-                self.odom_frame,
-                self.localized_frame,
-                lookup_time,
-                timeout=Duration(seconds=self.tf_lookup_timeout_sec),
-            )
-        except TransformException as exc:
-            self.publish_status(
-                f"REJECTED missing_tf {self.odom_frame}->{self.localized_frame}: {exc}")
+        map_to_localized = pose_to_matrix(pose)
+        odom_to_localized_matrix = self.lookup_odom_to_localized_matrix(lookup_time, is_zero_stamp)
+        if odom_to_localized_matrix is None:
+            if (
+                not is_zero_stamp
+                and self.last_odom_cache_failure == "future"
+                and self.queue_pending_odom_candidate(lookup_time, map_to_localized)
+            ):
+                return
             return
 
-        map_to_localized = pose_to_matrix(pose)
-        odom_to_localized_matrix = transform_to_matrix(odom_to_localized)
         candidate = map_to_localized @ np.linalg.inv(odom_to_localized_matrix)
         candidate = self.apply_output_constraints(candidate)
 
