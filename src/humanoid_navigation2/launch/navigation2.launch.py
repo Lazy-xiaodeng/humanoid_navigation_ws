@@ -3,21 +3,16 @@
 
 系统架构：
 1. 感知层：点云滤波、高程图（可选）、地形分析（可选）
-2. 定位层：定位节点（发布map→odom TF）+ map_server（发布2D栅格地图）
-   支持三种定位方案（三选一，注释切换）：
-     方案A - lidar_localization_ros2 (单分辨率NDT, 旧方案)
-     方案B - humanoid_global_localization (多分辨率NDT网格搜索)
-     方案C - hdl_localization (UKF+NDT_OMP, Humble移植)
-   当前实验版：方案C负责启动和运行期全局重定位，桥接到方案A的/initialpose；
-   方案A发布map→odom并持续定位，失锁后由C自动恢复。
+2. 定位层：外部先验地图定位节点 + prior_map_odom_bridge + map_server
+   外部节点只输出机器人在 map 下的全局位姿候选，不直接发布 TF。
+   prior_map_odom_bridge 独占发布 map→odom，并在写入 TF 前做跳变保护。
 3. 导航层：Nav2导航栈（规划、控制、行为树）
 
 启动顺序：
 0秒：感知层（点云滤波）
 1秒：map_server（加载2D地图）
 3秒：map_server生命周期管理
-5秒：定位节点启动
-7秒：定位生命周期管理
+4秒：prior_map_odom_bridge 启动，等待外部先验地图定位输出 pose
 7.5秒：机器人实时位姿发布器
 6秒：Nav2核心节点
 12秒：Nav2生命周期激活
@@ -25,8 +20,20 @@
 TF树：
 map → odom → camera_init → body → base_footprint → base_link → 传感器
   ↑        ↑
-定位发布  Fast-LIO发布
-(动态)   (动态)
+bridge发布  Fast-LIO发布
+(动态)      (动态)
+
+外部 prior-map 定位节点需要发布以下任一话题：
+  /prior_localization/pose                  geometry_msgs/PoseStamped
+  /prior_localization/pose_with_covariance  geometry_msgs/PoseWithCovarianceStamped
+  /prior_localization/odom                  nav_msgs/Odometry
+
+默认语义：
+  header.frame_id = map
+  pose = map -> prior_open3d_base
+
+prior_open3d_base 由 fastlio_open3d_axis_adapter 发布，用来隔离 Fast-LIO raw 坐标轴。
+如果换成别的外部定位节点，请通过 prior_localized_frame 参数修改。
 
 使用方式：
 ros2 launch humanoid_navigation2 navigation2.launch.py use_sim_time:=false
@@ -48,6 +55,8 @@ from launch.actions import (
 from launch.event_handlers import OnProcessExit
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.conditions import IfCondition
+from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     # =========================================================================
@@ -119,6 +128,18 @@ def generate_launch_description():
     bt_xml_file = LaunchConfiguration('bt_xml_file', default=default_bt_xml_file)
     
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
+    prior_pose_topic = LaunchConfiguration('prior_pose_topic', default='/prior_localization/pose')
+    prior_pose_with_covariance_topic = LaunchConfiguration(
+        'prior_pose_with_covariance_topic',
+        default='/prior_localization/pose_with_covariance'
+    )
+    prior_odom_topic = LaunchConfiguration('prior_odom_topic', default='/prior_localization/odom')
+    prior_localized_frame = LaunchConfiguration('prior_localized_frame', default='prior_open3d_base')
+    enable_prior_map_localization = LaunchConfiguration('enable_prior_map_localization', default='true')
+    prior_map_path = LaunchConfiguration(
+        'prior_map_path',
+        default=os.path.join(pkg_nav2, 'pcd', 'hall_open3d_grounded.pcd')
+    )
 
     def nav2_python_node(executable, node_name, extra_parameters=None):
         parameters = [{'use_sim_time': use_sim_time}]
@@ -354,6 +375,172 @@ def generate_launch_description():
         'robot_realpose_publisher',
         'robot_realpose_publisher',
         {'global_frame': 'map_ground'}
+    )
+
+    # ┌──────────────────────────────────────────────────────────────────────────┐
+    # │  外部 prior-map 定位 -> map->odom 桥接节点                                │
+    # │                                                                          │
+    # │  这是新定位方案的 TF owner：                                              │
+    # │    1. 外部 FAST_LIO_LOCALIZATION_HUMANOID / prior-map localization        │
+    # │       只发布机器人在 map 下的 Pose，不直接发布 map->odom。                 │
+    # │    2. 本节点查询当前 odom->localized_frame，计算 map->odom。               │
+    # │    3. 本节点在接受候选前做小修正/大修正/连续一致性门控，避免单帧跳变。       │
+    # │                                                                          │
+    # │  默认输入语义：                                                           │
+    # │    /prior_localization/odom: header.frame_id=map, pose=map->prior_open3d_base│
+    # │                                                                          │
+    # │  prior_open3d_base 是适配节点发布的虚拟标准轴 base frame，避免              │
+    # │  open3d_loc 的 raw Fast-LIO 坐标和 Nav2 标准坐标混用。                     │
+    # └──────────────────────────────────────────────────────────────────────────┘
+    prior_map_odom_bridge_node = nav2_python_node(
+        'prior_map_odom_bridge',
+        'prior_map_odom_bridge',
+        {
+            'map_frame': 'map',
+            'odom_frame': 'odom',
+            'localized_frame': prior_localized_frame,
+            'prior_pose_topic': prior_pose_topic,
+            'prior_pose_with_covariance_topic': prior_pose_with_covariance_topic,
+            'prior_odom_topic': prior_odom_topic,
+            # open3d_loc 初始化完成后才会发布 confidence。启用该门控可避免
+            # 初始化前 /baselink2map 的默认位姿被 bridge 接受。
+            'confidence_topic': '/prior_localization/confidence',
+            'require_confidence': True,
+            'min_confidence': 0.50,
+            'confidence_timeout_sec': 2.0,
+            'publish_rate': 30.0,
+            'tf_lookup_timeout_sec': 0.20,
+            'pose_timeout_sec': 0.8,
+            'accept_zero_stamp': True,
+            'allow_initial_pose': True,
+            # 小修正直接接受；这是正常地图锚定或慢漂修正。
+            'max_small_correction_translation': 0.25,
+            'max_small_correction_yaw': 0.12,
+            # 大修正必须多帧一致；这是重定位或人工给初值后的受控切换。
+            'max_large_correction_translation': 3.0,
+            'max_large_correction_yaw': 1.2,
+            'required_consistent_frames': 3,
+            'consistency_translation_tolerance': 0.25,
+            'consistency_yaw_tolerance': 0.10,
+            # SpinToPose 旋转保护：
+            # 只在 navigation_state_manager 发布 TURNING，也就是到点后的
+            # SpinToPose 原地朝向调整阶段冻结外部定位更新。期间 bridge 仍按
+            # publish_rate 重发 last good map->odom，旋转结束后再等待 settle 秒解冻。
+            'enable_spin_to_pose_guard': True,
+            'navigation_status_topic': '/navigation/status',
+            'spin_to_pose_guard_settle_sec': 3.0,
+            'spin_to_pose_guard_max_duration_sec': 8.0,
+            # Nav2 是平面导航，默认只把 x/y/yaw 写入 map->odom。
+            'force_2d': True,
+            'force_z': 0.0,
+        }
+    )
+
+    # ┌──────────────────────────────────────────────────────────────────────────┐
+    # │  Fast-LIO raw 坐标 -> open3d_loc 标准坐标适配节点                         │
+    # │                                                                          │
+    # │  你们当前 /odom 和 /fast_lio/cloud_registered 不是 ROS 标准轴：            │
+    # │    raw: x 左、y 下、z 后                                                   │
+    # │    ROS: x 前、y 左、z 上                                                   │
+    # │                                                                          │
+    # │  所以不能把 raw /odom 直接喂给 open3d_loc 后再让 bridge 查询标准 TF。       │
+    # │  本节点把 raw 点云和 raw odom 转成与 hall_open3d_grounded.pcd             │
+    # │  一致的标准轴，并发布 odom->prior_open3d_base，bridge 后面只用这个 frame。  │
+    # └──────────────────────────────────────────────────────────────────────────┘
+    fastlio_open3d_axis_adapter_node = nav2_python_node(
+        'fastlio_open3d_axis_adapter',
+        'fastlio_open3d_axis_adapter',
+        {
+            'raw_odom_topic': '/odom',
+            'raw_cloud_topic': '/fast_lio/cloud_registered',
+            'output_odom_topic': '/prior_localization/open3d_input_odom',
+            'output_cloud_topic': '/prior_localization/open3d_input_cloud',
+            'odom_frame': 'odom',
+            'output_base_frame': 'prior_open3d_base',
+            'publish_tf': True,
+            # 与 body->base_footprint 静态 TF 的平移保持一致。
+            # hall_open3d_grounded.pcd 也是按这段平移把地图原点落到
+            # 初始 base_footprint，因此实时点云必须使用同一段 offset。
+            'initial_body_to_base_translation_raw': [0.004, 1.215, 0.072],
+        }
+    )
+
+    # ┌──────────────────────────────────────────────────────────────────────────┐
+    # │  FAST_LIO_LOCALIZATION_HUMANOID / open3d_loc 先验地图定位节点             │
+    # │                                                                          │
+    # │  这个节点来自外部仓库：                                                   │
+    # │    src/FAST_LIO_LOCALIZATION_HUMANOID/open3d_loc                          │
+    # │                                                                          │
+    # │  在本系统中的接法：                                                       │
+    # │    - 输入 /prior_localization/open3d_input_odom：标准轴 odom->prior_open3d_base│
+    # │    - 输入 /prior_localization/open3d_input_cloud：标准轴 grounded 点云       │
+    # │    - 输出 /prior_localization/odom：map->prior_open3d_base 位姿候选          │
+    # │    - 输出 /prior_localization/confidence：Open3D ICP overlap/fitness       │
+    # │    - 不发布 TF；map->odom 只由 prior_map_odom_bridge 发布                  │
+    # │                                                                          │
+    # │  重要：prior_map_path 默认使用 hall_open3d_grounded.pcd。                 │
+    # │  这个 PCD 已经从 raw Fast-LIO 轴转换到 ROS 标准轴，必须搭配上面的            │
+    # │  fastlio_open3d_axis_adapter，不能直接搭配 raw /fast_lio/cloud_registered。  │
+    # └──────────────────────────────────────────────────────────────────────────┘
+    prior_map_localization_node = Node(
+        package='open3d_loc',
+        executable='global_localization_node',
+        name='prior_map_open3d_localization',
+        output='screen',
+        arguments=['--ros-args', '--log-level', 'WARN'],
+        condition=IfCondition(enable_prior_map_localization),
+        parameters=[
+            PathJoinSubstitution([
+                FindPackageShare('open3d_loc'),
+                'config',
+                'loc_param_g1.yaml'
+            ]),
+            {
+                'use_sim_time': use_sim_time,
+                'path_map': prior_map_path,
+                # open3d_loc 原仓库的 YAML 绑定的是 global_localization_node。
+                # 本 launch 为避免名字冲突把节点改名为 prior_map_open3d_localization，
+                # 所以这些数组参数必须在这里显式覆盖，否则 C++ 端会读到空数组。
+                'initialpose': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                'kf_baselink2map/x': [0.001, 0.002],
+                'kf_baselink2map/y': [0.001, 0.005],
+                'kf_baselink2map/z': [0.00001, 0.04],
+                'publish_tf': False,
+                'pcd_queue_maxsize': 10,
+                'voxelsize_coarse': 0.01,
+                'voxelsize_fine': 0.20,
+                'threshold_fitness': 0.50,
+                'threshold_fitness_init': 0.50,
+                # 该参数在 open3d_loc 中实际表示两次定位之间的秒数。
+                # 1.0s 是先求稳定的保守值；确认 CPU 余量后可降到 0.5。
+                'loc_frequence': 1.0,
+                'save_scan': False,
+                'hidden_removal': False,
+                'maxpoints_source': 60000,
+                'maxpoints_target': 250000,
+                'filter_odom2map': False,
+                'use_input_odom_pose_directly': True,
+                'kalman_processVar2': 0.001,
+                'kalman_estimatedMeasVar2': 0.02,
+                'confidence_loc_th': 0.7,
+                'dis_updatemap': 3.5,
+            }
+        ],
+        remappings=[
+            ('/Odometry_loc', '/prior_localization/open3d_input_odom'),
+            ('/cloud_registered_1', '/prior_localization/open3d_input_cloud'),
+            ('/baselink2map', '/prior_localization/odom'),
+            ('/localization_3d_confidence', '/prior_localization/confidence'),
+            ('/localization_3d', '/prior_localization/pose_motion_link'),
+            ('/odom2map', '/prior_localization/open3d_odom2map'),
+            ('/odom2map_kalman', '/prior_localization/open3d_odom2map_kalman'),
+            ('/baselink2map_kalman', '/prior_localization/open3d_baselink2map_kalman'),
+            ('/motionlink2map', '/prior_localization/open3d_motionlink2map'),
+            ('/map', '/prior_localization/open3d_map'),
+            ('/submap', '/prior_localization/open3d_submap'),
+            ('/scan', '/prior_localization/open3d_scan'),
+            ('/scan2map', '/prior_localization/open3d_scan2map'),
+        ],
     )
 
     # hdl_localization 的全局重定位服务（3D FPFH + RANSAC）
@@ -1104,6 +1291,36 @@ def generate_launch_description():
         DeclareLaunchArgument('enable_elevation_map', default_value='false'),
         DeclareLaunchArgument('enable_terrain_analysis', default_value='false'),
         DeclareLaunchArgument('enable_periodic_clearing', default_value='true'),
+        DeclareLaunchArgument(
+            'prior_pose_topic',
+            default_value='/prior_localization/pose',
+            description='外部 prior-map 定位输出的 PoseStamped，全局位姿语义为 map->localized_frame'
+        ),
+        DeclareLaunchArgument(
+            'prior_pose_with_covariance_topic',
+            default_value='/prior_localization/pose_with_covariance',
+            description='外部 prior-map 定位输出的 PoseWithCovarianceStamped，全局位姿语义为 map->localized_frame'
+        ),
+        DeclareLaunchArgument(
+            'prior_odom_topic',
+            default_value='/prior_localization/odom',
+            description='外部 prior-map 定位输出的 Odometry，全局位姿语义为 map->localized_frame'
+        ),
+        DeclareLaunchArgument(
+            'prior_localized_frame',
+            default_value='prior_open3d_base',
+            description='外部定位 pose 的子坐标系；open3d_loc 接入时默认 pose 表示 map->prior_open3d_base'
+        ),
+        DeclareLaunchArgument(
+            'enable_prior_map_localization',
+            default_value='true',
+            description='是否启动 open3d_loc prior-map 定位节点；关闭后只保留 bridge 等待外部 pose'
+        ),
+        DeclareLaunchArgument(
+            'prior_map_path',
+            default_value=os.path.join(pkg_nav2, 'pcd', 'hall_open3d_grounded.pcd'),
+            description='open3d_loc 使用的标准轴 grounded 先验点云地图，必须搭配 fastlio_open3d_axis_adapter'
+        ),
         # ★ 新增：允许通过参数控制 FastDDS 共享内存优化（默认启用）
         DeclareLaunchArgument('enable_fastdds_shm', default_value='true', description='Enable FastDDS shared memory optimization for point cloud topics'),
 
@@ -1144,21 +1361,16 @@ def generate_launch_description():
         # TimerAction(period=7.0, actions=[global_loc_lifecycle_manager]),
         # └──────────────────────────────────────────┘
 
-        # ┌─ ScanContext-recovery：替代 HDL bootstrap，不发布 map->odom TF ─┐
-        TimerAction(period=4.0, actions=[scancontext_global_localizer_node]),
-        TimerAction(period=6.0, actions=[scancontext_to_initialpose_node]),
-        # 原 HDL bootstrap 链路保留在本文件上方但不启动，原始逻辑仍在 navigation_stack.launch.py。
-        # └──────────────────────────────────────────────────────────────┘
-
-        # ┌─ 方案A：单分辨率 NDT 定位，等待 C recovery 发布 /initialpose ─┐
-        TimerAction(period=5.0, actions=[ndt_localization_node]),
-        TimerAction(period=7.0, actions=[ndt_lifecycle_manager]),
-        # └──────────────────────────────────────────────┘
-
-        # ┌─ NDT定位 + 里程计融合节点 ───────────────────────────────────┐
-        # 在 NDT 定位和 TF 树就绪后启动（period=8.0）
-        # HEALTHY 时不干预，NDT 漂移时冻结 map->odom 让 odom 传播位姿
-        TimerAction(period=8.0, actions=[localization_odom_fusion_node]),
+        # ┌─ 外部 prior-map 定位链路 ─────────────────────────────────────┐
+        # 1. fastlio_open3d_axis_adapter 先把 raw Fast-LIO 轴转成标准轴输入。
+        # 2. open3d_loc 对齐标准轴先验点云地图，输出 /prior_localization/odom。
+        # 3. prior_map_odom_bridge 订阅该候选位姿，门控后独占发布 map->odom。
+        #
+        # 注意：旧的 lidar_localization / NDT / localization_odom_fusion 不再启动，
+        # 避免多个节点同时发布 map->odom 造成 TF 冲突。
+        TimerAction(period=3.5, actions=[fastlio_open3d_axis_adapter_node]),
+        TimerAction(period=4.5, actions=[prior_map_localization_node]),
+        TimerAction(period=5.5, actions=[prior_map_odom_bridge_node]),
         # └──────────────────────────────────────────────────────────────┘
 
         # ┌─ 方案C：hdl_localization UKF+NDT (Humble移植, ★当前使用★) ─┐

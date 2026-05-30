@@ -14,7 +14,7 @@ from pathlib import Path
 
 import rclpy
 import rosbag2_py
-from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
+from geometry_msgs.msg import PoseWithCovarianceStamped, TransformStamped, Twist
 from lifecycle_msgs.msg import State, Transition
 from lifecycle_msgs.srv import ChangeState, GetState
 from nav2_msgs.msg import BehaviorTreeLog
@@ -117,11 +117,31 @@ def load_initial_context(bag, start_sec):
             elif initialpose is not None:
                 break
 
+    existing_static = {(tr.header.frame_id, tr.child_frame_id) for tr in tf_static_msg.transforms}
+    if ("odom", "camera_init") not in existing_static:
+        tr = TransformStamped()
+        tr.header.frame_id = "odom"
+        tr.child_frame_id = "camera_init"
+        tr.transform.rotation.x = -0.5
+        tr.transform.rotation.y = -0.5
+        tr.transform.rotation.z = 0.5
+        tr.transform.rotation.w = 0.5
+        tf_static_msg.transforms.append(tr)
+    if ("body", "base_footprint") not in existing_static:
+        tr = TransformStamped()
+        tr.header.frame_id = "body"
+        tr.child_frame_id = "base_footprint"
+        tr.transform.rotation.x = 0.5
+        tr.transform.rotation.y = 0.5
+        tr.transform.rotation.z = -0.5
+        tr.transform.rotation.w = 0.5
+        tf_static_msg.transforms.append(tr)
+
     if initialpose is None:
         initialpose = first_pose
     if initialpose is None:
         raise RuntimeError("No /pcl_pose available for initialization")
-    return initialpose, (tf_static_msg if tf_static_msg.transforms else None)
+    return initialpose, tf_static_msg
 
 
 def original_ndt_stats(bag, start_sec, end_sec):
@@ -187,13 +207,22 @@ def transition_to(node, target_state_id, timeout=60.0):
 def start_ndt(
     label,
     *,
+    reject_pose_jump=True,
     rotation_guard_enabled=True,
     multi_frame_enabled=True,
     multi_frame_only_when_rotating=True,
+    multi_frame_window_sec=1.2,
+    multi_frame_max_frames=12,
+    multi_frame_voxel_leaf_size=0.20,
+    multi_frame_max_points=20000,
+    multi_frame_keyframe_max_interval_sec=0.25,
+    ndt_resolution=None,
+    ndt_step_size=None,
+    ndt_max_iterations=None,
+    voxel_leaf_size=None,
 ):
     log_path = f"/tmp/ndt_replay_{label}_launch.log"
-    return subprocess.Popen(
-        [
+    cmd = [
             "ros2", "run", "lidar_localization_ros2", "lidar_localization_node",
             "--ros-args",
             "--params-file", "/home/ubuntu/humanoid_ws/src/lidar_localization/param/localization.yaml",
@@ -201,7 +230,7 @@ def start_ndt(
             "-p", "set_initial_pose:=false",
             "-p", "initialpose_base_frame_id:=odom",
             "-p", "score_threshold:=0.3",
-            "-p", "reject_pose_jump:=true",
+            "-p", f"reject_pose_jump:={'true' if reject_pose_jump else 'false'}",
             "-p", "max_pose_jump_translation:=0.50",
             "-p", "max_pose_jump_yaw:=0.40",
             "-p", "initialpose_relax_duration_sec:=4.0",
@@ -215,24 +244,20 @@ def start_ndt(
             "-p", "pose_jump_reacquire_xy_tolerance:=0.30",
             "-p", "pose_jump_reacquire_yaw_tolerance:=0.08",
             "-p", f"rotation_guard_enabled:={'true' if rotation_guard_enabled else 'false'}",
-            "-p", "rotation_guard_use_cmd_vel_fallback:=true",
-            "-p", "rotation_guard_freeze_corrections:=true",
-            "-p", "rotation_guard_recovery_gate_enabled:=true",
+            "-p", "rotation_guard_use_cmd_vel_fallback:=false",
             "-p", "rotation_guard_navigation_status_topic:=/navigation/status",
-            "-p", "rotation_guard_angular_threshold:=0.20",
-            "-p", "rotation_guard_linear_threshold:=0.05",
-            "-p", "rotation_guard_settle_sec:=2.0",
+            "-p", "rotation_guard_settle_sec:=1.2",
             "-p", "rotation_guard_max_duration_sec:=8.0",
-            "-p", "rotation_guard_recovery_max_translation:=0.15",
-            "-p", "rotation_guard_recovery_max_yaw:=0.05",
-            "-p", "rotation_guard_recovery_required_frames:=4",
-            "-p", "rotation_guard_recovery_max_duration_sec:=6.0",
             "-p", f"multi_frame_matching_enabled:={'true' if multi_frame_enabled else 'false'}",
             "-p", f"multi_frame_use_only_when_rotating:={'true' if multi_frame_only_when_rotating else 'false'}",
-            "-p", "multi_frame_window_sec:=0.6",
-            "-p", "multi_frame_max_frames:=8",
-            "-p", "multi_frame_voxel_leaf_size:=0.20",
-            "-p", "multi_frame_max_points:=40000",
+            "-p", f"multi_frame_window_sec:={multi_frame_window_sec}",
+            "-p", f"multi_frame_max_frames:={multi_frame_max_frames}",
+            "-p", f"multi_frame_voxel_leaf_size:={multi_frame_voxel_leaf_size}",
+            "-p", f"multi_frame_max_points:={multi_frame_max_points}",
+            "-p", "multi_frame_keyframe_filter_enabled:=true",
+            "-p", "multi_frame_keyframe_translation_threshold:=0.10",
+            "-p", "multi_frame_keyframe_yaw_threshold:=0.052",
+            "-p", f"multi_frame_keyframe_max_interval_sec:={multi_frame_keyframe_max_interval_sec}",
             "-p", "republish_last_good_tf_on_failure:=true",
             "-p", "max_last_good_tf_age_sec:=5.0",
             "-p", "use_fastlio_delta_guess:=true",
@@ -250,8 +275,19 @@ def start_ndt(
             "-p", "ndt_rotation_prior_weight:=10.0",
             "-p", "ndt_rotation_prior_roll_pitch_only:=true",
             "-p", "use_odom:=false",
+            "-p", "enable_debug:=false",
             "--log-level", "warn",
-        ],
+    ]
+    for name, value in (
+        ("ndt_resolution", ndt_resolution),
+        ("ndt_step_size", ndt_step_size),
+        ("ndt_max_iterations", ndt_max_iterations),
+        ("voxel_leaf_size", voxel_leaf_size),
+    ):
+        if value is not None:
+            cmd.extend(["-p", f"{name}:={value}"])
+    return subprocess.Popen(
+        cmd,
         stdout=open(log_path, "w"),
         stderr=subprocess.STDOUT,
     )
@@ -363,10 +399,21 @@ def parse_args():
     parser.add_argument("--label")
     parser.add_argument("--start", type=float)
     parser.add_argument("--duration", type=float)
+    parser.add_argument("--rate", type=float, default=1.0)
     parser.add_argument("--status-source", choices=["auto", "bt", "cmd_vel", "none"], default="auto")
+    parser.add_argument("--disable-pose-jump-reject", action="store_true")
     parser.add_argument("--disable-rotation-guard", action="store_true")
     parser.add_argument("--disable-multi-frame", action="store_true")
     parser.add_argument("--multi-frame-always", action="store_true")
+    parser.add_argument("--multi-frame-window-sec", type=float, default=1.2)
+    parser.add_argument("--multi-frame-max-frames", type=int, default=12)
+    parser.add_argument("--multi-frame-voxel-leaf-size", type=float, default=0.20)
+    parser.add_argument("--multi-frame-max-points", type=int, default=20000)
+    parser.add_argument("--multi-frame-keyframe-max-interval-sec", type=float, default=0.25)
+    parser.add_argument("--ndt-resolution", type=float)
+    parser.add_argument("--ndt-step-size", type=float)
+    parser.add_argument("--ndt-max-iterations", type=int)
+    parser.add_argument("--voxel-leaf-size", type=float)
     return parser.parse_args()
 
 
@@ -392,9 +439,18 @@ def main():
     print(f"  status_source={status_source}")
     print(
         "  "
+        f"reject_pose_jump={not args.disable_pose_jump_reject} "
         f"rotation_guard={not args.disable_rotation_guard} "
         f"multi_frame={not args.disable_multi_frame} "
         f"multi_frame_only_when_rotating={not args.multi_frame_always}"
+    )
+    print(
+        "  "
+        f"multi_frame_window_sec={args.multi_frame_window_sec} "
+        f"multi_frame_max_frames={args.multi_frame_max_frames} "
+        f"multi_frame_voxel_leaf_size={args.multi_frame_voxel_leaf_size} "
+        f"multi_frame_max_points={args.multi_frame_max_points} "
+        f"multi_frame_keyframe_max_interval_sec={args.multi_frame_keyframe_max_interval_sec}"
     )
     print(f"  initial x={initialpose.pose.pose.position.x:.3f} y={initialpose.pose.pose.position.y:.3f}")
 
@@ -404,9 +460,19 @@ def main():
     print("[1/5] starting NDT")
     ndt_proc = start_ndt(
         label,
+        reject_pose_jump=not args.disable_pose_jump_reject,
         rotation_guard_enabled=not args.disable_rotation_guard,
         multi_frame_enabled=not args.disable_multi_frame,
         multi_frame_only_when_rotating=not args.multi_frame_always,
+        multi_frame_window_sec=args.multi_frame_window_sec,
+        multi_frame_max_frames=args.multi_frame_max_frames,
+        multi_frame_voxel_leaf_size=args.multi_frame_voxel_leaf_size,
+        multi_frame_max_points=args.multi_frame_max_points,
+        multi_frame_keyframe_max_interval_sec=args.multi_frame_keyframe_max_interval_sec,
+        ndt_resolution=args.ndt_resolution,
+        ndt_step_size=args.ndt_step_size,
+        ndt_max_iterations=args.ndt_max_iterations,
+        voxel_leaf_size=args.voxel_leaf_size,
     )
     time.sleep(4.0)
 
@@ -437,6 +503,7 @@ def main():
     play = subprocess.run(
         [
             "ros2", "bag", "play", str(bag), "--clock", "100",
+            "--rate", f"{args.rate:.3f}",
             "--start-offset", f"{replay_start - bag_start:.3f}",
             "--playback-duration", f"{replay_end - replay_start:.3f}",
             "--topics",

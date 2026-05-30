@@ -20,10 +20,11 @@ def generate_launch_description():
     use_rviz = LaunchConfiguration('rviz', default='true')
     reloc_engine = LaunchConfiguration('relocalization_engine', default='v2')
 
-    # 条件表达式: v2 / SC / HDL 三引擎
+    # 条件表达式: prior / v2 / SC / HDL 四种导航栈
+    use_prior = PythonExpression(["'", reloc_engine, "' == 'prior'"])
     use_v2 = PythonExpression(["'", reloc_engine, "' == 'v2'"])
     use_sc = PythonExpression(["'", reloc_engine, "' == 'sc'"])
-    # v2 和 SC 共用 app 层 (都基于 ScanContext + waypoint 管理)
+    # prior / v2 / SC 共用 app 层
     use_fusion_sc_app = PythonExpression(["'", reloc_engine, "' != 'hdl'"])
 
     # ================= 第一阶段：基础设施 =================
@@ -41,6 +42,14 @@ def generate_launch_description():
     )
 
     # ================= 第二阶段：导航栈（延迟6秒）=================
+    # prior 版本 (relocalization_engine:=prior) — open3d prior-map 定位 + bridge 独占 map->odom
+    launch_nav2_prior = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg_navigation2, 'launch', 'navigation2.launch.py')),
+        launch_arguments={'use_sim_time': use_sim_time}.items(),
+        condition=IfCondition(use_prior)
+    )
+
     # v2 版本 (relocalization_engine:=v2, 默认) — NDT+SC+HDL 双引擎恢复 (已去 fusion)
     launch_nav2_v2 = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -67,7 +76,7 @@ def generate_launch_description():
 
     launch_nav2_stack = TimerAction(
         period=6.0,
-        actions=[launch_nav2_v2, launch_nav2_sc, launch_nav2_hdl]
+        actions=[launch_nav2_prior, launch_nav2_v2, launch_nav2_sc, launch_nav2_hdl]
     )
 
     # ================= 第三阶段：应用层（延迟9秒）=================
@@ -124,7 +133,7 @@ def generate_launch_description():
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('rviz', default_value='true', description='Whether to start RViz'),
         DeclareLaunchArgument('relocalization_engine', default_value='v2',
-                              description='Nav2 stack: v2 (NDT+Fusion+SC+HDL, default) | sc (SC v1) | hdl (FPFH+RANSAC)'),
+                              description='Nav2 stack: prior (open3d prior-map) | v2 (NDT+SC+HDL, default) | sc (SC v1) | hdl (FPFH+RANSAC)'),
 
         # 按顺序启动
         launch_description,

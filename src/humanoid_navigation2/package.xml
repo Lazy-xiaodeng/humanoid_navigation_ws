@@ -54,6 +54,7 @@
   <depend>humanoid_terrain_analyzer</depend>
   <depend>lidar_localization</depend>
   <depend>lidar_localization_ros2</depend>
+  <depend>open3d_loc</depend>
   <depend>hdl_localization</depend>
   <depend>hdl_global_localization</depend>
   <depend>humanoid_scancontext_global_localization</depend>

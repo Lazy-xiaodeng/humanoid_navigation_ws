@@ -79,6 +79,8 @@ using namespace std::chrono_literals;
 class PCLLocalization : public rclcpp_lifecycle::LifecycleNode
 {
 public:
+  struct ScanFrame;
+
   /**
    * @brief 构造函数
    * @param options ROS节点选项
@@ -129,19 +131,21 @@ public:
   Eigen::Matrix4f applyPlanarTransformConstraint(const Eigen::Matrix4f & transform) const;
   bool initialPoseReacquireActive();
   bool publishLastGoodTransformIfFresh(const char * reject_reason);
-  void resetFreezeDriftMonitor();
-  void clearFreezeDriftDebug();
-  void updateFreezeDriftDebug(const Eigen::Affine3d & current_T_odom_body);
-  void startFreezeDriftMonitorIfNeeded(const Eigen::Affine3d & current_T_odom_body);
-  void updateFreezeDriftAnchorError(const Eigen::Affine3d & accepted_T_map_odom);
   bool rotationGuardActive();
   bool rotationGuardInSettle();
   void enterRotationGuard(const char * source);
   void updateRotationGuard();
+  void resetCandidateConfirmation();
+  bool lookupOdomBodyPlanarPose(
+    const rclcpp::Time & stamp,
+    double & x,
+    double & y,
+    double & yaw);
+  bool shouldStoreMultiFrameKeyframe(const ScanFrame & frame) const;
   pcl::PointCloud<pcl::PointXYZI>::Ptr buildMultiFrameSource(
     const pcl::PointCloud<pcl::PointXYZI>::Ptr & current_cloud,
     const rclcpp::Time & stamp,
-    bool multi_frame_context_active);
+    bool rotation_guard_active);
   void publishLocalizationStatus(
     const char * state,
     const char * reason,
@@ -204,6 +208,10 @@ public:
   {
     rclcpp::Time stamp;
     pcl::PointCloud<pcl::PointXYZI>::Ptr cloud;
+    bool has_odom_body_pose{false};
+    double odom_body_x{0.0};
+    double odom_body_y{0.0};
+    double odom_body_yaw{0.0};
   };
   std::deque<ScanFrame> scan_frame_buffer_;
 
@@ -264,20 +272,6 @@ public:
   std::string rotation_guard_source_debug_;
   int multi_frame_source_frames_debug_{1};
   int multi_frame_source_points_debug_{0};
-  bool freeze_drift_active_{false};
-  bool freeze_drift_valid_debug_{false};
-  bool freeze_anchor_error_valid_debug_{false};
-  rclcpp::Time freeze_drift_start_time_{0, 0, RCL_ROS_TIME};
-  Eigen::Affine3d freeze_start_T_odom_body_{Eigen::Affine3d::Identity()};
-  Eigen::Affine3d freeze_start_T_map_odom_{Eigen::Affine3d::Identity()};
-  double freeze_duration_debug_{0.0};
-  double freeze_odom_delta_translation_debug_{0.0};
-  double freeze_odom_delta_yaw_debug_{0.0};
-  double freeze_predicted_map_body_x_debug_{0.0};
-  double freeze_predicted_map_body_y_debug_{0.0};
-  double freeze_predicted_map_body_yaw_debug_{0.0};
-  double freeze_anchor_error_xy_debug_{0.0};
-  double freeze_anchor_error_yaw_debug_{0.0};
 
 
   // ========== ROS参数 ==========
@@ -310,38 +304,49 @@ public:
   double pose_jump_candidate_x_{0.0}; ///< 待确认候选X
   double pose_jump_candidate_y_{0.0}; ///< 待确认候选Y
   double pose_jump_candidate_yaw_{0.0}; ///< 待确认候选yaw
+  bool candidate_confirmation_enabled_{false}; ///< 是否对中等修正量的NDT候选做连续确认
+  double candidate_confirmation_min_translation_{0.20}; ///< 触发候选确认的最小平移修正
+  double candidate_confirmation_min_yaw_{0.08}; ///< 触发候选确认的最小yaw修正
+  double candidate_confirmation_max_fitness_{0.08}; ///< 候选确认允许的最大fitness，<=0表示不限制
+  double candidate_confirmation_max_mean_corr_dist_{0.0}; ///< 超过该平均关联距离时拒绝候选，<=0表示禁用
+  int candidate_confirmation_required_frames_{2}; ///< 候选确认要求的一致帧数
+  double candidate_confirmation_xy_tolerance_{0.20}; ///< 候选确认XY一致性阈值
+  double candidate_confirmation_yaw_tolerance_{0.06}; ///< 候选确认yaw一致性阈值
+  bool candidate_confirmation_active_{false}; ///< 是否已有中等修正候选
+  int candidate_confirmation_count_{0}; ///< 当前中等修正候选连续确认帧数
+  double candidate_confirmation_x_{0.0}; ///< 中等修正候选X
+  double candidate_confirmation_y_{0.0}; ///< 中等修正候选Y
+  double candidate_confirmation_yaw_{0.0}; ///< 中等修正候选yaw
   double last_mean_corr_dist_{-1.0}; ///< 最近一次NDT匹配的平均关联距离(用于退化诊断)
   int last_corr_count_{0}; ///< 最近一次NDT匹配的关联点对数
   bool rotation_guard_enabled_{false};
   bool rotation_guard_use_cmd_vel_fallback_{false};
-  bool rotation_guard_freeze_corrections_{false};
-  bool rotation_guard_recovery_gate_enabled_{false};
   std::string rotation_guard_navigation_status_topic_{"/navigation/status"};
   double rotation_guard_angular_threshold_{0.20};
   double rotation_guard_linear_threshold_{0.05};
   double rotation_guard_settle_sec_{1.0};
   double rotation_guard_max_duration_sec_{8.0};
-  double rotation_guard_recovery_max_translation_{0.15};
-  double rotation_guard_recovery_max_yaw_{0.05};
-  double rotation_guard_recovery_max_duration_sec_{6.0};
-  int rotation_guard_recovery_required_frames_{4};
   rclcpp::Time rotation_guard_start_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time rotation_guard_settle_until_{0, 0, RCL_ROS_TIME};
-  rclcpp::Time rotation_guard_recovery_start_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_cmd_vel_time_{0, 0, RCL_ROS_TIME};
   bool rotation_guard_active_{false};
-  bool rotation_guard_recovery_active_{false};
   bool rotation_guard_state_active_{false};
   bool rotation_guard_rotating_now_{false};
   std::string rotation_guard_source_;
   int rotation_guard_hold_count_{0};
-  int rotation_guard_recovery_stable_count_{0};
   bool multi_frame_matching_enabled_{false};
   bool multi_frame_use_only_when_rotating_{true};
   double multi_frame_window_sec_{0.6};
   int multi_frame_max_frames_{8};
   double multi_frame_voxel_leaf_size_{0.20};
   int multi_frame_max_points_{40000};
+  bool multi_frame_keyframe_filter_enabled_{false};
+  double multi_frame_keyframe_translation_threshold_{0.10};
+  double multi_frame_keyframe_yaw_threshold_{0.052};
+  double multi_frame_keyframe_max_interval_sec_{0.25};
+  int multi_frame_buffer_frames_debug_{0};
+  int multi_frame_skipped_frames_debug_{0};
+  double ndt_align_duration_sec_debug_{0.0};
   double ndt_resolution_;         ///< NDT网格分辨率（米）
   double ndt_step_size_;          ///< NDT牛顿迭代步长
   double transform_epsilon_;      ///< 变换收敛阈值
@@ -370,7 +375,7 @@ public:
   bool force_2d_fixed_z_{true};   ///< 2D约束时是否固定Z坐标
   double force_2d_z_{0.0};        ///< 2D约束时使用的固定Z坐标
   bool republish_last_good_tf_on_failure_{true}; ///< 定位短暂失败时是否重发最后可信TF
-  double max_last_good_tf_age_sec_{3.0}; ///< 兼容旧参数；last_good TF 现在会持续按当前时间重发
+  double max_last_good_tf_age_sec_{3.0}; ///< 最后可信TF可重发的最大时长
   int ndt_num_threads_;           ///< OMP线程数
   int ndt_max_iterations_;        ///< 配准最大迭代次数
 

@@ -532,7 +532,7 @@ def generate_launch_description():
                 'initial_pose_y': 0.0,
                 'initial_pose_z': 0.0,
                 'score_threshold': 0.3,
-                'reject_pose_jump': True,
+                'reject_pose_jump': True,                # 开启 NDT 位姿跳变拒绝；点18这类错误匹配需要由 jump gate 拦住。
                 'max_pose_jump_translation': 0.50,    # Plan C: 0.80→0.50 (delta guess压低correction后收紧)
                 'max_pose_jump_yaw': 0.40,            # Plan C: 0.60→0.40
                 'initialpose_relax_duration_sec': 4.0,
@@ -547,37 +547,44 @@ def generate_launch_description():
                 'pose_jump_reacquire_required_frames': 4,
                 'pose_jump_reacquire_xy_tolerance': 0.30,
                 'pose_jump_reacquire_yaw_tolerance': 0.08,
+                # Fine-grained gate: normal small corrections still pass, but
+                # medium NDT corrections must repeat before map->odom is updated.
+                # This prevents sub-threshold jumps from leaking through.
+                'candidate_confirmation_enabled': False,
+                'candidate_confirmation_min_translation': 0.18,
+                'candidate_confirmation_min_yaw': 0.06,
+                'candidate_confirmation_max_fitness': 0.08,
+                'candidate_confirmation_max_mean_corr_dist': 0.0,
+                'candidate_confirmation_required_frames': 3,
+                'candidate_confirmation_xy_tolerance': 0.18,
+                'candidate_confirmation_yaw_tolerance': 0.05,
                 # ★ Scheme 1: rotation guard. During SpinToPose/cmd_vel yaw-only
-                # rotation, freeze all NDT pose corrections and keep the last good
-                # map->odom transform until the rotation settle window expires.
-                # rotation_guard_recovery_gate_enabled=True: 旋转保护结束后先验证 NDT，
-                # 验证不通过就持续发布冻结 TF，验证通过才恢复 NDT。
+                # rotation, hold large translation corrections instead of turning
+                # them into immediate pose_jump recovery. This keeps the original
+                # settle/timeout exit behavior and does not add an NDT recovery gate.
                 'rotation_guard_enabled': True,
                 'rotation_guard_use_cmd_vel_fallback': True,
-                'rotation_guard_freeze_corrections': True,
-                'rotation_guard_recovery_gate_enabled': True,
                 'rotation_guard_navigation_status_topic': '/navigation/status',
                 'rotation_guard_angular_threshold': 0.20,
                 'rotation_guard_linear_threshold': 0.05,
-                'rotation_guard_settle_sec': 2.0,
+                'rotation_guard_settle_sec': 1.2,
                 'rotation_guard_max_duration_sec': 8.0,
-                'rotation_guard_recovery_max_translation': 0.15,
-                'rotation_guard_recovery_max_yaw': 0.05,
-                'rotation_guard_recovery_required_frames': 4,
-                'rotation_guard_recovery_max_duration_sec': 6.0,
-                # ★ Scheme 2: multi-frame source cloud. /fast_lio/cloud_registered
-                # is already registered in the Fast-LIO world frame; lidar_localization
-                # applies the same fixed axis conversion before buffering.
-                'multi_frame_matching_enabled': True,
-                'multi_frame_use_only_when_rotating': True,
-                'multi_frame_window_sec': 0.6,
-                'multi_frame_max_frames': 8,
-                'multi_frame_voxel_leaf_size': 0.20,
-                'multi_frame_max_points': 40000,
+                # ★ Scheme 2: 多帧 NDT 输入点云。/fast_lio/cloud_registered 已经在
+                # Fast-LIO 世界系下配准；lidar_localization 会先做固定轴转换，再进入多帧缓存。
+                'multi_frame_matching_enabled': True,          # 是否启用多帧 NDT；False 时只使用当前单帧点云。
+                'multi_frame_use_only_when_rotating': False,   # False=全程多帧；True=仅旋转保护期间启用多帧。
+                'multi_frame_window_sec': 1.2,                 # 多帧缓存时间窗口；10Hz 点云下约覆盖最近 12 帧。
+                'multi_frame_max_frames': 12,                  # 多帧最多参与匹配的关键帧数量，上限防止点云过大。
+                'multi_frame_voxel_leaf_size': 0.20,           # 合并多帧后的体素降采样尺寸；越小细节越多但更耗 CPU。
+                'multi_frame_max_points': 30000,               # 降采样后最多保留点数；提高到 30000 增加几何约束。
+                'multi_frame_keyframe_filter_enabled': True,   # 是否只缓存关键帧，减少重复帧和无效计算。
+                'multi_frame_keyframe_translation_threshold': 0.10,  # 与上一关键帧平移超过该值才强制入缓存。
+                'multi_frame_keyframe_yaw_threshold': 0.052,   # 与上一关键帧 yaw 变化超过该值才强制入缓存，0.052rad 约 3deg。
+                'multi_frame_keyframe_max_interval_sec': 0.15, # 即使运动很小，超过该时间也缓存一帧，保证低速时信息密度。
                 'min_scan_points': 50,
                 'localization_status_topic': '/localization/ndt_status',
                 'republish_last_good_tf_on_failure': True,   # R3: NDT拒绝后保持last_good TF, 维持TF树
-                'max_last_good_tf_age_sec': 5.0,         # 兼容旧参数；last_good TF 不再因 age 超时停发
+                'max_last_good_tf_age_sec': 5.0,         # 0.5→5.0: 覆盖典型DEGRADED窗口
                 # ★ Plan B: Fast-LIO delta guess
                 'use_fastlio_delta_guess': True,
                 'fastlio_delta_guess_mode': 'map_body_to_map_odom',
