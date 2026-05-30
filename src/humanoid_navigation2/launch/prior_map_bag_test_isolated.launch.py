@@ -115,7 +115,7 @@ def generate_launch_description():
             "max_small_correction_yaw": 0.12,
             "max_large_correction_translation": 3.0,
             "max_large_correction_yaw": 1.2,
-            "required_consistent_frames": 3,
+            "required_consistent_frames": 5,
             "consistency_translation_tolerance": 0.25,
             "consistency_yaw_tolerance": 0.10,
             "enable_spin_to_pose_guard": True,

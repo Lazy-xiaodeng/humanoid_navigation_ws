@@ -1,0 +1,19 @@
+global_localization_node:
+  ros__parameters:
+    # x, y, z, roll, pitch, yaw (单位:度degrees)
+    initialpose: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    kf_baselink2map:
+      x: [0.001, 0.002]
+      y: [0.001, 0.005]
+      z: [0.00001, 0.04]
+
+    # 本项目中 map->odom 由 humanoid_navigation2 的 prior_map_odom_bridge 统一发布。
+    # open3d_loc 只输出 /localization_3d 或重映射后的 /prior_localization/pose，
+    # 不直接发布 TF，避免和 bridge 抢占同一条 map->odom。
+    publish_tf: false
+
+    # 本项目不让 open3d_loc 自己处理 imu_link/base_link 外参。
+    # fastlio_open3d_axis_adapter 已经把 Fast-LIO raw /odom 转成标准轴
+    # odom->prior_open3d_base，所以这里必须直接使用输入 Odometry pose。
+    use_input_odom_pose_directly: true

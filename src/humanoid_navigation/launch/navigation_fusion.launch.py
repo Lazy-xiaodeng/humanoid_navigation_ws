@@ -43,10 +43,10 @@ def generate_launch_description():
         }]
     )
     
-    # 2. 导航状态管理器节点 (负责监听 Nav2 进度并生成 JSON 状态)
+    # 2. 导航状态管理器节点 (新 prior-map 定位版本，旧 fusion 可单独回退)
     navigation_state_node = Node(
         package='humanoid_navigation',
-        executable='navigation_state_manager_fusion',
+        executable='navigation_state_manager',
         name='navigation_state_manager',
         output='screen',
         parameters=[{
@@ -59,9 +59,13 @@ def generate_launch_description():
             'localization_stop_hold_sec': 2.0,
             'localization_resume_settle_sec': 1.0,
             'localization_auto_resume_require_recovery_done': True,
-            'localization_resume_ndt_stable_frames': 8,
-            'localization_resume_max_fitness': 0.05,
-            'localization_resume_max_correction_translation': 0.25,
+            'localization_resume_stable_frames': 3,
+            'localization_health_status_topic': '/localization/prior_map_odom_bridge_status',
+            'localization_health_timeout_sec': 3.0,
+            # bridge 已经接受过 map->odom 后，即使当前候选被拒绝，也允许靠 last good TF + odom 启动/推进。
+            'localization_allow_start_with_last_good_tf': True,
+            # 0 表示不限制 last good TF 年龄；如果现场需要更保守，可改成 10~30 秒。
+            'localization_last_good_tf_max_age_sec': 0.0,
             'localization_recovery_status_topic': '/localization/recovery_status',
             'localization_recovery_request_topic': '/localization/recovery_requests',
             'request_localization_recovery_on_nav_failure': True,

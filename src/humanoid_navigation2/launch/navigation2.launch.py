@@ -429,7 +429,7 @@ def generate_launch_description():
             # 大修正必须多帧一致；这是重定位或人工给初值后的受控切换。
             'max_large_correction_translation': 3.0,
             'max_large_correction_yaw': 1.2,
-            'required_consistent_frames': 3,
+            'required_consistent_frames': 5,
             'consistency_translation_tolerance': 0.25,
             'consistency_yaw_tolerance': 0.10,
             # SpinToPose 旋转保护：

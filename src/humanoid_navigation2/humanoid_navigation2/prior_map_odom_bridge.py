@@ -303,7 +303,7 @@ class PriorMapOdomBridge(Node):
         self.max_large_correction_yaw = float(
             self.declare_parameter("max_large_correction_yaw", 1.2).value)
         self.required_consistent_frames = int(
-            self.declare_parameter("required_consistent_frames", 3).value)
+            self.declare_parameter("required_consistent_frames", 5).value)
         self.consistency_translation_tolerance = float(
             self.declare_parameter("consistency_translation_tolerance", 0.25).value)
         self.consistency_yaw_tolerance = float(
