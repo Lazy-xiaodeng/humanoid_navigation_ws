@@ -1,9 +1,0 @@
-{
-  "source": "debug_monitor/nav_drift_test2_scancontext_rerun_20260525/samples.csv",
-  "count": 12,
-  "success": 11,
-  "success_rate": 0.9166666666666666,
-  "seed": 20260525,
-  "ndt_accept_error": 2.0,
-  "max_attempts": 5
-}

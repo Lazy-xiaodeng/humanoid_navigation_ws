@@ -1,3 +1,0 @@
-# command: ros2 topic hz /hdl_bootstrap/odom --window 100
-# started: 2026-05-24 16:51:45 +0800
-WARNING: topic [/hdl_bootstrap/odom] does not appear to be published yet

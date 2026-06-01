@@ -1,4 +1,0 @@
-# command: ros2 topic echo /hdl_relocalize_prior
-# started: 2026-05-24 16:51:45 +0800
-WARNING: topic [/hdl_relocalize_prior] does not appear to be published yet
-Could not determine the type for the passed topic

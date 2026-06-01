@@ -35,7 +35,8 @@ from launch_ros.actions import Node
 def generate_launch_description():
     pkg_nav2 = get_package_share_directory('humanoid_navigation2')
 
-    default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params_xy_yaw.yaml')
+    # default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params_straight_first.yaml')
+    default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params.yaml')
     default_bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_xy_then_yaw.xml')
     default_robosense_config_file = (
         '/home/ubuntu/humanoid_ws/src/robosense_lidar_localization/config/'

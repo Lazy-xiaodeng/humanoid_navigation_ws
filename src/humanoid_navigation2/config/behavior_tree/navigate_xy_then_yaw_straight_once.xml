@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+
+  <BehaviorTree ID="MainTree">
+    <!--
+      Straight-first staged navigation:
+        1. SpinToPose(mode=goal_position)：先转向目标点 XY 方向。
+        2. MakePoseTowardGoal：XY 目标的 yaw 指向行走方向。
+        3. ComputePathToPose + FollowPath：只规划一次，避免固定周期重规划把实际偏差写回新路径。
+        4. SpinToPose(mode=goal_yaw)：到达 XY 后再补最终 yaw。
+    -->
+
+    <RecoveryNode number_of_retries="1" name="StagedNavigationRecovery">
+
+      <RecoveryNode number_of_retries="1" name="DynamicObstacleRecovery">
+
+        <Sequence name="FaceGoalFollowXYThenFaceFinalYaw">
+
+          <SpinToPose goal="{goal}"
+                      mode="goal_position"
+                      robot_base_frame="base_footprint"
+                      yaw_tolerance="0.25"
+                      position_tolerance="0.80"
+                      transform_tolerance="0.8"
+                      time_allowance="20.0"
+                      max_attempts="3"
+                      server_name="spin"
+                      error_code_id="{initial_spin_error_code}"/>
+
+          <MakePoseTowardGoal goal="{goal}"
+                              output_goal="{approach_goal}"
+                              robot_base_frame="base_footprint"
+                              min_heading_distance="0.20"
+                              transform_tolerance="0.8"/>
+
+          <Sequence name="PlanOnceAndFollowXYOnly">
+            <ComputePathToPose goal="{approach_goal}"
+                               path="{path}"
+                               planner_id="GridBased"
+                               error_code_id="{compute_path_error_code}"/>
+            <FollowPath path="{path}"
+                        controller_id="FollowPath"
+                        goal_checker_id="xy_goal_checker"
+                        error_code_id="{follow_path_error_code}"/>
+          </Sequence>
+
+          <SpinToPose goal="{goal}"
+                      mode="goal_yaw"
+                      robot_base_frame="base_footprint"
+                      yaw_tolerance="0.18"
+                      position_tolerance="0.0"
+                      transform_tolerance="0.8"
+                      time_allowance="20.0"
+                      max_attempts="4"
+                      server_name="spin"
+                      error_code_id="{final_spin_error_code}"/>
+
+        </Sequence>
+
+        <Fallback name="WaitOrNewGoal">
+          <GoalUpdated/>
+          <Wait wait_duration="10.0"/>
+        </Fallback>
+
+      </RecoveryNode>
+
+      <Fallback name="StuckHandler">
+        <GoalUpdated/>
+        <Wait wait_duration="10.0"/>
+      </Fallback>
+
+    </RecoveryNode>
+
+  </BehaviorTree>
+
+</root>

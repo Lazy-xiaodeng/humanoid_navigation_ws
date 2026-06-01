@@ -706,7 +706,7 @@ def main():
     args = parser.parse_args()
 
     started = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = args.output_dir or f"/home/ubuntu/humanoid_ws/debug_monitor/multiframe_ndt_replay_{started}"
+    output_dir = args.output_dir or f"/home/ubuntu/humanoid_ws/workspace_archive/debug_monitor/multiframe_ndt_replay_{started}"
     selected = BAGS
     if args.bags:
         wanted = set(args.bags)

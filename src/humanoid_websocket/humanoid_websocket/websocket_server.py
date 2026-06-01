@@ -351,6 +351,7 @@ class CompleteWebSocketServer(Node):
                     "robot_pose",          # 机器人定位数据
                     "robot_speed",         # 机器人实时速度               
                     "navigation_path",     # 路径规划数据
+                    "navigation_path_monitor",  # 实时规划/实际轨迹偏差监控
                     "navigation_status",   # 导航状态数据
                     "system_status",       # 系统状态数据
                     "waypoints_data",      # 路点数据

@@ -1,5 +1,0 @@
-# command: ros2 topic hz /pcl_pose --window 100
-# started: 2026-05-24 16:51:45 +0800
-WARNING: topic [/pcl_pose] does not appear to be published yet
-average rate: 7.338
-	min: 0.081s max: 0.254s std dev: 0.05880s window: 9

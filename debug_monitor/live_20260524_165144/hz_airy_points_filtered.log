@@ -1,4 +1,0 @@
-# command: ros2 topic hz /airy_points_filtered --window 100
-# started: 2026-05-24 16:51:45 +0800
-average rate: 1.777
-	min: 0.310s max: 1.152s std dev: 0.34475s window: 4

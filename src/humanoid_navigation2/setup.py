@@ -66,6 +66,7 @@ setup(
             'ndt_fusion_monitor = humanoid_navigation2.ndt_fusion_monitor:main',
             'check_map_quality = humanoid_navigation2.check_map_quality:main',
             'ndt_drift_diagnostic = humanoid_navigation2.ndt_drift_diagnostic:main',
+            'navigation_path_monitor = humanoid_navigation2.navigation_path_monitor:main',
         ],
     },
 )

@@ -1,4 +1,0 @@
-# command: ros2 topic hz /fast_lio/cloud_registered --window 100
-# started: 2026-05-24 16:51:45 +0800
-average rate: 1.815
-	min: 0.174s max: 1.092s std dev: 0.39225s window: 3

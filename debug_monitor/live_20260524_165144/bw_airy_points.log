@@ -1,8 +1,0 @@
-# command: ros2 topic bw /airy_points
-# started: 2026-05-24 16:51:45 +0800
-WARNING: topic [/airy_points] does not appear to be published yet
-Subscribed to [/airy_points]
-4.09 MB/s from 2 messages
-	Message size mean: 1.38 MB min: 1.38 MB max: 1.38 MB
-2.44 MB/s from 3 messages
-	Message size mean: 1.36 MB min: 1.32 MB max: 1.38 MB

@@ -37,7 +37,8 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     pkg_nav2 = get_package_share_directory('humanoid_navigation2')
 
-    default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params_xy_yaw.yaml')
+    #default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params_xy_yaw.yaml')
+    default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params.yaml')
     default_bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_xy_then_yaw.xml')
     default_prior_map_path = os.path.join(pkg_nav2, 'pcd', 'hall_open3d_grounded.pcd')
 

@@ -1,7 +1,0 @@
-# command: ros2 run tf2_ros tf2_monitor odom base_footprint
-# started: 2026-05-24 16:51:45 +0800
-[INFO] [1779612706.312997184] [tf2_monitor_main]: Waiting for transform odom ->  base_footprint: Invalid frame ID "odom" passed to canTransform argument target_frame - frame does not exist
-[INFO] [1779612707.316218697] [tf2_monitor_main]: Waiting for transform odom ->  base_footprint: Invalid frame ID "odom" passed to canTransform argument target_frame - frame does not exist
-[INFO] [1779612708.320427311] [tf2_monitor_main]: Waiting for transform odom ->  base_footprint: Invalid frame ID "odom" passed to canTransform argument target_frame - frame does not exist
-[INFO] [1779612709.329825550] [tf2_monitor_main]: Waiting for transform odom ->  base_footprint: Could not find a connection between 'odom' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.
-[INFO] [1779612710.331125929] [tf2_monitor_main]: Waiting for transform odom ->  base_footprint: Could not find a connection between 'odom' and 'base_footprint' because they are not part of the same tree.Tf has two or more unconnected trees.

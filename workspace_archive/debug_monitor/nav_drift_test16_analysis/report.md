@@ -1,0 +1,5112 @@
+# nav_drift_test15 新定位节点导航分析
+
+- bag: `/home/ubuntu/nav_drift_test/nav_drift_test16`
+- log: `debug_output.txt`
+- map->odom 数值变化次数: 1496
+- map->odom >=5cm 或 >=0.03rad 的变化次数: 225
+
+## 点位汇总
+
+| 点位 | 时间段 | 耗时s | accepted | rejected | spin冻结拒绝 | TF变化 | TF大变化 | odom位移m | 判断 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 点位1 | 1780137543.433-1780137544.335 | 0.9 | 44 | 30 | 3 | 4 | 0 | 0.01 | 正常完成 |
+| 点位2 | 1780137557.000-1780137579.712 | 22.7 | 180 | 110 | 12 | 19 | 7 | 8.49 | SpinToPose保护冻结，非定位失败 |
+| 点位3 | 1780137621.660-1780137634.532 | 12.9 | 66 | 125 | 13 | 8 | 5 | 3.38 | SpinToPose保护冻结，非定位失败；存在较大TF修正 |
+| 点位4 | 1780137679.583-1780137691.424 | 11.8 | 78 | 105 | 11 | 7 | 0 | 0.23 | SpinToPose保护冻结，非定位失败 |
+| 点位5 | 1780137742.313-1780137754.138 | 11.8 | 58 | 125 | 13 | 6 | 1 | 1.72 | SpinToPose保护冻结，非定位失败 |
+| 点位6 | 1780137771.547-1780137783.575 | 12.0 | 91 | 95 | 10 | 9 | 4 | 3.66 | SpinToPose保护冻结，非定位失败 |
+| 点位7 | 1780137821.296-1780137834.617 | 13.3 | 86 | 110 | 11 | 8 | 4 | 3.94 | SpinToPose保护冻结，非定位失败 |
+| 点位8 | 1780137857.570-1780137878.237 | 20.7 | 159 | 110 | 12 | 17 | 10 | 7.42 | SpinToPose保护冻结，非定位失败 |
+| 点位9 | 1780137899.958-1780137917.317 | 17.4 | 115 | 120 | 12 | 12 | 8 | 5.46 | SpinToPose保护冻结，非定位失败 |
+| 点位10 | 1780137999.214-1780138015.324 | 16.1 | 136 | 90 | 10 | 13 | 8 | 0.28 | SpinToPose保护冻结，非定位失败 |
+| 点位11 | 1780138060.454-1780138071.368 | 10.9 | 47 | 125 | 13 | 5 | 4 | 1.29 | SpinToPose保护冻结，非定位失败 |
+| 点位12 | 1780138073.388-1780138093.439 | 20.1 | 137 | 120 | 13 | 14 | 9 | 3.40 | SpinToPose保护冻结，非定位失败 |
+| 点位13 | 1780138095.459-1780138109.116 | 13.7 | 112 | 79 | 8 | 12 | 8 | 4.15 | SpinToPose保护冻结，非定位失败；存在较大TF修正 |
+| 点位14 | 1780138228.777-1780138238.256 | 9.5 | 55 | 95 | 10 | 7 | 7 | 0.38 | SpinToPose保护冻结，非定位失败；存在较大TF修正 |
+| 点位15 | 1780138308.416-1780138333.384 | 25.0 | 190 | 115 | 12 | 20 | 12 | 0.98 | SpinToPose保护冻结，非定位失败；存在较大TF修正 |
+| 点位16 | 1780138382.312-1780138397.241 | 14.9 | 84 | 120 | 13 | 9 | 6 | 1.19 | SpinToPose保护冻结，非定位失败；存在较大TF修正 |
+| 点位17 | 1780138472.640-1780138498.327 | 25.7 | 196 | 105 | 11 | 22 | 17 | 0.49 | SpinToPose保护冻结，非定位失败；存在较大TF修正 |
+| 点位18 | 1780138564.153-1780138578.472 | 14.3 | 77 | 115 | 12 | 10 | 10 | 1.31 | SpinToPose保护冻结，非定位失败；存在较大TF修正 |
+| 点位19 | 1780138620.976-1780138641.722 | 20.7 | 145 | 120 | 12 | 17 | 11 | 0.10 | 正常完成；存在较大TF修正 |
+| 点位20 | 1780138687.931-1780138703.283 | 15.4 | 107 | 100 | 10 | 12 | 11 | 0.40 | SpinToPose保护冻结，非定位失败；存在较大TF修正 |
+| 点位21 | 1780138705.299-1780138728.721 | 23.4 | 168 | 121 | 12 | 18 | 17 | 3.33 | SpinToPose保护冻结，非定位失败；存在较大TF修正 |
+| 点位22 | 1780138730.744-1780138767.536 | 36.8 | 383 | 42 | 4 | 38 | 6 | 1.52 | 失败；SpinToPose保护冻结，非定位失败；存在较大TF修正 |
+
+## 每个点位事件
+
+### 点位1
+
+- 导航: 1780137543.433 -> 1780137544.335, 耗时 0.9s, odom 位移 0.01m, odom yaw 0.02rad
+- bridge: ACCEPTED 44 次, REJECTED 30 次, PENDING/SPIN_GUARD 19 次；spin 冻结拒绝 3 次
+- TF: map->odom 数值变化 4 次，大变化 0 次
+- 接受的定位修正:
+- 1780137542.950: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.131 yaw=-0.207
+- 1780137543.048: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.131 yaw=-0.207
+- 1780137543.149: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.131 yaw=-0.207
+- 1780137543.253: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.131 yaw=-0.207
+- 1780137543.351: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.131 yaw=-0.207
+- 1780137543.449: ACCEPTED small_correction dx=0.004 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.206
+- 1780137543.547: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.206
+- 1780137543.650: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.206
+- 1780137543.752: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.206
+- 1780137543.850: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.206
+- 1780137546.953: ACCEPTED small_correction dx=0.012 yaw=0.001 map_odom_xy_norm=0.130 yaw=-0.208
+- 1780137547.063: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.130 yaw=-0.208
+- 1780137547.149: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.130 yaw=-0.208
+- 1780137547.249: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.130 yaw=-0.208
+- 1780137547.352: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.130 yaw=-0.208
+- 1780137547.448: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.130 yaw=-0.208
+- 1780137547.549: ACCEPTED small_correction dx=0.008 yaw=0.002 map_odom_xy_norm=0.132 yaw=-0.209
+- 1780137547.648: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.132 yaw=-0.209
+- 1780137547.746: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.132 yaw=-0.209
+- 1780137547.851: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.132 yaw=-0.209
+- 1780137547.948: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.132 yaw=-0.209
+- 1780137548.049: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.132 yaw=-0.209
+- 1780137548.149: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.132 yaw=-0.209
+- 1780137548.249: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.132 yaw=-0.209
+- 1780137548.369: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.132 yaw=-0.209
+- 1780137548.474: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.132 yaw=-0.209
+- 1780137548.553: ACCEPTED small_correction dx=0.007 yaw=0.001 map_odom_xy_norm=0.135 yaw=-0.208
+- 1780137548.651: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.135 yaw=-0.208
+- 1780137548.762: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.135 yaw=-0.208
+- 1780137548.853: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.135 yaw=-0.208
+- 1780137548.951: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.135 yaw=-0.208
+- 1780137549.050: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.135 yaw=-0.208
+- 1780137549.150: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.135 yaw=-0.208
+- 1780137549.250: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.135 yaw=-0.208
+- 1780137549.349: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.135 yaw=-0.208
+- 1780137549.453: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.135 yaw=-0.208
+- 1780137549.547: ACCEPTED small_correction dx=0.014 yaw=0.002 map_odom_xy_norm=0.147 yaw=-0.207
+- 1780137549.648: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.147 yaw=-0.207
+- 1780137549.750: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.147 yaw=-0.207
+- 1780137549.850: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.147 yaw=-0.207
+- 1780137549.949: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.147 yaw=-0.207
+- 1780137550.052: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.147 yaw=-0.207
+- 1780137550.152: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.147 yaw=-0.207
+- 1780137550.249: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.147 yaw=-0.207
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780137542.948: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137543.248: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137543.912: SPIN_GUARD entered source=navigation_status
+- 1780137543.917: SPIN_GUARD settling sec=3.00
+- 1780137544.448: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137544.648: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780137544.749: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137544.956: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137545.948: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137546.950: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137546.952: SPIN_GUARD settled
+- 1780137547.350: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137547.448: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137547.648: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137548.472: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137548.552: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137549.750: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780137549.948: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137550.152: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 未检测到 >=5cm 或 >=0.03rad 的 map->odom 大变化。
+
+### 点位2
+
+- 导航: 1780137557.000 -> 1780137579.712, 耗时 22.7s, odom 位移 8.49m, odom yaw 3.11rad
+- bridge: ACCEPTED 180 次, REJECTED 110 次, PENDING/SPIN_GUARD 84 次；spin 冻结拒绝 12 次
+- TF: map->odom 数值变化 19 次，大变化 7 次
+- 接受的定位修正:
+- 1780137556.558: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.143 yaw=-0.208
+- 1780137556.651: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.143 yaw=-0.208
+- 1780137556.748: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.143 yaw=-0.208
+- 1780137556.848: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.143 yaw=-0.208
+- 1780137556.951: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.143 yaw=-0.208
+- 1780137557.052: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.143 yaw=-0.208
+- 1780137557.150: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.143 yaw=-0.208
+- 1780137557.262: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.143 yaw=-0.208
+- 1780137557.357: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.143 yaw=-0.208
+- 1780137562.950: ACCEPTED small_correction dx=0.102 yaw=0.011 map_odom_xy_norm=0.177 yaw=-0.219
+- 1780137563.062: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.177 yaw=-0.219
+- 1780137563.152: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.177 yaw=-0.219
+- 1780137563.248: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.177 yaw=-0.219
+- 1780137563.349: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.177 yaw=-0.219
+- 1780137563.455: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.177 yaw=-0.219
+- 1780137563.552: ACCEPTED small_correction dx=0.006 yaw=0.002 map_odom_xy_norm=0.181 yaw=-0.221
+- 1780137563.650: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.221
+- 1780137563.749: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.221
+- 1780137563.849: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.221
+- 1780137563.947: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.221
+- 1780137564.049: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.221
+- 1780137564.150: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.221
+- 1780137564.253: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.221
+- 1780137564.350: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.221
+- 1780137564.460: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.221
+- 1780137564.551: ACCEPTED small_correction dx=0.013 yaw=0.001 map_odom_xy_norm=0.168 yaw=-0.220
+- 1780137564.649: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.220
+- 1780137564.754: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.220
+- 1780137564.863: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.220
+- 1780137564.952: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.220
+- 1780137565.052: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.220
+- 1780137565.158: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.220
+- 1780137565.254: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.220
+- 1780137565.349: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.220
+- 1780137565.449: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.220
+- 1780137565.546: ACCEPTED small_correction dx=0.027 yaw=0.001 map_odom_xy_norm=0.194 yaw=-0.221
+- 1780137565.662: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.194 yaw=-0.221
+- 1780137565.747: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.194 yaw=-0.221
+- 1780137565.848: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.194 yaw=-0.221
+- 1780137565.948: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.194 yaw=-0.221
+- 1780137566.048: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.194 yaw=-0.221
+- 1780137566.151: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.194 yaw=-0.221
+- 1780137566.251: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.194 yaw=-0.221
+- 1780137566.353: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.194 yaw=-0.221
+- 1780137566.462: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.194 yaw=-0.221
+- 1780137566.549: ACCEPTED small_correction dx=0.013 yaw=0.003 map_odom_xy_norm=0.182 yaw=-0.218
+- 1780137566.666: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.182 yaw=-0.218
+- 1780137566.756: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.182 yaw=-0.218
+- 1780137566.853: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.182 yaw=-0.218
+- 1780137566.949: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.182 yaw=-0.218
+- 1780137567.050: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.182 yaw=-0.218
+- 1780137567.150: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.182 yaw=-0.218
+- 1780137567.260: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.182 yaw=-0.218
+- 1780137567.351: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.182 yaw=-0.218
+- 1780137567.457: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.182 yaw=-0.218
+- 1780137567.548: ACCEPTED small_correction dx=0.014 yaw=0.000 map_odom_xy_norm=0.170 yaw=-0.217
+- 1780137567.649: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.170 yaw=-0.217
+- 1780137567.755: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.170 yaw=-0.217
+- 1780137567.853: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.170 yaw=-0.217
+- 1780137567.949: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.170 yaw=-0.217
+- 1780137568.049: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.170 yaw=-0.217
+- 1780137568.151: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.170 yaw=-0.217
+- 1780137568.253: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.170 yaw=-0.217
+- 1780137568.350: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.170 yaw=-0.217
+- 1780137568.454: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.170 yaw=-0.217
+- 1780137568.549: ACCEPTED small_correction dx=0.037 yaw=0.006 map_odom_xy_norm=0.134 yaw=-0.212
+- 1780137568.653: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.212
+- 1780137568.761: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.212
+- 1780137568.858: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.212
+- 1780137568.950: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.212
+- 1780137569.053: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.212
+- 1780137569.149: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.212
+- 1780137569.259: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.212
+- 1780137569.348: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.212
+- 1780137569.463: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.212
+- 1780137569.552: ACCEPTED small_correction dx=0.051 yaw=0.005 map_odom_xy_norm=0.083 yaw=-0.207
+- 1780137569.651: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.083 yaw=-0.207
+- 1780137569.746: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.083 yaw=-0.207
+- 1780137569.847: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.083 yaw=-0.207
+- 1780137569.958: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.083 yaw=-0.207
+- 1780137570.048: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.083 yaw=-0.207
+- 1780137570.147: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.083 yaw=-0.207
+- 1780137570.252: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.083 yaw=-0.207
+- 1780137570.353: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.083 yaw=-0.207
+- 1780137570.451: ACCEPTED small_correction dx=0.049 yaw=0.004 map_odom_xy_norm=0.044 yaw=-0.203
+- 1780137570.546: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.044 yaw=-0.203
+- 1780137570.649: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.044 yaw=-0.203
+- 1780137570.750: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.044 yaw=-0.203
+- 1780137570.847: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.044 yaw=-0.203
+- 1780137570.957: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.044 yaw=-0.203
+- 1780137571.047: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.044 yaw=-0.203
+- 1780137571.152: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.044 yaw=-0.203
+- 1780137571.251: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.044 yaw=-0.203
+- 1780137571.350: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.044 yaw=-0.203
+- 1780137571.459: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.044 yaw=-0.203
+- 1780137571.558: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.044 yaw=-0.203
+- 1780137571.653: ACCEPTED small_correction dx=0.068 yaw=0.004 map_odom_xy_norm=0.041 yaw=-0.199
+- 1780137571.751: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.041 yaw=-0.199
+- 1780137571.848: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.041 yaw=-0.199
+- 1780137571.951: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.041 yaw=-0.199
+- 1780137572.056: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.041 yaw=-0.199
+- 1780137572.147: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.041 yaw=-0.199
+- 1780137572.247: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.041 yaw=-0.199
+- 1780137572.353: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.041 yaw=-0.199
+- 1780137572.457: ACCEPTED small_correction dx=0.006 yaw=0.001 map_odom_xy_norm=0.042 yaw=-0.200
+- 1780137572.552: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.042 yaw=-0.200
+- 1780137572.646: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.042 yaw=-0.200
+- 1780137572.752: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.042 yaw=-0.200
+- 1780137572.846: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.042 yaw=-0.200
+- 1780137572.946: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.042 yaw=-0.200
+- 1780137573.054: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.042 yaw=-0.200
+- 1780137573.148: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.042 yaw=-0.200
+- 1780137573.254: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.042 yaw=-0.200
+- 1780137573.347: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.042 yaw=-0.200
+- 1780137573.455: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.042 yaw=-0.200
+- 1780137573.547: ACCEPTED small_correction dx=0.116 yaw=0.013 map_odom_xy_norm=0.154 yaw=-0.186
+- 1780137573.649: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.154 yaw=-0.186
+- 1780137573.750: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.154 yaw=-0.186
+- 1780137573.857: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.154 yaw=-0.186
+- 1780137573.951: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.154 yaw=-0.186
+- 1780137574.050: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.154 yaw=-0.186
+- 1780137574.152: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.154 yaw=-0.186
+- 1780137574.253: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.154 yaw=-0.186
+- 1780137574.346: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.154 yaw=-0.186
+- 1780137574.461: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.154 yaw=-0.186
+- 1780137574.548: ACCEPTED small_correction dx=0.035 yaw=0.001 map_odom_xy_norm=0.134 yaw=-0.187
+- 1780137574.651: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.187
+- 1780137574.749: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.187
+- 1780137574.853: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.187
+- 1780137574.949: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.187
+- 1780137575.063: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.187
+- 1780137575.157: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.187
+- 1780137575.247: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.187
+- 1780137575.352: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.187
+- 1780137575.455: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.187
+- 1780137575.558: ACCEPTED small_correction dx=0.056 yaw=0.008 map_odom_xy_norm=0.190 yaw=-0.179
+- 1780137575.655: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.179
+- 1780137575.756: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.179
+- 1780137575.851: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.179
+- 1780137575.955: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.179
+- 1780137576.056: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.179
+- 1780137576.162: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.179
+- 1780137576.262: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.179
+- 1780137576.353: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.179
+- 1780137576.449: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.179
+- 1780137576.546: ACCEPTED small_correction dx=0.169 yaw=0.026 map_odom_xy_norm=0.358 yaw=-0.154
+- 1780137576.646: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.358 yaw=-0.154
+- 1780137576.749: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.358 yaw=-0.154
+- 1780137576.853: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.358 yaw=-0.154
+- 1780137582.651: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.056 yaw=-0.207
+- 1780137582.765: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.207
+- 1780137582.851: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.207
+- 1780137582.947: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.207
+- 1780137583.047: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.207
+- 1780137583.148: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.207
+- 1780137583.253: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.207
+- 1780137583.352: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.207
+- 1780137583.450: ACCEPTED small_correction dx=0.005 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.206
+- 1780137583.549: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.206
+- 1780137583.664: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.206
+- 1780137583.752: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.206
+- 1780137583.847: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.206
+- 1780137583.947: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.206
+- 1780137584.049: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.206
+- 1780137584.163: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.206
+- 1780137584.260: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.206
+- 1780137584.352: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.206
+- 1780137584.452: ACCEPTED small_correction dx=0.012 yaw=0.001 map_odom_xy_norm=0.060 yaw=-0.208
+- 1780137584.549: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.208
+- 1780137584.649: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.208
+- 1780137584.750: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.208
+- 1780137584.850: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.208
+- 1780137584.949: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.208
+- 1780137585.050: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.208
+- 1780137585.147: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.208
+- 1780137585.251: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.208
+- 1780137585.353: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.208
+- 1780137585.452: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.208
+- 1780137585.549: ACCEPTED small_correction dx=0.006 yaw=0.000 map_odom_xy_norm=0.063 yaw=-0.207
+- 1780137585.649: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.063 yaw=-0.207
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780137556.557: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780137556.651: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780137556.950: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137557.150: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137557.410: SPIN_GUARD entered source=navigation_status
+- 1780137557.414: SPIN_GUARD settling sec=3.00
+- 1780137557.748: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137557.919: SPIN_GUARD settling sec=3.00
+- 1780137558.416: SPIN_GUARD settling sec=3.00
+- 1780137558.450: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137558.852: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137558.925: SPIN_GUARD settling sec=3.00
+- 1780137558.948: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137559.417: SPIN_GUARD settling sec=3.00
+- 1780137559.928: SPIN_GUARD settling sec=3.00
+- 1780137559.950: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137560.048: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137560.152: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137560.357: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137560.451: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137561.648: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137561.949: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137562.152: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137562.452: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780137562.652: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780137562.950: SPIN_GUARD settled
+- 1780137563.248: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137563.455: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780137563.552: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137564.048: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137564.350: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137565.747: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780137566.666: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137567.150: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137567.547: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780137567.649: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780137568.858: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137569.259: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137569.347: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137569.463: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137570.450: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780137570.546: PENDING wait_odom_cache gap=0.103s max=0.200s
+- 1780137570.747: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137571.350: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137571.557: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780137572.551: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780137573.347: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137573.453: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137573.857: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137573.950: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137574.050: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137574.650: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137574.748: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780137574.852: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137576.352: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137576.546: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137576.646: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780137576.910: SPIN_GUARD entered source=navigation_status
+- 1780137576.912: SPIN_GUARD settling sec=3.00
+- 1780137577.416: SPIN_GUARD settling sec=3.00
+- 1780137577.648: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780137577.752: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137577.923: SPIN_GUARD settling sec=3.00
+- 1780137578.047: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137578.413: SPIN_GUARD settling sec=3.00
+- 1780137578.465: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137578.925: SPIN_GUARD settling sec=3.00
+- 1780137579.050: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137579.246: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137579.418: SPIN_GUARD settling sec=3.00
+- 1780137580.149: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780137580.954: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137581.251: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137581.349: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137581.865: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137582.453: SPIN_GUARD settled
+- 1780137582.453: PENDING large_correction count=1 dx=0.372 yaw=0.051
+- 1780137582.550: PENDING large_correction count=2/3
+- 1780137583.549: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780137584.163: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780137584.548: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137585.049: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137585.146: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137585.549: PENDING wait_odom_cache gap=0.107s max=0.200s
+- map->odom 大变化:
+- 1780137562.967: dx=0.102m dyaw=0.011rad, (0.119,0.079,-0.208) -> (0.177,-0.004,-0.219)
+- 1780137569.566: dx=0.051m dyaw=0.005rad, (0.134,-0.012,-0.212) -> (0.083,-0.001,-0.207)
+- 1780137571.667: dx=0.068m dyaw=0.004rad, (0.039,0.020,-0.203) -> (-0.028,0.030,-0.199)
+- 1780137573.566: dx=0.116m dyaw=0.013rad, (-0.024,0.034,-0.200) -> (-0.129,0.084,-0.186)
+- 1780137575.566: dx=0.056m dyaw=0.008rad, (-0.125,0.050,-0.187) -> (-0.175,0.074,-0.179)
+- 1780137576.566: dx=0.169m dyaw=0.026rad, (-0.175,0.074,-0.179) -> (-0.339,0.116,-0.154)
+- 1780137582.667: dx=0.388m dyaw=0.053rad, (-0.339,0.116,-0.154) -> (0.042,0.037,-0.207)
+
+### 点位3
+
+- 导航: 1780137621.660 -> 1780137634.532, 耗时 12.9s, odom 位移 3.38m, odom yaw 0.00rad
+- bridge: ACCEPTED 66 次, REJECTED 125 次, PENDING/SPIN_GUARD 66 次；spin 冻结拒绝 13 次
+- TF: map->odom 数值变化 8 次，大变化 5 次
+- 接受的定位修正:
+- 1780137621.248: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.066 yaw=-0.206
+- 1780137621.348: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.066 yaw=-0.206
+- 1780137621.453: ACCEPTED small_correction dx=0.005 yaw=0.001 map_odom_xy_norm=0.067 yaw=-0.207
+- 1780137621.552: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.067 yaw=-0.207
+- 1780137621.651: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.067 yaw=-0.207
+- 1780137621.756: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.067 yaw=-0.207
+- 1780137621.854: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.067 yaw=-0.207
+- 1780137627.947: ACCEPTED small_correction dx=0.096 yaw=0.014 map_odom_xy_norm=0.056 yaw=-0.193
+- 1780137628.055: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.193
+- 1780137628.157: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.193
+- 1780137628.248: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.193
+- 1780137628.349: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.193
+- 1780137628.458: ACCEPTED small_correction dx=0.162 yaw=0.018 map_odom_xy_norm=0.210 yaw=-0.175
+- 1780137628.545: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.210 yaw=-0.175
+- 1780137628.649: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.210 yaw=-0.175
+- 1780137628.748: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.210 yaw=-0.175
+- 1780137628.850: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.210 yaw=-0.175
+- 1780137628.949: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.210 yaw=-0.175
+- 1780137629.047: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.210 yaw=-0.175
+- 1780137629.154: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.210 yaw=-0.175
+- 1780137629.250: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.210 yaw=-0.175
+- 1780137629.346: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.210 yaw=-0.175
+- 1780137629.455: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.210 yaw=-0.175
+- 1780137629.555: ACCEPTED small_correction dx=0.192 yaw=0.025 map_odom_xy_norm=0.402 yaw=-0.150
+- 1780137629.645: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.402 yaw=-0.150
+- 1780137629.751: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.402 yaw=-0.150
+- 1780137629.848: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.402 yaw=-0.150
+- 1780137629.951: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.402 yaw=-0.150
+- 1780137630.047: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.402 yaw=-0.150
+- 1780137630.145: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.402 yaw=-0.150
+- 1780137630.253: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.402 yaw=-0.150
+- 1780137630.357: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.402 yaw=-0.150
+- 1780137630.446: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.402 yaw=-0.150
+- 1780137630.546: ACCEPTED small_correction dx=0.097 yaw=0.017 map_odom_xy_norm=0.496 yaw=-0.133
+- 1780137630.647: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.496 yaw=-0.133
+- 1780137630.759: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.496 yaw=-0.133
+- 1780137630.846: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.496 yaw=-0.133
+- 1780137637.648: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.056 yaw=-0.198
+- 1780137637.751: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.198
+- 1780137637.850: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.198
+- 1780137637.949: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.198
+- 1780137638.050: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.198
+- 1780137638.161: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.198
+- 1780137638.260: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.198
+- 1780137638.355: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.198
+- 1780137638.449: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.056 yaw=-0.198
+- 1780137638.548: ACCEPTED small_correction dx=0.037 yaw=0.002 map_odom_xy_norm=0.092 yaw=-0.201
+- 1780137638.651: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.092 yaw=-0.201
+- 1780137638.750: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.092 yaw=-0.201
+- 1780137638.849: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.092 yaw=-0.201
+- 1780137638.949: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.092 yaw=-0.201
+- 1780137639.050: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.092 yaw=-0.201
+- 1780137639.153: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.092 yaw=-0.201
+- 1780137639.249: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.092 yaw=-0.201
+- 1780137639.349: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.092 yaw=-0.201
+- 1780137639.450: ACCEPTED small_correction dx=0.016 yaw=0.002 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137639.561: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137639.652: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137639.750: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137639.850: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137639.950: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137640.048: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137640.151: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137640.251: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137640.351: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137640.459: ACCEPTED small_correction dx=0.006 yaw=0.001 map_odom_xy_norm=0.071 yaw=-0.201
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780137621.348: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137621.452: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780137621.854: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137621.919: SPIN_GUARD entered source=navigation_status
+- 1780137621.923: SPIN_GUARD settling sec=3.00
+- 1780137621.950: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780137622.421: SPIN_GUARD settling sec=3.00
+- 1780137622.923: SPIN_GUARD settling sec=3.00
+- 1780137623.253: PENDING wait_odom_cache gap=0.103s max=0.200s
+- 1780137623.348: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780137623.414: SPIN_GUARD settling sec=3.00
+- 1780137623.648: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780137623.858: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137623.920: SPIN_GUARD settling sec=3.00
+- 1780137623.950: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137624.413: SPIN_GUARD settling sec=3.00
+- 1780137624.645: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137624.848: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137624.912: SPIN_GUARD settling sec=3.00
+- 1780137624.946: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137625.054: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137625.147: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137625.757: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780137625.948: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137626.648: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137627.247: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137627.345: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137627.557: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137627.947: SPIN_GUARD settled
+- 1780137628.545: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137628.850: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137629.453: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137629.751: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137629.948: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137630.754: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137630.845: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137630.910: SPIN_GUARD entered source=navigation_status
+- 1780137630.915: SPIN_GUARD settling sec=3.00
+- 1780137630.947: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137631.054: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137631.419: SPIN_GUARD settling sec=3.00
+- 1780137631.750: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137631.849: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137631.917: SPIN_GUARD settling sec=3.00
+- 1780137632.152: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137632.419: SPIN_GUARD settling sec=3.00
+- 1780137632.450: PENDING wait_odom_cache gap=0.094s max=0.200s
+- 1780137632.921: SPIN_GUARD settling sec=3.00
+- 1780137633.356: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137633.431: SPIN_GUARD settling sec=3.00
+- 1780137633.647: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780137633.746: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137633.912: SPIN_GUARD settling sec=3.00
+- 1780137634.419: SPIN_GUARD settling sec=3.00
+- 1780137634.851: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137634.947: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137635.050: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137635.355: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137636.148: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780137637.451: SPIN_GUARD settled
+- 1780137637.451: PENDING large_correction count=1 dx=0.527 yaw=0.065
+- 1780137637.550: PENDING large_correction count=2/3
+- 1780137638.650: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137638.748: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137638.849: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137640.249: PENDING wait_odom_cache gap=0.100s max=0.200s
+- map->odom 大变化:
+- 1780137627.972: dx=0.096m dyaw=0.014rad, (0.056,0.037,-0.207) -> (-0.040,0.039,-0.193)
+- 1780137628.466: dx=0.162m dyaw=0.018rad, (-0.040,0.039,-0.193) -> (-0.199,0.066,-0.175)
+- 1780137629.567: dx=0.192m dyaw=0.025rad, (-0.199,0.066,-0.175) -> (-0.375,0.143,-0.150)
+- 1780137630.566: dx=0.097m dyaw=0.017rad, (-0.375,0.143,-0.150) -> (-0.471,0.154,-0.133)
+- 1780137637.666: dx=0.527m dyaw=0.065rad, (-0.471,0.154,-0.133) -> (0.042,0.036,-0.198)
+
+### 点位4
+
+- 导航: 1780137679.583 -> 1780137691.424, 耗时 11.8s, odom 位移 0.23m, odom yaw 3.03rad
+- bridge: ACCEPTED 78 次, REJECTED 105 次, PENDING/SPIN_GUARD 60 次；spin 冻结拒绝 11 次
+- TF: map->odom 数值变化 7 次，大变化 0 次
+- 接受的定位修正:
+- 1780137679.149: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.058 yaw=-0.201
+- 1780137679.252: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.058 yaw=-0.201
+- 1780137679.350: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.058 yaw=-0.201
+- 1780137679.453: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.058 yaw=-0.201
+- 1780137679.550: ACCEPTED small_correction dx=0.009 yaw=0.002 map_odom_xy_norm=0.066 yaw=-0.199
+- 1780137679.649: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.066 yaw=-0.199
+- 1780137679.746: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.066 yaw=-0.199
+- 1780137679.851: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.066 yaw=-0.199
+- 1780137684.450: ACCEPTED small_correction dx=0.030 yaw=0.003 map_odom_xy_norm=0.037 yaw=-0.197
+- 1780137684.551: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.037 yaw=-0.197
+- 1780137684.652: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.037 yaw=-0.197
+- 1780137684.749: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.037 yaw=-0.197
+- 1780137684.855: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.037 yaw=-0.197
+- 1780137684.955: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.037 yaw=-0.197
+- 1780137685.049: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.037 yaw=-0.197
+- 1780137685.156: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.037 yaw=-0.197
+- 1780137685.259: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.037 yaw=-0.197
+- 1780137685.361: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.037 yaw=-0.197
+- 1780137685.460: ACCEPTED small_correction dx=0.002 yaw=0.002 map_odom_xy_norm=0.039 yaw=-0.195
+- 1780137685.549: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.039 yaw=-0.195
+- 1780137685.650: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.039 yaw=-0.195
+- 1780137685.753: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.039 yaw=-0.195
+- 1780137685.847: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.039 yaw=-0.195
+- 1780137685.952: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.039 yaw=-0.195
+- 1780137686.048: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.039 yaw=-0.195
+- 1780137686.168: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.039 yaw=-0.195
+- 1780137686.252: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.039 yaw=-0.195
+- 1780137686.349: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.039 yaw=-0.195
+- 1780137686.460: ACCEPTED small_correction dx=0.027 yaw=0.001 map_odom_xy_norm=0.064 yaw=-0.196
+- 1780137686.548: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.196
+- 1780137686.650: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.196
+- 1780137686.746: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.196
+- 1780137686.850: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.196
+- 1780137686.950: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.196
+- 1780137687.046: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.196
+- 1780137687.148: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.196
+- 1780137687.250: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.196
+- 1780137687.354: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.196
+- 1780137687.458: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.196
+- 1780137687.554: ACCEPTED small_correction dx=0.007 yaw=0.001 map_odom_xy_norm=0.059 yaw=-0.195
+- 1780137687.651: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.195
+- 1780137687.754: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.195
+- 1780137687.848: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.195
+- 1780137687.950: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.195
+- 1780137688.047: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.195
+- 1780137688.156: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.195
+- 1780137688.265: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.195
+- 1780137688.358: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.195
+- 1780137694.450: ACCEPTED small_correction dx=0.049 yaw=0.003 map_odom_xy_norm=0.071 yaw=-0.198
+- 1780137694.551: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.071 yaw=-0.198
+- 1780137694.649: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.071 yaw=-0.198
+- 1780137694.764: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.071 yaw=-0.198
+- 1780137694.865: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.071 yaw=-0.198
+- 1780137694.951: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.071 yaw=-0.198
+- 1780137695.051: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.071 yaw=-0.198
+- 1780137695.151: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.071 yaw=-0.198
+- 1780137695.251: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.071 yaw=-0.198
+- 1780137695.353: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.071 yaw=-0.198
+- 1780137695.449: ACCEPTED small_correction dx=0.008 yaw=0.001 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137695.549: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137695.649: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137695.753: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137695.856: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137695.955: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137696.050: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137696.151: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137696.254: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137696.349: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.199
+- 1780137696.457: ACCEPTED small_correction dx=0.015 yaw=0.002 map_odom_xy_norm=0.066 yaw=-0.197
+- 1780137696.551: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.066 yaw=-0.197
+- 1780137696.652: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.066 yaw=-0.197
+- 1780137696.760: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.066 yaw=-0.197
+- 1780137696.849: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.066 yaw=-0.197
+- 1780137696.954: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.066 yaw=-0.197
+- 1780137697.048: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.066 yaw=-0.197
+- 1780137697.165: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.066 yaw=-0.197
+- 1780137697.257: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.066 yaw=-0.197
+- 1780137697.381: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.066 yaw=-0.197
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780137679.746: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137679.851: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137679.912: SPIN_GUARD entered source=navigation_status
+- 1780137679.918: SPIN_GUARD settling sec=3.00
+- 1780137680.165: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780137680.420: SPIN_GUARD settling sec=3.00
+- 1780137680.460: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137680.550: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137680.753: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137680.917: SPIN_GUARD settling sec=3.00
+- 1780137680.953: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137681.262: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137681.365: PENDING wait_odom_cache gap=0.107s max=0.200s
+- 1780137681.420: SPIN_GUARD settling sec=3.00
+- 1780137681.949: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137682.250: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137682.457: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137682.551: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780137682.649: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137682.854: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780137683.055: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137683.150: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137683.750: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137683.966: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137684.253: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137684.450: SPIN_GUARD settled
+- 1780137685.155: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137685.258: PENDING wait_odom_cache gap=0.103s max=0.200s
+- 1780137686.048: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137686.168: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137686.849: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780137687.750: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137688.154: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137688.416: SPIN_GUARD entered source=navigation_status
+- 1780137688.425: SPIN_GUARD settling sec=3.00
+- 1780137688.552: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137688.858: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780137688.911: SPIN_GUARD settling sec=3.00
+- 1780137688.950: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137689.045: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137689.155: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137689.411: SPIN_GUARD settling sec=3.00
+- 1780137689.550: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137689.910: SPIN_GUARD settling sec=3.00
+- 1780137690.415: SPIN_GUARD settling sec=3.00
+- 1780137690.911: SPIN_GUARD settling sec=3.00
+- 1780137691.147: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137691.420: SPIN_GUARD settling sec=3.00
+- 1780137692.365: PENDING wait_odom_cache gap=0.103s max=0.200s
+- 1780137693.366: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137693.555: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137694.250: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137694.449: SPIN_GUARD settled
+- 1780137694.649: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137694.764: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137694.864: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137695.353: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137695.649: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137696.150: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137696.551: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 未检测到 >=5cm 或 >=0.03rad 的 map->odom 大变化。
+
+### 点位5
+
+- 导航: 1780137742.313 -> 1780137754.138, 耗时 11.8s, odom 位移 1.72m, odom yaw 0.01rad
+- bridge: ACCEPTED 58 次, REJECTED 125 次, PENDING/SPIN_GUARD 73 次；spin 冻结拒绝 13 次
+- TF: map->odom 数值变化 6 次，大变化 1 次
+- 接受的定位修正:
+- 1780137741.848: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.196
+- 1780137741.957: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.196
+- 1780137742.057: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.196
+- 1780137742.158: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.196
+- 1780137742.263: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.196
+- 1780137742.363: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.196
+- 1780137747.965: ACCEPTED small_correction dx=0.044 yaw=0.001 map_odom_xy_norm=0.099 yaw=-0.197
+- 1780137748.061: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.099 yaw=-0.197
+- 1780137748.166: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.099 yaw=-0.197
+- 1780137748.263: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.099 yaw=-0.197
+- 1780137748.350: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.099 yaw=-0.197
+- 1780137748.458: ACCEPTED small_correction dx=0.041 yaw=0.005 map_odom_xy_norm=0.125 yaw=-0.192
+- 1780137748.557: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.125 yaw=-0.192
+- 1780137748.652: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.125 yaw=-0.192
+- 1780137748.755: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.125 yaw=-0.192
+- 1780137748.853: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.125 yaw=-0.192
+- 1780137748.964: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.125 yaw=-0.192
+- 1780137749.064: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.125 yaw=-0.192
+- 1780137749.170: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.125 yaw=-0.192
+- 1780137749.256: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.125 yaw=-0.192
+- 1780137749.370: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.125 yaw=-0.192
+- 1780137749.482: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.125 yaw=-0.192
+- 1780137749.567: ACCEPTED small_correction dx=0.022 yaw=0.004 map_odom_xy_norm=0.126 yaw=-0.188
+- 1780137749.660: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.126 yaw=-0.188
+- 1780137749.753: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.126 yaw=-0.188
+- 1780137749.852: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.126 yaw=-0.188
+- 1780137756.949: ACCEPTED small_correction dx=0.142 yaw=0.009 map_odom_xy_norm=0.160 yaw=-0.179
+- 1780137757.059: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.160 yaw=-0.179
+- 1780137757.150: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.160 yaw=-0.179
+- 1780137757.267: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.160 yaw=-0.179
+- 1780137757.360: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.160 yaw=-0.179
+- 1780137757.450: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.160 yaw=-0.179
+- 1780137757.551: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.160 yaw=-0.179
+- 1780137757.653: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.160 yaw=-0.179
+- 1780137757.767: ACCEPTED small_correction dx=0.039 yaw=0.004 map_odom_xy_norm=0.196 yaw=-0.183
+- 1780137757.856: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.196 yaw=-0.183
+- 1780137757.957: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.196 yaw=-0.183
+- 1780137758.049: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.196 yaw=-0.183
+- 1780137758.156: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.196 yaw=-0.183
+- 1780137758.266: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.196 yaw=-0.183
+- 1780137758.363: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.196 yaw=-0.183
+- 1780137758.473: ACCEPTED small_correction dx=0.046 yaw=0.003 map_odom_xy_norm=0.157 yaw=-0.186
+- 1780137758.566: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.157 yaw=-0.186
+- 1780137758.664: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.157 yaw=-0.186
+- 1780137758.762: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.157 yaw=-0.186
+- 1780137758.864: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.157 yaw=-0.186
+- 1780137758.958: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.157 yaw=-0.186
+- 1780137759.065: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.157 yaw=-0.186
+- 1780137759.191: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.157 yaw=-0.186
+- 1780137759.281: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.157 yaw=-0.186
+- 1780137759.375: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.157 yaw=-0.186
+- 1780137759.472: ACCEPTED small_correction dx=0.014 yaw=0.001 map_odom_xy_norm=0.168 yaw=-0.187
+- 1780137759.553: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.187
+- 1780137759.660: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.187
+- 1780137759.754: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.187
+- 1780137759.863: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.187
+- 1780137759.960: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.187
+- 1780137760.062: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.187
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780137741.848: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780137741.957: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137742.361: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137742.411: SPIN_GUARD entered source=navigation_status
+- 1780137742.416: SPIN_GUARD settling sec=3.00
+- 1780137742.461: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137742.915: SPIN_GUARD settling sec=3.00
+- 1780137742.978: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137743.172: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137743.416: SPIN_GUARD settling sec=3.00
+- 1780137743.464: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137743.918: SPIN_GUARD settling sec=3.00
+- 1780137743.957: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137744.420: SPIN_GUARD settling sec=3.00
+- 1780137744.558: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780137744.939: SPIN_GUARD settling sec=3.00
+- 1780137745.171: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137745.366: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137746.158: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137746.279: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137746.382: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137746.570: PENDING wait_odom_cache gap=0.106s max=0.200s
+- 1780137746.950: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137747.476: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137747.648: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137747.872: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137747.965: SPIN_GUARD settled
+- 1780137748.162: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137748.262: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137748.348: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137748.853: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137748.961: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137749.063: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137749.170: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137749.660: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137749.851: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137749.910: SPIN_GUARD entered source=navigation_status
+- 1780137749.913: SPIN_GUARD settling sec=3.00
+- 1780137750.425: SPIN_GUARD settling sec=3.00
+- 1780137750.656: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780137750.855: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137750.920: SPIN_GUARD settling sec=3.00
+- 1780137751.168: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137751.365: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137751.425: SPIN_GUARD settling sec=3.00
+- 1780137751.491: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137751.670: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780137751.765: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137751.858: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137751.924: SPIN_GUARD settling sec=3.00
+- 1780137752.417: SPIN_GUARD settling sec=3.00
+- 1780137752.465: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137752.570: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780137752.920: SPIN_GUARD settling sec=3.00
+- 1780137753.055: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137753.364: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137753.421: SPIN_GUARD settling sec=3.00
+- 1780137753.480: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137753.658: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137753.925: SPIN_GUARD settling sec=3.00
+- 1780137753.965: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137754.153: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780137754.485: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137756.062: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137756.164: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137756.368: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137756.460: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137756.949: SPIN_GUARD settled
+- 1780137757.765: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137758.262: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137758.362: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137759.187: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137759.375: PENDING wait_odom_cache gap=0.100s max=0.200s
+- map->odom 大变化:
+- 1780137756.967: dx=0.142m dyaw=0.009rad, (0.007,0.126,-0.188) -> (0.140,0.078,-0.179)
+
+### 点位6
+
+- 导航: 1780137771.547 -> 1780137783.575, 耗时 12.0s, odom 位移 3.66m, odom yaw 0.00rad
+- bridge: ACCEPTED 91 次, REJECTED 95 次, PENDING/SPIN_GUARD 72 次；spin 冻结拒绝 10 次
+- TF: map->odom 数值变化 9 次，大变化 4 次
+- 接受的定位修正:
+- 1780137771.060: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.154 yaw=-0.184
+- 1780137771.155: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.154 yaw=-0.184
+- 1780137771.273: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.154 yaw=-0.184
+- 1780137771.376: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.154 yaw=-0.184
+- 1780137771.460: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.154 yaw=-0.184
+- 1780137771.579: ACCEPTED small_correction dx=0.037 yaw=0.005 map_odom_xy_norm=0.186 yaw=-0.189
+- 1780137771.659: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.186 yaw=-0.189
+- 1780137771.762: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.186 yaw=-0.189
+- 1780137771.864: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.186 yaw=-0.189
+- 1780137775.475: ACCEPTED small_correction dx=0.198 yaw=0.002 map_odom_xy_norm=0.207 yaw=-0.187
+- 1780137775.561: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.207 yaw=-0.187
+- 1780137775.676: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.207 yaw=-0.187
+- 1780137775.775: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.207 yaw=-0.187
+- 1780137775.863: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.207 yaw=-0.187
+- 1780137775.950: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.207 yaw=-0.187
+- 1780137776.058: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.207 yaw=-0.187
+- 1780137776.158: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.207 yaw=-0.187
+- 1780137776.262: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.207 yaw=-0.187
+- 1780137776.357: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.207 yaw=-0.187
+- 1780137776.476: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.207 yaw=-0.187
+- 1780137776.561: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.207 yaw=-0.187
+- 1780137776.659: ACCEPTED small_correction dx=0.043 yaw=0.014 map_odom_xy_norm=0.228 yaw=-0.173
+- 1780137776.772: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.228 yaw=-0.173
+- 1780137776.861: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.228 yaw=-0.173
+- 1780137776.965: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.228 yaw=-0.173
+- 1780137777.057: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.228 yaw=-0.173
+- 1780137777.148: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.228 yaw=-0.173
+- 1780137777.263: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.228 yaw=-0.173
+- 1780137777.368: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.228 yaw=-0.173
+- 1780137777.461: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.228 yaw=-0.173
+- 1780137777.561: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.228 yaw=-0.173
+- 1780137777.661: ACCEPTED small_correction dx=0.094 yaw=0.008 map_odom_xy_norm=0.185 yaw=-0.181
+- 1780137777.764: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.181
+- 1780137777.852: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.181
+- 1780137777.965: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.181
+- 1780137778.065: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.181
+- 1780137778.155: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.181
+- 1780137778.273: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.181
+- 1780137778.356: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.181
+- 1780137778.456: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.181
+- 1780137778.549: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.181
+- 1780137778.652: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.181
+- 1780137778.759: ACCEPTED small_correction dx=0.074 yaw=0.003 map_odom_xy_norm=0.175 yaw=-0.184
+- 1780137778.854: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.184
+- 1780137778.961: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.184
+- 1780137779.052: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.184
+- 1780137779.148: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.184
+- 1780137779.249: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.184
+- 1780137779.362: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.184
+- 1780137779.481: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.184
+- 1780137779.577: ACCEPTED small_correction dx=0.071 yaw=0.004 map_odom_xy_norm=0.107 yaw=-0.181
+- 1780137779.665: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.107 yaw=-0.181
+- 1780137779.774: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.107 yaw=-0.181
+- 1780137779.863: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.107 yaw=-0.181
+- 1780137779.957: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.107 yaw=-0.181
+- 1780137780.057: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.107 yaw=-0.181
+- 1780137780.149: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.107 yaw=-0.181
+- 1780137780.251: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.107 yaw=-0.181
+- 1780137780.355: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.107 yaw=-0.181
+- 1780137786.465: ACCEPTED small_correction dx=0.040 yaw=0.011 map_odom_xy_norm=0.073 yaw=-0.170
+- 1780137786.566: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.073 yaw=-0.170
+- 1780137786.665: ACCEPTED small_correction dx=0.022 yaw=0.008 map_odom_xy_norm=0.055 yaw=-0.178
+- 1780137786.751: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.055 yaw=-0.178
+- 1780137786.856: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.055 yaw=-0.178
+- 1780137786.954: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.055 yaw=-0.178
+- 1780137787.052: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.055 yaw=-0.178
+- 1780137787.150: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.055 yaw=-0.178
+- 1780137787.251: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.055 yaw=-0.178
+- 1780137787.359: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.055 yaw=-0.178
+- 1780137787.451: ACCEPTED small_correction dx=0.018 yaw=0.003 map_odom_xy_norm=0.070 yaw=-0.181
+- 1780137787.552: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.070 yaw=-0.181
+- 1780137787.656: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.070 yaw=-0.181
+- 1780137787.755: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.070 yaw=-0.181
+- 1780137787.850: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.070 yaw=-0.181
+- 1780137787.950: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.070 yaw=-0.181
+- 1780137788.049: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.070 yaw=-0.181
+- 1780137788.155: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.070 yaw=-0.181
+- 1780137788.252: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.070 yaw=-0.181
+- 1780137788.350: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.070 yaw=-0.181
+- 1780137788.465: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.070 yaw=-0.181
+- 1780137788.566: ACCEPTED small_correction dx=0.020 yaw=0.003 map_odom_xy_norm=0.064 yaw=-0.184
+- 1780137788.658: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.184
+- 1780137788.754: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.184
+- 1780137788.853: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.184
+- 1780137788.950: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.184
+- 1780137789.054: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.184
+- 1780137789.153: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.184
+- 1780137789.253: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.184
+- 1780137789.359: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.184
+- 1780137789.469: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.184
+- 1780137789.554: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.064 yaw=-0.184
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780137771.058: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137771.374: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137771.572: PENDING wait_odom_cache gap=0.103s max=0.200s
+- 1780137771.912: SPIN_GUARD entered source=navigation_status
+- 1780137771.918: SPIN_GUARD settling sec=3.00
+- 1780137771.965: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137772.150: PENDING wait_odom_cache gap=0.092s max=0.200s
+- 1780137772.357: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137772.428: SPIN_GUARD settling sec=3.00
+- 1780137772.787: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137773.052: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137773.254: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137773.354: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137773.758: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137774.150: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137774.258: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137774.458: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137774.855: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137775.474: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137775.475: SPIN_GUARD settled
+- 1780137775.863: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137776.058: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137776.355: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137777.263: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137778.273: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137778.854: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780137778.961: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780137779.479: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780137779.862: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137780.250: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137780.426: SPIN_GUARD entered source=navigation_status
+- 1780137780.427: SPIN_GUARD settling sec=3.00
+- 1780137780.456: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137780.562: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137780.667: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137780.779: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137780.916: SPIN_GUARD settling sec=3.00
+- 1780137781.360: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137781.433: SPIN_GUARD settling sec=3.00
+- 1780137781.778: PENDING wait_odom_cache gap=0.118s max=0.200s
+- 1780137781.875: PENDING wait_odom_cache gap=0.082s max=0.200s
+- 1780137781.919: SPIN_GUARD settling sec=3.00
+- 1780137781.981: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137782.154: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137782.251: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137782.353: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137782.415: SPIN_GUARD settling sec=3.00
+- 1780137782.454: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137782.749: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137782.872: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137782.921: SPIN_GUARD settling sec=3.00
+- 1780137783.079: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137783.273: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137783.421: SPIN_GUARD settling sec=3.00
+- 1780137783.558: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137784.562: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780137784.862: PENDING wait_odom_cache gap=0.084s max=0.200s
+- 1780137785.147: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137785.250: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780137785.551: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137785.858: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137786.148: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137786.248: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137786.465: SPIN_GUARD settled
+- 1780137786.953: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137787.250: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137787.357: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137787.451: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137787.949: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137788.154: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137788.251: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137789.469: PENDING wait_odom_cache gap=0.100s max=0.200s
+- map->odom 大变化:
+- 1780137775.522: dx=0.198m dyaw=0.002rad, (0.164,0.088,-0.189) -> (0.006,0.207,-0.187)
+- 1780137777.666: dx=0.094m dyaw=0.008rad, (-0.033,0.226,-0.173) -> (0.048,0.179,-0.181)
+- 1780137778.767: dx=0.074m dyaw=0.003rad, (0.048,0.179,-0.181) -> (0.109,0.137,-0.184)
+- 1780137779.599: dx=0.071m dyaw=0.004rad, (0.109,0.137,-0.184) -> (0.054,0.093,-0.181)
+
+### 点位7
+
+- 导航: 1780137821.296 -> 1780137834.617, 耗时 13.3s, odom 位移 3.94m, odom yaw 0.04rad
+- bridge: ACCEPTED 86 次, REJECTED 110 次, PENDING/SPIN_GUARD 89 次；spin 冻结拒绝 11 次
+- TF: map->odom 数值变化 8 次，大变化 4 次
+- 接受的定位修正:
+- 1780137820.866: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.171
+- 1780137820.969: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.171
+- 1780137821.050: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.171
+- 1780137821.157: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.171
+- 1780137821.253: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.171
+- 1780137821.352: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.171
+- 1780137827.459: ACCEPTED small_correction dx=0.097 yaw=0.033 map_odom_xy_norm=0.062 yaw=-0.204
+- 1780137827.576: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.062 yaw=-0.204
+- 1780137827.674: ACCEPTED small_correction dx=0.098 yaw=0.012 map_odom_xy_norm=0.090 yaw=-0.192
+- 1780137827.770: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.090 yaw=-0.192
+- 1780137827.857: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.090 yaw=-0.192
+- 1780137827.978: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.090 yaw=-0.192
+- 1780137828.076: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.090 yaw=-0.192
+- 1780137828.161: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.090 yaw=-0.192
+- 1780137828.263: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.090 yaw=-0.192
+- 1780137828.361: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.090 yaw=-0.192
+- 1780137828.463: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.090 yaw=-0.192
+- 1780137828.552: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.090 yaw=-0.192
+- 1780137828.651: ACCEPTED small_correction dx=0.049 yaw=0.007 map_odom_xy_norm=0.076 yaw=-0.198
+- 1780137828.752: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.198
+- 1780137828.868: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.198
+- 1780137828.957: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.198
+- 1780137829.049: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.198
+- 1780137829.148: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.198
+- 1780137829.249: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.198
+- 1780137829.358: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.198
+- 1780137829.464: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.198
+- 1780137829.552: ACCEPTED small_correction dx=0.050 yaw=0.001 map_odom_xy_norm=0.081 yaw=-0.197
+- 1780137829.653: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.197
+- 1780137829.749: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.197
+- 1780137829.856: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.197
+- 1780137829.953: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.197
+- 1780137830.058: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.197
+- 1780137830.150: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.197
+- 1780137830.272: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.197
+- 1780137830.371: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.197
+- 1780137830.471: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.197
+- 1780137830.562: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.081 yaw=-0.197
+- 1780137830.651: ACCEPTED small_correction dx=0.139 yaw=0.022 map_odom_xy_norm=0.218 yaw=-0.175
+- 1780137830.750: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.218 yaw=-0.175
+- 1780137830.855: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.218 yaw=-0.175
+- 1780137830.954: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.218 yaw=-0.175
+- 1780137831.059: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.218 yaw=-0.175
+- 1780137831.164: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.218 yaw=-0.175
+- 1780137831.258: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.218 yaw=-0.175
+- 1780137831.370: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.218 yaw=-0.175
+- 1780137831.487: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.218 yaw=-0.175
+- 1780137831.555: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.218 yaw=-0.175
+- 1780137831.665: ACCEPTED small_correction dx=0.032 yaw=0.007 map_odom_xy_norm=0.243 yaw=-0.168
+- 1780137831.759: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.243 yaw=-0.168
+- 1780137831.852: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.243 yaw=-0.168
+- 1780137831.948: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.243 yaw=-0.168
+- 1780137832.049: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.243 yaw=-0.168
+- 1780137832.147: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.243 yaw=-0.168
+- 1780137832.250: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.243 yaw=-0.168
+- 1780137832.352: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.243 yaw=-0.168
+- 1780137837.652: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.185 yaw=-0.153
+- 1780137837.748: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.153
+- 1780137837.855: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.153
+- 1780137837.956: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.153
+- 1780137838.067: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.153
+- 1780137838.151: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.153
+- 1780137838.250: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.153
+- 1780137838.358: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.185 yaw=-0.153
+- 1780137838.464: ACCEPTED small_correction dx=0.048 yaw=0.004 map_odom_xy_norm=0.230 yaw=-0.149
+- 1780137838.560: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.230 yaw=-0.149
+- 1780137838.652: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.230 yaw=-0.149
+- 1780137838.749: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.230 yaw=-0.149
+- 1780137838.857: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.230 yaw=-0.149
+- 1780137838.954: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.230 yaw=-0.149
+- 1780137839.058: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.230 yaw=-0.149
+- 1780137839.152: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.230 yaw=-0.149
+- 1780137839.262: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.230 yaw=-0.149
+- 1780137839.357: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.230 yaw=-0.149
+- 1780137839.483: ACCEPTED small_correction dx=0.007 yaw=0.001 map_odom_xy_norm=0.238 yaw=-0.148
+- 1780137839.568: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.238 yaw=-0.148
+- 1780137839.659: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.238 yaw=-0.148
+- 1780137839.755: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.238 yaw=-0.148
+- 1780137839.855: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.238 yaw=-0.148
+- 1780137839.967: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.238 yaw=-0.148
+- 1780137840.070: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.238 yaw=-0.148
+- 1780137840.158: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.238 yaw=-0.148
+- 1780137840.248: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.238 yaw=-0.148
+- 1780137840.357: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.238 yaw=-0.148
+- 1780137840.465: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.238 yaw=-0.148
+- 1780137840.558: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.238 yaw=-0.148
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780137820.865: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137821.417: SPIN_GUARD entered source=navigation_status
+- 1780137821.422: SPIN_GUARD settling sec=3.00
+- 1780137821.557: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137821.764: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137821.912: SPIN_GUARD settling sec=3.00
+- 1780137822.359: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137822.438: SPIN_GUARD settling sec=3.00
+- 1780137822.466: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137822.916: SPIN_GUARD settling sec=3.00
+- 1780137823.431: SPIN_GUARD settling sec=3.00
+- 1780137823.756: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137823.861: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137823.912: SPIN_GUARD settling sec=3.00
+- 1780137824.078: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137824.193: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137824.262: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137824.411: SPIN_GUARD settling sec=3.00
+- 1780137824.462: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137825.067: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137825.547: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137825.949: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137826.053: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137826.467: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137826.747: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137826.959: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137827.063: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137827.459: SPIN_GUARD settled
+- 1780137827.673: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780137827.856: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780137828.260: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137828.460: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137828.650: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137828.868: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137829.048: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137829.647: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137829.953: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137830.149: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137830.271: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137830.369: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137830.749: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137830.952: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137831.369: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137831.554: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137832.248: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137832.349: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137832.414: SPIN_GUARD entered source=navigation_status
+- 1780137832.420: SPIN_GUARD settling sec=3.00
+- 1780137832.469: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137832.553: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780137832.752: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137832.938: SPIN_GUARD settling sec=3.00
+- 1780137833.057: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137833.159: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137833.370: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780137833.420: SPIN_GUARD settling sec=3.00
+- 1780137833.460: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780137833.553: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780137833.666: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137833.862: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137833.921: SPIN_GUARD settling sec=3.00
+- 1780137834.169: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137834.358: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137834.420: SPIN_GUARD settling sec=3.00
+- 1780137834.762: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137835.380: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137835.766: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780137835.963: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137836.251: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137836.753: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137836.947: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137837.468: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137837.468: SPIN_GUARD settled
+- 1780137837.468: PENDING large_correction count=1 dx=0.269 yaw=0.009
+- 1780137837.559: PENDING large_correction count=2/3
+- 1780137838.149: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137838.357: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137838.560: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137838.652: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780137838.749: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780137838.954: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137839.260: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137839.483: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137839.964: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137840.070: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137840.248: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137840.355: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137840.460: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137840.557: PENDING wait_odom_cache gap=0.104s max=0.200s
+- map->odom 大变化:
+- 1780137827.707: dx=0.098m dyaw=0.012rad, (0.056,0.026,-0.204) -> (-0.021,0.087,-0.192)
+- 1780137829.569: dx=0.050m dyaw=0.001rad, (0.025,0.071,-0.198) -> (0.068,0.044,-0.197)
+- 1780137830.667: dx=0.139m dyaw=0.022rad, (0.068,0.044,-0.197) -> (0.163,0.145,-0.175)
+- 1780137837.667: dx=0.349m dyaw=0.015rad, (0.167,0.176,-0.168) -> (-0.168,0.077,-0.153)
+
+### 点位8
+
+- 导航: 1780137857.570 -> 1780137878.237, 耗时 20.7s, odom 位移 7.42m, odom yaw 0.03rad
+- bridge: ACCEPTED 159 次, REJECTED 110 次, PENDING/SPIN_GUARD 91 次；spin 冻结拒绝 12 次
+- TF: map->odom 数值变化 17 次，大变化 10 次
+- 接受的定位修正:
+- 1780137857.151: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.144 yaw=-0.158
+- 1780137857.278: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.144 yaw=-0.158
+- 1780137857.360: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.144 yaw=-0.158
+- 1780137857.463: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.144 yaw=-0.158
+- 1780137857.578: ACCEPTED small_correction dx=0.003 yaw=0.000 map_odom_xy_norm=0.148 yaw=-0.158
+- 1780137857.665: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.148 yaw=-0.158
+- 1780137857.762: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.148 yaw=-0.158
+- 1780137857.858: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.148 yaw=-0.158
+- 1780137863.467: ACCEPTED small_correction dx=0.097 yaw=0.076 map_odom_xy_norm=0.234 yaw=-0.234
+- 1780137863.578: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.234 yaw=-0.234
+- 1780137863.683: ACCEPTED small_correction dx=0.077 yaw=0.003 map_odom_xy_norm=0.306 yaw=-0.237
+- 1780137863.766: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.237
+- 1780137863.862: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.237
+- 1780137863.964: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.237
+- 1780137864.066: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.237
+- 1780137864.157: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.237
+- 1780137864.274: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.237
+- 1780137864.361: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.237
+- 1780137864.460: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.237
+- 1780137864.558: ACCEPTED small_correction dx=0.117 yaw=0.012 map_odom_xy_norm=0.383 yaw=-0.249
+- 1780137864.652: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.383 yaw=-0.249
+- 1780137864.768: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.383 yaw=-0.249
+- 1780137864.851: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.383 yaw=-0.249
+- 1780137864.958: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.383 yaw=-0.249
+- 1780137865.056: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.383 yaw=-0.249
+- 1780137865.148: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.383 yaw=-0.249
+- 1780137865.256: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.383 yaw=-0.249
+- 1780137865.350: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.383 yaw=-0.249
+- 1780137865.461: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.383 yaw=-0.249
+- 1780137865.550: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.383 yaw=-0.249
+- 1780137865.654: ACCEPTED small_correction dx=0.089 yaw=0.008 map_odom_xy_norm=0.467 yaw=-0.256
+- 1780137865.750: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.467 yaw=-0.256
+- 1780137865.853: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.467 yaw=-0.256
+- 1780137865.961: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.467 yaw=-0.256
+- 1780137866.050: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.467 yaw=-0.256
+- 1780137866.156: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.467 yaw=-0.256
+- 1780137866.261: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.467 yaw=-0.256
+- 1780137866.355: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.467 yaw=-0.256
+- 1780137866.462: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.467 yaw=-0.256
+- 1780137866.561: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.467 yaw=-0.256
+- 1780137866.665: ACCEPTED small_correction dx=0.088 yaw=0.006 map_odom_xy_norm=0.395 yaw=-0.250
+- 1780137866.769: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.395 yaw=-0.250
+- 1780137866.858: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.395 yaw=-0.250
+- 1780137866.947: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.395 yaw=-0.250
+- 1780137867.055: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.395 yaw=-0.250
+- 1780137867.164: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.395 yaw=-0.250
+- 1780137867.258: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.395 yaw=-0.250
+- 1780137867.375: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.395 yaw=-0.250
+- 1780137867.480: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.395 yaw=-0.250
+- 1780137867.563: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.395 yaw=-0.250
+- 1780137867.670: ACCEPTED small_correction dx=0.047 yaw=0.001 map_odom_xy_norm=0.348 yaw=-0.251
+- 1780137867.771: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.348 yaw=-0.251
+- 1780137867.878: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.348 yaw=-0.251
+- 1780137867.963: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.348 yaw=-0.251
+- 1780137868.066: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.348 yaw=-0.251
+- 1780137868.148: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.348 yaw=-0.251
+- 1780137868.261: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.348 yaw=-0.251
+- 1780137868.361: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.348 yaw=-0.251
+- 1780137868.472: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.348 yaw=-0.251
+- 1780137868.567: ACCEPTED small_correction dx=0.019 yaw=0.002 map_odom_xy_norm=0.366 yaw=-0.249
+- 1780137868.656: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.366 yaw=-0.249
+- 1780137868.768: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.366 yaw=-0.249
+- 1780137868.869: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.366 yaw=-0.249
+- 1780137868.958: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.366 yaw=-0.249
+- 1780137869.047: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.366 yaw=-0.249
+- 1780137869.149: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.366 yaw=-0.249
+- 1780137869.268: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.366 yaw=-0.249
+- 1780137869.357: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.366 yaw=-0.249
+- 1780137869.459: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.366 yaw=-0.249
+- 1780137869.555: ACCEPTED small_correction dx=0.069 yaw=0.004 map_odom_xy_norm=0.300 yaw=-0.246
+- 1780137869.660: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.300 yaw=-0.246
+- 1780137869.762: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.300 yaw=-0.246
+- 1780137869.864: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.300 yaw=-0.246
+- 1780137869.976: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.300 yaw=-0.246
+- 1780137870.080: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.300 yaw=-0.246
+- 1780137870.163: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.300 yaw=-0.246
+- 1780137870.263: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.300 yaw=-0.246
+- 1780137870.363: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.300 yaw=-0.246
+- 1780137870.461: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.300 yaw=-0.246
+- 1780137870.554: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.300 yaw=-0.246
+- 1780137870.650: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.300 yaw=-0.246
+- 1780137870.749: ACCEPTED small_correction dx=0.019 yaw=0.004 map_odom_xy_norm=0.314 yaw=-0.250
+- 1780137870.849: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.314 yaw=-0.250
+- 1780137870.956: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.314 yaw=-0.250
+- 1780137871.054: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.314 yaw=-0.250
+- 1780137871.152: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.314 yaw=-0.250
+- 1780137871.252: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.314 yaw=-0.250
+- 1780137871.350: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.314 yaw=-0.250
+- 1780137871.469: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.314 yaw=-0.250
+- 1780137871.573: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.314 yaw=-0.250
+- 1780137871.665: ACCEPTED small_correction dx=0.155 yaw=0.013 map_odom_xy_norm=0.464 yaw=-0.263
+- 1780137871.778: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.464 yaw=-0.263
+- 1780137871.876: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.464 yaw=-0.263
+- 1780137871.983: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.464 yaw=-0.263
+- 1780137872.081: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.464 yaw=-0.263
+- 1780137872.166: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.464 yaw=-0.263
+- 1780137872.265: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.464 yaw=-0.263
+- 1780137872.363: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.464 yaw=-0.263
+- 1780137872.487: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.464 yaw=-0.263
+- 1780137872.575: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.464 yaw=-0.263
+- 1780137872.684: ACCEPTED small_correction dx=0.059 yaw=0.004 map_odom_xy_norm=0.420 yaw=-0.258
+- 1780137872.779: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.420 yaw=-0.258
+- 1780137872.854: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.420 yaw=-0.258
+- 1780137872.952: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.420 yaw=-0.258
+- 1780137873.050: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.420 yaw=-0.258
+- 1780137873.148: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.420 yaw=-0.258
+- 1780137873.249: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.420 yaw=-0.258
+- 1780137873.361: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.420 yaw=-0.258
+- 1780137873.460: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.420 yaw=-0.258
+- 1780137873.557: ACCEPTED small_correction dx=0.024 yaw=0.003 map_odom_xy_norm=0.413 yaw=-0.255
+- 1780137873.663: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.413 yaw=-0.255
+- 1780137873.755: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.413 yaw=-0.255
+- 1780137873.856: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.413 yaw=-0.255
+- 1780137873.971: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.413 yaw=-0.255
+- 1780137874.076: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.413 yaw=-0.255
+- 1780137874.174: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.413 yaw=-0.255
+- 1780137874.268: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.413 yaw=-0.255
+- 1780137874.366: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.413 yaw=-0.255
+- 1780137874.466: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.413 yaw=-0.255
+- 1780137874.573: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.413 yaw=-0.255
+- 1780137874.667: ACCEPTED small_correction dx=0.063 yaw=0.007 map_odom_xy_norm=0.351 yaw=-0.248
+- 1780137874.749: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.351 yaw=-0.248
+- 1780137874.857: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.351 yaw=-0.248
+- 1780137874.948: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.351 yaw=-0.248
+- 1780137875.054: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.351 yaw=-0.248
+- 1780137875.150: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.351 yaw=-0.248
+- 1780137875.258: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.351 yaw=-0.248
+- 1780137875.354: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.351 yaw=-0.248
+- 1780137881.157: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.121 yaw=-0.201
+- 1780137881.254: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.121 yaw=-0.201
+- 1780137881.353: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.121 yaw=-0.201
+- 1780137881.472: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.121 yaw=-0.201
+- 1780137881.557: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.121 yaw=-0.201
+- 1780137881.665: ACCEPTED small_correction dx=0.015 yaw=0.001 map_odom_xy_norm=0.112 yaw=-0.202
+- 1780137881.775: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.112 yaw=-0.202
+- 1780137881.869: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.112 yaw=-0.202
+- 1780137881.980: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.112 yaw=-0.202
+- 1780137882.074: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.112 yaw=-0.202
+- 1780137882.164: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.112 yaw=-0.202
+- 1780137882.265: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.112 yaw=-0.202
+- 1780137882.364: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.112 yaw=-0.202
+- 1780137882.461: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.112 yaw=-0.202
+- 1780137882.561: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.112 yaw=-0.202
+- 1780137882.657: ACCEPTED small_correction dx=0.026 yaw=0.006 map_odom_xy_norm=0.086 yaw=-0.208
+- 1780137882.765: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.086 yaw=-0.208
+- 1780137882.869: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.086 yaw=-0.208
+- 1780137882.957: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.086 yaw=-0.208
+- 1780137883.076: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.086 yaw=-0.208
+- 1780137883.162: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.086 yaw=-0.208
+- 1780137883.259: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.086 yaw=-0.208
+- 1780137883.359: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.086 yaw=-0.208
+- 1780137883.461: ACCEPTED small_correction dx=0.028 yaw=0.003 map_odom_xy_norm=0.059 yaw=-0.210
+- 1780137883.560: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.210
+- 1780137883.662: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.210
+- 1780137883.754: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.210
+- 1780137883.849: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.210
+- 1780137883.949: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.210
+- 1780137884.059: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.210
+- 1780137884.159: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.059 yaw=-0.210
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780137857.151: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137857.925: SPIN_GUARD entered source=navigation_status
+- 1780137857.926: SPIN_GUARD settling sec=3.00
+- 1780137857.958: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780137858.052: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780137858.411: SPIN_GUARD settling sec=3.00
+- 1780137858.471: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780137858.915: SPIN_GUARD settling sec=3.00
+- 1780137859.157: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137859.428: SPIN_GUARD settling sec=3.00
+- 1780137859.469: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137859.559: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780137859.759: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137859.911: SPIN_GUARD settling sec=3.00
+- 1780137860.156: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137860.423: SPIN_GUARD settling sec=3.00
+- 1780137860.758: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137860.851: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137861.350: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137861.670: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137862.047: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137862.967: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137863.350: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137863.467: SPIN_GUARD settled
+- 1780137863.577: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137864.066: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137864.271: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137864.459: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137864.652: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780137866.049: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137866.561: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780137866.664: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780137867.479: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137867.770: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137867.877: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780137868.361: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137868.768: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137868.862: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137869.555: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137869.864: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137870.262: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137870.849: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137871.349: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137871.663: PENDING wait_odom_cache gap=0.094s max=0.200s
+- 1780137871.982: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137872.265: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137872.952: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137873.357: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137873.658: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780137873.856: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137874.465: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137874.666: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137875.054: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137875.410: SPIN_GUARD entered source=navigation_status
+- 1780137875.424: SPIN_GUARD settling sec=3.00
+- 1780137875.673: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780137875.915: SPIN_GUARD settling sec=3.00
+- 1780137875.968: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137876.269: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137876.417: SPIN_GUARD settling sec=3.00
+- 1780137876.464: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137876.755: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137876.929: SPIN_GUARD settling sec=3.00
+- 1780137876.955: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137877.056: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137877.152: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137877.259: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137877.356: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137877.415: SPIN_GUARD settling sec=3.00
+- 1780137877.463: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137877.923: SPIN_GUARD settling sec=3.00
+- 1780137878.260: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137879.065: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137879.163: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137879.859: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137880.151: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137880.260: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137880.655: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137880.851: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137880.951: SPIN_GUARD settled
+- 1780137880.951: PENDING large_correction count=1 dx=0.463 yaw=0.047
+- 1780137881.054: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137881.054: PENDING large_correction count=2/3
+- 1780137881.252: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137881.350: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137882.074: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137882.164: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137882.262: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137882.361: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137883.558: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137883.848: PENDING wait_odom_cache gap=0.100s max=0.200s
+- map->odom 大变化:
+- 1780137863.500: dx=0.097m dyaw=0.076rad, (-0.117,0.089,-0.158) -> (-0.214,0.094,-0.234)
+- 1780137863.699: dx=0.077m dyaw=0.003rad, (-0.214,0.094,-0.234) -> (-0.291,0.093,-0.237)
+- 1780137864.566: dx=0.117m dyaw=0.012rad, (-0.291,0.093,-0.237) -> (-0.382,0.020,-0.249)
+- 1780137865.667: dx=0.089m dyaw=0.008rad, (-0.382,0.020,-0.249) -> (-0.463,0.056,-0.256)
+- 1780137866.666: dx=0.088m dyaw=0.006rad, (-0.463,0.056,-0.256) -> (-0.384,0.094,-0.250)
+- 1780137869.567: dx=0.069m dyaw=0.004rad, (-0.355,0.089,-0.249) -> (-0.287,0.088,-0.246)
+- 1780137871.667: dx=0.155m dyaw=0.013rad, (-0.296,0.105,-0.250) -> (-0.451,0.108,-0.263)
+- 1780137872.707: dx=0.059m dyaw=0.004rad, (-0.451,0.108,-0.263) -> (-0.415,0.062,-0.258)
+- 1780137874.699: dx=0.063m dyaw=0.007rad, (-0.412,0.038,-0.255) -> (-0.349,0.039,-0.248)
+- 1780137881.171: dx=0.463m dyaw=0.047rad, (-0.349,0.039,-0.248) -> (0.102,-0.065,-0.201)
+
+### 点位9
+
+- 导航: 1780137899.958 -> 1780137917.317, 耗时 17.4s, odom 位移 5.46m, odom yaw 0.04rad
+- bridge: ACCEPTED 115 次, REJECTED 120 次, PENDING/SPIN_GUARD 99 次；spin 冻结拒绝 12 次
+- TF: map->odom 数值变化 12 次，大变化 8 次
+- 接受的定位修正:
+- 1780137899.483: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.023 yaw=-0.211
+- 1780137899.583: ACCEPTED small_correction dx=0.002 yaw=0.001 map_odom_xy_norm=0.025 yaw=-0.210
+- 1780137899.670: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.025 yaw=-0.210
+- 1780137899.762: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.025 yaw=-0.210
+- 1780137899.872: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.025 yaw=-0.210
+- 1780137899.991: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.025 yaw=-0.210
+- 1780137900.082: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.025 yaw=-0.210
+- 1780137900.177: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.025 yaw=-0.210
+- 1780137900.284: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.025 yaw=-0.210
+- 1780137900.367: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.025 yaw=-0.210
+- 1780137906.663: ACCEPTED small_correction dx=0.174 yaw=0.021 map_odom_xy_norm=0.190 yaw=-0.231
+- 1780137906.754: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.231
+- 1780137906.857: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.231
+- 1780137906.978: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.231
+- 1780137907.081: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.231
+- 1780137907.171: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.231
+- 1780137907.260: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.231
+- 1780137907.348: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.231
+- 1780137907.469: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.231
+- 1780137907.560: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.190 yaw=-0.231
+- 1780137907.658: ACCEPTED small_correction dx=0.135 yaw=0.016 map_odom_xy_norm=0.060 yaw=-0.215
+- 1780137907.751: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.215
+- 1780137907.849: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.215
+- 1780137907.955: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.215
+- 1780137908.067: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.215
+- 1780137908.156: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.215
+- 1780137908.253: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.215
+- 1780137908.361: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.215
+- 1780137908.469: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.215
+- 1780137908.567: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.060 yaw=-0.215
+- 1780137908.662: ACCEPTED small_correction dx=0.044 yaw=0.005 map_odom_xy_norm=0.026 yaw=-0.210
+- 1780137908.756: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.026 yaw=-0.210
+- 1780137908.851: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.026 yaw=-0.210
+- 1780137908.952: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.026 yaw=-0.210
+- 1780137909.054: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.026 yaw=-0.210
+- 1780137909.152: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.026 yaw=-0.210
+- 1780137909.248: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.026 yaw=-0.210
+- 1780137909.350: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.026 yaw=-0.210
+- 1780137909.461: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.026 yaw=-0.210
+- 1780137909.573: ACCEPTED small_correction dx=0.089 yaw=0.007 map_odom_xy_norm=0.114 yaw=-0.217
+- 1780137909.672: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.114 yaw=-0.217
+- 1780137909.766: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.114 yaw=-0.217
+- 1780137909.856: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.114 yaw=-0.217
+- 1780137909.949: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.114 yaw=-0.217
+- 1780137910.056: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.114 yaw=-0.217
+- 1780137910.158: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.114 yaw=-0.217
+- 1780137910.257: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.114 yaw=-0.217
+- 1780137910.363: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.114 yaw=-0.217
+- 1780137910.456: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.114 yaw=-0.217
+- 1780137910.562: ACCEPTED small_correction dx=0.112 yaw=0.010 map_odom_xy_norm=0.226 yaw=-0.226
+- 1780137910.659: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.226 yaw=-0.226
+- 1780137910.747: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.226 yaw=-0.226
+- 1780137910.869: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.226 yaw=-0.226
+- 1780137910.977: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.226 yaw=-0.226
+- 1780137911.063: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.226 yaw=-0.226
+- 1780137911.148: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.226 yaw=-0.226
+- 1780137911.258: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.226 yaw=-0.226
+- 1780137911.346: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.226 yaw=-0.226
+- 1780137911.468: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.226 yaw=-0.226
+- 1780137911.563: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.226 yaw=-0.226
+- 1780137911.659: ACCEPTED small_correction dx=0.036 yaw=0.001 map_odom_xy_norm=0.195 yaw=-0.228
+- 1780137911.769: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.195 yaw=-0.228
+- 1780137911.861: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.195 yaw=-0.228
+- 1780137911.962: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.195 yaw=-0.228
+- 1780137912.103: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.195 yaw=-0.228
+- 1780137912.176: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.195 yaw=-0.228
+- 1780137912.262: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.195 yaw=-0.228
+- 1780137912.373: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.195 yaw=-0.228
+- 1780137912.464: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.195 yaw=-0.228
+- 1780137912.570: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.195 yaw=-0.228
+- 1780137912.661: ACCEPTED small_correction dx=0.215 yaw=0.019 map_odom_xy_norm=0.408 yaw=-0.246
+- 1780137912.758: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.408 yaw=-0.246
+- 1780137912.854: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.408 yaw=-0.246
+- 1780137912.950: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.408 yaw=-0.246
+- 1780137913.051: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.408 yaw=-0.246
+- 1780137913.155: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.408 yaw=-0.246
+- 1780137913.254: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.408 yaw=-0.246
+- 1780137913.371: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.408 yaw=-0.246
+- 1780137913.463: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.408 yaw=-0.246
+- 1780137913.555: ACCEPTED small_correction dx=0.145 yaw=0.018 map_odom_xy_norm=0.264 yaw=-0.229
+- 1780137913.646: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.264 yaw=-0.229
+- 1780137913.763: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.264 yaw=-0.229
+- 1780137913.868: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.264 yaw=-0.229
+- 1780137920.173: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.075 yaw=-0.210
+- 1780137920.263: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.075 yaw=-0.210
+- 1780137920.360: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.075 yaw=-0.210
+- 1780137920.459: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.075 yaw=-0.210
+- 1780137920.556: ACCEPTED small_correction dx=0.016 yaw=0.001 map_odom_xy_norm=0.091 yaw=-0.212
+- 1780137920.658: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.091 yaw=-0.212
+- 1780137920.753: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.091 yaw=-0.212
+- 1780137920.860: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.091 yaw=-0.212
+- 1780137920.965: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.091 yaw=-0.212
+- 1780137921.068: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.091 yaw=-0.212
+- 1780137921.159: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.091 yaw=-0.212
+- 1780137921.264: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.091 yaw=-0.212
+- 1780137921.364: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.091 yaw=-0.212
+- 1780137921.479: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.091 yaw=-0.212
+- 1780137921.588: ACCEPTED small_correction dx=0.051 yaw=0.006 map_odom_xy_norm=0.087 yaw=-0.217
+- 1780137921.685: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.087 yaw=-0.217
+- 1780137921.764: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.087 yaw=-0.217
+- 1780137921.855: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.087 yaw=-0.217
+- 1780137921.964: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.087 yaw=-0.217
+- 1780137922.080: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.087 yaw=-0.217
+- 1780137922.164: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.087 yaw=-0.217
+- 1780137922.274: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.087 yaw=-0.217
+- 1780137922.379: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.087 yaw=-0.217
+- 1780137922.474: ACCEPTED small_correction dx=0.014 yaw=0.002 map_odom_xy_norm=0.077 yaw=-0.216
+- 1780137922.571: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.216
+- 1780137922.703: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.216
+- 1780137922.790: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.216
+- 1780137922.883: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.216
+- 1780137922.975: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.216
+- 1780137923.061: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.216
+- 1780137923.160: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.216
+- 1780137923.273: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.077 yaw=-0.216
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780137900.282: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137900.418: SPIN_GUARD entered source=navigation_status
+- 1780137900.424: SPIN_GUARD settling sec=3.00
+- 1780137900.468: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137900.936: SPIN_GUARD settling sec=3.00
+- 1780137901.081: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137901.168: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137901.424: SPIN_GUARD settling sec=3.00
+- 1780137901.578: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137901.916: SPIN_GUARD settling sec=3.00
+- 1780137901.953: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137902.378: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137902.411: SPIN_GUARD settling sec=3.00
+- 1780137902.479: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137902.913: SPIN_GUARD settling sec=3.00
+- 1780137902.975: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137903.172: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137903.361: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780137903.441: SPIN_GUARD settling sec=3.00
+- 1780137903.466: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780137903.559: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137903.904: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137903.973: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137904.165: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137904.262: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137904.464: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137904.652: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137905.160: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137905.648: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780137906.067: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137906.151: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137906.464: SPIN_GUARD settled
+- 1780137906.464: PENDING large_correction count=1 dx=0.399 yaw=0.044
+- 1780137906.553: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137906.553: PENDING large_correction count=2/3
+- 1780137906.857: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780137907.080: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137907.171: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137907.259: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137907.657: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137908.064: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137908.155: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137908.565: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137908.752: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137908.951: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137909.152: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137909.248: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137909.461: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137909.856: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137910.456: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780137910.658: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137911.255: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137911.961: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780137912.082: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780137912.368: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137912.462: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137912.854: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137913.252: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137913.370: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137913.913: SPIN_GUARD entered source=navigation_status
+- 1780137913.917: SPIN_GUARD settling sec=3.00
+- 1780137914.065: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137914.426: SPIN_GUARD settling sec=3.00
+- 1780137914.457: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137914.921: SPIN_GUARD settling sec=3.00
+- 1780137915.154: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780137915.431: SPIN_GUARD settling sec=3.00
+- 1780137915.458: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137915.857: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137915.925: SPIN_GUARD settling sec=3.00
+- 1780137915.960: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137916.427: SPIN_GUARD settling sec=3.00
+- 1780137916.463: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137916.579: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137916.773: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137916.931: SPIN_GUARD settling sec=3.00
+- 1780137917.071: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137917.158: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137917.259: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137917.360: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137917.462: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137917.551: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780137917.851: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137918.057: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137918.459: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137918.754: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137918.854: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137918.954: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137919.055: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137919.576: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780137919.759: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137919.969: SPIN_GUARD settled
+- 1780137919.969: PENDING large_correction count=1 dx=0.304 yaw=0.018
+- 1780137920.071: PENDING large_correction count=2/3
+- 1780137920.360: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137921.681: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137922.377: PENDING wait_odom_cache gap=0.091s max=0.200s
+- 1780137922.968: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137923.273: PENDING wait_odom_cache gap=0.100s max=0.200s
+- map->odom 大变化:
+- 1780137906.667: dx=0.174m dyaw=0.021rad, (-0.019,-0.016,-0.210) -> (-0.188,0.024,-0.231)
+- 1780137907.666: dx=0.135m dyaw=0.016rad, (-0.188,0.024,-0.231) -> (-0.053,0.027,-0.215)
+- 1780137909.599: dx=0.089m dyaw=0.007rad, (-0.025,-0.006,-0.210) -> (-0.113,-0.014,-0.217)
+- 1780137910.566: dx=0.112m dyaw=0.010rad, (-0.113,-0.014,-0.217) -> (-0.225,-0.024,-0.226)
+- 1780137912.667: dx=0.215m dyaw=0.019rad, (-0.192,-0.037,-0.228) -> (-0.407,-0.035,-0.246)
+- 1780137913.566: dx=0.145m dyaw=0.018rad, (-0.407,-0.035,-0.246) -> (-0.262,-0.030,-0.229)
+- 1780137920.200: dx=0.304m dyaw=0.018rad, (-0.262,-0.030,-0.229) -> (0.040,-0.064,-0.210)
+- 1780137921.600: dx=0.051m dyaw=0.006rad, (0.048,-0.078,-0.212) -> (-0.003,-0.087,-0.217)
+
+### 点位10
+
+- 导航: 1780137999.214 -> 1780138015.324, 耗时 16.1s, odom 位移 0.28m, odom yaw 0.02rad
+- bridge: ACCEPTED 136 次, REJECTED 90 次, PENDING/SPIN_GUARD 84 次；spin 冻结拒绝 10 次
+- TF: map->odom 数值变化 13 次，大变化 8 次
+- 接受的定位修正:
+- 1780137998.750: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.038 yaw=-0.217
+- 1780137998.856: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.038 yaw=-0.217
+- 1780137998.969: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.038 yaw=-0.217
+- 1780137999.073: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.038 yaw=-0.217
+- 1780137999.166: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.038 yaw=-0.217
+- 1780137999.263: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.038 yaw=-0.217
+- 1780137999.395: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.038 yaw=-0.217
+- 1780138003.974: ACCEPTED small_correction dx=0.105 yaw=0.000 map_odom_xy_norm=0.138 yaw=-0.217
+- 1780138004.059: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.138 yaw=-0.217
+- 1780138004.176: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.138 yaw=-0.217
+- 1780138004.272: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.138 yaw=-0.217
+- 1780138004.384: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.138 yaw=-0.217
+- 1780138004.491: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.138 yaw=-0.217
+- 1780138004.589: ACCEPTED small_correction dx=0.159 yaw=0.014 map_odom_xy_norm=0.128 yaw=-0.203
+- 1780138004.682: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.128 yaw=-0.203
+- 1780138004.790: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.128 yaw=-0.203
+- 1780138004.880: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.128 yaw=-0.203
+- 1780138004.975: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.128 yaw=-0.203
+- 1780138005.091: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.128 yaw=-0.203
+- 1780138005.195: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.128 yaw=-0.203
+- 1780138005.279: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.128 yaw=-0.203
+- 1780138005.380: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.128 yaw=-0.203
+- 1780138005.473: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.128 yaw=-0.203
+- 1780138005.567: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.128 yaw=-0.203
+- 1780138005.663: ACCEPTED small_correction dx=0.050 yaw=0.004 map_odom_xy_norm=0.168 yaw=-0.199
+- 1780138005.776: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.199
+- 1780138005.859: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.199
+- 1780138005.949: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.199
+- 1780138006.071: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.199
+- 1780138006.170: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.199
+- 1780138006.264: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.199
+- 1780138006.369: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.168 yaw=-0.199
+- 1780138006.470: ACCEPTED small_correction dx=0.086 yaw=0.009 map_odom_xy_norm=0.100 yaw=-0.208
+- 1780138006.555: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.100 yaw=-0.208
+- 1780138006.654: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.100 yaw=-0.208
+- 1780138006.772: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.100 yaw=-0.208
+- 1780138006.870: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.100 yaw=-0.208
+- 1780138006.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.100 yaw=-0.208
+- 1780138007.068: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.100 yaw=-0.208
+- 1780138007.177: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.100 yaw=-0.208
+- 1780138007.279: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.100 yaw=-0.208
+- 1780138007.380: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.100 yaw=-0.208
+- 1780138007.466: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.100 yaw=-0.208
+- 1780138007.552: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.100 yaw=-0.208
+- 1780138007.656: ACCEPTED small_correction dx=0.015 yaw=0.000 map_odom_xy_norm=0.103 yaw=-0.208
+- 1780138007.755: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.103 yaw=-0.208
+- 1780138007.848: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.103 yaw=-0.208
+- 1780138007.959: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.103 yaw=-0.208
+- 1780138008.057: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.103 yaw=-0.208
+- 1780138008.160: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.103 yaw=-0.208
+- 1780138008.258: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.103 yaw=-0.208
+- 1780138008.360: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.103 yaw=-0.208
+- 1780138008.471: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.103 yaw=-0.208
+- 1780138008.570: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.103 yaw=-0.208
+- 1780138008.665: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.103 yaw=-0.208
+- 1780138008.757: ACCEPTED small_correction dx=0.049 yaw=0.003 map_odom_xy_norm=0.115 yaw=-0.205
+- 1780138008.849: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.115 yaw=-0.205
+- 1780138008.956: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.115 yaw=-0.205
+- 1780138009.051: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.115 yaw=-0.205
+- 1780138009.149: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.115 yaw=-0.205
+- 1780138009.252: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.115 yaw=-0.205
+- 1780138009.365: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.115 yaw=-0.205
+- 1780138009.470: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.115 yaw=-0.205
+- 1780138009.558: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.115 yaw=-0.205
+- 1780138009.650: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.115 yaw=-0.205
+- 1780138009.756: ACCEPTED small_correction dx=0.181 yaw=0.016 map_odom_xy_norm=0.175 yaw=-0.221
+- 1780138009.877: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.221
+- 1780138009.957: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.221
+- 1780138010.049: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.221
+- 1780138010.168: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.221
+- 1780138010.258: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.221
+- 1780138010.361: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.221
+- 1780138010.473: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.221
+- 1780138010.551: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.221
+- 1780138010.650: ACCEPTED small_correction dx=0.148 yaw=0.007 map_odom_xy_norm=0.319 yaw=-0.229
+- 1780138010.753: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.319 yaw=-0.229
+- 1780138010.854: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.319 yaw=-0.229
+- 1780138010.961: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.319 yaw=-0.229
+- 1780138011.058: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.319 yaw=-0.229
+- 1780138011.156: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.319 yaw=-0.229
+- 1780138011.268: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.319 yaw=-0.229
+- 1780138011.388: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.319 yaw=-0.229
+- 1780138011.479: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.319 yaw=-0.229
+- 1780138011.565: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.319 yaw=-0.229
+- 1780138011.659: ACCEPTED small_correction dx=0.081 yaw=0.005 map_odom_xy_norm=0.274 yaw=-0.224
+- 1780138011.762: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.274 yaw=-0.224
+- 1780138011.855: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.274 yaw=-0.224
+- 1780138011.965: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.274 yaw=-0.224
+- 1780138012.072: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.274 yaw=-0.224
+- 1780138012.188: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.274 yaw=-0.224
+- 1780138012.274: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.274 yaw=-0.224
+- 1780138012.394: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.274 yaw=-0.224
+- 1780138012.493: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.274 yaw=-0.224
+- 1780138012.588: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.274 yaw=-0.224
+- 1780138012.672: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.274 yaw=-0.224
+- 1780138012.782: ACCEPTED small_correction dx=0.249 yaw=0.011 map_odom_xy_norm=0.255 yaw=-0.213
+- 1780138012.874: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.255 yaw=-0.213
+- 1780138012.967: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.255 yaw=-0.213
+- 1780138013.067: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.255 yaw=-0.213
+- 1780138013.166: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.255 yaw=-0.213
+- 1780138013.265: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.255 yaw=-0.213
+- 1780138013.355: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.255 yaw=-0.213
+- 1780138017.963: ACCEPTED small_correction dx=0.148 yaw=0.004 map_odom_xy_norm=0.134 yaw=-0.209
+- 1780138018.080: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.209
+- 1780138018.182: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.209
+- 1780138018.275: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.209
+- 1780138018.365: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.209
+- 1780138018.461: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.209
+- 1780138018.555: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.209
+- 1780138018.658: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.134 yaw=-0.209
+- 1780138018.777: ACCEPTED small_correction dx=0.076 yaw=0.003 map_odom_xy_norm=0.076 yaw=-0.212
+- 1780138018.881: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.212
+- 1780138018.970: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.212
+- 1780138019.080: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.212
+- 1780138019.167: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.212
+- 1780138019.276: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.212
+- 1780138019.364: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.212
+- 1780138019.461: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.212
+- 1780138019.560: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.212
+- 1780138019.656: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.076 yaw=-0.212
+- 1780138019.752: ACCEPTED small_correction dx=0.044 yaw=0.007 map_odom_xy_norm=0.113 yaw=-0.219
+- 1780138019.864: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.113 yaw=-0.219
+- 1780138019.952: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.113 yaw=-0.219
+- 1780138020.050: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.113 yaw=-0.219
+- 1780138020.155: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.113 yaw=-0.219
+- 1780138020.257: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.113 yaw=-0.219
+- 1780138020.355: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.113 yaw=-0.219
+- 1780138020.462: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.113 yaw=-0.219
+- 1780138020.563: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.113 yaw=-0.219
+- 1780138020.664: ACCEPTED small_correction dx=0.049 yaw=0.000 map_odom_xy_norm=0.142 yaw=-0.218
+- 1780138020.759: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.142 yaw=-0.218
+- 1780138020.879: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.142 yaw=-0.218
+- 1780138020.958: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.142 yaw=-0.218
+- 1780138021.067: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.142 yaw=-0.218
+- 1780138021.165: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.142 yaw=-0.218
+- 1780138021.264: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.142 yaw=-0.218
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780137998.969: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137999.411: SPIN_GUARD entered source=navigation_status
+- 1780137999.420: SPIN_GUARD settling sec=3.00
+- 1780137999.661: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780137999.861: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780137999.912: SPIN_GUARD settling sec=3.00
+- 1780137999.970: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138000.415: SPIN_GUARD settling sec=3.00
+- 1780138000.466: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138000.565: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138000.678: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138000.945: SPIN_GUARD settling sec=3.00
+- 1780138001.268: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138001.559: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138001.768: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138001.853: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138002.172: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138002.877: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138003.070: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138003.889: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138003.974: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138003.974: SPIN_GUARD settled
+- 1780138004.380: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138004.588: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138004.876: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138005.091: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138005.278: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138005.775: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138005.859: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138005.949: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138006.071: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138006.169: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138006.470: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138006.767: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138007.176: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138007.655: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138008.056: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138008.257: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138008.358: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138008.468: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138008.662: PENDING wait_odom_cache gap=0.092s max=0.200s
+- 1780138008.753: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138009.148: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138009.556: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138010.048: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138010.258: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138010.361: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138010.470: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138010.752: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138011.155: PENDING wait_odom_cache gap=0.103s max=0.200s
+- 1780138011.268: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138011.479: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138011.659: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138011.761: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138011.854: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138012.186: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138012.274: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138012.491: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138012.670: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138012.871: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138012.967: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138013.413: SPIN_GUARD entered source=navigation_status
+- 1780138013.419: SPIN_GUARD settling sec=3.00
+- 1780138013.652: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138013.928: SPIN_GUARD settling sec=3.00
+- 1780138013.968: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138014.421: SPIN_GUARD settling sec=3.00
+- 1780138014.553: PENDING wait_odom_cache gap=0.107s max=0.200s
+- 1780138014.856: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138014.929: SPIN_GUARD settling sec=3.00
+- 1780138014.961: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138015.364: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138015.461: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138015.858: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138016.064: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138016.249: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138016.360: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138017.171: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138017.963: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138017.963: SPIN_GUARD settled
+- 1780138018.080: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138018.554: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138018.881: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138021.262: PENDING wait_odom_cache gap=0.100s max=0.200s
+- map->odom 大变化:
+- 1780138004.602: dx=0.159m dyaw=0.014rad, (-0.072,-0.118,-0.217) -> (0.085,-0.095,-0.203)
+- 1780138006.500: dx=0.086m dyaw=0.009rad, (0.135,-0.099,-0.199) -> (0.050,-0.087,-0.208)
+- 1780138009.767: dx=0.181m dyaw=0.016rad, (-0.006,-0.115,-0.205) -> (-0.170,-0.038,-0.221)
+- 1780138010.666: dx=0.148m dyaw=0.007rad, (-0.170,-0.038,-0.221) -> (-0.299,-0.112,-0.229)
+- 1780138011.667: dx=0.081m dyaw=0.005rad, (-0.299,-0.112,-0.229) -> (-0.228,-0.152,-0.224)
+- 1780138012.799: dx=0.249m dyaw=0.011rad, (-0.228,-0.152,-0.224) -> (-0.001,-0.255,-0.213)
+- 1780138017.966: dx=0.148m dyaw=0.004rad, (-0.001,-0.255,-0.213) -> (0.061,-0.120,-0.209)
+- 1780138018.802: dx=0.076m dyaw=0.003rad, (0.061,-0.120,-0.209) -> (-0.002,-0.076,-0.212)
+
+### 点位11
+
+- 导航: 1780138060.454 -> 1780138071.368, 耗时 10.9s, odom 位移 1.29m, odom yaw 0.21rad
+- bridge: ACCEPTED 47 次, REJECTED 125 次, PENDING/SPIN_GUARD 83 次；spin 冻结拒绝 13 次
+- TF: map->odom 数值变化 5 次，大变化 4 次
+- 接受的定位修正:
+- 1780138060.051: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.144 yaw=-0.211
+- 1780138060.155: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.144 yaw=-0.211
+- 1780138060.254: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.144 yaw=-0.211
+- 1780138060.355: ACCEPTED small_correction dx=0.009 yaw=0.000 map_odom_xy_norm=0.153 yaw=-0.211
+- 1780138060.459: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.153 yaw=-0.211
+- 1780138060.555: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.153 yaw=-0.211
+- 1780138060.655: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.153 yaw=-0.211
+- 1780138060.763: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.153 yaw=-0.211
+- 1780138060.871: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.153 yaw=-0.211
+- 1780138066.152: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.384 yaw=-0.246
+- 1780138066.258: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.384 yaw=-0.246
+- 1780138066.353: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.384 yaw=-0.246
+- 1780138066.470: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.384 yaw=-0.246
+- 1780138066.559: ACCEPTED small_correction dx=0.100 yaw=0.003 map_odom_xy_norm=0.306 yaw=-0.243
+- 1780138066.667: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.243
+- 1780138066.775: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.243
+- 1780138066.869: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.243
+- 1780138066.963: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.243
+- 1780138067.074: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.243
+- 1780138067.160: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.243
+- 1780138067.268: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.243
+- 1780138067.353: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.243
+- 1780138067.465: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.306 yaw=-0.243
+- 1780138067.573: ACCEPTED small_correction dx=0.016 yaw=0.001 map_odom_xy_norm=0.291 yaw=-0.244
+- 1780138067.688: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.291 yaw=-0.244
+- 1780138067.778: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.291 yaw=-0.244
+- 1780138067.859: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.291 yaw=-0.244
+- 1780138067.961: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.291 yaw=-0.244
+- 1780138068.072: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.291 yaw=-0.244
+- 1780138068.158: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.291 yaw=-0.244
+- 1780138068.258: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.291 yaw=-0.244
+- 1780138068.357: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.291 yaw=-0.244
+- 1780138068.467: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.291 yaw=-0.244
+- 1780138068.553: ACCEPTED small_correction dx=0.058 yaw=0.001 map_odom_xy_norm=0.272 yaw=-0.243
+- 1780138068.665: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.272 yaw=-0.243
+- 1780138068.761: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.272 yaw=-0.243
+- 1780138068.857: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.272 yaw=-0.243
+- 1780138068.949: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.272 yaw=-0.243
+- 1780138069.057: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.272 yaw=-0.243
+- 1780138069.162: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.272 yaw=-0.243
+- 1780138069.263: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.272 yaw=-0.243
+- 1780138069.376: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.272 yaw=-0.243
+- 1780138069.467: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.272 yaw=-0.243
+- 1780138069.586: ACCEPTED small_correction dx=0.055 yaw=0.002 map_odom_xy_norm=0.326 yaw=-0.246
+- 1780138069.671: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.326 yaw=-0.246
+- 1780138069.770: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.326 yaw=-0.246
+- 1780138069.868: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.326 yaw=-0.246
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780138060.254: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138060.871: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138060.910: SPIN_GUARD entered source=navigation_status
+- 1780138060.916: SPIN_GUARD settling sec=3.00
+- 1780138061.173: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138061.370: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138061.420: SPIN_GUARD settling sec=3.00
+- 1780138061.485: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138061.764: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138061.917: SPIN_GUARD settling sec=3.00
+- 1780138062.257: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138062.367: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138062.416: SPIN_GUARD settling sec=3.00
+- 1780138062.897: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138062.915: SPIN_GUARD settling sec=3.00
+- 1780138063.268: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138063.467: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138063.654: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138063.951: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138064.366: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138064.468: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138064.754: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138065.071: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138065.260: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138065.366: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138065.687: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138065.960: SPIN_GUARD settled
+- 1780138065.960: PENDING large_correction count=1 dx=0.455 yaw=0.035
+- 1780138066.058: PENDING large_correction count=2/3
+- 1780138066.152: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138066.775: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138066.962: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138067.573: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138067.773: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138067.858: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138068.072: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138068.357: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138068.466: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138068.551: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138068.661: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138068.948: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138069.263: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138069.466: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138069.585: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138069.670: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138069.764: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138069.910: SPIN_GUARD entered source=navigation_status
+- 1780138069.915: SPIN_GUARD settling sec=3.00
+- 1780138070.356: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138070.427: SPIN_GUARD settling sec=3.00
+- 1780138070.789: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138070.861: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138070.945: SPIN_GUARD settling sec=3.00
+- 1780138070.957: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138071.147: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138071.350: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138071.469: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138071.567: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138071.948: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138072.057: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138072.358: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138072.567: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138072.667: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138072.859: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138073.568: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138073.662: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138073.920: SPIN_GUARD settling sec=3.00
+- 1780138073.957: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138074.251: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138074.431: SPIN_GUARD settling sec=3.00
+- 1780138074.469: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138074.656: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138074.761: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138074.857: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138075.052: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138075.469: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138075.749: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138076.247: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138076.467: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138076.755: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138077.053: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138077.158: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138077.356: PENDING wait_odom_cache gap=0.100s max=0.200s
+- map->odom 大变化:
+- 1780138066.169: dx=0.455m dyaw=0.035rad, (0.046,-0.146,-0.211) -> (-0.384,0.006,-0.246)
+- 1780138066.567: dx=0.100m dyaw=0.003rad, (-0.384,0.006,-0.246) -> (-0.302,-0.052,-0.243)
+- 1780138068.569: dx=0.058m dyaw=0.001rad, (-0.286,-0.051,-0.244) -> (-0.253,-0.098,-0.243)
+- 1780138069.600: dx=0.055m dyaw=0.002rad, (-0.253,-0.098,-0.243) -> (-0.305,-0.114,-0.246)
+
+### 点位12
+
+- 导航: 1780138073.388 -> 1780138093.439, 耗时 20.1s, odom 位移 3.40m, odom yaw 0.11rad
+- bridge: ACCEPTED 137 次, REJECTED 120 次, PENDING/SPIN_GUARD 104 次；spin 冻结拒绝 13 次
+- TF: map->odom 数值变化 14 次，大变化 9 次
+- 接受的定位修正:
+- 1780138077.854: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.536 yaw=-0.205
+- 1780138077.977: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.536 yaw=-0.205
+- 1780138078.071: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.536 yaw=-0.205
+- 1780138078.168: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.536 yaw=-0.205
+- 1780138078.254: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.536 yaw=-0.205
+- 1780138078.362: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.536 yaw=-0.205
+- 1780138078.462: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.536 yaw=-0.205
+- 1780138078.558: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.536 yaw=-0.205
+- 1780138078.655: ACCEPTED small_correction dx=0.130 yaw=0.014 map_odom_xy_norm=0.407 yaw=-0.219
+- 1780138078.763: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.407 yaw=-0.219
+- 1780138078.858: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.407 yaw=-0.219
+- 1780138078.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.407 yaw=-0.219
+- 1780138079.073: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.407 yaw=-0.219
+- 1780138079.162: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.407 yaw=-0.219
+- 1780138079.259: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.407 yaw=-0.219
+- 1780138079.366: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.407 yaw=-0.219
+- 1780138079.466: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.407 yaw=-0.219
+- 1780138079.555: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.407 yaw=-0.219
+- 1780138079.864: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.561 yaw=-0.205
+- 1780138079.967: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.561 yaw=-0.205
+- 1780138080.072: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.561 yaw=-0.205
+- 1780138080.174: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.561 yaw=-0.205
+- 1780138080.270: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.561 yaw=-0.205
+- 1780138080.370: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.561 yaw=-0.205
+- 1780138080.471: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.561 yaw=-0.205
+- 1780138080.561: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.561 yaw=-0.205
+- 1780138080.660: ACCEPTED small_correction dx=0.071 yaw=0.001 map_odom_xy_norm=0.632 yaw=-0.204
+- 1780138080.751: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.632 yaw=-0.204
+- 1780138080.864: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.632 yaw=-0.204
+- 1780138080.973: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.632 yaw=-0.204
+- 1780138081.059: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.632 yaw=-0.204
+- 1780138081.156: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.632 yaw=-0.204
+- 1780138081.266: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.632 yaw=-0.204
+- 1780138081.352: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.632 yaw=-0.204
+- 1780138081.470: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.632 yaw=-0.204
+- 1780138081.583: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.632 yaw=-0.204
+- 1780138081.667: ACCEPTED small_correction dx=0.065 yaw=0.003 map_odom_xy_norm=0.693 yaw=-0.201
+- 1780138081.767: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.693 yaw=-0.201
+- 1780138081.869: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.693 yaw=-0.201
+- 1780138081.959: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.693 yaw=-0.201
+- 1780138082.067: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.693 yaw=-0.201
+- 1780138082.172: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.693 yaw=-0.201
+- 1780138082.273: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.693 yaw=-0.201
+- 1780138082.390: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.693 yaw=-0.201
+- 1780138082.475: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.693 yaw=-0.201
+- 1780138082.570: ACCEPTED small_correction dx=0.050 yaw=0.002 map_odom_xy_norm=0.643 yaw=-0.203
+- 1780138082.657: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.643 yaw=-0.203
+- 1780138082.764: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.643 yaw=-0.203
+- 1780138082.872: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.643 yaw=-0.203
+- 1780138082.962: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.643 yaw=-0.203
+- 1780138083.059: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.643 yaw=-0.203
+- 1780138083.158: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.643 yaw=-0.203
+- 1780138083.254: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.643 yaw=-0.203
+- 1780138083.356: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.643 yaw=-0.203
+- 1780138083.464: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.643 yaw=-0.203
+- 1780138083.562: ACCEPTED small_correction dx=0.031 yaw=0.001 map_odom_xy_norm=0.621 yaw=-0.205
+- 1780138083.662: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.621 yaw=-0.205
+- 1780138083.798: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.621 yaw=-0.205
+- 1780138083.872: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.621 yaw=-0.205
+- 1780138083.965: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.621 yaw=-0.205
+- 1780138084.061: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.621 yaw=-0.205
+- 1780138084.170: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.621 yaw=-0.205
+- 1780138084.265: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.621 yaw=-0.205
+- 1780138084.374: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.621 yaw=-0.205
+- 1780138084.478: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.621 yaw=-0.205
+- 1780138084.558: ACCEPTED small_correction dx=0.009 yaw=0.000 map_odom_xy_norm=0.628 yaw=-0.204
+- 1780138084.661: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.628 yaw=-0.204
+- 1780138084.761: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.628 yaw=-0.204
+- 1780138084.862: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.628 yaw=-0.204
+- 1780138084.986: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.628 yaw=-0.204
+- 1780138085.087: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.628 yaw=-0.204
+- 1780138085.174: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.628 yaw=-0.204
+- 1780138085.272: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.628 yaw=-0.204
+- 1780138085.363: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.628 yaw=-0.204
+- 1780138085.461: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.628 yaw=-0.204
+- 1780138085.558: ACCEPTED small_correction dx=0.055 yaw=0.003 map_odom_xy_norm=0.674 yaw=-0.202
+- 1780138085.661: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.674 yaw=-0.202
+- 1780138085.756: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.674 yaw=-0.202
+- 1780138085.868: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.674 yaw=-0.202
+- 1780138085.971: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.674 yaw=-0.202
+- 1780138086.071: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.674 yaw=-0.202
+- 1780138086.166: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.674 yaw=-0.202
+- 1780138086.270: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.674 yaw=-0.202
+- 1780138086.367: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.674 yaw=-0.202
+- 1780138086.463: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.674 yaw=-0.202
+- 1780138086.568: ACCEPTED small_correction dx=0.008 yaw=0.000 map_odom_xy_norm=0.681 yaw=-0.202
+- 1780138086.676: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.681 yaw=-0.202
+- 1780138086.781: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.681 yaw=-0.202
+- 1780138086.876: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.681 yaw=-0.202
+- 1780138086.971: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.681 yaw=-0.202
+- 1780138087.073: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.681 yaw=-0.202
+- 1780138087.164: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.681 yaw=-0.202
+- 1780138087.271: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.681 yaw=-0.202
+- 1780138087.365: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.681 yaw=-0.202
+- 1780138087.468: ACCEPTED small_correction dx=0.015 yaw=0.000 map_odom_xy_norm=0.682 yaw=-0.201
+- 1780138087.561: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.682 yaw=-0.201
+- 1780138087.660: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.682 yaw=-0.201
+- 1780138087.760: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.682 yaw=-0.201
+- 1780138087.864: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.682 yaw=-0.201
+- 1780138087.958: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.682 yaw=-0.201
+- 1780138088.055: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.682 yaw=-0.201
+- 1780138088.162: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.682 yaw=-0.201
+- 1780138088.265: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.682 yaw=-0.201
+- 1780138088.360: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.682 yaw=-0.201
+- 1780138091.974: ACCEPTED small_correction dx=0.065 yaw=0.002 map_odom_xy_norm=0.735 yaw=-0.199
+- 1780138092.069: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.735 yaw=-0.199
+- 1780138092.169: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.735 yaw=-0.199
+- 1780138092.277: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.735 yaw=-0.199
+- 1780138092.368: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.735 yaw=-0.199
+- 1780138096.659: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138096.753: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138096.855: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138096.957: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138097.075: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138097.178: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138097.257: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138097.360: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138097.457: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138097.564: ACCEPTED small_correction dx=0.025 yaw=0.001 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138097.661: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138097.763: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138097.862: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138097.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138098.062: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138098.158: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138098.258: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138098.359: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138098.463: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138098.558: ACCEPTED small_correction dx=0.075 yaw=0.004 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138098.653: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138098.767: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138098.869: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138098.965: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138099.061: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138099.167: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138099.265: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138099.359: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780138073.568: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138073.662: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138073.920: SPIN_GUARD settling sec=3.00
+- 1780138073.957: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138074.251: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138074.431: SPIN_GUARD settling sec=3.00
+- 1780138074.469: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138074.656: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138074.761: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138074.857: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138075.052: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138075.469: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138075.749: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138076.247: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138076.467: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138076.755: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138077.053: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138077.158: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138077.356: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138077.464: SPIN_GUARD settled
+- 1780138077.464: PENDING large_correction count=1 dx=0.748 yaw=0.061
+- 1780138077.561: PENDING large_correction count=2/3
+- 1780138077.659: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138077.660: PENDING reset_large_candidate spread_xy=0.338 spread_yaw=0.020
+- 1780138077.757: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138077.757: PENDING large_correction count=2/3
+- 1780138077.854: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138078.254: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138078.361: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138078.858: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138079.259: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138079.362: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138079.656: PENDING large_correction count=1 dx=0.268 yaw=0.014
+- 1780138079.761: PENDING large_correction count=2/3
+- 1780138079.864: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138080.751: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138080.973: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138081.266: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138081.352: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138081.581: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138083.059: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138083.870: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138084.061: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138084.374: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138084.660: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138085.172: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138085.271: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138085.363: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138085.756: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138086.070: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138086.166: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138086.269: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138086.462: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138087.271: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138087.364: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138087.561: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138088.161: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138088.411: SPIN_GUARD entered source=navigation_status
+- 1780138088.412: SPIN_GUARD settling sec=3.00
+- 1780138088.772: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138088.886: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138088.922: SPIN_GUARD settling sec=3.00
+- 1780138089.077: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138090.265: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138090.468: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138090.558: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138090.665: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138090.765: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138090.867: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138090.967: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138091.160: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138091.464: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138091.867: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138091.973: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138091.974: SPIN_GUARD settled
+- 1780138092.069: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138092.169: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138092.416: SPIN_GUARD entered source=navigation_status
+- 1780138092.423: SPIN_GUARD settling sec=3.00
+- 1780138092.665: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138092.918: SPIN_GUARD settling sec=3.00
+- 1780138093.170: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138093.384: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138093.423: SPIN_GUARD settling sec=3.00
+- 1780138093.583: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138093.869: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138093.968: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138094.262: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138094.366: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138095.252: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138095.571: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138095.870: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138096.258: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138096.373: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138096.463: SPIN_GUARD settled
+- 1780138096.463: PENDING large_correction count=1 dx=0.348 yaw=0.014
+- 1780138096.562: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138096.562: PENDING large_correction count=2/3
+- 1780138096.753: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138097.257: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138097.457: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138097.762: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138098.558: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138099.264: PENDING wait_odom_cache gap=0.100s max=0.200s
+- map->odom 大变化:
+- 1780138078.666: dx=0.130m dyaw=0.014rad, (-0.104,-0.526,-0.205) -> (-0.067,-0.401,-0.219)
+- 1780138079.866: dx=0.268m dyaw=0.014rad, (-0.067,-0.401,-0.219) -> (0.164,-0.537,-0.205)
+- 1780138080.672: dx=0.071m dyaw=0.001rad, (0.164,-0.537,-0.205) -> (0.190,-0.603,-0.204)
+- 1780138081.700: dx=0.065m dyaw=0.003rad, (0.190,-0.603,-0.204) -> (0.233,-0.652,-0.201)
+- 1780138082.599: dx=0.050m dyaw=0.002rad, (0.233,-0.652,-0.201) -> (0.207,-0.609,-0.203)
+- 1780138085.570: dx=0.055m dyaw=0.003rad, (0.187,-0.600,-0.204) -> (0.230,-0.633,-0.202)
+- 1780138092.000: dx=0.065m dyaw=0.002rad, (0.248,-0.635,-0.201) -> (0.303,-0.670,-0.199)
+- 1780138096.666: dx=0.348m dyaw=0.014rad, (0.303,-0.670,-0.199) -> (-0.023,-0.549,-0.213)
+- 1780138098.566: dx=0.075m dyaw=0.004rad, (-0.012,-0.572,-0.211) -> (-0.086,-0.559,-0.215)
+
+### 点位13
+
+- 导航: 1780138095.459 -> 1780138109.116, 耗时 13.7s, odom 位移 4.15m, odom yaw 3.12rad
+- bridge: ACCEPTED 112 次, REJECTED 79 次, PENDING/SPIN_GUARD 71 次；spin 冻结拒绝 8 次
+- TF: map->odom 数值变化 12 次，大变化 8 次
+- 接受的定位修正:
+- 1780138096.659: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138096.753: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138096.855: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138096.957: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138097.075: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138097.178: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138097.257: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138097.360: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138097.457: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.550 yaw=-0.213
+- 1780138097.564: ACCEPTED small_correction dx=0.025 yaw=0.001 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138097.661: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138097.763: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138097.862: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138097.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138098.062: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138098.158: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138098.258: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138098.359: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138098.463: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.572 yaw=-0.211
+- 1780138098.558: ACCEPTED small_correction dx=0.075 yaw=0.004 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138098.653: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138098.767: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138098.869: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138098.965: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138099.061: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138099.167: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138099.265: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138099.359: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138099.459: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.566 yaw=-0.215
+- 1780138099.576: ACCEPTED small_correction dx=0.241 yaw=0.013 map_odom_xy_norm=0.539 yaw=-0.229
+- 1780138099.671: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.539 yaw=-0.229
+- 1780138099.778: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.539 yaw=-0.229
+- 1780138099.871: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.539 yaw=-0.229
+- 1780138099.955: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.539 yaw=-0.229
+- 1780138100.061: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.539 yaw=-0.229
+- 1780138100.163: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.539 yaw=-0.229
+- 1780138100.273: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.539 yaw=-0.229
+- 1780138100.373: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.539 yaw=-0.229
+- 1780138100.461: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.539 yaw=-0.229
+- 1780138100.559: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.539 yaw=-0.229
+- 1780138100.858: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.653 yaw=-0.208
+- 1780138100.958: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.653 yaw=-0.208
+- 1780138101.056: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.653 yaw=-0.208
+- 1780138101.161: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.653 yaw=-0.208
+- 1780138101.257: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.653 yaw=-0.208
+- 1780138101.376: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.653 yaw=-0.208
+- 1780138101.668: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.955 yaw=-0.190
+- 1780138101.770: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.955 yaw=-0.190
+- 1780138101.860: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.955 yaw=-0.190
+- 1780138101.960: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.955 yaw=-0.190
+- 1780138102.056: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.955 yaw=-0.190
+- 1780138102.165: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.955 yaw=-0.190
+- 1780138102.257: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.955 yaw=-0.190
+- 1780138102.349: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.955 yaw=-0.190
+- 1780138102.459: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.955 yaw=-0.190
+- 1780138102.564: ACCEPTED small_correction dx=0.106 yaw=0.001 map_odom_xy_norm=1.006 yaw=-0.188
+- 1780138102.650: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.006 yaw=-0.188
+- 1780138102.757: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.006 yaw=-0.188
+- 1780138102.857: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.006 yaw=-0.188
+- 1780138102.953: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.006 yaw=-0.188
+- 1780138103.051: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.006 yaw=-0.188
+- 1780138103.154: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.006 yaw=-0.188
+- 1780138103.258: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.006 yaw=-0.188
+- 1780138103.370: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.006 yaw=-0.188
+- 1780138103.471: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.006 yaw=-0.188
+- 1780138103.564: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.006 yaw=-0.188
+- 1780138103.660: ACCEPTED small_correction dx=0.083 yaw=0.001 map_odom_xy_norm=0.938 yaw=-0.189
+- 1780138103.760: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.938 yaw=-0.189
+- 1780138103.855: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.938 yaw=-0.189
+- 1780138103.972: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.938 yaw=-0.189
+- 1780138104.078: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.938 yaw=-0.189
+- 1780138104.191: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.938 yaw=-0.189
+- 1780138104.289: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.938 yaw=-0.189
+- 1780138104.357: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.938 yaw=-0.189
+- 1780138104.466: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.938 yaw=-0.189
+- 1780138104.580: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.938 yaw=-0.189
+- 1780138104.658: ACCEPTED small_correction dx=0.047 yaw=0.003 map_odom_xy_norm=0.967 yaw=-0.185
+- 1780138104.748: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.967 yaw=-0.185
+- 1780138104.863: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.967 yaw=-0.185
+- 1780138104.974: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.967 yaw=-0.185
+- 1780138105.070: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.967 yaw=-0.185
+- 1780138105.167: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.967 yaw=-0.185
+- 1780138105.262: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.967 yaw=-0.185
+- 1780138105.359: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.967 yaw=-0.185
+- 1780138112.165: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=1.798 yaw=-0.154
+- 1780138112.264: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.798 yaw=-0.154
+- 1780138112.366: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.798 yaw=-0.154
+- 1780138112.464: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.798 yaw=-0.154
+- 1780138112.555: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.798 yaw=-0.154
+- 1780138112.851: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=2.048 yaw=-0.145
+- 1780138112.957: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.048 yaw=-0.145
+- 1780138113.078: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.048 yaw=-0.145
+- 1780138113.174: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.048 yaw=-0.145
+- 1780138113.279: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.048 yaw=-0.145
+- 1780138113.366: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.048 yaw=-0.145
+- 1780138113.480: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.048 yaw=-0.145
+- 1780138113.568: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.048 yaw=-0.145
+- 1780138113.655: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.048 yaw=-0.145
+- 1780138113.759: ACCEPTED small_correction dx=0.049 yaw=0.002 map_odom_xy_norm=2.088 yaw=-0.143
+- 1780138113.859: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.088 yaw=-0.143
+- 1780138113.957: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.088 yaw=-0.143
+- 1780138114.061: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.088 yaw=-0.143
+- 1780138114.158: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.088 yaw=-0.143
+- 1780138114.272: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.088 yaw=-0.143
+- 1780138114.365: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.088 yaw=-0.143
+- 1780138114.475: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.088 yaw=-0.143
+- 1780138114.579: ACCEPTED small_correction dx=0.033 yaw=0.000 map_odom_xy_norm=2.058 yaw=-0.144
+- 1780138114.671: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.058 yaw=-0.144
+- 1780138114.775: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.058 yaw=-0.144
+- 1780138114.868: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.058 yaw=-0.144
+- 1780138114.963: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.058 yaw=-0.144
+- 1780138115.059: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.058 yaw=-0.144
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780138095.252: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138095.571: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138095.870: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138096.258: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138096.373: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138096.463: SPIN_GUARD settled
+- 1780138096.463: PENDING large_correction count=1 dx=0.348 yaw=0.014
+- 1780138096.562: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138096.562: PENDING large_correction count=2/3
+- 1780138096.753: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138097.257: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138097.457: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138097.762: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138098.558: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138099.264: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138099.778: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138099.953: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138100.371: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138100.665: PENDING large_correction count=1 dx=0.377 yaw=0.021
+- 1780138100.759: PENDING large_correction count=2/3
+- 1780138101.474: PENDING large_correction count=1 dx=0.415 yaw=0.018
+- 1780138101.565: PENDING large_correction count=2/3
+- 1780138102.160: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138102.256: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138102.458: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138102.562: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138102.857: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138102.952: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138103.051: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138103.469: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138103.760: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138104.465: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138104.578: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138105.416: SPIN_GUARD entered source=navigation_status
+- 1780138105.423: SPIN_GUARD settling sec=3.00
+- 1780138105.461: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138105.766: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138105.864: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138105.922: SPIN_GUARD settling sec=3.00
+- 1780138106.417: SPIN_GUARD settling sec=3.00
+- 1780138106.773: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138106.916: SPIN_GUARD settling sec=3.00
+- 1780138107.072: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138107.417: SPIN_GUARD settling sec=3.00
+- 1780138107.922: SPIN_GUARD settling sec=3.00
+- 1780138108.436: SPIN_GUARD settling sec=3.00
+- 1780138108.880: PENDING wait_odom_cache gap=0.117s max=0.200s
+- 1780138108.920: SPIN_GUARD settling sec=3.00
+- 1780138108.967: PENDING wait_odom_cache gap=0.083s max=0.200s
+- 1780138109.173: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138109.466: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138109.870: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138110.479: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138110.586: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138111.067: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138111.965: SPIN_GUARD settled
+- 1780138111.965: PENDING large_correction count=1 dx=0.883 yaw=0.031
+- 1780138112.064: PENDING large_correction count=2/3
+- 1780138112.366: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138112.463: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138112.553: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138112.657: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138112.658: PENDING large_correction count=1 dx=0.254 yaw=0.009
+- 1780138112.754: PENDING large_correction count=2/3
+- 1780138112.957: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138113.363: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138113.479: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138113.568: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138113.854: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138114.474: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138115.059: PENDING wait_odom_cache gap=0.100s max=0.200s
+- map->odom 大变化:
+- 1780138098.566: dx=0.075m dyaw=0.004rad, (-0.012,-0.572,-0.211) -> (-0.086,-0.559,-0.215)
+- 1780138099.601: dx=0.241m dyaw=0.013rad, (-0.086,-0.559,-0.215) -> (-0.300,-0.448,-0.229)
+- 1780138100.868: dx=0.377m dyaw=0.021rad, (-0.300,-0.448,-0.229) -> (0.016,-0.653,-0.208)
+- 1780138101.673: dx=0.415m dyaw=0.018rad, (0.016,-0.653,-0.208) -> (0.360,-0.885,-0.190)
+- 1780138102.567: dx=0.106m dyaw=0.001rad, (0.360,-0.885,-0.190) -> (0.466,-0.891,-0.188)
+- 1780138103.667: dx=0.083m dyaw=0.001rad, (0.466,-0.891,-0.188) -> (0.475,-0.809,-0.189)
+- 1780138112.173: dx=0.883m dyaw=0.031rad, (0.523,-0.814,-0.185) -> (1.287,-1.256,-0.154)
+- 1780138112.873: dx=0.254m dyaw=0.009rad, (1.287,-1.256,-0.154) -> (1.432,-1.465,-0.145)
+
+### 点位14
+
+- 导航: 1780138228.777 -> 1780138238.256, 耗时 9.5s, odom 位移 0.38m, odom yaw 1.73rad
+- bridge: ACCEPTED 55 次, REJECTED 95 次, PENDING/SPIN_GUARD 66 次；spin 冻结拒绝 10 次
+- TF: map->odom 数值变化 7 次，大变化 7 次
+- 接受的定位修正:
+- 1780138228.283: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.722 yaw=-0.152
+- 1780138228.376: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.722 yaw=-0.152
+- 1780138228.463: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.722 yaw=-0.152
+- 1780138228.565: ACCEPTED small_correction dx=0.017 yaw=0.001 map_odom_xy_norm=1.739 yaw=-0.151
+- 1780138228.665: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.739 yaw=-0.151
+- 1780138228.762: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.739 yaw=-0.151
+- 1780138228.859: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.739 yaw=-0.151
+- 1780138233.666: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=1.059 yaw=-0.183
+- 1780138233.765: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.059 yaw=-0.183
+- 1780138233.859: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.059 yaw=-0.183
+- 1780138233.965: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.059 yaw=-0.183
+- 1780138234.086: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.059 yaw=-0.183
+- 1780138234.174: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.059 yaw=-0.183
+- 1780138234.274: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.059 yaw=-0.183
+- 1780138234.367: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.059 yaw=-0.183
+- 1780138234.468: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.059 yaw=-0.183
+- 1780138234.567: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.059 yaw=-0.183
+- 1780138234.668: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.059 yaw=-0.183
+- 1780138234.971: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=1.464 yaw=-0.162
+- 1780138235.063: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.464 yaw=-0.162
+- 1780138235.164: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.464 yaw=-0.162
+- 1780138235.261: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.464 yaw=-0.162
+- 1780138235.375: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.464 yaw=-0.162
+- 1780138235.478: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.464 yaw=-0.162
+- 1780138235.761: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=1.995 yaw=-0.134
+- 1780138235.859: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.995 yaw=-0.134
+- 1780138241.163: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=1.740 yaw=-0.159
+- 1780138241.271: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.740 yaw=-0.159
+- 1780138241.364: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.740 yaw=-0.159
+- 1780138241.462: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.740 yaw=-0.159
+- 1780138241.571: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.740 yaw=-0.159
+- 1780138241.672: ACCEPTED small_correction dx=0.101 yaw=0.012 map_odom_xy_norm=1.640 yaw=-0.171
+- 1780138241.762: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.640 yaw=-0.171
+- 1780138241.861: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.640 yaw=-0.171
+- 1780138241.957: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.640 yaw=-0.171
+- 1780138242.057: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.640 yaw=-0.171
+- 1780138242.165: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.640 yaw=-0.171
+- 1780138242.258: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.640 yaw=-0.171
+- 1780138242.358: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.640 yaw=-0.171
+- 1780138242.459: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.640 yaw=-0.171
+- 1780138242.565: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.640 yaw=-0.171
+- 1780138242.878: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=1.073 yaw=-0.201
+- 1780138242.973: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.073 yaw=-0.201
+- 1780138243.070: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.073 yaw=-0.201
+- 1780138243.162: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.073 yaw=-0.201
+- 1780138243.259: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.073 yaw=-0.201
+- 1780138243.388: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.073 yaw=-0.201
+- 1780138243.477: ACCEPTED small_correction dx=0.182 yaw=0.010 map_odom_xy_norm=0.892 yaw=-0.211
+- 1780138243.574: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.892 yaw=-0.211
+- 1780138243.656: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.892 yaw=-0.211
+- 1780138243.757: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.892 yaw=-0.211
+- 1780138243.857: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.892 yaw=-0.211
+- 1780138243.957: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.892 yaw=-0.211
+- 1780138244.057: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.892 yaw=-0.211
+- 1780138244.157: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.892 yaw=-0.211
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780138228.564: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138228.911: SPIN_GUARD entered source=navigation_status
+- 1780138228.914: SPIN_GUARD settling sec=3.00
+- 1780138229.374: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138229.418: SPIN_GUARD settling sec=3.00
+- 1780138229.870: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138229.927: SPIN_GUARD settling sec=3.00
+- 1780138230.064: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138230.293: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138230.419: SPIN_GUARD settling sec=3.00
+- 1780138230.976: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138232.168: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138232.566: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138233.062: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138233.174: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138233.274: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138233.482: SPIN_GUARD settled
+- 1780138233.482: PENDING large_correction count=1 dx=0.837 yaw=0.031
+- 1780138233.573: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138233.573: PENDING large_correction count=2/3
+- 1780138233.858: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138234.274: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138234.365: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138234.565: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138234.667: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138234.759: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138234.760: PENDING large_correction count=1 dx=0.460 yaw=0.021
+- 1780138234.859: PENDING large_correction count=2/3
+- 1780138235.062: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138235.163: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138235.564: PENDING large_correction count=1 dx=0.598 yaw=0.028
+- 1780138235.671: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138235.672: PENDING large_correction count=2/3
+- 1780138235.914: SPIN_GUARD entered source=navigation_status
+- 1780138235.923: SPIN_GUARD settling sec=3.00
+- 1780138236.069: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138236.387: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138236.423: SPIN_GUARD settling sec=3.00
+- 1780138236.516: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138236.610: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138236.925: SPIN_GUARD settling sec=3.00
+- 1780138237.267: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138237.425: SPIN_GUARD settling sec=3.00
+- 1780138237.774: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138237.919: SPIN_GUARD settling sec=3.00
+- 1780138237.963: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138238.370: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138238.864: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138239.158: PENDING wait_odom_cache gap=0.111s max=0.200s
+- 1780138239.558: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138239.862: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138240.163: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138240.467: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138240.582: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138240.772: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138240.959: SPIN_GUARD settled
+- 1780138240.959: PENDING large_correction count=1 dx=0.323 yaw=0.026
+- 1780138241.063: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138241.064: PENDING large_correction count=2/3
+- 1780138241.671: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138241.762: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138241.861: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138242.661: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138242.661: PENDING large_correction count=1 dx=0.579 yaw=0.030
+- 1780138242.766: PENDING large_correction count=2/3
+- 1780138243.567: PENDING wait_odom_cache gap=0.104s max=0.200s
+- map->odom 大变化:
+- 1780138233.667: dx=0.888m dyaw=0.032rad, (1.261,-1.197,-0.151) -> (0.400,-0.981,-0.183)
+- 1780138235.003: dx=0.460m dyaw=0.021rad, (0.400,-0.981,-0.183) -> (0.780,-1.238,-0.162)
+- 1780138235.766: dx=0.598m dyaw=0.028rad, (0.780,-1.238,-0.162) -> (1.319,-1.497,-0.134)
+- 1780138241.166: dx=0.323m dyaw=0.026rad, (1.319,-1.497,-0.134) -> (1.282,-1.177,-0.159)
+- 1780138241.705: dx=0.101m dyaw=0.012rad, (1.282,-1.177,-0.159) -> (1.216,-1.100,-0.171)
+- 1780138242.901: dx=0.579m dyaw=0.030rad, (1.216,-1.100,-0.171) -> (0.730,-0.786,-0.201)
+- 1780138243.502: dx=0.182m dyaw=0.010rad, (0.730,-0.786,-0.201) -> (0.596,-0.663,-0.211)
+
+### 点位15
+
+- 导航: 1780138308.416 -> 1780138333.384, 耗时 25.0s, odom 位移 0.98m, odom yaw 0.17rad
+- bridge: ACCEPTED 190 次, REJECTED 115 次, PENDING/SPIN_GUARD 120 次；spin 冻结拒绝 12 次
+- TF: map->odom 数值变化 20 次，大变化 12 次
+- 接受的定位修正:
+- 1780138307.962: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.871 yaw=-0.198
+- 1780138308.065: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.871 yaw=-0.198
+- 1780138308.168: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.871 yaw=-0.198
+- 1780138308.274: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.871 yaw=-0.198
+- 1780138308.361: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.871 yaw=-0.198
+- 1780138308.489: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.871 yaw=-0.198
+- 1780138308.592: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.871 yaw=-0.198
+- 1780138308.673: ACCEPTED small_correction dx=0.021 yaw=0.001 map_odom_xy_norm=0.891 yaw=-0.197
+- 1780138308.774: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.891 yaw=-0.197
+- 1780138308.884: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.891 yaw=-0.197
+- 1780138315.171: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=2.489 yaw=-0.130
+- 1780138315.273: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.489 yaw=-0.130
+- 1780138315.386: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.489 yaw=-0.130
+- 1780138315.493: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.489 yaw=-0.130
+- 1780138315.780: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=3.494 yaw=-0.091
+- 1780138315.871: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.494 yaw=-0.091
+- 1780138315.967: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.494 yaw=-0.091
+- 1780138316.060: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.494 yaw=-0.091
+- 1780138316.159: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.494 yaw=-0.091
+- 1780138316.263: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.494 yaw=-0.091
+- 1780138316.368: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.494 yaw=-0.091
+- 1780138316.464: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.494 yaw=-0.091
+- 1780138316.763: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=3.956 yaw=-0.073
+- 1780138316.858: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.956 yaw=-0.073
+- 1780138316.960: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.956 yaw=-0.073
+- 1780138317.060: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.956 yaw=-0.073
+- 1780138317.165: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.956 yaw=-0.073
+- 1780138317.276: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.956 yaw=-0.073
+- 1780138317.376: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.956 yaw=-0.073
+- 1780138317.477: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.956 yaw=-0.073
+- 1780138317.576: ACCEPTED small_correction dx=0.144 yaw=0.007 map_odom_xy_norm=4.099 yaw=-0.066
+- 1780138317.672: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.099 yaw=-0.066
+- 1780138317.770: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.099 yaw=-0.066
+- 1780138317.867: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.099 yaw=-0.066
+- 1780138317.961: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.099 yaw=-0.066
+- 1780138318.061: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.099 yaw=-0.066
+- 1780138318.164: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.099 yaw=-0.066
+- 1780138318.264: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.099 yaw=-0.066
+- 1780138318.373: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.099 yaw=-0.066
+- 1780138318.474: ACCEPTED small_correction dx=0.026 yaw=0.000 map_odom_xy_norm=4.078 yaw=-0.067
+- 1780138318.573: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.078 yaw=-0.067
+- 1780138318.669: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.078 yaw=-0.067
+- 1780138318.767: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.078 yaw=-0.067
+- 1780138318.872: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.078 yaw=-0.067
+- 1780138318.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.078 yaw=-0.067
+- 1780138319.073: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.078 yaw=-0.067
+- 1780138319.165: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.078 yaw=-0.067
+- 1780138319.273: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.078 yaw=-0.067
+- 1780138319.390: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.078 yaw=-0.067
+- 1780138319.496: ACCEPTED small_correction dx=0.019 yaw=0.001 map_odom_xy_norm=4.089 yaw=-0.066
+- 1780138319.584: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.089 yaw=-0.066
+- 1780138319.674: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.089 yaw=-0.066
+- 1780138319.786: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.089 yaw=-0.066
+- 1780138319.889: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.089 yaw=-0.066
+- 1780138319.967: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.089 yaw=-0.066
+- 1780138320.062: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.089 yaw=-0.066
+- 1780138320.159: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.089 yaw=-0.066
+- 1780138320.268: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.089 yaw=-0.066
+- 1780138320.370: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.089 yaw=-0.066
+- 1780138320.462: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.089 yaw=-0.066
+- 1780138320.566: ACCEPTED small_correction dx=0.038 yaw=0.002 map_odom_xy_norm=4.051 yaw=-0.067
+- 1780138320.675: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.051 yaw=-0.067
+- 1780138320.770: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.051 yaw=-0.067
+- 1780138320.861: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.051 yaw=-0.067
+- 1780138320.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.051 yaw=-0.067
+- 1780138321.060: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.051 yaw=-0.067
+- 1780138321.165: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.051 yaw=-0.067
+- 1780138321.274: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.051 yaw=-0.067
+- 1780138321.378: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.051 yaw=-0.067
+- 1780138321.478: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.051 yaw=-0.067
+- 1780138321.571: ACCEPTED small_correction dx=0.089 yaw=0.004 map_odom_xy_norm=3.964 yaw=-0.071
+- 1780138321.664: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.964 yaw=-0.071
+- 1780138321.772: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.964 yaw=-0.071
+- 1780138321.876: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.964 yaw=-0.071
+- 1780138321.973: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.964 yaw=-0.071
+- 1780138322.071: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.964 yaw=-0.071
+- 1780138322.176: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.964 yaw=-0.071
+- 1780138322.283: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.964 yaw=-0.071
+- 1780138322.365: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.964 yaw=-0.071
+- 1780138322.469: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.964 yaw=-0.071
+- 1780138322.569: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.964 yaw=-0.071
+- 1780138322.678: ACCEPTED small_correction dx=0.005 yaw=0.000 map_odom_xy_norm=3.959 yaw=-0.071
+- 1780138322.770: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.959 yaw=-0.071
+- 1780138322.867: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.959 yaw=-0.071
+- 1780138322.972: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.959 yaw=-0.071
+- 1780138323.068: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.959 yaw=-0.071
+- 1780138323.190: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.959 yaw=-0.071
+- 1780138323.296: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.959 yaw=-0.071
+- 1780138323.368: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.959 yaw=-0.071
+- 1780138323.475: ACCEPTED small_correction dx=0.024 yaw=0.001 map_odom_xy_norm=3.936 yaw=-0.072
+- 1780138323.567: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.936 yaw=-0.072
+- 1780138323.668: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.936 yaw=-0.072
+- 1780138323.760: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.936 yaw=-0.072
+- 1780138323.871: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.936 yaw=-0.072
+- 1780138323.967: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.936 yaw=-0.072
+- 1780138324.061: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.936 yaw=-0.072
+- 1780138324.160: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.936 yaw=-0.072
+- 1780138324.281: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.936 yaw=-0.072
+- 1780138324.382: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.936 yaw=-0.072
+- 1780138324.468: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.936 yaw=-0.072
+- 1780138324.563: ACCEPTED small_correction dx=0.004 yaw=0.000 map_odom_xy_norm=3.938 yaw=-0.072
+- 1780138324.658: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.938 yaw=-0.072
+- 1780138324.776: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.938 yaw=-0.072
+- 1780138324.878: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.938 yaw=-0.072
+- 1780138324.984: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.938 yaw=-0.072
+- 1780138325.072: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.938 yaw=-0.072
+- 1780138325.182: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.938 yaw=-0.072
+- 1780138325.272: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.938 yaw=-0.072
+- 1780138325.389: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.938 yaw=-0.072
+- 1780138325.490: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.938 yaw=-0.072
+- 1780138325.579: ACCEPTED small_correction dx=0.096 yaw=0.004 map_odom_xy_norm=3.844 yaw=-0.076
+- 1780138325.676: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.844 yaw=-0.076
+- 1780138325.767: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.844 yaw=-0.076
+- 1780138325.865: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.844 yaw=-0.076
+- 1780138325.994: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.844 yaw=-0.076
+- 1780138326.079: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.844 yaw=-0.076
+- 1780138326.164: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.844 yaw=-0.076
+- 1780138326.276: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.844 yaw=-0.076
+- 1780138326.379: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.844 yaw=-0.076
+- 1780138326.468: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.844 yaw=-0.076
+- 1780138326.565: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.844 yaw=-0.076
+- 1780138326.862: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=3.580 yaw=-0.086
+- 1780138326.971: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.580 yaw=-0.086
+- 1780138327.073: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.580 yaw=-0.086
+- 1780138327.196: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.580 yaw=-0.086
+- 1780138327.292: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.580 yaw=-0.086
+- 1780138327.398: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.580 yaw=-0.086
+- 1780138327.485: ACCEPTED small_correction dx=0.008 yaw=0.001 map_odom_xy_norm=3.587 yaw=-0.085
+- 1780138327.582: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.587 yaw=-0.085
+- 1780138327.665: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.587 yaw=-0.085
+- 1780138327.761: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.587 yaw=-0.085
+- 1780138327.869: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.587 yaw=-0.085
+- 1780138327.965: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.587 yaw=-0.085
+- 1780138328.071: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.587 yaw=-0.085
+- 1780138328.171: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.587 yaw=-0.085
+- 1780138328.276: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.587 yaw=-0.085
+- 1780138328.372: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.587 yaw=-0.085
+- 1780138328.475: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.587 yaw=-0.085
+- 1780138328.576: ACCEPTED small_correction dx=0.125 yaw=0.005 map_odom_xy_norm=3.476 yaw=-0.090
+- 1780138328.672: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.090
+- 1780138328.778: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.090
+- 1780138328.864: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.090
+- 1780138328.963: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.090
+- 1780138329.063: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.090
+- 1780138329.171: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.090
+- 1780138329.259: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.090
+- 1780138329.367: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.090
+- 1780138329.468: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.090
+- 1780138329.560: ACCEPTED small_correction dx=0.060 yaw=0.002 map_odom_xy_norm=3.419 yaw=-0.092
+- 1780138329.663: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.419 yaw=-0.092
+- 1780138329.763: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.419 yaw=-0.092
+- 1780138329.876: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.419 yaw=-0.092
+- 1780138329.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.419 yaw=-0.092
+- 1780138330.064: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.419 yaw=-0.092
+- 1780138330.164: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.419 yaw=-0.092
+- 1780138330.261: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.419 yaw=-0.092
+- 1780138330.376: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.419 yaw=-0.092
+- 1780138336.183: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.733 yaw=-0.229
+- 1780138336.261: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.733 yaw=-0.229
+- 1780138336.369: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.733 yaw=-0.229
+- 1780138336.469: ACCEPTED small_correction dx=0.087 yaw=0.011 map_odom_xy_norm=0.675 yaw=-0.240
+- 1780138336.565: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.675 yaw=-0.240
+- 1780138336.667: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.675 yaw=-0.240
+- 1780138336.764: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.675 yaw=-0.240
+- 1780138336.861: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.675 yaw=-0.240
+- 1780138336.961: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.675 yaw=-0.240
+- 1780138337.058: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.675 yaw=-0.240
+- 1780138337.158: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.675 yaw=-0.240
+- 1780138337.275: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.675 yaw=-0.240
+- 1780138337.379: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.675 yaw=-0.240
+- 1780138337.484: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.675 yaw=-0.240
+- 1780138337.574: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.675 yaw=-0.240
+- 1780138337.680: ACCEPTED small_correction dx=0.095 yaw=0.005 map_odom_xy_norm=0.703 yaw=-0.245
+- 1780138337.770: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.703 yaw=-0.245
+- 1780138337.877: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.703 yaw=-0.245
+- 1780138337.965: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.703 yaw=-0.245
+- 1780138338.065: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.703 yaw=-0.245
+- 1780138338.168: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.703 yaw=-0.245
+- 1780138338.265: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.703 yaw=-0.245
+- 1780138338.364: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.703 yaw=-0.245
+- 1780138338.474: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.703 yaw=-0.245
+- 1780138338.572: ACCEPTED small_correction dx=0.027 yaw=0.001 map_odom_xy_norm=0.684 yaw=-0.246
+- 1780138338.664: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.684 yaw=-0.246
+- 1780138338.763: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.684 yaw=-0.246
+- 1780138338.870: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.684 yaw=-0.246
+- 1780138338.961: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.684 yaw=-0.246
+- 1780138339.061: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.684 yaw=-0.246
+- 1780138339.190: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.684 yaw=-0.246
+- 1780138339.267: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.684 yaw=-0.246
+- 1780138339.368: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.684 yaw=-0.246
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780138308.064: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138308.166: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138308.270: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138308.488: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138308.577: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138308.774: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138308.910: SPIN_GUARD entered source=navigation_status
+- 1780138308.920: SPIN_GUARD settling sec=3.00
+- 1780138309.364: PENDING wait_odom_cache gap=0.103s max=0.200s
+- 1780138309.430: SPIN_GUARD settling sec=3.00
+- 1780138309.472: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138309.762: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138309.919: SPIN_GUARD settling sec=3.00
+- 1780138310.090: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138310.189: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138310.423: SPIN_GUARD settling sec=3.00
+- 1780138310.669: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138310.766: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138310.928: SPIN_GUARD settling sec=3.00
+- 1780138311.425: SPIN_GUARD settling sec=3.00
+- 1780138311.920: SPIN_GUARD settling sec=3.00
+- 1780138312.166: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138312.267: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138312.462: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138312.769: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138314.168: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138314.665: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138314.865: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138314.976: SPIN_GUARD settled
+- 1780138314.976: PENDING large_correction count=1 dx=1.598 yaw=0.067
+- 1780138315.079: PENDING large_correction count=2/3
+- 1780138315.385: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138315.580: PENDING large_correction count=1 dx=1.076 yaw=0.039
+- 1780138315.687: PENDING large_correction count=2/3
+- 1780138315.780: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138315.967: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138316.059: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138316.463: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138316.558: PENDING large_correction count=1 dx=0.487 yaw=0.018
+- 1780138316.659: PENDING large_correction count=2/3
+- 1780138316.960: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138317.576: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138317.866: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138318.061: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138318.573: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138318.669: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138319.164: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138319.273: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138319.389: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138319.672: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138319.888: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138320.062: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138320.158: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138320.461: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138320.563: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138321.165: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138321.272: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138321.973: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138322.175: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138322.279: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138323.067: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138323.368: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138323.667: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138323.871: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138323.967: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138324.060: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138324.281: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138324.468: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138324.563: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138324.773: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138324.984: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138325.072: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138326.663: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138326.663: PENDING large_correction count=1 dx=0.276 yaw=0.011
+- 1780138326.766: PENDING large_correction count=2/3
+- 1780138326.970: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138327.196: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138327.292: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138328.371: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138328.670: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138329.167: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138329.258: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138329.366: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138329.465: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138329.875: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138330.410: SPIN_GUARD entered source=navigation_status
+- 1780138330.413: SPIN_GUARD settling sec=3.00
+- 1780138330.869: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138330.916: SPIN_GUARD settling sec=3.00
+- 1780138331.366: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138331.417: SPIN_GUARD settling sec=3.00
+- 1780138331.879: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138331.921: SPIN_GUARD settling sec=3.00
+- 1780138332.414: SPIN_GUARD settling sec=3.00
+- 1780138332.682: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138332.917: SPIN_GUARD settling sec=3.00
+- 1780138333.285: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138333.499: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138334.078: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138334.579: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138335.159: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138335.362: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138335.477: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138335.971: SPIN_GUARD settled
+- 1780138335.971: PENDING large_correction count=1 dx=2.692 yaw=0.137
+- 1780138336.072: PENDING large_correction count=2/3
+- 1780138336.369: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138336.469: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138336.764: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138336.860: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138336.960: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138337.158: PENDING wait_odom_cache gap=0.103s max=0.200s
+- 1780138337.378: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138337.770: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138337.873: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138338.064: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138338.167: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138339.061: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138339.190: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138339.368: PENDING wait_odom_cache gap=0.100s max=0.200s
+- map->odom 大变化:
+- 1780138315.199: dx=1.598m dyaw=0.067rad, (0.482,-0.750,-0.197) -> (1.361,-2.084,-0.130)
+- 1780138315.800: dx=1.076m dyaw=0.039rad, (1.361,-2.084,-0.130) -> (2.274,-2.653,-0.091)
+- 1780138316.768: dx=0.487m dyaw=0.018rad, (2.274,-2.653,-0.091) -> (2.698,-2.893,-0.073)
+- 1780138317.603: dx=0.144m dyaw=0.007rad, (2.698,-2.893,-0.073) -> (2.811,-2.983,-0.066)
+- 1780138321.599: dx=0.089m dyaw=0.004rad, (2.796,-2.931,-0.067) -> (2.723,-2.881,-0.071)
+- 1780138325.600: dx=0.096m dyaw=0.004rad, (2.702,-2.865,-0.072) -> (2.623,-2.810,-0.076)
+- 1780138326.867: dx=0.276m dyaw=0.011rad, (2.623,-2.810,-0.076) -> (2.387,-2.667,-0.086)
+- 1780138328.600: dx=0.125m dyaw=0.005rad, (2.394,-2.670,-0.085) -> (2.277,-2.626,-0.090)
+- 1780138329.570: dx=0.060m dyaw=0.002rad, (2.277,-2.626,-0.090) -> (2.225,-2.596,-0.092)
+- 1780138336.205: dx=2.692m dyaw=0.137rad, (2.225,-2.596,-0.092) -> (0.408,-0.609,-0.229)
+- 1780138336.499: dx=0.087m dyaw=0.011rad, (0.408,-0.609,-0.229) -> (0.426,-0.524,-0.240)
+- 1780138337.700: dx=0.095m dyaw=0.005rad, (0.426,-0.524,-0.240) -> (0.511,-0.482,-0.245)
+
+### 点位16
+
+- 导航: 1780138382.312 -> 1780138397.241, 耗时 14.9s, odom 位移 1.19m, odom yaw 0.29rad
+- bridge: ACCEPTED 84 次, REJECTED 120 次, PENDING/SPIN_GUARD 96 次；spin 冻结拒绝 13 次
+- TF: map->odom 数值变化 9 次，大变化 6 次
+- 接受的定位修正:
+- 1780138381.870: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.757 yaw=-0.236
+- 1780138381.958: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.757 yaw=-0.236
+- 1780138382.059: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.757 yaw=-0.236
+- 1780138382.169: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.757 yaw=-0.236
+- 1780138382.275: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.757 yaw=-0.236
+- 1780138382.371: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.757 yaw=-0.236
+- 1780138389.158: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=2.941 yaw=-0.127
+- 1780138389.262: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.941 yaw=-0.127
+- 1780138389.361: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.941 yaw=-0.127
+- 1780138389.463: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.941 yaw=-0.127
+- 1780138389.593: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.941 yaw=-0.127
+- 1780138389.892: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=4.229 yaw=-0.081
+- 1780138389.997: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.229 yaw=-0.081
+- 1780138390.090: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.229 yaw=-0.081
+- 1780138390.192: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.229 yaw=-0.081
+- 1780138390.288: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.229 yaw=-0.081
+- 1780138390.377: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.229 yaw=-0.081
+- 1780138390.475: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.229 yaw=-0.081
+- 1780138390.584: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.229 yaw=-0.081
+- 1780138390.670: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.229 yaw=-0.081
+- 1780138390.979: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=5.085 yaw=-0.049
+- 1780138391.103: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.085 yaw=-0.049
+- 1780138391.192: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.085 yaw=-0.049
+- 1780138391.277: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.085 yaw=-0.049
+- 1780138391.379: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.085 yaw=-0.049
+- 1780138391.495: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.085 yaw=-0.049
+- 1780138391.576: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.085 yaw=-0.049
+- 1780138391.869: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=5.561 yaw=-0.029
+- 1780138391.972: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.561 yaw=-0.029
+- 1780138392.072: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.561 yaw=-0.029
+- 1780138392.172: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.561 yaw=-0.029
+- 1780138392.278: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.561 yaw=-0.029
+- 1780138392.383: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.561 yaw=-0.029
+- 1780138392.469: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.561 yaw=-0.029
+- 1780138392.576: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.561 yaw=-0.029
+- 1780138392.683: ACCEPTED small_correction dx=0.228 yaw=0.006 map_odom_xy_norm=5.365 yaw=-0.035
+- 1780138392.765: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.365 yaw=-0.035
+- 1780138392.862: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.365 yaw=-0.035
+- 1780138392.962: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.365 yaw=-0.035
+- 1780138393.066: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.365 yaw=-0.035
+- 1780138393.159: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.365 yaw=-0.035
+- 1780138393.259: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.365 yaw=-0.035
+- 1780138393.367: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.365 yaw=-0.035
+- 1780138393.477: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.365 yaw=-0.035
+- 1780138393.575: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.365 yaw=-0.035
+- 1780138393.691: ACCEPTED small_correction dx=0.193 yaw=0.008 map_odom_xy_norm=5.206 yaw=-0.043
+- 1780138393.783: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.206 yaw=-0.043
+- 1780138393.887: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.206 yaw=-0.043
+- 1780138393.998: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.206 yaw=-0.043
+- 1780138394.096: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.206 yaw=-0.043
+- 1780138394.189: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.206 yaw=-0.043
+- 1780138394.271: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.206 yaw=-0.043
+- 1780138394.372: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.206 yaw=-0.043
+- 1780138400.164: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=4.584 yaw=-0.073
+- 1780138400.265: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.584 yaw=-0.073
+- 1780138400.391: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.584 yaw=-0.073
+- 1780138400.485: ACCEPTED small_correction dx=0.015 yaw=0.003 map_odom_xy_norm=4.571 yaw=-0.076
+- 1780138400.571: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.571 yaw=-0.076
+- 1780138400.669: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.571 yaw=-0.076
+- 1780138400.794: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.571 yaw=-0.076
+- 1780138400.874: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.571 yaw=-0.076
+- 1780138400.965: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.571 yaw=-0.076
+- 1780138401.074: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.571 yaw=-0.076
+- 1780138401.165: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.571 yaw=-0.076
+- 1780138401.275: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.571 yaw=-0.076
+- 1780138401.373: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.571 yaw=-0.076
+- 1780138401.475: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.571 yaw=-0.076
+- 1780138401.568: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.571 yaw=-0.076
+- 1780138401.662: ACCEPTED small_correction dx=0.046 yaw=0.000 map_odom_xy_norm=4.531 yaw=-0.076
+- 1780138401.760: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.531 yaw=-0.076
+- 1780138401.892: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.531 yaw=-0.076
+- 1780138402.004: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.531 yaw=-0.076
+- 1780138402.097: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.531 yaw=-0.076
+- 1780138402.186: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.531 yaw=-0.076
+- 1780138402.272: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.531 yaw=-0.076
+- 1780138402.371: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.531 yaw=-0.076
+- 1780138402.486: ACCEPTED small_correction dx=0.009 yaw=0.000 map_odom_xy_norm=4.540 yaw=-0.076
+- 1780138402.591: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.540 yaw=-0.076
+- 1780138402.702: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.540 yaw=-0.076
+- 1780138402.785: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.540 yaw=-0.076
+- 1780138402.885: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.540 yaw=-0.076
+- 1780138402.976: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.540 yaw=-0.076
+- 1780138403.074: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.540 yaw=-0.076
+- 1780138403.163: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.540 yaw=-0.076
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780138381.958: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138382.451: SPIN_GUARD entered source=navigation_status
+- 1780138382.454: SPIN_GUARD settling sec=3.00
+- 1780138382.760: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138382.916: SPIN_GUARD settling sec=3.00
+- 1780138382.958: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138383.444: SPIN_GUARD settling sec=3.00
+- 1780138383.662: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138383.764: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138383.930: SPIN_GUARD settling sec=3.00
+- 1780138383.964: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138384.060: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138384.163: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138384.421: SPIN_GUARD settling sec=3.00
+- 1780138384.466: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138384.920: SPIN_GUARD settling sec=3.00
+- 1780138385.281: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138385.367: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138385.422: SPIN_GUARD settling sec=3.00
+- 1780138385.478: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138385.576: PENDING wait_odom_cache gap=0.107s max=0.200s
+- 1780138385.677: PENDING wait_odom_cache gap=0.093s max=0.200s
+- 1780138385.941: SPIN_GUARD settling sec=3.00
+- 1780138386.174: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138386.865: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138387.073: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138387.384: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138387.771: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138388.167: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138388.565: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138388.668: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138388.876: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138388.958: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138388.958: SPIN_GUARD settled
+- 1780138388.958: PENDING large_correction count=1 dx=2.232 yaw=0.109
+- 1780138389.057: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138389.057: PENDING large_correction count=2/3
+- 1780138389.158: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138389.361: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138389.460: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138389.679: PENDING large_correction count=1 dx=1.368 yaw=0.046
+- 1780138389.786: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138389.786: PENDING large_correction count=2/3
+- 1780138389.994: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138390.759: PENDING large_correction count=1 dx=0.890 yaw=0.033
+- 1780138390.871: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138390.871: PENDING large_correction count=2/3
+- 1780138390.979: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138391.185: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138391.275: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138391.493: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138391.674: PENDING large_correction count=1 dx=0.482 yaw=0.020
+- 1780138391.774: PENDING large_correction count=2/3
+- 1780138391.869: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138391.972: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138392.278: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138392.383: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138392.764: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138392.860: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138393.259: PENDING wait_odom_cache gap=0.103s max=0.200s
+- 1780138393.367: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138393.476: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138393.574: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138394.412: SPIN_GUARD entered source=navigation_status
+- 1780138394.422: SPIN_GUARD settling sec=3.00
+- 1780138394.561: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138394.658: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138394.921: SPIN_GUARD settling sec=3.00
+- 1780138395.268: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138395.411: SPIN_GUARD settling sec=3.00
+- 1780138395.474: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138395.568: PENDING wait_odom_cache gap=0.106s max=0.200s
+- 1780138395.671: PENDING wait_odom_cache gap=0.094s max=0.200s
+- 1780138395.923: SPIN_GUARD settling sec=3.00
+- 1780138395.969: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138396.082: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138396.421: SPIN_GUARD settling sec=3.00
+- 1780138396.483: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138396.574: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138396.678: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138396.919: SPIN_GUARD settling sec=3.00
+- 1780138397.498: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138397.976: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138398.485: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138398.667: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138398.887: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138399.493: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138399.682: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138399.767: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138399.976: SPIN_GUARD settled
+- 1780138399.976: PENDING large_correction count=1 dx=0.623 yaw=0.030
+- 1780138400.070: PENDING large_correction count=2/3
+- 1780138401.372: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138402.272: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138402.371: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138402.590: PENDING wait_odom_cache gap=0.104s max=0.200s
+- map->odom 大变化:
+- 1780138389.900: dx=1.368m dyaw=0.046rad, (1.399,-2.587,-0.127) -> (2.479,-3.426,-0.081)
+- 1780138391.002: dx=0.890m dyaw=0.033rad, (2.479,-3.426,-0.081) -> (3.193,-3.958,-0.049)
+- 1780138391.904: dx=0.482m dyaw=0.020rad, (3.193,-3.958,-0.049) -> (3.550,-4.280,-0.029)
+- 1780138392.699: dx=0.228m dyaw=0.006rad, (3.550,-4.280,-0.029) -> (3.336,-4.202,-0.035)
+- 1780138393.699: dx=0.193m dyaw=0.008rad, (3.336,-4.202,-0.035) -> (3.152,-4.144,-0.043)
+- 1780138400.167: dx=0.623m dyaw=0.030rad, (3.152,-4.144,-0.043) -> (2.750,-3.667,-0.073)
+
+### 点位17
+
+- 导航: 1780138472.640 -> 1780138498.327, 耗时 25.7s, odom 位移 0.49m, odom yaw 0.19rad
+- bridge: ACCEPTED 196 次, REJECTED 105 次, PENDING/SPIN_GUARD 138 次；spin 冻结拒绝 11 次
+- TF: map->odom 数值变化 22 次，大变化 17 次
+- 接受的定位修正:
+- 1780138472.190: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.592 yaw=-0.071
+- 1780138472.284: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.592 yaw=-0.071
+- 1780138472.377: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.592 yaw=-0.071
+- 1780138472.483: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.592 yaw=-0.071
+- 1780138472.590: ACCEPTED small_correction dx=0.013 yaw=0.001 map_odom_xy_norm=4.584 yaw=-0.072
+- 1780138472.711: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.584 yaw=-0.072
+- 1780138472.817: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.584 yaw=-0.072
+- 1780138472.902: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.584 yaw=-0.072
+- 1780138478.762: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=3.908 yaw=-0.103
+- 1780138478.859: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.908 yaw=-0.103
+- 1780138478.969: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.908 yaw=-0.103
+- 1780138479.097: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.908 yaw=-0.103
+- 1780138479.180: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.908 yaw=-0.103
+- 1780138479.279: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.908 yaw=-0.103
+- 1780138479.379: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.908 yaw=-0.103
+- 1780138479.491: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.908 yaw=-0.103
+- 1780138479.573: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.908 yaw=-0.103
+- 1780138479.863: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=4.762 yaw=-0.077
+- 1780138479.960: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.762 yaw=-0.077
+- 1780138480.087: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.762 yaw=-0.077
+- 1780138480.189: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.762 yaw=-0.077
+- 1780138480.283: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.762 yaw=-0.077
+- 1780138480.374: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.762 yaw=-0.077
+- 1780138480.473: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.762 yaw=-0.077
+- 1780138480.762: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=5.479 yaw=-0.056
+- 1780138480.859: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.479 yaw=-0.056
+- 1780138480.959: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.479 yaw=-0.056
+- 1780138481.063: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.479 yaw=-0.056
+- 1780138481.164: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.479 yaw=-0.056
+- 1780138481.263: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.479 yaw=-0.056
+- 1780138481.386: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.479 yaw=-0.056
+- 1780138481.482: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.479 yaw=-0.056
+- 1780138481.766: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=6.213 yaw=-0.031
+- 1780138481.869: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.213 yaw=-0.031
+- 1780138481.969: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.213 yaw=-0.031
+- 1780138482.075: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.213 yaw=-0.031
+- 1780138482.168: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.213 yaw=-0.031
+- 1780138482.265: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.213 yaw=-0.031
+- 1780138482.380: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.213 yaw=-0.031
+- 1780138482.476: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.213 yaw=-0.031
+- 1780138482.781: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=6.460 yaw=-0.023
+- 1780138482.861: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.460 yaw=-0.023
+- 1780138482.978: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.460 yaw=-0.023
+- 1780138483.063: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.460 yaw=-0.023
+- 1780138483.165: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.460 yaw=-0.023
+- 1780138483.281: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.460 yaw=-0.023
+- 1780138483.389: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.460 yaw=-0.023
+- 1780138483.481: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.460 yaw=-0.023
+- 1780138483.577: ACCEPTED small_correction dx=0.024 yaw=0.001 map_odom_xy_norm=6.483 yaw=-0.022
+- 1780138483.670: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.483 yaw=-0.022
+- 1780138483.757: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.483 yaw=-0.022
+- 1780138483.860: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.483 yaw=-0.022
+- 1780138483.959: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.483 yaw=-0.022
+- 1780138484.060: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.483 yaw=-0.022
+- 1780138484.175: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.483 yaw=-0.022
+- 1780138484.260: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.483 yaw=-0.022
+- 1780138484.380: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.483 yaw=-0.022
+- 1780138484.483: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.483 yaw=-0.022
+- 1780138484.568: ACCEPTED small_correction dx=0.035 yaw=0.001 map_odom_xy_norm=6.448 yaw=-0.023
+- 1780138484.669: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.448 yaw=-0.023
+- 1780138484.765: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.448 yaw=-0.023
+- 1780138484.868: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.448 yaw=-0.023
+- 1780138484.971: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.448 yaw=-0.023
+- 1780138485.067: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.448 yaw=-0.023
+- 1780138485.161: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.448 yaw=-0.023
+- 1780138485.264: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.448 yaw=-0.023
+- 1780138485.373: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.448 yaw=-0.023
+- 1780138485.478: ACCEPTED small_correction dx=0.007 yaw=0.000 map_odom_xy_norm=6.441 yaw=-0.022
+- 1780138485.572: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.441 yaw=-0.022
+- 1780138485.660: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.441 yaw=-0.022
+- 1780138485.774: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.441 yaw=-0.022
+- 1780138485.886: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.441 yaw=-0.022
+- 1780138485.991: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.441 yaw=-0.022
+- 1780138486.096: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.441 yaw=-0.022
+- 1780138486.194: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.441 yaw=-0.022
+- 1780138486.262: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.441 yaw=-0.022
+- 1780138486.366: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.441 yaw=-0.022
+- 1780138486.472: ACCEPTED small_correction dx=0.019 yaw=0.001 map_odom_xy_norm=6.423 yaw=-0.023
+- 1780138486.568: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.423 yaw=-0.023
+- 1780138486.673: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.423 yaw=-0.023
+- 1780138486.773: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.423 yaw=-0.023
+- 1780138486.871: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.423 yaw=-0.023
+- 1780138486.959: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.423 yaw=-0.023
+- 1780138487.058: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.423 yaw=-0.023
+- 1780138487.168: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.423 yaw=-0.023
+- 1780138487.262: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.423 yaw=-0.023
+- 1780138487.365: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.423 yaw=-0.023
+- 1780138487.466: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.423 yaw=-0.023
+- 1780138487.565: ACCEPTED small_correction dx=0.019 yaw=0.000 map_odom_xy_norm=6.405 yaw=-0.024
+- 1780138487.684: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.405 yaw=-0.024
+- 1780138487.778: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.405 yaw=-0.024
+- 1780138487.871: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.405 yaw=-0.024
+- 1780138487.975: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.405 yaw=-0.024
+- 1780138488.080: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.405 yaw=-0.024
+- 1780138488.163: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.405 yaw=-0.024
+- 1780138488.261: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.405 yaw=-0.024
+- 1780138488.392: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.405 yaw=-0.024
+- 1780138488.479: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.405 yaw=-0.024
+- 1780138488.577: ACCEPTED small_correction dx=0.203 yaw=0.006 map_odom_xy_norm=6.206 yaw=-0.030
+- 1780138488.660: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.206 yaw=-0.030
+- 1780138488.764: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.206 yaw=-0.030
+- 1780138488.875: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.206 yaw=-0.030
+- 1780138488.964: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.206 yaw=-0.030
+- 1780138489.059: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.206 yaw=-0.030
+- 1780138489.160: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.206 yaw=-0.030
+- 1780138489.262: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.206 yaw=-0.030
+- 1780138489.368: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.206 yaw=-0.030
+- 1780138489.475: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.206 yaw=-0.030
+- 1780138489.581: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.206 yaw=-0.030
+- 1780138489.667: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.206 yaw=-0.030
+- 1780138489.968: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=5.950 yaw=-0.038
+- 1780138490.069: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.950 yaw=-0.038
+- 1780138490.168: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.950 yaw=-0.038
+- 1780138490.280: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.950 yaw=-0.038
+- 1780138490.372: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.950 yaw=-0.038
+- 1780138490.478: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.950 yaw=-0.038
+- 1780138490.578: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.950 yaw=-0.038
+- 1780138490.663: ACCEPTED small_correction dx=0.149 yaw=0.005 map_odom_xy_norm=5.802 yaw=-0.043
+- 1780138490.786: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.802 yaw=-0.043
+- 1780138490.885: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.802 yaw=-0.043
+- 1780138490.979: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.802 yaw=-0.043
+- 1780138491.068: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.802 yaw=-0.043
+- 1780138491.174: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.802 yaw=-0.043
+- 1780138491.267: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.802 yaw=-0.043
+- 1780138491.361: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.802 yaw=-0.043
+- 1780138491.475: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.802 yaw=-0.043
+- 1780138491.564: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.802 yaw=-0.043
+- 1780138491.872: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=5.520 yaw=-0.053
+- 1780138491.960: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.520 yaw=-0.053
+- 1780138492.068: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.520 yaw=-0.053
+- 1780138492.164: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.520 yaw=-0.053
+- 1780138492.273: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.520 yaw=-0.053
+- 1780138492.369: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.520 yaw=-0.053
+- 1780138492.475: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.520 yaw=-0.053
+- 1780138492.566: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.520 yaw=-0.053
+- 1780138492.660: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.520 yaw=-0.053
+- 1780138492.771: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.520 yaw=-0.053
+- 1780138493.071: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=5.139 yaw=-0.068
+- 1780138493.172: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.139 yaw=-0.068
+- 1780138493.278: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.139 yaw=-0.068
+- 1780138493.366: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.139 yaw=-0.068
+- 1780138493.469: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.139 yaw=-0.068
+- 1780138493.592: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.139 yaw=-0.068
+- 1780138493.871: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=4.793 yaw=-0.080
+- 1780138493.972: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.793 yaw=-0.080
+- 1780138494.084: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.793 yaw=-0.080
+- 1780138494.167: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.793 yaw=-0.080
+- 1780138494.270: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.793 yaw=-0.080
+- 1780138494.362: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.793 yaw=-0.080
+- 1780138494.476: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.793 yaw=-0.080
+- 1780138494.588: ACCEPTED small_correction dx=0.234 yaw=0.007 map_odom_xy_norm=4.999 yaw=-0.073
+- 1780138494.674: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.999 yaw=-0.073
+- 1780138494.791: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.999 yaw=-0.073
+- 1780138494.880: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.999 yaw=-0.073
+- 1780138494.965: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.999 yaw=-0.073
+- 1780138495.066: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.999 yaw=-0.073
+- 1780138495.173: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.999 yaw=-0.073
+- 1780138495.278: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.999 yaw=-0.073
+- 1780138495.378: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.999 yaw=-0.073
+- 1780138495.496: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.999 yaw=-0.073
+- 1780138495.593: ACCEPTED small_correction dx=0.130 yaw=0.003 map_odom_xy_norm=4.869 yaw=-0.076
+- 1780138495.683: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.869 yaw=-0.076
+- 1780138495.772: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.869 yaw=-0.076
+- 1780138495.869: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.869 yaw=-0.076
+- 1780138501.158: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=3.481 yaw=-0.136
+- 1780138501.263: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.481 yaw=-0.136
+- 1780138501.362: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.481 yaw=-0.136
+- 1780138501.476: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.481 yaw=-0.136
+- 1780138501.585: ACCEPTED small_correction dx=0.131 yaw=0.008 map_odom_xy_norm=3.359 yaw=-0.143
+- 1780138501.678: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.359 yaw=-0.143
+- 1780138501.784: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.359 yaw=-0.143
+- 1780138501.885: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.359 yaw=-0.143
+- 1780138501.979: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.359 yaw=-0.143
+- 1780138502.076: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.359 yaw=-0.143
+- 1780138502.173: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.359 yaw=-0.143
+- 1780138502.260: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.359 yaw=-0.143
+- 1780138502.362: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.359 yaw=-0.143
+- 1780138502.476: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.359 yaw=-0.143
+- 1780138502.567: ACCEPTED small_correction dx=0.056 yaw=0.002 map_odom_xy_norm=3.303 yaw=-0.145
+- 1780138502.666: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.303 yaw=-0.145
+- 1780138502.761: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.303 yaw=-0.145
+- 1780138502.866: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.303 yaw=-0.145
+- 1780138502.959: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.303 yaw=-0.145
+- 1780138503.071: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.303 yaw=-0.145
+- 1780138503.160: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.303 yaw=-0.145
+- 1780138503.272: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.303 yaw=-0.145
+- 1780138503.374: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.303 yaw=-0.145
+- 1780138503.477: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.303 yaw=-0.145
+- 1780138503.575: ACCEPTED small_correction dx=0.059 yaw=0.003 map_odom_xy_norm=3.354 yaw=-0.142
+- 1780138503.678: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.354 yaw=-0.142
+- 1780138503.787: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.354 yaw=-0.142
+- 1780138503.865: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.354 yaw=-0.142
+- 1780138503.977: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.354 yaw=-0.142
+- 1780138504.079: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.354 yaw=-0.142
+- 1780138504.174: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.354 yaw=-0.142
+- 1780138504.269: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.354 yaw=-0.142
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780138472.283: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138472.377: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138472.710: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138472.815: PENDING wait_odom_cache gap=0.094s max=0.200s
+- 1780138472.911: SPIN_GUARD entered source=navigation_status
+- 1780138472.916: SPIN_GUARD settling sec=3.00
+- 1780138472.968: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138473.289: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138473.414: SPIN_GUARD settling sec=3.00
+- 1780138473.776: PENDING wait_odom_cache gap=0.094s max=0.200s
+- 1780138473.916: SPIN_GUARD settling sec=3.00
+- 1780138473.970: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138474.358: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138474.423: SPIN_GUARD settling sec=3.00
+- 1780138474.874: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138474.919: SPIN_GUARD settling sec=3.00
+- 1780138475.167: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138475.264: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138475.359: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138475.418: SPIN_GUARD settling sec=3.00
+- 1780138475.571: PENDING wait_odom_cache gap=0.106s max=0.200s
+- 1780138476.568: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138476.676: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138476.783: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138477.162: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138477.960: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138478.064: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138478.495: SPIN_GUARD settled
+- 1780138478.495: PENDING large_correction count=1 dx=1.274 yaw=0.039
+- 1780138478.591: PENDING reset_large_candidate spread_xy=0.388 spread_yaw=0.009
+- 1780138478.670: PENDING large_correction count=2/3
+- 1780138479.096: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138479.278: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138479.571: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138479.667: PENDING large_correction count=1 dx=0.877 yaw=0.025
+- 1780138479.776: PENDING large_correction count=2/3
+- 1780138479.863: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138480.560: PENDING large_correction count=1 dx=0.744 yaw=0.022
+- 1780138480.659: PENDING large_correction count=2/3
+- 1780138481.164: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138481.262: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138481.384: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138481.481: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138481.589: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138481.589: PENDING large_correction count=1 dx=0.767 yaw=0.025
+- 1780138481.672: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138481.673: PENDING large_correction count=2/3
+- 1780138481.764: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138482.264: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138482.474: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138482.561: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138482.561: PENDING large_correction count=1 dx=0.253 yaw=0.008
+- 1780138482.680: PENDING large_correction count=2/3
+- 1780138483.062: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138483.388: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138483.576: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138483.858: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138483.959: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138484.260: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138484.482: PENDING wait_odom_cache gap=0.103s max=0.200s
+- 1780138484.764: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138484.868: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138485.067: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138485.478: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138485.571: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138485.659: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138485.990: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138486.365: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138486.469: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138486.672: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138486.773: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138487.167: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138488.576: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138488.658: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138488.762: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138489.159: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138489.367: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138489.474: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138489.576: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138489.757: PENDING large_correction count=1 dx=0.260 yaw=0.008
+- 1780138489.864: PENDING large_correction count=2/3
+- 1780138490.167: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138490.278: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138490.978: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138491.173: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138491.562: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138491.660: PENDING large_correction count=1 dx=0.286 yaw=0.010
+- 1780138491.772: PENDING large_correction count=2/3
+- 1780138491.872: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138491.960: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138492.272: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138492.474: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138492.660: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138492.769: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138492.869: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138492.869: PENDING large_correction count=1 dx=0.388 yaw=0.015
+- 1780138492.976: PENDING large_correction count=2/3
+- 1780138493.365: PENDING wait_odom_cache gap=0.093s max=0.200s
+- 1780138493.706: PENDING wait_odom_cache gap=0.108s max=0.200s
+- 1780138493.706: PENDING large_correction count=1 dx=0.364 yaw=0.012
+- 1780138493.790: PENDING large_correction count=2/3
+- 1780138494.083: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138494.164: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138494.586: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138494.674: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138495.173: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138495.278: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138495.374: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138495.681: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138495.912: SPIN_GUARD entered source=navigation_status
+- 1780138495.919: SPIN_GUARD settling sec=3.00
+- 1780138496.158: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138496.418: SPIN_GUARD settling sec=3.00
+- 1780138496.913: SPIN_GUARD settling sec=3.00
+- 1780138497.377: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138497.416: SPIN_GUARD settling sec=3.00
+- 1780138497.660: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138497.924: SPIN_GUARD settling sec=3.00
+- 1780138498.084: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138498.268: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138498.669: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138498.768: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138499.305: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138499.994: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138500.772: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138500.973: SPIN_GUARD settled
+- 1780138500.973: PENDING large_correction count=1 dx=1.388 yaw=0.059
+- 1780138501.068: PENDING large_correction count=2/3
+- 1780138501.158: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138501.885: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138501.979: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138502.475: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138503.071: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138503.272: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138503.374: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138503.575: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138503.977: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138504.268: PENDING wait_odom_cache gap=0.100s max=0.200s
+- map->odom 大变化:
+- 1780138478.767: dx=1.110m dyaw=0.031rad, (2.757,-3.662,-0.072) -> (1.654,-3.541,-0.103)
+- 1780138479.866: dx=0.877m dyaw=0.025rad, (1.654,-3.541,-0.103) -> (2.209,-4.219,-0.077)
+- 1780138480.767: dx=0.744m dyaw=0.022rad, (2.209,-4.219,-0.077) -> (2.732,-4.749,-0.056)
+- 1780138481.768: dx=0.767m dyaw=0.025rad, (2.732,-4.749,-0.056) -> (3.300,-5.265,-0.031)
+- 1780138482.799: dx=0.253m dyaw=0.008rad, (3.300,-5.265,-0.031) -> (3.476,-5.446,-0.023)
+- 1780138488.604: dx=0.203m dyaw=0.006rad, (3.444,-5.401,-0.024) -> (3.306,-5.251,-0.030)
+- 1780138490.001: dx=0.260m dyaw=0.008rad, (3.306,-5.251,-0.030) -> (3.131,-5.060,-0.038)
+- 1780138490.673: dx=0.149m dyaw=0.005rad, (3.131,-5.060,-0.038) -> (3.051,-4.934,-0.043)
+- 1780138491.900: dx=0.286m dyaw=0.010rad, (3.051,-4.934,-0.043) -> (2.865,-4.718,-0.053)
+- 1780138493.101: dx=0.388m dyaw=0.015rad, (2.865,-4.718,-0.053) -> (2.608,-4.428,-0.068)
+- 1780138493.903: dx=0.364m dyaw=0.012rad, (2.608,-4.428,-0.068) -> (2.336,-4.185,-0.080)
+- 1780138494.603: dx=0.234m dyaw=0.007rad, (2.336,-4.185,-0.080) -> (2.535,-4.309,-0.073)
+- 1780138495.600: dx=0.130m dyaw=0.003rad, (2.535,-4.309,-0.073) -> (2.469,-4.196,-0.076)
+- 1780138501.167: dx=1.388m dyaw=0.059rad, (2.469,-4.196,-0.076) -> (1.790,-2.985,-0.136)
+- 1780138501.599: dx=0.131m dyaw=0.008rad, (1.790,-2.985,-0.136) -> (1.688,-2.905,-0.143)
+- 1780138502.600: dx=0.056m dyaw=0.002rad, (1.688,-2.905,-0.143) -> (1.653,-2.860,-0.145)
+- 1780138503.600: dx=0.059m dyaw=0.003rad, (1.653,-2.860,-0.145) -> (1.705,-2.889,-0.142)
+
+### 点位18
+
+- 导航: 1780138564.153 -> 1780138578.472, 耗时 14.3s, odom 位移 1.31m, odom yaw 0.06rad
+- bridge: ACCEPTED 77 次, REJECTED 115 次, PENDING/SPIN_GUARD 94 次；spin 冻结拒绝 12 次
+- TF: map->odom 数值变化 10 次，大变化 10 次
+- 接受的定位修正:
+- 1780138563.671: ACCEPTED small_correction dx=0.091 yaw=0.003 map_odom_xy_norm=3.476 yaw=-0.133
+- 1780138563.775: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.133
+- 1780138563.877: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.133
+- 1780138563.996: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.133
+- 1780138564.092: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.133
+- 1780138564.175: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.133
+- 1780138564.297: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.133
+- 1780138564.405: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.476 yaw=-0.133
+- 1780138569.882: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=1.750 yaw=-0.195
+- 1780138569.972: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.750 yaw=-0.195
+- 1780138570.073: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.750 yaw=-0.195
+- 1780138570.174: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.750 yaw=-0.195
+- 1780138570.284: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.750 yaw=-0.195
+- 1780138570.392: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.750 yaw=-0.195
+- 1780138570.477: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.750 yaw=-0.195
+- 1780138570.571: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.750 yaw=-0.195
+- 1780138570.858: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=2.204 yaw=-0.185
+- 1780138570.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.204 yaw=-0.185
+- 1780138571.062: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.204 yaw=-0.185
+- 1780138571.162: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.204 yaw=-0.185
+- 1780138571.258: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.204 yaw=-0.185
+- 1780138571.360: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.204 yaw=-0.185
+- 1780138571.476: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.204 yaw=-0.185
+- 1780138571.570: ACCEPTED small_correction dx=0.113 yaw=0.001 map_odom_xy_norm=2.316 yaw=-0.186
+- 1780138571.662: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.316 yaw=-0.186
+- 1780138571.757: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.316 yaw=-0.186
+- 1780138571.860: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.316 yaw=-0.186
+- 1780138571.966: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.316 yaw=-0.186
+- 1780138572.077: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.316 yaw=-0.186
+- 1780138572.176: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.316 yaw=-0.186
+- 1780138572.266: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.316 yaw=-0.186
+- 1780138572.391: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.316 yaw=-0.186
+- 1780138572.499: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.316 yaw=-0.186
+- 1780138572.777: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=1.884 yaw=-0.204
+- 1780138572.874: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.884 yaw=-0.204
+- 1780138572.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.884 yaw=-0.204
+- 1780138573.072: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.884 yaw=-0.204
+- 1780138573.165: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.884 yaw=-0.204
+- 1780138573.272: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.884 yaw=-0.204
+- 1780138573.369: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.884 yaw=-0.204
+- 1780138573.666: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=1.592 yaw=-0.219
+- 1780138573.768: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.592 yaw=-0.219
+- 1780138573.863: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.592 yaw=-0.219
+- 1780138573.972: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.592 yaw=-0.219
+- 1780138574.060: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.592 yaw=-0.219
+- 1780138574.167: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.592 yaw=-0.219
+- 1780138574.277: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.592 yaw=-0.219
+- 1780138574.374: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.592 yaw=-0.219
+- 1780138574.476: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.592 yaw=-0.219
+- 1780138574.561: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.592 yaw=-0.219
+- 1780138574.667: ACCEPTED small_correction dx=0.071 yaw=0.002 map_odom_xy_norm=1.588 yaw=-0.221
+- 1780138574.764: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.588 yaw=-0.221
+- 1780138574.867: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=1.588 yaw=-0.221
+- 1780138581.685: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.833 yaw=-0.290
+- 1780138581.980: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.406 yaw=-0.288
+- 1780138582.106: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.406 yaw=-0.288
+- 1780138582.179: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.406 yaw=-0.288
+- 1780138582.277: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.406 yaw=-0.288
+- 1780138582.381: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.406 yaw=-0.288
+- 1780138582.491: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.406 yaw=-0.288
+- 1780138582.772: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=0.058 yaw=-0.284
+- 1780138582.872: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.058 yaw=-0.284
+- 1780138582.990: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.058 yaw=-0.284
+- 1780138583.065: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.058 yaw=-0.284
+- 1780138583.189: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.058 yaw=-0.284
+- 1780138583.272: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.058 yaw=-0.284
+- 1780138583.379: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.058 yaw=-0.284
+- 1780138583.505: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.058 yaw=-0.284
+- 1780138583.588: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.058 yaw=-0.284
+- 1780138583.674: ACCEPTED small_correction dx=0.186 yaw=0.001 map_odom_xy_norm=0.181 yaw=-0.283
+- 1780138583.777: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.283
+- 1780138583.870: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.283
+- 1780138583.973: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.283
+- 1780138584.076: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.283
+- 1780138584.183: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.283
+- 1780138584.277: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.283
+- 1780138584.392: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.181 yaw=-0.283
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780138564.411: SPIN_GUARD entered source=navigation_status
+- 1780138564.413: SPIN_GUARD settling sec=3.00
+- 1780138564.685: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138564.912: SPIN_GUARD settling sec=3.00
+- 1780138565.067: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138565.379: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138565.418: SPIN_GUARD settling sec=3.00
+- 1780138565.475: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138565.921: SPIN_GUARD settling sec=3.00
+- 1780138565.960: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138566.070: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138566.162: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138566.258: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138566.417: SPIN_GUARD settling sec=3.00
+- 1780138566.467: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138567.067: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138567.280: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138567.370: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138567.477: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138568.387: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138568.492: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138568.797: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138569.183: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138569.272: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138569.490: SPIN_GUARD settled
+- 1780138569.490: PENDING large_correction count=1 dx=2.517 yaw=0.072
+- 1780138569.569: PENDING large_correction count=2/3
+- 1780138569.669: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138569.669: PENDING reset_large_candidate spread_xy=0.375 spread_yaw=0.010
+- 1780138569.766: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138569.766: PENDING large_correction count=2/3
+- 1780138570.173: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138570.676: PENDING large_correction count=1 dx=0.503 yaw=0.010
+- 1780138570.768: PENDING large_correction count=2/3
+- 1780138571.662: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138571.757: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138571.962: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138572.585: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138572.586: PENDING large_correction count=1 dx=0.485 yaw=0.018
+- 1780138572.679: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138572.679: PENDING large_correction count=2/3
+- 1780138572.777: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138572.872: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138573.488: PENDING large_correction count=1 dx=0.372 yaw=0.015
+- 1780138573.563: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138573.563: PENDING large_correction count=2/3
+- 1780138573.764: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138574.164: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138574.476: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138574.667: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138574.916: SPIN_GUARD entered source=navigation_status
+- 1780138574.928: SPIN_GUARD settling sec=3.00
+- 1780138575.366: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138575.430: SPIN_GUARD settling sec=3.00
+- 1780138575.858: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138575.912: SPIN_GUARD settling sec=3.00
+- 1780138576.268: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138576.420: SPIN_GUARD settling sec=3.00
+- 1780138576.946: SPIN_GUARD settling sec=3.00
+- 1780138577.086: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138577.183: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138577.270: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138577.368: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138577.421: SPIN_GUARD settling sec=3.00
+- 1780138577.579: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138577.677: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138577.774: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138577.877: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138577.923: SPIN_GUARD settling sec=3.00
+- 1780138578.269: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138578.413: SPIN_GUARD settling sec=3.00
+- 1780138578.583: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138578.684: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138579.073: PENDING wait_odom_cache gap=0.110s max=0.200s
+- 1780138579.385: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138579.710: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138579.871: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138580.490: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138580.694: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138580.787: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138581.068: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138581.488: SPIN_GUARD settled
+- 1780138581.488: PENDING large_correction count=1 dx=1.708 yaw=0.069
+- 1780138581.595: PENDING large_correction count=2/3
+- 1780138581.816: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138581.816: PENDING large_correction count=1 dx=0.429 yaw=0.002
+- 1780138581.899: PENDING large_correction count=2/3
+- 1780138582.574: PENDING wait_odom_cache gap=0.106s max=0.200s
+- 1780138582.574: PENDING large_correction count=1 dx=0.394 yaw=0.004
+- 1780138582.669: PENDING large_correction count=2/3
+- 1780138582.771: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138583.186: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138583.503: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138583.674: PENDING wait_odom_cache gap=0.096s max=0.200s
+- map->odom 大变化:
+- 1780138569.900: dx=2.220m dyaw=0.062rad, (1.751,-3.002,-0.133) -> (-0.080,-1.748,-0.195)
+- 1780138570.868: dx=0.503m dyaw=0.010rad, (-0.080,-1.748,-0.195) -> (0.139,-2.200,-0.185)
+- 1780138571.600: dx=0.113m dyaw=0.001rad, (0.139,-2.200,-0.185) -> (0.164,-2.310,-0.186)
+- 1780138572.799: dx=0.485m dyaw=0.018rad, (0.164,-2.310,-0.186) -> (-0.066,-1.882,-0.204)
+- 1780138573.668: dx=0.372m dyaw=0.015rad, (-0.066,-1.882,-0.204) -> (-0.267,-1.569,-0.219)
+- 1780138574.708: dx=0.071m dyaw=0.002rad, (-0.267,-1.569,-0.219) -> (-0.336,-1.552,-0.221)
+- 1780138581.721: dx=1.708m dyaw=0.069rad, (-0.336,-1.552,-0.221) -> (-0.829,0.083,-0.290)
+- 1780138582.000: dx=0.429m dyaw=0.002rad, (-0.829,0.083,-0.290) -> (-0.405,0.010,-0.288)
+- 1780138582.802: dx=0.394m dyaw=0.004rad, (-0.405,0.010,-0.288) -> (-0.017,-0.055,-0.284)
+- 1780138583.699: dx=0.186m dyaw=0.001rad, (-0.017,-0.055,-0.284) -> (0.169,-0.065,-0.283)
+
+### 点位19
+
+- 导航: 1780138620.976 -> 1780138641.722, 耗时 20.7s, odom 位移 0.10m, odom yaw 0.02rad
+- bridge: ACCEPTED 145 次, REJECTED 120 次, PENDING/SPIN_GUARD 119 次；spin 冻结拒绝 12 次
+- TF: map->odom 数值变化 17 次，大变化 11 次
+- 接受的定位修正:
+- 1780138620.482: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.148 yaw=-0.282
+- 1780138620.587: ACCEPTED small_correction dx=0.028 yaw=0.001 map_odom_xy_norm=0.175 yaw=-0.281
+- 1780138620.684: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.281
+- 1780138620.765: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.281
+- 1780138620.867: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.281
+- 1780138620.978: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.281
+- 1780138621.081: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.281
+- 1780138621.178: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.281
+- 1780138621.286: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.281
+- 1780138621.386: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=0.175 yaw=-0.281
+- 1780138627.679: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=2.585 yaw=-0.348
+- 1780138627.968: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=2.779 yaw=-0.348
+- 1780138628.074: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.779 yaw=-0.348
+- 1780138628.179: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.779 yaw=-0.348
+- 1780138628.274: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.779 yaw=-0.348
+- 1780138628.383: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.779 yaw=-0.348
+- 1780138628.488: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=2.779 yaw=-0.348
+- 1780138628.763: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=3.279 yaw=-0.360
+- 1780138628.868: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.279 yaw=-0.360
+- 1780138628.957: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.279 yaw=-0.360
+- 1780138629.059: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.279 yaw=-0.360
+- 1780138629.173: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.279 yaw=-0.360
+- 1780138629.272: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.279 yaw=-0.360
+- 1780138629.359: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.279 yaw=-0.360
+- 1780138629.477: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.279 yaw=-0.360
+- 1780138629.558: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.279 yaw=-0.360
+- 1780138629.866: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=3.833 yaw=-0.379
+- 1780138629.975: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.833 yaw=-0.379
+- 1780138630.079: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.833 yaw=-0.379
+- 1780138630.188: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.833 yaw=-0.379
+- 1780138630.284: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.833 yaw=-0.379
+- 1780138630.375: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.833 yaw=-0.379
+- 1780138630.489: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.833 yaw=-0.379
+- 1780138630.572: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.833 yaw=-0.379
+- 1780138630.679: ACCEPTED small_correction dx=0.141 yaw=0.001 map_odom_xy_norm=3.973 yaw=-0.380
+- 1780138630.798: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.973 yaw=-0.380
+- 1780138630.906: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.973 yaw=-0.380
+- 1780138630.988: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.973 yaw=-0.380
+- 1780138631.065: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.973 yaw=-0.380
+- 1780138631.160: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.973 yaw=-0.380
+- 1780138631.258: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.973 yaw=-0.380
+- 1780138631.358: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.973 yaw=-0.380
+- 1780138631.466: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.973 yaw=-0.380
+- 1780138631.567: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.973 yaw=-0.380
+- 1780138631.679: ACCEPTED small_correction dx=0.073 yaw=0.002 map_odom_xy_norm=4.039 yaw=-0.377
+- 1780138631.766: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.039 yaw=-0.377
+- 1780138631.886: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.039 yaw=-0.377
+- 1780138631.997: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.039 yaw=-0.377
+- 1780138632.060: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.039 yaw=-0.377
+- 1780138632.175: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.039 yaw=-0.377
+- 1780138632.271: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.039 yaw=-0.377
+- 1780138632.360: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.039 yaw=-0.377
+- 1780138632.469: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.039 yaw=-0.377
+- 1780138632.567: ACCEPTED small_correction dx=0.080 yaw=0.001 map_odom_xy_norm=4.115 yaw=-0.378
+- 1780138632.678: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.115 yaw=-0.378
+- 1780138632.785: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.115 yaw=-0.378
+- 1780138632.876: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.115 yaw=-0.378
+- 1780138632.967: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.115 yaw=-0.378
+- 1780138633.057: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.115 yaw=-0.378
+- 1780138633.168: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.115 yaw=-0.378
+- 1780138633.262: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.115 yaw=-0.378
+- 1780138633.368: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.115 yaw=-0.378
+- 1780138633.471: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.115 yaw=-0.378
+- 1780138633.562: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.115 yaw=-0.378
+- 1780138633.660: ACCEPTED small_correction dx=0.013 yaw=0.001 map_odom_xy_norm=4.122 yaw=-0.379
+- 1780138633.758: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.122 yaw=-0.379
+- 1780138633.868: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.122 yaw=-0.379
+- 1780138633.966: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.122 yaw=-0.379
+- 1780138634.062: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.122 yaw=-0.379
+- 1780138634.166: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.122 yaw=-0.379
+- 1780138634.280: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.122 yaw=-0.379
+- 1780138634.376: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.122 yaw=-0.379
+- 1780138634.472: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.122 yaw=-0.379
+- 1780138634.566: ACCEPTED small_correction dx=0.095 yaw=0.003 map_odom_xy_norm=4.044 yaw=-0.376
+- 1780138634.664: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.044 yaw=-0.376
+- 1780138634.764: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.044 yaw=-0.376
+- 1780138634.887: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.044 yaw=-0.376
+- 1780138634.977: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.044 yaw=-0.376
+- 1780138635.063: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.044 yaw=-0.376
+- 1780138635.167: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.044 yaw=-0.376
+- 1780138635.274: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.044 yaw=-0.376
+- 1780138635.380: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.044 yaw=-0.376
+- 1780138635.481: ACCEPTED small_correction dx=0.020 yaw=0.001 map_odom_xy_norm=4.043 yaw=-0.377
+- 1780138635.576: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.043 yaw=-0.377
+- 1780138635.660: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.043 yaw=-0.377
+- 1780138635.758: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.043 yaw=-0.377
+- 1780138635.869: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.043 yaw=-0.377
+- 1780138635.972: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.043 yaw=-0.377
+- 1780138636.086: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.043 yaw=-0.377
+- 1780138636.166: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.043 yaw=-0.377
+- 1780138636.275: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.043 yaw=-0.377
+- 1780138636.364: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.043 yaw=-0.377
+- 1780138636.473: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.043 yaw=-0.377
+- 1780138636.566: ACCEPTED small_correction dx=0.049 yaw=0.001 map_odom_xy_norm=4.069 yaw=-0.378
+- 1780138636.658: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.069 yaw=-0.378
+- 1780138636.773: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.069 yaw=-0.378
+- 1780138636.867: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.069 yaw=-0.378
+- 1780138636.958: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.069 yaw=-0.378
+- 1780138637.065: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.069 yaw=-0.378
+- 1780138637.166: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.069 yaw=-0.378
+- 1780138637.259: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.069 yaw=-0.378
+- 1780138637.364: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.069 yaw=-0.378
+- 1780138637.471: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.069 yaw=-0.378
+- 1780138637.564: ACCEPTED small_correction dx=0.070 yaw=0.004 map_odom_xy_norm=4.055 yaw=-0.382
+- 1780138637.671: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.055 yaw=-0.382
+- 1780138637.773: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.055 yaw=-0.382
+- 1780138637.861: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.055 yaw=-0.382
+- 1780138637.956: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.055 yaw=-0.382
+- 1780138638.063: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.055 yaw=-0.382
+- 1780138638.157: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.055 yaw=-0.382
+- 1780138638.269: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.055 yaw=-0.382
+- 1780138638.367: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.055 yaw=-0.382
+- 1780138644.480: ACCEPTED small_correction dx=0.215 yaw=0.010 map_odom_xy_norm=3.978 yaw=-0.392
+- 1780138644.582: ACCEPTED small_correction dx=0.103 yaw=0.004 map_odom_xy_norm=4.016 yaw=-0.395
+- 1780138644.665: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.016 yaw=-0.395
+- 1780138644.780: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.016 yaw=-0.395
+- 1780138644.886: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.016 yaw=-0.395
+- 1780138644.991: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.016 yaw=-0.395
+- 1780138645.075: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.016 yaw=-0.395
+- 1780138645.175: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.016 yaw=-0.395
+- 1780138645.295: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.016 yaw=-0.395
+- 1780138645.376: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.016 yaw=-0.395
+- 1780138645.476: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.016 yaw=-0.395
+- 1780138645.577: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.016 yaw=-0.395
+- 1780138645.689: ACCEPTED small_correction dx=0.033 yaw=0.000 map_odom_xy_norm=3.984 yaw=-0.395
+- 1780138645.798: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.984 yaw=-0.395
+- 1780138645.908: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.984 yaw=-0.395
+- 1780138646.006: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.984 yaw=-0.395
+- 1780138646.076: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.984 yaw=-0.395
+- 1780138646.163: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.984 yaw=-0.395
+- 1780138646.291: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.984 yaw=-0.395
+- 1780138646.383: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.984 yaw=-0.395
+- 1780138646.481: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.984 yaw=-0.395
+- 1780138646.570: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.984 yaw=-0.395
+- 1780138646.672: ACCEPTED small_correction dx=0.043 yaw=0.002 map_odom_xy_norm=3.942 yaw=-0.394
+- 1780138646.777: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.942 yaw=-0.394
+- 1780138646.872: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.942 yaw=-0.394
+- 1780138646.979: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.942 yaw=-0.394
+- 1780138647.081: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.942 yaw=-0.394
+- 1780138647.169: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.942 yaw=-0.394
+- 1780138647.273: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.942 yaw=-0.394
+- 1780138647.381: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.942 yaw=-0.394
+- 1780138647.486: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.942 yaw=-0.394
+- 1780138647.572: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=3.942 yaw=-0.394
+- 1780138647.665: ACCEPTED small_correction dx=0.034 yaw=0.001 map_odom_xy_norm=3.924 yaw=-0.393
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780138620.684: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138620.763: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138621.080: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138621.386: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138621.412: SPIN_GUARD entered source=navigation_status
+- 1780138621.419: SPIN_GUARD settling sec=3.00
+- 1780138621.472: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138621.777: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138621.920: SPIN_GUARD settling sec=3.00
+- 1780138622.419: SPIN_GUARD settling sec=3.00
+- 1780138622.481: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138622.786: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138622.870: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138622.910: SPIN_GUARD settling sec=3.00
+- 1780138623.074: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138623.266: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138623.417: SPIN_GUARD settling sec=3.00
+- 1780138623.476: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138623.776: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138623.919: SPIN_GUARD settling sec=3.00
+- 1780138624.068: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138624.274: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138624.419: SPIN_GUARD settling sec=3.00
+- 1780138624.566: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138624.761: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138625.179: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138625.276: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138625.467: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138625.657: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138625.769: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138627.070: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138627.266: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138627.474: SPIN_GUARD settled
+- 1780138627.474: PENDING large_correction count=1 dx=2.760 yaw=0.068
+- 1780138627.567: PENDING large_correction count=2/3
+- 1780138627.776: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138627.779: PENDING large_correction count=1 dx=0.474 yaw=0.001
+- 1780138627.867: PENDING large_correction count=2/3
+- 1780138628.273: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138628.481: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138628.578: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138628.578: PENDING large_correction count=1 dx=0.502 yaw=0.013
+- 1780138628.670: PENDING large_correction count=2/3
+- 1780138628.863: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138629.359: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138629.670: PENDING large_correction count=1 dx=0.602 yaw=0.019
+- 1780138629.789: PENDING large_correction count=2/3
+- 1780138630.373: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138630.679: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138630.972: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138631.061: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138631.160: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138631.466: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138631.567: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138631.678: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138631.766: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138632.467: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138632.874: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138632.967: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138633.261: PENDING wait_odom_cache gap=0.106s max=0.200s
+- 1780138633.368: PENDING wait_odom_cache gap=0.094s max=0.200s
+- 1780138633.561: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138633.757: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138634.062: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138634.165: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138634.280: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138634.376: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138634.472: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138634.660: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138635.273: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138635.376: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138635.971: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138636.472: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138636.657: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138636.957: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138637.470: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138637.773: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138637.861: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138637.955: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138638.361: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138638.424: SPIN_GUARD entered source=navigation_status
+- 1780138638.435: SPIN_GUARD settling sec=3.00
+- 1780138638.918: SPIN_GUARD settling sec=3.00
+- 1780138638.971: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138639.415: SPIN_GUARD settling sec=3.00
+- 1780138639.777: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138639.914: SPIN_GUARD settling sec=3.00
+- 1780138640.078: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138640.371: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138640.425: SPIN_GUARD settling sec=3.00
+- 1780138640.869: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138640.954: SPIN_GUARD settling sec=3.00
+- 1780138640.980: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138641.265: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138641.438: SPIN_GUARD settling sec=3.00
+- 1780138641.483: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138641.685: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138642.186: PENDING wait_odom_cache gap=0.111s max=0.200s
+- 1780138642.481: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138642.597: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138642.690: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138642.789: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138643.512: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138643.597: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138643.680: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138643.783: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138643.981: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138644.081: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138644.165: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138644.261: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138644.480: SPIN_GUARD settled
+- 1780138644.780: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138644.886: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138644.986: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138645.295: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138645.475: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138646.291: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138646.776: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138647.081: PENDING wait_odom_cache gap=0.100s max=0.200s
+- map->odom 大变化:
+- 1780138627.699: dx=2.760m dyaw=0.068rad, (0.151,-0.088,-0.281) -> (-2.305,1.170,-0.348)
+- 1780138628.000: dx=0.474m dyaw=0.001rad, (-2.305,1.170,-0.348) -> (-2.648,0.843,-0.348)
+- 1780138628.767: dx=0.502m dyaw=0.013rad, (-2.648,0.843,-0.348) -> (-3.109,1.041,-0.360)
+- 1780138629.874: dx=0.602m dyaw=0.019rad, (-3.109,1.041,-0.360) -> (-3.545,1.457,-0.379)
+- 1780138630.699: dx=0.141m dyaw=0.001rad, (-3.545,1.457,-0.379) -> (-3.675,1.510,-0.380)
+- 1780138631.700: dx=0.073m dyaw=0.002rad, (-3.675,1.510,-0.380) -> (-3.748,1.505,-0.377)
+- 1780138632.568: dx=0.080m dyaw=0.001rad, (-3.748,1.505,-0.377) -> (-3.810,1.556,-0.378)
+- 1780138634.601: dx=0.095m dyaw=0.003rad, (-3.820,1.548,-0.379) -> (-3.768,1.469,-0.376)
+- 1780138637.568: dx=0.070m dyaw=0.004rad, (-3.769,1.536,-0.378) -> (-3.729,1.593,-0.382)
+- 1780138644.502: dx=0.215m dyaw=0.010rad, (-3.729,1.593,-0.382) -> (-3.576,1.744,-0.392)
+- 1780138644.600: dx=0.103m dyaw=0.004rad, (-3.576,1.744,-0.392) -> (-3.566,1.847,-0.395)
+
+### 点位20
+
+- 导航: 1780138687.931 -> 1780138703.283, 耗时 15.4s, odom 位移 0.40m, odom yaw 0.06rad
+- bridge: ACCEPTED 107 次, REJECTED 100 次, PENDING/SPIN_GUARD 97 次；spin 冻结拒绝 10 次
+- TF: map->odom 数值变化 12 次，大变化 11 次
+- 接受的定位修正:
+- 1780138687.478: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.208 yaw=-0.402
+- 1780138687.568: ACCEPTED small_correction dx=0.001 yaw=0.000 map_odom_xy_norm=4.207 yaw=-0.402
+- 1780138687.677: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.207 yaw=-0.402
+- 1780138687.769: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.207 yaw=-0.402
+- 1780138687.877: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.207 yaw=-0.402
+- 1780138687.978: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.207 yaw=-0.402
+- 1780138688.084: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.207 yaw=-0.402
+- 1780138688.191: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.207 yaw=-0.402
+- 1780138688.286: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.207 yaw=-0.402
+- 1780138688.386: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.207 yaw=-0.402
+- 1780138692.676: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=5.288 yaw=-0.440
+- 1780138692.774: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.288 yaw=-0.440
+- 1780138693.066: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=4.980 yaw=-0.418
+- 1780138693.171: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.980 yaw=-0.418
+- 1780138693.275: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.980 yaw=-0.418
+- 1780138693.374: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.980 yaw=-0.418
+- 1780138693.475: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.980 yaw=-0.418
+- 1780138693.566: ACCEPTED small_correction dx=0.139 yaw=0.004 map_odom_xy_norm=4.894 yaw=-0.414
+- 1780138693.681: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.894 yaw=-0.414
+- 1780138693.777: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.894 yaw=-0.414
+- 1780138693.893: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.894 yaw=-0.414
+- 1780138693.978: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.894 yaw=-0.414
+- 1780138694.074: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.894 yaw=-0.414
+- 1780138694.197: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.894 yaw=-0.414
+- 1780138694.286: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.894 yaw=-0.414
+- 1780138694.380: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.894 yaw=-0.414
+- 1780138694.474: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.894 yaw=-0.414
+- 1780138694.580: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.894 yaw=-0.414
+- 1780138694.682: ACCEPTED small_correction dx=0.067 yaw=0.002 map_odom_xy_norm=4.941 yaw=-0.417
+- 1780138694.779: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.941 yaw=-0.417
+- 1780138694.889: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.941 yaw=-0.417
+- 1780138694.978: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.941 yaw=-0.417
+- 1780138695.078: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.941 yaw=-0.417
+- 1780138695.178: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.941 yaw=-0.417
+- 1780138695.286: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.941 yaw=-0.417
+- 1780138695.404: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.941 yaw=-0.417
+- 1780138695.493: ACCEPTED small_correction dx=0.030 yaw=0.001 map_odom_xy_norm=4.926 yaw=-0.417
+- 1780138695.597: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.926 yaw=-0.417
+- 1780138695.688: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.926 yaw=-0.417
+- 1780138695.774: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.926 yaw=-0.417
+- 1780138695.882: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.926 yaw=-0.417
+- 1780138695.985: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.926 yaw=-0.417
+- 1780138696.077: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.926 yaw=-0.417
+- 1780138696.172: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.926 yaw=-0.417
+- 1780138696.281: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.926 yaw=-0.417
+- 1780138696.387: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.926 yaw=-0.417
+- 1780138696.488: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.926 yaw=-0.417
+- 1780138696.594: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.926 yaw=-0.417
+- 1780138696.675: ACCEPTED small_correction dx=0.174 yaw=0.003 map_odom_xy_norm=4.757 yaw=-0.414
+- 1780138696.772: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.757 yaw=-0.414
+- 1780138696.876: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.757 yaw=-0.414
+- 1780138696.983: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.757 yaw=-0.414
+- 1780138697.074: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.757 yaw=-0.414
+- 1780138697.191: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.757 yaw=-0.414
+- 1780138697.281: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.757 yaw=-0.414
+- 1780138697.398: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.757 yaw=-0.414
+- 1780138697.478: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.757 yaw=-0.414
+- 1780138697.585: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.757 yaw=-0.414
+- 1780138697.679: ACCEPTED small_correction dx=0.161 yaw=0.004 map_odom_xy_norm=4.598 yaw=-0.410
+- 1780138697.779: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.598 yaw=-0.410
+- 1780138697.881: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.598 yaw=-0.410
+- 1780138697.984: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.598 yaw=-0.410
+- 1780138698.093: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.598 yaw=-0.410
+- 1780138698.179: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.598 yaw=-0.410
+- 1780138698.282: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.598 yaw=-0.410
+- 1780138698.379: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.598 yaw=-0.410
+- 1780138698.471: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.598 yaw=-0.410
+- 1780138698.570: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.598 yaw=-0.410
+- 1780138698.677: ACCEPTED small_correction dx=0.069 yaw=0.002 map_odom_xy_norm=4.533 yaw=-0.408
+- 1780138698.783: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.533 yaw=-0.408
+- 1780138698.887: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.533 yaw=-0.408
+- 1780138698.970: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.533 yaw=-0.408
+- 1780138699.072: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.533 yaw=-0.408
+- 1780138699.162: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.533 yaw=-0.408
+- 1780138699.291: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.533 yaw=-0.408
+- 1780138699.423: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.533 yaw=-0.408
+- 1780138699.485: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.533 yaw=-0.408
+- 1780138699.574: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.533 yaw=-0.408
+- 1780138699.676: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.533 yaw=-0.408
+- 1780138699.977: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=4.824 yaw=-0.417
+- 1780138700.075: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.824 yaw=-0.417
+- 1780138700.187: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.824 yaw=-0.417
+- 1780138700.297: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.824 yaw=-0.417
+- 1780138700.388: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.824 yaw=-0.417
+- 1780138700.477: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.824 yaw=-0.417
+- 1780138700.585: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=4.824 yaw=-0.417
+- 1780138700.872: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=5.093 yaw=-0.421
+- 1780138700.978: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.093 yaw=-0.421
+- 1780138701.087: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.093 yaw=-0.421
+- 1780138701.174: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.093 yaw=-0.421
+- 1780138701.269: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.093 yaw=-0.421
+- 1780138701.374: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.093 yaw=-0.421
+- 1780138701.478: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.093 yaw=-0.421
+- 1780138701.581: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.093 yaw=-0.421
+- 1780138701.664: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.093 yaw=-0.421
+- 1780138701.767: ACCEPTED small_correction dx=0.229 yaw=0.004 map_odom_xy_norm=5.225 yaw=-0.417
+- 1780138701.878: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.225 yaw=-0.417
+- 1780138701.972: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.225 yaw=-0.417
+- 1780138702.091: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.225 yaw=-0.417
+- 1780138702.174: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.225 yaw=-0.417
+- 1780138702.282: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.225 yaw=-0.417
+- 1780138702.378: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.225 yaw=-0.417
+- 1780138702.479: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.225 yaw=-0.417
+- 1780138702.581: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.225 yaw=-0.417
+- 1780138702.674: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=5.225 yaw=-0.417
+- 1780138709.180: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=7.178 yaw=-0.416
+- 1780138709.275: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.178 yaw=-0.416
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780138687.477: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138687.676: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138687.978: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138688.410: SPIN_GUARD entered source=navigation_status
+- 1780138688.411: SPIN_GUARD settling sec=3.00
+- 1780138688.596: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138688.870: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138688.921: SPIN_GUARD settling sec=3.00
+- 1780138689.078: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138689.262: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138689.416: SPIN_GUARD settling sec=3.00
+- 1780138689.486: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138689.576: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138689.775: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138690.365: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138690.482: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138690.574: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138690.770: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138690.878: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138691.286: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138691.377: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138691.569: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138691.986: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138692.080: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138692.293: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138692.391: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138692.486: SPIN_GUARD settled
+- 1780138692.486: PENDING large_correction count=1 dx=1.224 yaw=0.037
+- 1780138692.575: PENDING large_correction count=2/3
+- 1780138692.676: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138692.870: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138692.870: PENDING large_correction count=1 dx=0.619 yaw=0.021
+- 1780138692.980: PENDING large_correction count=2/3
+- 1780138693.372: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138693.474: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138693.565: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138693.887: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138693.975: PENDING wait_odom_cache gap=0.094s max=0.200s
+- 1780138694.286: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138694.580: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138695.178: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138695.597: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138695.679: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138695.882: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138696.592: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138696.675: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138696.983: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138697.074: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138697.394: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138697.477: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138697.879: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138698.089: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138698.176: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138698.281: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138698.470: PENDING wait_odom_cache gap=0.093s max=0.200s
+- 1780138698.783: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138698.966: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138699.161: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138699.484: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138699.782: PENDING large_correction count=1 dx=0.306 yaw=0.009
+- 1780138699.882: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138699.886: PENDING large_correction count=2/3
+- 1780138700.691: PENDING large_correction count=1 dx=0.269 yaw=0.004
+- 1780138700.782: PENDING large_correction count=2/3
+- 1780138700.872: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138701.576: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138701.663: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138701.763: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138702.088: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138702.277: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138702.774: PENDING large_correction count=1 dx=0.461 yaw=0.010
+- 1780138702.870: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138702.870: PENDING large_correction count=2/3
+- 1780138702.910: SPIN_GUARD entered source=navigation_status
+- 1780138702.912: SPIN_GUARD settling sec=3.00
+- 1780138702.972: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138703.181: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138703.491: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138703.767: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138703.863: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138704.181: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138704.484: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138705.265: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138705.438: SPIN_GUARD settling sec=3.00
+- 1780138705.681: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138705.919: SPIN_GUARD settling sec=3.00
+- 1780138706.877: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138706.969: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138707.069: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138707.274: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138707.882: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138707.972: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138708.375: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138708.676: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138708.979: SPIN_GUARD settled
+- 1780138708.979: PENDING large_correction count=1 dx=2.234 yaw=0.001
+- 1780138709.073: PENDING large_correction count=2/3
+- map->odom 大变化:
+- 1780138692.712: dx=1.224m dyaw=0.037rad, (-3.661,2.072,-0.402) -> (-4.252,3.144,-0.440)
+- 1780138693.068: dx=0.619m dyaw=0.021rad, (-4.252,3.144,-0.440) -> (-4.292,2.527,-0.418)
+- 1780138693.567: dx=0.139m dyaw=0.004rad, (-4.292,2.527,-0.418) -> (-4.271,2.389,-0.414)
+- 1780138694.700: dx=0.067m dyaw=0.002rad, (-4.271,2.389,-0.414) -> (-4.288,2.455,-0.417)
+- 1780138696.699: dx=0.174m dyaw=0.003rad, (-4.262,2.469,-0.417) -> (-4.136,2.349,-0.414)
+- 1780138697.701: dx=0.161m dyaw=0.004rad, (-4.136,2.349,-0.414) -> (-4.013,2.245,-0.410)
+- 1780138698.699: dx=0.069m dyaw=0.002rad, (-4.013,2.245,-0.410) -> (-3.968,2.193,-0.408)
+- 1780138699.999: dx=0.306m dyaw=0.009rad, (-3.968,2.193,-0.408) -> (-4.174,2.420,-0.417)
+- 1780138700.903: dx=0.269m dyaw=0.004rad, (-4.174,2.420,-0.417) -> (-4.416,2.538,-0.421)
+- 1780138701.769: dx=0.229m dyaw=0.004rad, (-4.416,2.538,-0.421) -> (-4.622,2.437,-0.417)
+- 1780138709.200: dx=2.234m dyaw=0.001rad, (-4.622,2.437,-0.417) -> (-6.840,2.177,-0.416)
+
+### 点位21
+
+- 导航: 1780138705.299 -> 1780138728.721, 耗时 23.4s, odom 位移 3.33m, odom yaw 2.90rad
+- bridge: ACCEPTED 168 次, REJECTED 121 次, PENDING/SPIN_GUARD 108 次；spin 冻结拒绝 12 次
+- TF: map->odom 数值变化 18 次，大变化 17 次
+- 接受的定位修正:
+- 1780138709.180: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=7.178 yaw=-0.416
+- 1780138709.275: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.178 yaw=-0.416
+- 1780138709.386: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.178 yaw=-0.416
+- 1780138709.476: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.178 yaw=-0.416
+- 1780138709.563: ACCEPTED small_correction dx=0.108 yaw=0.001 map_odom_xy_norm=7.286 yaw=-0.417
+- 1780138709.672: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.286 yaw=-0.417
+- 1780138709.767: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.286 yaw=-0.417
+- 1780138709.876: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.286 yaw=-0.417
+- 1780138709.970: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.286 yaw=-0.417
+- 1780138710.059: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.286 yaw=-0.417
+- 1780138710.166: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.286 yaw=-0.417
+- 1780138710.264: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.286 yaw=-0.417
+- 1780138710.365: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.286 yaw=-0.417
+- 1780138710.480: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.286 yaw=-0.417
+- 1780138710.567: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.286 yaw=-0.417
+- 1780138710.684: ACCEPTED small_correction dx=0.246 yaw=0.008 map_odom_xy_norm=7.485 yaw=-0.425
+- 1780138710.765: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.485 yaw=-0.425
+- 1780138710.866: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.485 yaw=-0.425
+- 1780138710.972: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.485 yaw=-0.425
+- 1780138711.092: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.485 yaw=-0.425
+- 1780138711.181: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.485 yaw=-0.425
+- 1780138711.278: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.485 yaw=-0.425
+- 1780138711.380: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.485 yaw=-0.425
+- 1780138711.489: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.485 yaw=-0.425
+- 1780138711.579: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.485 yaw=-0.425
+- 1780138711.661: ACCEPTED small_correction dx=0.169 yaw=0.006 map_odom_xy_norm=7.614 yaw=-0.431
+- 1780138711.761: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.431
+- 1780138711.869: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.431
+- 1780138711.989: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.431
+- 1780138712.076: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.431
+- 1780138712.176: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.431
+- 1780138712.261: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.431
+- 1780138712.369: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.431
+- 1780138712.471: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.431
+- 1780138712.591: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.431
+- 1780138712.878: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=7.482 yaw=-0.423
+- 1780138712.975: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.482 yaw=-0.423
+- 1780138713.065: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.482 yaw=-0.423
+- 1780138713.168: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.482 yaw=-0.423
+- 1780138713.267: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.482 yaw=-0.423
+- 1780138713.365: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.482 yaw=-0.423
+- 1780138713.486: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.482 yaw=-0.423
+- 1780138713.573: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.482 yaw=-0.423
+- 1780138713.875: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=7.242 yaw=-0.409
+- 1780138713.986: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.242 yaw=-0.409
+- 1780138714.084: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.242 yaw=-0.409
+- 1780138714.182: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.242 yaw=-0.409
+- 1780138714.305: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.242 yaw=-0.409
+- 1780138714.384: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.242 yaw=-0.409
+- 1780138714.497: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.242 yaw=-0.409
+- 1780138714.594: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.242 yaw=-0.409
+- 1780138714.886: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=7.516 yaw=-0.427
+- 1780138714.975: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.516 yaw=-0.427
+- 1780138715.074: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.516 yaw=-0.427
+- 1780138715.171: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.516 yaw=-0.427
+- 1780138715.274: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.516 yaw=-0.427
+- 1780138715.371: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.516 yaw=-0.427
+- 1780138715.470: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.516 yaw=-0.427
+- 1780138715.564: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.516 yaw=-0.427
+- 1780138715.675: ACCEPTED small_correction dx=0.196 yaw=0.008 map_odom_xy_norm=7.645 yaw=-0.435
+- 1780138715.782: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.645 yaw=-0.435
+- 1780138715.906: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.645 yaw=-0.435
+- 1780138716.011: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.645 yaw=-0.435
+- 1780138716.106: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.645 yaw=-0.435
+- 1780138716.205: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.645 yaw=-0.435
+- 1780138716.298: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.645 yaw=-0.435
+- 1780138716.413: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.645 yaw=-0.435
+- 1780138716.475: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.645 yaw=-0.435
+- 1780138716.569: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.645 yaw=-0.435
+- 1780138716.671: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.645 yaw=-0.435
+- 1780138716.770: ACCEPTED small_correction dx=0.053 yaw=0.001 map_odom_xy_norm=7.697 yaw=-0.436
+- 1780138716.881: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.697 yaw=-0.436
+- 1780138716.976: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.697 yaw=-0.436
+- 1780138717.079: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.697 yaw=-0.436
+- 1780138717.179: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.697 yaw=-0.436
+- 1780138717.283: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.697 yaw=-0.436
+- 1780138717.377: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.697 yaw=-0.436
+- 1780138717.480: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.697 yaw=-0.436
+- 1780138717.570: ACCEPTED small_correction dx=0.079 yaw=0.004 map_odom_xy_norm=7.730 yaw=-0.440
+- 1780138717.665: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.730 yaw=-0.440
+- 1780138717.759: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.730 yaw=-0.440
+- 1780138717.890: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.730 yaw=-0.440
+- 1780138717.991: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.730 yaw=-0.440
+- 1780138718.080: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.730 yaw=-0.440
+- 1780138718.175: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.730 yaw=-0.440
+- 1780138718.282: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.730 yaw=-0.440
+- 1780138718.385: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.730 yaw=-0.440
+- 1780138718.476: ACCEPTED small_correction dx=0.178 yaw=0.009 map_odom_xy_norm=7.869 yaw=-0.448
+- 1780138718.570: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.869 yaw=-0.448
+- 1780138718.686: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.869 yaw=-0.448
+- 1780138718.776: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.869 yaw=-0.448
+- 1780138718.873: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.869 yaw=-0.448
+- 1780138718.970: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.869 yaw=-0.448
+- 1780138719.074: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.869 yaw=-0.448
+- 1780138719.176: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.869 yaw=-0.448
+- 1780138719.278: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.869 yaw=-0.448
+- 1780138719.383: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.869 yaw=-0.448
+- 1780138719.483: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.869 yaw=-0.448
+- 1780138719.585: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.869 yaw=-0.448
+- 1780138719.675: ACCEPTED small_correction dx=0.031 yaw=0.003 map_odom_xy_norm=7.898 yaw=-0.451
+- 1780138719.774: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.898 yaw=-0.451
+- 1780138719.871: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.898 yaw=-0.451
+- 1780138719.962: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.898 yaw=-0.451
+- 1780138720.089: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.898 yaw=-0.451
+- 1780138720.189: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.898 yaw=-0.451
+- 1780138720.275: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.898 yaw=-0.451
+- 1780138720.379: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.898 yaw=-0.451
+- 1780138720.490: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.898 yaw=-0.451
+- 1780138720.591: ACCEPTED small_correction dx=0.085 yaw=0.003 map_odom_xy_norm=7.983 yaw=-0.453
+- 1780138720.680: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.983 yaw=-0.453
+- 1780138720.782: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.983 yaw=-0.453
+- 1780138720.869: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.983 yaw=-0.453
+- 1780138720.975: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.983 yaw=-0.453
+- 1780138721.081: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.983 yaw=-0.453
+- 1780138721.177: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.983 yaw=-0.453
+- 1780138721.270: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.983 yaw=-0.453
+- 1780138721.371: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.983 yaw=-0.453
+- 1780138721.473: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.983 yaw=-0.453
+- 1780138721.571: ACCEPTED small_correction dx=0.052 yaw=0.002 map_odom_xy_norm=7.941 yaw=-0.451
+- 1780138721.666: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.941 yaw=-0.451
+- 1780138721.766: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.941 yaw=-0.451
+- 1780138721.870: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.941 yaw=-0.451
+- 1780138721.975: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.941 yaw=-0.451
+- 1780138722.063: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.941 yaw=-0.451
+- 1780138722.165: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.941 yaw=-0.451
+- 1780138722.273: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.941 yaw=-0.451
+- 1780138722.370: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.941 yaw=-0.451
+- 1780138722.478: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.941 yaw=-0.451
+- 1780138722.589: ACCEPTED small_correction dx=0.227 yaw=0.009 map_odom_xy_norm=7.778 yaw=-0.442
+- 1780138722.682: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.778 yaw=-0.442
+- 1780138722.761: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.778 yaw=-0.442
+- 1780138722.864: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.778 yaw=-0.442
+- 1780138722.974: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.778 yaw=-0.442
+- 1780138723.080: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.778 yaw=-0.442
+- 1780138723.176: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.778 yaw=-0.442
+- 1780138723.282: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.778 yaw=-0.442
+- 1780138723.396: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.778 yaw=-0.442
+- 1780138723.471: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.778 yaw=-0.442
+- 1780138723.577: ACCEPTED small_correction dx=0.224 yaw=0.009 map_odom_xy_norm=7.615 yaw=-0.434
+- 1780138723.675: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.615 yaw=-0.434
+- 1780138723.785: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.615 yaw=-0.434
+- 1780138723.884: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.615 yaw=-0.434
+- 1780138723.976: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.615 yaw=-0.434
+- 1780138724.074: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.615 yaw=-0.434
+- 1780138724.179: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.615 yaw=-0.434
+- 1780138724.280: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.615 yaw=-0.434
+- 1780138724.392: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.615 yaw=-0.434
+- 1780138724.478: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.615 yaw=-0.434
+- 1780138724.572: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.615 yaw=-0.434
+- 1780138724.676: ACCEPTED small_correction dx=0.131 yaw=0.005 map_odom_xy_norm=7.622 yaw=-0.439
+- 1780138724.769: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.622 yaw=-0.439
+- 1780138724.870: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.622 yaw=-0.439
+- 1780138724.960: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.622 yaw=-0.439
+- 1780138725.065: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.622 yaw=-0.439
+- 1780138725.171: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.622 yaw=-0.439
+- 1780138725.274: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.622 yaw=-0.439
+- 1780138725.391: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.622 yaw=-0.439
+- 1780138725.508: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.622 yaw=-0.439
+- 1780138725.602: ACCEPTED small_correction dx=0.075 yaw=0.004 map_odom_xy_norm=7.614 yaw=-0.442
+- 1780138725.705: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.442
+- 1780138725.791: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.442
+- 1780138725.892: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.442
+- 1780138725.980: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.442
+- 1780138726.080: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.442
+- 1780138726.182: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.442
+- 1780138726.276: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.442
+- 1780138726.376: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.614 yaw=-0.442
+- 1780138734.670: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=6.655 yaw=-0.399
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780138705.265: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138705.438: SPIN_GUARD settling sec=3.00
+- 1780138705.681: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138705.919: SPIN_GUARD settling sec=3.00
+- 1780138706.877: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138706.969: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138707.069: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138707.274: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138707.882: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138707.972: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138708.375: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138708.676: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138708.979: SPIN_GUARD settled
+- 1780138708.979: PENDING large_correction count=1 dx=2.234 yaw=0.001
+- 1780138709.073: PENDING large_correction count=2/3
+- 1780138709.563: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138710.365: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138711.181: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138711.380: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138711.661: PENDING wait_odom_cache gap=0.092s max=0.200s
+- 1780138711.988: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138712.588: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138712.658: PENDING large_correction count=1 dx=0.267 yaw=0.008
+- 1780138712.776: PENDING large_correction count=2/3
+- 1780138713.167: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138713.365: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138713.668: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138713.669: PENDING large_correction count=1 dx=0.355 yaw=0.014
+- 1780138713.771: PENDING large_correction count=2/3
+- 1780138713.874: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138713.984: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138714.496: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138714.703: PENDING large_correction count=1 dx=0.459 yaw=0.018
+- 1780138714.780: PENDING large_correction count=2/3
+- 1780138714.885: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138715.272: PENDING wait_odom_cache gap=0.090s max=0.200s
+- 1780138715.670: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138715.905: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138716.102: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138716.204: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138716.297: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138716.408: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138716.667: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138717.890: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138718.079: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138718.381: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138718.570: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138718.686: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138719.074: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138721.369: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138721.571: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138721.665: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138722.681: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138722.761: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138722.864: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138723.079: PENDING wait_odom_cache gap=0.103s max=0.200s
+- 1780138723.572: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138724.179: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138724.571: PENDING wait_odom_cache gap=0.089s max=0.200s
+- 1780138725.065: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138725.507: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138725.705: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138725.784: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138725.980: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138726.182: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138726.275: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138726.375: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138726.411: SPIN_GUARD entered source=navigation_status
+- 1780138726.414: SPIN_GUARD settling sec=3.00
+- 1780138726.580: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138726.895: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138726.924: SPIN_GUARD settling sec=3.00
+- 1780138726.979: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138727.068: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138727.416: SPIN_GUARD settling sec=3.00
+- 1780138727.670: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138727.879: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138727.918: SPIN_GUARD settling sec=3.00
+- 1780138728.067: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138728.162: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138728.431: SPIN_GUARD settling sec=3.00
+- 1780138728.789: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138728.969: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138729.477: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138729.677: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138729.873: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138729.976: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138730.367: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138730.917: SPIN_GUARD settling sec=3.00
+- 1780138731.072: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138731.428: SPIN_GUARD settling sec=3.00
+- 1780138731.468: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138731.685: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138731.920: SPIN_GUARD settling sec=3.00
+- 1780138731.986: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138732.167: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138732.269: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138732.375: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138732.861: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138733.163: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138733.368: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138733.482: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138733.981: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138734.175: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138734.359: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138734.475: SPIN_GUARD expired age=8.06s
+- 1780138734.475: PENDING large_correction count=1 dx=0.959 yaw=0.029
+- 1780138734.568: PENDING large_correction count=2/3
+- map->odom 大变化:
+- 1780138709.566: dx=0.108m dyaw=0.001rad, (-6.840,2.177,-0.416) -> (-6.947,2.197,-0.417)
+- 1780138710.699: dx=0.246m dyaw=0.008rad, (-6.947,2.197,-0.417) -> (-7.090,2.397,-0.425)
+- 1780138711.670: dx=0.169m dyaw=0.006rad, (-7.090,2.397,-0.425) -> (-7.177,2.542,-0.431)
+- 1780138712.900: dx=0.267m dyaw=0.008rad, (-7.177,2.542,-0.431) -> (-7.126,2.280,-0.423)
+- 1780138713.899: dx=0.355m dyaw=0.014rad, (-7.126,2.280,-0.423) -> (-6.971,1.961,-0.409)
+- 1780138714.901: dx=0.459m dyaw=0.018rad, (-6.971,1.961,-0.409) -> (-7.125,2.393,-0.427)
+- 1780138715.699: dx=0.196m dyaw=0.008rad, (-7.125,2.393,-0.427) -> (-7.198,2.575,-0.435)
+- 1780138716.801: dx=0.053m dyaw=0.001rad, (-7.198,2.575,-0.435) -> (-7.245,2.598,-0.436)
+- 1780138717.602: dx=0.079m dyaw=0.004rad, (-7.245,2.598,-0.436) -> (-7.252,2.677,-0.440)
+- 1780138718.500: dx=0.178m dyaw=0.009rad, (-7.252,2.677,-0.440) -> (-7.342,2.831,-0.448)
+- 1780138720.600: dx=0.085m dyaw=0.003rad, (-7.373,2.831,-0.451) -> (-7.455,2.855,-0.453)
+- 1780138721.603: dx=0.052m dyaw=0.002rad, (-7.455,2.855,-0.453) -> (-7.427,2.811,-0.451)
+- 1780138722.600: dx=0.227m dyaw=0.009rad, (-7.427,2.811,-0.451) -> (-7.328,2.607,-0.442)
+- 1780138723.599: dx=0.224m dyaw=0.009rad, (-7.328,2.607,-0.442) -> (-7.224,2.408,-0.434)
+- 1780138724.699: dx=0.131m dyaw=0.005rad, (-7.224,2.408,-0.434) -> (-7.189,2.534,-0.439)
+- 1780138725.633: dx=0.075m dyaw=0.004rad, (-7.189,2.534,-0.439) -> (-7.156,2.601,-0.442)
+- 1780138734.699: dx=1.166m dyaw=0.043rad, (-7.156,2.601,-0.442) -> (-6.439,1.681,-0.399)
+
+### 点位22
+
+- 导航: 1780138730.744 -> 1780138767.536, 耗时 36.8s, odom 位移 1.52m, odom yaw 2.85rad
+- bridge: ACCEPTED 383 次, REJECTED 42 次, PENDING/SPIN_GUARD 145 次；spin 冻结拒绝 4 次
+- TF: map->odom 数值变化 38 次，大变化 6 次
+- 接受的定位修正:
+- 1780138734.670: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=6.655 yaw=-0.399
+- 1780138734.781: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.655 yaw=-0.399
+- 1780138734.871: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.655 yaw=-0.399
+- 1780138734.976: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.655 yaw=-0.399
+- 1780138735.087: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.655 yaw=-0.399
+- 1780138735.177: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.655 yaw=-0.399
+- 1780138735.277: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.655 yaw=-0.399
+- 1780138735.367: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.655 yaw=-0.399
+- 1780138735.467: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.655 yaw=-0.399
+- 1780138735.561: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.655 yaw=-0.399
+- 1780138735.675: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.655 yaw=-0.399
+- 1780138735.965: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=7.087 yaw=-0.427
+- 1780138736.073: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.087 yaw=-0.427
+- 1780138736.166: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.087 yaw=-0.427
+- 1780138736.265: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.087 yaw=-0.427
+- 1780138736.361: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.087 yaw=-0.427
+- 1780138736.472: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.087 yaw=-0.427
+- 1780138736.557: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.087 yaw=-0.427
+- 1780138736.875: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=7.486 yaw=-0.453
+- 1780138736.973: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.486 yaw=-0.453
+- 1780138737.074: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.486 yaw=-0.453
+- 1780138737.174: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.486 yaw=-0.453
+- 1780138737.268: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.486 yaw=-0.453
+- 1780138737.382: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.486 yaw=-0.453
+- 1780138737.467: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.486 yaw=-0.453
+- 1780138737.576: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.486 yaw=-0.453
+- 1780138737.675: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.486 yaw=-0.453
+- 1780138737.967: ACCEPTED confirmed_large_correction count=3 map_odom_xy_norm=7.195 yaw=-0.436
+- 1780138738.073: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.195 yaw=-0.436
+- 1780138738.179: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.195 yaw=-0.436
+- 1780138738.268: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.195 yaw=-0.436
+- 1780138738.379: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.195 yaw=-0.436
+- 1780138738.484: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.195 yaw=-0.436
+- 1780138738.573: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.195 yaw=-0.436
+- 1780138738.667: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.195 yaw=-0.436
+- 1780138738.764: ACCEPTED small_correction dx=0.145 yaw=0.006 map_odom_xy_norm=7.149 yaw=-0.430
+- 1780138738.864: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.149 yaw=-0.430
+- 1780138738.977: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.149 yaw=-0.430
+- 1780138739.068: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.149 yaw=-0.430
+- 1780138739.159: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.149 yaw=-0.430
+- 1780138739.268: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.149 yaw=-0.430
+- 1780138739.370: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.149 yaw=-0.430
+- 1780138739.472: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.149 yaw=-0.430
+- 1780138739.567: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.149 yaw=-0.430
+- 1780138739.667: ACCEPTED small_correction dx=0.147 yaw=0.007 map_odom_xy_norm=7.057 yaw=-0.423
+- 1780138739.761: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.057 yaw=-0.423
+- 1780138739.868: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.057 yaw=-0.423
+- 1780138739.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.057 yaw=-0.423
+- 1780138740.070: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.057 yaw=-0.423
+- 1780138740.168: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.057 yaw=-0.423
+- 1780138740.279: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.057 yaw=-0.423
+- 1780138740.376: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.057 yaw=-0.423
+- 1780138740.485: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.057 yaw=-0.423
+- 1780138740.574: ACCEPTED small_correction dx=0.140 yaw=0.010 map_odom_xy_norm=6.998 yaw=-0.414
+- 1780138740.672: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.998 yaw=-0.414
+- 1780138740.794: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.998 yaw=-0.414
+- 1780138740.884: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.998 yaw=-0.414
+- 1780138740.985: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.998 yaw=-0.414
+- 1780138741.081: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.998 yaw=-0.414
+- 1780138741.163: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.998 yaw=-0.414
+- 1780138741.275: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.998 yaw=-0.414
+- 1780138741.383: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.998 yaw=-0.414
+- 1780138741.489: ACCEPTED small_correction dx=0.005 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138741.606: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138741.699: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138741.784: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138741.885: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138742.008: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138742.092: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138742.187: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138742.270: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138742.369: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138742.475: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138742.573: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138742.664: ACCEPTED small_correction dx=0.030 yaw=0.001 map_odom_xy_norm=6.990 yaw=-0.415
+- 1780138742.765: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.415
+- 1780138742.859: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.415
+- 1780138742.962: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.415
+- 1780138743.071: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.415
+- 1780138743.175: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.415
+- 1780138743.274: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.415
+- 1780138743.375: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.415
+- 1780138743.480: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.415
+- 1780138743.592: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.415
+- 1780138743.665: ACCEPTED small_correction dx=0.031 yaw=0.001 map_odom_xy_norm=7.000 yaw=-0.416
+- 1780138743.775: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.000 yaw=-0.416
+- 1780138743.864: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.000 yaw=-0.416
+- 1780138743.964: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.000 yaw=-0.416
+- 1780138744.066: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.000 yaw=-0.416
+- 1780138744.166: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.000 yaw=-0.416
+- 1780138744.268: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.000 yaw=-0.416
+- 1780138744.374: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.000 yaw=-0.416
+- 1780138744.475: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.000 yaw=-0.416
+- 1780138744.570: ACCEPTED small_correction dx=0.032 yaw=0.001 map_odom_xy_norm=6.988 yaw=-0.414
+- 1780138744.672: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.414
+- 1780138744.787: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.414
+- 1780138744.883: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.414
+- 1780138744.977: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.414
+- 1780138745.076: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.414
+- 1780138745.177: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.414
+- 1780138745.269: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.414
+- 1780138745.372: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.414
+- 1780138745.476: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.414
+- 1780138745.577: ACCEPTED small_correction dx=0.020 yaw=0.001 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138745.668: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138745.769: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138745.865: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138745.971: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138746.068: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138746.176: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138746.269: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138746.376: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138746.491: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138746.580: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138746.668: ACCEPTED small_correction dx=0.018 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138746.759: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138746.874: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138746.963: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138747.072: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138747.173: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138747.282: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138747.382: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138747.467: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138747.572: ACCEPTED small_correction dx=0.010 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.414
+- 1780138747.672: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.414
+- 1780138747.776: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.414
+- 1780138747.867: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.414
+- 1780138747.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.414
+- 1780138748.068: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.414
+- 1780138748.174: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.414
+- 1780138748.267: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.414
+- 1780138748.375: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.414
+- 1780138748.474: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.414
+- 1780138748.581: ACCEPTED small_correction dx=0.002 yaw=0.001 map_odom_xy_norm=6.991 yaw=-0.413
+- 1780138748.673: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.991 yaw=-0.413
+- 1780138748.761: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.991 yaw=-0.413
+- 1780138748.858: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.991 yaw=-0.413
+- 1780138748.975: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.991 yaw=-0.413
+- 1780138749.075: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.991 yaw=-0.413
+- 1780138749.174: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.991 yaw=-0.413
+- 1780138749.281: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.991 yaw=-0.413
+- 1780138749.361: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.991 yaw=-0.413
+- 1780138749.470: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.991 yaw=-0.413
+- 1780138749.565: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.991 yaw=-0.413
+- 1780138749.669: ACCEPTED small_correction dx=0.024 yaw=0.002 map_odom_xy_norm=6.969 yaw=-0.411
+- 1780138749.776: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.969 yaw=-0.411
+- 1780138749.873: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.969 yaw=-0.411
+- 1780138749.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.969 yaw=-0.411
+- 1780138750.060: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.969 yaw=-0.411
+- 1780138750.170: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.969 yaw=-0.411
+- 1780138750.280: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.969 yaw=-0.411
+- 1780138750.387: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.969 yaw=-0.411
+- 1780138750.482: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.969 yaw=-0.411
+- 1780138750.583: ACCEPTED small_correction dx=0.028 yaw=0.001 map_odom_xy_norm=6.977 yaw=-0.412
+- 1780138750.675: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.412
+- 1780138750.774: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.412
+- 1780138750.871: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.412
+- 1780138750.971: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.412
+- 1780138751.069: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.412
+- 1780138751.164: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.412
+- 1780138751.280: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.412
+- 1780138751.378: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.412
+- 1780138751.468: ACCEPTED small_correction dx=0.007 yaw=0.001 map_odom_xy_norm=6.982 yaw=-0.413
+- 1780138751.563: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.982 yaw=-0.413
+- 1780138751.684: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.982 yaw=-0.413
+- 1780138751.771: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.982 yaw=-0.413
+- 1780138751.873: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.982 yaw=-0.413
+- 1780138751.971: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.982 yaw=-0.413
+- 1780138752.071: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.982 yaw=-0.413
+- 1780138752.170: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.982 yaw=-0.413
+- 1780138752.268: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.982 yaw=-0.413
+- 1780138752.372: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.982 yaw=-0.413
+- 1780138752.475: ACCEPTED small_correction dx=0.019 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.413
+- 1780138752.574: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.413
+- 1780138752.668: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.413
+- 1780138752.765: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.413
+- 1780138752.879: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.413
+- 1780138752.973: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.413
+- 1780138753.079: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.413
+- 1780138753.171: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.413
+- 1780138753.272: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.413
+- 1780138753.372: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.413
+- 1780138753.488: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.413
+- 1780138753.578: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.413
+- 1780138753.677: ACCEPTED small_correction dx=0.005 yaw=0.002 map_odom_xy_norm=6.992 yaw=-0.415
+- 1780138753.773: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.415
+- 1780138753.873: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.415
+- 1780138753.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.415
+- 1780138754.065: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.415
+- 1780138754.175: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.415
+- 1780138754.271: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.415
+- 1780138754.371: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.415
+- 1780138754.475: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.415
+- 1780138754.573: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.415
+- 1780138754.661: ACCEPTED small_correction dx=0.007 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138754.769: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138754.875: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138754.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138755.070: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138755.168: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138755.271: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138755.379: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138755.491: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138755.581: ACCEPTED small_correction dx=0.010 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.416
+- 1780138755.674: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.416
+- 1780138755.770: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.416
+- 1780138755.871: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.416
+- 1780138755.974: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.416
+- 1780138756.078: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.416
+- 1780138756.180: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.416
+- 1780138756.262: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.416
+- 1780138756.365: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.416
+- 1780138756.475: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.416
+- 1780138756.569: ACCEPTED small_correction dx=0.011 yaw=0.001 map_odom_xy_norm=6.992 yaw=-0.414
+- 1780138756.678: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.414
+- 1780138756.764: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.414
+- 1780138756.873: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.414
+- 1780138756.971: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.414
+- 1780138757.068: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.414
+- 1780138757.164: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.414
+- 1780138757.278: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.414
+- 1780138757.367: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.414
+- 1780138757.500: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.992 yaw=-0.414
+- 1780138757.586: ACCEPTED small_correction dx=0.022 yaw=0.001 map_odom_xy_norm=7.012 yaw=-0.415
+- 1780138757.668: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.012 yaw=-0.415
+- 1780138757.776: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.012 yaw=-0.415
+- 1780138757.881: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.012 yaw=-0.415
+- 1780138757.974: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.012 yaw=-0.415
+- 1780138758.074: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.012 yaw=-0.415
+- 1780138758.178: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.012 yaw=-0.415
+- 1780138758.276: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.012 yaw=-0.415
+- 1780138758.369: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.012 yaw=-0.415
+- 1780138758.469: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.012 yaw=-0.415
+- 1780138758.575: ACCEPTED small_correction dx=0.042 yaw=0.003 map_odom_xy_norm=6.995 yaw=-0.412
+- 1780138758.697: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.412
+- 1780138758.773: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.412
+- 1780138758.864: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.412
+- 1780138758.976: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.412
+- 1780138759.070: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.412
+- 1780138759.173: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.412
+- 1780138759.271: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.412
+- 1780138759.373: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.412
+- 1780138759.473: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.412
+- 1780138759.571: ACCEPTED small_correction dx=0.044 yaw=0.002 map_odom_xy_norm=6.988 yaw=-0.410
+- 1780138759.671: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.410
+- 1780138759.769: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.410
+- 1780138759.875: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.410
+- 1780138759.972: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.410
+- 1780138760.082: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.410
+- 1780138760.176: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.410
+- 1780138760.277: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.410
+- 1780138760.367: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.410
+- 1780138760.482: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.410
+- 1780138760.570: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.988 yaw=-0.410
+- 1780138760.678: ACCEPTED small_correction dx=0.013 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.410
+- 1780138760.789: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.410
+- 1780138760.870: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.410
+- 1780138760.970: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.410
+- 1780138761.073: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.410
+- 1780138761.172: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.410
+- 1780138761.267: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.410
+- 1780138761.366: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.410
+- 1780138761.482: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.977 yaw=-0.410
+- 1780138761.599: ACCEPTED small_correction dx=0.010 yaw=0.002 map_odom_xy_norm=6.986 yaw=-0.411
+- 1780138761.691: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.986 yaw=-0.411
+- 1780138761.801: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.986 yaw=-0.411
+- 1780138761.904: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.986 yaw=-0.411
+- 1780138761.981: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.986 yaw=-0.411
+- 1780138762.069: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.986 yaw=-0.411
+- 1780138762.169: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.986 yaw=-0.411
+- 1780138762.268: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.986 yaw=-0.411
+- 1780138762.372: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.986 yaw=-0.411
+- 1780138762.471: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.986 yaw=-0.411
+- 1780138762.575: ACCEPTED small_correction dx=0.032 yaw=0.003 map_odom_xy_norm=6.990 yaw=-0.414
+- 1780138762.675: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.414
+- 1780138762.759: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.414
+- 1780138762.864: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.414
+- 1780138762.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.414
+- 1780138763.059: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.414
+- 1780138763.182: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.414
+- 1780138763.260: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.414
+- 1780138763.365: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.414
+- 1780138763.473: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.990 yaw=-0.414
+- 1780138763.573: ACCEPTED small_correction dx=0.014 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138763.674: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138763.777: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138763.864: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138763.974: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138764.092: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138764.171: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138764.275: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138764.371: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.996 yaw=-0.414
+- 1780138764.472: ACCEPTED small_correction dx=0.003 yaw=0.001 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138764.561: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138764.666: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138764.782: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138764.882: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138764.974: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138765.069: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138765.175: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138765.294: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138765.380: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138765.480: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.995 yaw=-0.415
+- 1780138765.568: ACCEPTED small_correction dx=0.030 yaw=0.002 map_odom_xy_norm=6.989 yaw=-0.413
+- 1780138765.679: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.989 yaw=-0.413
+- 1780138765.776: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.989 yaw=-0.413
+- 1780138765.876: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.989 yaw=-0.413
+- 1780138765.979: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.989 yaw=-0.413
+- 1780138766.069: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.989 yaw=-0.413
+- 1780138766.172: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.989 yaw=-0.413
+- 1780138766.280: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.989 yaw=-0.413
+- 1780138766.377: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.989 yaw=-0.413
+- 1780138766.473: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.989 yaw=-0.413
+- 1780138766.563: ACCEPTED small_correction dx=0.033 yaw=0.001 map_odom_xy_norm=6.987 yaw=-0.414
+- 1780138766.681: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.414
+- 1780138766.778: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.414
+- 1780138766.871: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.414
+- 1780138766.996: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.414
+- 1780138767.088: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.414
+- 1780138767.177: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.414
+- 1780138767.285: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.414
+- 1780138767.371: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.987 yaw=-0.414
+- 1780138767.496: ACCEPTED small_correction dx=0.015 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.415
+- 1780138767.588: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.415
+- 1780138767.675: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.415
+- 1780138767.778: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.415
+- 1780138767.881: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.415
+- 1780138767.962: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.415
+- 1780138768.071: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.415
+- 1780138768.171: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.415
+- 1780138768.268: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.415
+- 1780138768.363: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.415
+- 1780138768.474: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.993 yaw=-0.415
+- 1780138768.587: ACCEPTED small_correction dx=0.022 yaw=0.001 map_odom_xy_norm=6.983 yaw=-0.414
+- 1780138768.680: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.983 yaw=-0.414
+- 1780138768.773: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.983 yaw=-0.414
+- 1780138768.874: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.983 yaw=-0.414
+- 1780138768.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.983 yaw=-0.414
+- 1780138769.070: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.983 yaw=-0.414
+- 1780138769.176: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.983 yaw=-0.414
+- 1780138769.269: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.983 yaw=-0.414
+- 1780138769.369: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.983 yaw=-0.414
+- 1780138769.477: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.983 yaw=-0.414
+- 1780138769.572: ACCEPTED small_correction dx=0.022 yaw=0.001 map_odom_xy_norm=6.999 yaw=-0.415
+- 1780138769.666: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.415
+- 1780138769.767: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.415
+- 1780138769.882: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.415
+- 1780138769.976: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.415
+- 1780138770.078: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.415
+- 1780138770.174: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.415
+- 1780138770.279: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.415
+- 1780138770.376: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.415
+- 1780138770.480: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.415
+- 1780138770.582: ACCEPTED small_correction dx=0.003 yaw=0.001 map_odom_xy_norm=6.997 yaw=-0.415
+- 1780138770.676: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.997 yaw=-0.415
+- 1780138770.772: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.997 yaw=-0.415
+- 1780138770.868: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.997 yaw=-0.415
+- 1780138770.968: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.997 yaw=-0.415
+- 1780138771.074: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.997 yaw=-0.415
+- 1780138771.167: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.997 yaw=-0.415
+- 1780138771.278: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.997 yaw=-0.415
+- 1780138771.367: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.997 yaw=-0.415
+- 1780138771.476: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.997 yaw=-0.415
+- 1780138771.571: ACCEPTED small_correction dx=0.007 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.416
+- 1780138771.686: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.416
+- 1780138771.778: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.416
+- 1780138771.882: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.416
+- 1780138771.980: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.416
+- 1780138772.077: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.416
+- 1780138772.185: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.416
+- 1780138772.273: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.416
+- 1780138772.363: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.416
+- 1780138772.472: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=6.999 yaw=-0.416
+- 1780138772.572: ACCEPTED small_correction dx=0.025 yaw=0.002 map_odom_xy_norm=7.002 yaw=-0.417
+- 1780138772.666: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.417
+- 1780138772.760: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.417
+- 1780138772.869: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.417
+- 1780138772.982: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.417
+- 1780138773.083: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.417
+- 1780138773.176: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.417
+- 1780138773.271: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.417
+- 1780138773.363: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.417
+- 1780138773.480: ACCEPTED small_correction dx=0.000 yaw=0.000 map_odom_xy_norm=7.002 yaw=-0.417
+- 拒绝全部来自 SpinToPose 冻结保护。
+- Pending / SpinGuard:
+- 1780138730.367: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138730.917: SPIN_GUARD settling sec=3.00
+- 1780138731.072: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138731.428: SPIN_GUARD settling sec=3.00
+- 1780138731.468: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138731.685: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138731.920: SPIN_GUARD settling sec=3.00
+- 1780138731.986: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138732.167: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138732.269: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138732.375: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138732.861: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138733.163: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138733.368: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138733.482: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138733.981: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138734.175: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138734.359: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138734.475: SPIN_GUARD expired age=8.06s
+- 1780138734.475: PENDING large_correction count=1 dx=0.959 yaw=0.029
+- 1780138734.568: PENDING large_correction count=2/3
+- 1780138734.778: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138735.177: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138735.561: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138735.773: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138735.775: PENDING large_correction count=1 dx=0.577 yaw=0.028
+- 1780138735.866: PENDING large_correction count=2/3
+- 1780138736.360: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138736.556: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138736.667: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138736.668: PENDING large_correction count=1 dx=0.516 yaw=0.026
+- 1780138736.777: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138736.777: PENDING large_correction count=2/3
+- 1780138737.466: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138737.778: PENDING wait_odom_cache gap=0.103s max=0.200s
+- 1780138737.778: PENDING large_correction count=1 dx=0.419 yaw=0.017
+- 1780138737.879: PENDING large_correction count=2/3
+- 1780138738.267: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138738.977: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138739.158: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138739.267: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138739.867: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138740.167: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138740.279: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138740.376: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138740.881: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138740.985: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138741.695: PENDING wait_odom_cache gap=0.087s max=0.200s
+- 1780138742.008: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138742.270: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138742.473: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138742.962: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138743.175: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138743.373: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138743.864: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138744.065: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138744.672: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138745.575: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138745.970: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138746.067: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138746.963: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138747.279: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138747.467: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138748.473: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138748.974: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138749.074: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138749.279: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138749.360: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138749.776: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138750.060: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138750.774: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138751.161: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138751.278: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138751.378: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138751.562: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138751.873: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138752.169: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138752.266: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138752.370: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138752.879: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138752.973: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138753.169: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138753.271: PENDING wait_odom_cache gap=0.098s max=0.200s
+- 1780138753.578: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138753.676: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138753.967: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138754.270: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138754.573: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138754.769: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138755.168: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138755.579: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138755.671: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138755.864: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138756.360: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138756.568: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138756.678: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138757.164: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138757.499: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138757.584: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138757.668: PENDING wait_odom_cache gap=0.095s max=0.200s
+- 1780138758.369: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138758.469: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138758.862: PENDING wait_odom_cache gap=0.097s max=0.200s
+- 1780138759.168: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138759.373: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138759.874: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138759.972: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138760.082: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138760.276: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138760.367: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138760.869: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138761.267: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138761.599: PENDING wait_odom_cache gap=0.105s max=0.200s
+- 1780138761.902: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138761.978: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138762.069: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138762.267: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138762.371: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138762.572: PENDING wait_odom_cache gap=0.103s max=0.200s
+- 1780138762.759: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138763.572: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138763.973: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138764.471: PENDING wait_odom_cache gap=0.099s max=0.200s
+- 1780138764.561: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138764.881: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138765.293: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138765.876: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138766.069: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138766.278: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138766.681: PENDING wait_odom_cache gap=0.096s max=0.200s
+- 1780138766.778: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138767.284: PENDING wait_odom_cache gap=0.102s max=0.200s
+- 1780138768.070: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138768.268: PENDING wait_odom_cache gap=0.101s max=0.200s
+- 1780138768.586: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138769.973: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138770.075: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138770.582: PENDING wait_odom_cache gap=0.104s max=0.200s
+- 1780138770.968: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138771.069: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138771.468: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138772.272: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138772.363: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138772.760: PENDING wait_odom_cache gap=0.100s max=0.200s
+- 1780138773.077: PENDING wait_odom_cache gap=0.100s max=0.200s
+- map->odom 大变化:
+- 1780138735.966: dx=0.577m dyaw=0.028rad, (-6.439,1.681,-0.399) -> (-6.747,2.169,-0.427)
+- 1780138736.899: dx=0.516m dyaw=0.026rad, (-6.747,2.169,-0.427) -> (-7.016,2.610,-0.453)
+- 1780138738.000: dx=0.419m dyaw=0.017rad, (-7.016,2.610,-0.453) -> (-6.842,2.228,-0.436)
+- 1780138738.766: dx=0.145m dyaw=0.006rad, (-6.842,2.228,-0.436) -> (-6.838,2.083,-0.430)
+- 1780138739.699: dx=0.147m dyaw=0.007rad, (-6.838,2.083,-0.430) -> (-6.784,1.947,-0.423)
+- 1780138740.600: dx=0.140m dyaw=0.010rad, (-6.784,1.947,-0.423) -> (-6.760,1.809,-0.414)

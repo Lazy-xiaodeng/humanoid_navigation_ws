@@ -1,4 +1,0 @@
-# command: ros2 topic bw /airy_points_filtered
-# started: 2026-05-24 16:51:45 +0800
-WARNING: topic [/airy_points_filtered] does not appear to be published yet
-Subscribed to [/airy_points_filtered]

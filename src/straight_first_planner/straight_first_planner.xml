@@ -1,0 +1,10 @@
+<library path="straight_first_planner">
+  <class
+    name="straight_first_planner::StraightFirstPlanner"
+    type="straight_first_planner::StraightFirstPlanner"
+    base_class_type="nav2_core::GlobalPlanner">
+    <description>
+      Prefer a costmap-safe straight path, otherwise fall back to Nav2 ThetaStar.
+    </description>
+  </class>
+</library>
