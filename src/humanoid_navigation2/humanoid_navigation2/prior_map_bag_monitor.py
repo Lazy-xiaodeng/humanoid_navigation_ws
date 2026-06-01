@@ -26,6 +26,10 @@ class PriorMapBagMonitor(Node):
         self.output_dir = self.declare_parameter("output_dir", "/tmp/prior_map_bag_monitor").value
         self.sample_period = float(self.declare_parameter("sample_period", 0.5).value)
         self.robot_pose_topic = self.declare_parameter("robot_pose_topic", "/bag/robot_realpose").value
+        self.prior_odom_topic = self.declare_parameter("prior_odom_topic", "/prior_localization/odom").value
+        self.confidence_topic = self.declare_parameter("confidence_topic", "/prior_localization/confidence").value
+        self.bridge_status_topic = self.declare_parameter(
+            "bridge_status_topic", "/localization/prior_map_odom_bridge_status").value
 
         os.makedirs(self.output_dir, exist_ok=True)
 
@@ -37,13 +41,16 @@ class PriorMapBagMonitor(Node):
         self.samples = []
         self.status_counter = Counter()
 
-        self.create_subscription(Float32, "/prior_localization/confidence", self.on_confidence, 10)
-        self.create_subscription(String, "/localization/prior_map_odom_bridge_status", self.on_status, 50)
-        self.create_subscription(Odometry, "/prior_localization/odom", self.on_prior_odom, 10)
+        self.create_subscription(Float32, self.confidence_topic, self.on_confidence, 10)
+        self.create_subscription(String, self.bridge_status_topic, self.on_status, 50)
+        self.create_subscription(Odometry, self.prior_odom_topic, self.on_prior_odom, 10)
         self.create_subscription(PoseWithCovarianceStamped, self.robot_pose_topic, self.on_robot_pose, 10)
         self.create_subscription(TFMessage, "/tf", self.on_tf, 100)
         self.create_timer(self.sample_period, self.on_timer)
-        self.get_logger().info(f"monitor output_dir={self.output_dir} robot_pose_topic={self.robot_pose_topic}")
+        self.get_logger().info(
+            f"monitor output_dir={self.output_dir} robot_pose_topic={self.robot_pose_topic} "
+            f"prior_odom_topic={self.prior_odom_topic}"
+        )
 
     def on_confidence(self, msg: Float32):
         self.latest_confidence = float(msg.data)

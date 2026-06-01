@@ -1,0 +1,64 @@
+# Bag 回放专用配置：用于模拟集成后的 RoboSense 定位链路。
+# isolated bag launch 只启动 ro + bridge，不启动硬件和 Fast-LIO，
+# 因此可以直接订阅 bag 中的原始话题，不需要 remap 到 /bag/*。
+
+lidar_topic: "/fast_lio/cloud_registered"
+rel_pose_topic: "/odom"
+abs_pose_topic: "/odom"
+
+convert_fastlio_odom_to_base: true
+convert_registered_cloud_to_body: true
+registered_cloud_odom_sync_tolerance_sec: 0.15
+fastlio_odom_camera_xyz: [0.0, 0.0, 0.0]
+fastlio_odom_camera_quat_xyzw: [-0.5, -0.5, 0.5, 0.5]
+fastlio_body_base_xyz: [0.004, 1.215, 0.072]
+fastlio_body_base_quat_xyzw: [0.5, 0.5, -0.5, 0.5]
+
+publish_map_to_odom_tf: false
+map_frame_id: "map"
+odom_frame_id: "odom"
+base_frame_id: "base_footprint"
+debug_print: false
+tf_odom_cache_duration_sec: 5.0
+tf_max_interpolation_gap_sec: 0.25
+
+map_path: /home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall_open3d_grounded.pcd
+init_position: [0.035185, 0.087588, 0.0]
+init_euler: [0.0, 0.0, -0.130823906]
+
+# Bag 对比实验：把 RoboSense 地图 KD-tree 降采样从正式默认 0.30m 调到 0.10m。
+# 这样地图参与匹配的点更密，但 CPU 和最近邻搜索压力会明显增加。
+map_voxel_leaf_size: 0.10
+
+is_pub_cloud: false
+is_pub_map: false
+pose_topic: "/prior_localization/robosense_odom"
+odom_cache_topic: "/prior_localization/robosense_input_odom"
+publish_odom_cache: true
+
+input_cloud_size_thr: 1000
+matching_check_residual_thresh: 0.15
+matching_check_valid_pair_ratio_thresh: 0.80
+matching_check_prior_xy_thresh: 0.50
+matching_check_prior_z_thresh: 0.50
+matching_check_prior_yaw_thresh_deg: 8.0
+
+# raw/body 非标准轴 -> base_footprint，含义同正式配置。
+lidar_vehicle_xyz: [0.072, -0.004, 1.215]
+lidar_vehicle_rpy: [-1.5707963268, 0.0, 1.5707963268]
+
+lidar_matcher:
+  min_map_size: 50000
+  min_pair_size: 200
+  iterations: 4
+  validation_thresh: 0.2
+  validation_TF_angle_delta_thresh: 1.0
+  validation_ave_final_cost_thresh: 0.03
+  blind_distance: 2.0
+  leaf_size: 0.1
+  debug_print: false
+  num_threads: 2
+  max_num_iterations: 2
+  min_point_num: 3
+  min_angle: 20
+  max_pair_size: 800

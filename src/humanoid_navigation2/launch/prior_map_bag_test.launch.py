@@ -1,15 +1,17 @@
 from launch import LaunchDescription
-from launch.actions import TimerAction
-from launch.substitutions import PathJoinSubstitution
+from launch.actions import DeclareLaunchArgument, TimerAction
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
     use_sim_time = True
+    voxelsize_fine = LaunchConfiguration("voxelsize_fine")
 
     axis_adapter = Node(
-        package="humanoid_navigation2",
+        package="humanoid_open3d_adapter",
         executable="fastlio_open3d_axis_adapter",
         name="fastlio_open3d_axis_adapter",
         output="screen",
@@ -53,7 +55,7 @@ def generate_launch_description():
                 "publish_tf": False,
                 "pcd_queue_maxsize": 10,
                 "voxelsize_coarse": 0.01,
-                "voxelsize_fine": 0.20,
+                "voxelsize_fine": ParameterValue(voxelsize_fine, value_type=float),
                 "threshold_fitness": 0.50,
                 "threshold_fitness_init": 0.50,
                 "loc_frequence": 1.0,
@@ -122,6 +124,22 @@ def generate_launch_description():
             "required_consistent_frames": 5,
             "consistency_translation_tolerance": 0.25,
             "consistency_yaw_tolerance": 0.10,
+            # 第一版大跳保护。bag 测试默认开 monitor，只观察 WOULD_*，不改变 TF。
+            # 要验证保护真实影响时，把这里改成 "protect"。
+            "jump_protection_mode": "monitor",              # 大跳保护模式：off=关闭；monitor=只记录不拦截；protect=真实冻结大跳更新。
+            "nav_medium_correction_translation": 0.50,      # 导航中“中等平移修正”上限，单位 m；超过它就按大跳处理。
+            "nav_medium_correction_yaw": 0.20,              # 导航中“中等角度修正”上限，单位 rad；约 11.5 度。
+            "nav_medium_required_frames": 5,                # 中等修正需要连续稳定多少帧才真正接受。
+            "nav_large_correction_translation": 0.50,       # 导航中“大跳平移”判定阈值，单位 m；大于该值默认冻结 map->odom 更新。
+            "nav_large_correction_yaw": 0.20,               # 导航中“大跳角度”判定阈值，单位 rad；大于该值默认冻结 map->odom 更新。
+            "allow_nav_large_jump": False,                  # 是否允许导航中大跳经连续帧确认后接受；第一版先关掉。
+            "idle_large_correction_translation": 1.00,      # 空闲/讲解/到点后允许自动回正的平移上限，单位 m。
+            "idle_large_correction_yaw": 0.35,              # 空闲/讲解/到点后允许自动回正的角度上限，单位 rad；约 20 度。
+            "idle_large_required_frames": 5,                # 空闲阶段大修正需要连续稳定多少帧才接受。
+            "allow_idle_large_jump": True,                  # 是否允许空闲阶段接受较大回正。
+            "hard_reject_translation": 1.00,                # 绝对保护平移阈值，单位 m；超过后不自动接受，只进入 hold/degraded。
+            "hard_reject_yaw": 0.50,                        # 绝对保护角度阈值，单位 rad；约 28.6 度。
+            "large_jump_degraded_after_sec": 3.0,           # 大跳冻结持续多久后认为定位退化，单位 s；只发状态，不主动断 TF。
             "enable_spin_to_pose_guard": True,
             "navigation_status_topic": "/navigation/status",
             "spin_to_pose_guard_settle_sec": 3.0,
@@ -132,6 +150,11 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            "voxelsize_fine",
+            default_value="0.20",
+            description="Open3D fine registration voxel size in meters for bag validation.",
+        ),
         axis_adapter,
         TimerAction(period=2.0, actions=[open3d_loc]),
         TimerAction(period=3.0, actions=[bridge]),

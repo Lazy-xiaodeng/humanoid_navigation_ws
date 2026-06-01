@@ -25,6 +25,8 @@ prior_map_odom_bridge.py
    - 大修正必须连续多帧一致；
    - 超过最大跳变阈值的候选直接拒绝；
    - 候选位姿太旧、frame_id 不对、TF 查不到时拒绝。
+   - 可选启用第一版大跳保护：导航中大于阈值的修正先冻结，
+     继续发布 last good map->odom，等待候选自己恢复或交给状态管理器处理。
 
 注意：
 这个节点只解决“谁来维护 map->odom”的问题，不做点云配准。
@@ -310,6 +312,59 @@ class PriorMapOdomBridge(Node):
             self.declare_parameter("consistency_yaw_tolerance", 0.10).value)
 
         # ==============================
+        # 第一版大跳保护参数
+        # ==============================
+        # jump_protection_mode:
+        #   off     : 完全沿用原来的“连续多帧一致就接受”逻辑；
+        #   monitor : 不改变实际 TF，只额外发布 WOULD_* 状态，方便离线/实机观察；
+        #   protect : 真正启用导航中大跳冻结保护。
+        self.jump_protection_mode = str(
+            self.declare_parameter("jump_protection_mode", "off").value).lower()
+        if self.jump_protection_mode not in ("off", "monitor", "protect"):
+            self.get_logger().warn(
+                f"unknown jump_protection_mode={self.jump_protection_mode}, fallback to off"
+            )
+            self.jump_protection_mode = "off"
+
+        # 导航中 0.25m~0.50m 的中等修正不立即放行，连续稳定后接受。
+        self.nav_medium_correction_translation = float(
+            self.declare_parameter("nav_medium_correction_translation", 0.50).value)
+        self.nav_medium_correction_yaw = float(
+            self.declare_parameter("nav_medium_correction_yaw", 0.20).value)
+        self.nav_medium_required_frames = int(
+            self.declare_parameter("nav_medium_required_frames", 5).value)
+
+        # 导航中超过该阈值的修正认为是大跳。protect 模式下不直接接受，
+        # 而是保持 last good map->odom，让机器人暂时只靠 odom 连续性走。
+        self.nav_large_correction_translation = float(
+            self.declare_parameter("nav_large_correction_translation", 0.50).value)
+        self.nav_large_correction_yaw = float(
+            self.declare_parameter("nav_large_correction_yaw", 0.20).value)
+        self.allow_nav_large_jump = bool(
+            self.declare_parameter("allow_nav_large_jump", False).value)
+
+        # 非导航/讲解/空闲阶段允许更大的回正，但仍需要连续稳定。
+        self.idle_large_correction_translation = float(
+            self.declare_parameter("idle_large_correction_translation", 1.00).value)
+        self.idle_large_correction_yaw = float(
+            self.declare_parameter("idle_large_correction_yaw", 0.35).value)
+        self.idle_large_required_frames = int(
+            self.declare_parameter("idle_large_required_frames", 5).value)
+        self.allow_idle_large_jump = bool(
+            self.declare_parameter("allow_idle_large_jump", True).value)
+
+        # 过大的候选即使在空闲阶段也不自动接受，避免一次错误局部最优把全局位姿拉飞。
+        self.hard_reject_translation = float(
+            self.declare_parameter("hard_reject_translation", 1.00).value)
+        self.hard_reject_yaw = float(
+            self.declare_parameter("hard_reject_yaw", 0.50).value)
+
+        # 大跳冻结超过该时间后发布 DEGRADED 状态。bridge 自身仍持续发布 last good TF；
+        # 后续可由 navigation_state_manager 根据该状态选择暂停/等待/重定位。
+        self.large_jump_degraded_after_sec = float(
+            self.declare_parameter("large_jump_degraded_after_sec", 3.0).value)
+
+        # ==============================
         # SpinToPose 旋转保护参数
         # ==============================
         # 这里对齐 lidar_localization 的 rotation_guard 逻辑：
@@ -370,6 +425,9 @@ class PriorMapOdomBridge(Node):
         self.odom_cache = deque()
         self.pending_odom_candidates = deque()
         self.last_odom_cache_failure = ""
+        self.navigation_active = False
+        self.large_jump_hold_start_time: Optional[Time] = None
+        self.large_jump_hold_reason = ""
         self.spin_guard_active = False
         self.spin_guard_turning = False
         self.spin_guard_start_time: Optional[Time] = None
@@ -462,6 +520,8 @@ class PriorMapOdomBridge(Node):
 
     def on_navigation_status(self, msg: String):
         """根据导航状态识别到点后的 SpinToPose 原地旋转阶段。"""
+        self.navigation_active = self.navigation_status_is_active(msg.data)
+
         if not self.enable_spin_to_pose_guard:
             return
 
@@ -491,6 +551,25 @@ class PriorMapOdomBridge(Node):
             return navigation_active and detailed_state == "TURNING"
         except (TypeError, ValueError):
             return "TURNING" in data and "SpinToPose" in data
+
+    def navigation_status_is_active(self, data: str) -> bool:
+        """判断当前是否处于会驱动机器人移动的导航阶段。"""
+        try:
+            status = json.loads(data)
+            current_state = str(status.get("current_state", "")).lower()
+            detailed_state = str(
+                status.get("current_detailed_state", status.get("detailed_state", ""))
+            ).upper()
+            if current_state in ("executing", "planning", "running", "active"):
+                return True
+            if detailed_state in ("NAVIGATING", "PLANNING", "CONTROLLING", "TURNING"):
+                return True
+            return False
+        except (TypeError, ValueError):
+            upper = str(data).upper()
+            if "COMPLETED" in upper or "SUCCEEDED" in upper or "IDLE" in upper:
+                return False
+            return any(token in upper for token in ("NAVIGATING", "PLANNING", "RUNNING", "ACTIVE", "TURNING"))
 
     def lookup_odom_to_localized_matrix(self, lookup_time: Time, is_zero_stamp: bool) -> Optional[np.ndarray]:
         """
@@ -795,6 +874,7 @@ class PriorMapOdomBridge(Node):
         if self.spin_to_pose_guard_is_active():
             self.pending_large_candidate = None
             self.pending_large_count = 0
+            self.large_jump_hold_start_time = None
             self.publish_status(
                 "REJECTED spin_to_pose_freeze_tf "
                 f"phase={self.spin_guard_phase()}"
@@ -810,15 +890,28 @@ class PriorMapOdomBridge(Node):
 
         delta_xy, delta_yaw = correction_delta(candidate, self.accepted_map_to_odom)
 
+        if self.jump_protection_mode == "protect":
+            self.evaluate_candidate_protected(candidate, delta_xy, delta_yaw)
+            return
+
+        if self.jump_protection_mode == "monitor":
+            self.publish_jump_protection_monitor(delta_xy, delta_yaw)
+
+        self.evaluate_candidate_legacy(candidate, delta_xy, delta_yaw)
+
+    def evaluate_candidate_legacy(self, candidate: np.ndarray, delta_xy: float, delta_yaw: float):
+        """原始门控逻辑：小修正直接接受，大修正连续多帧一致后接受。"""
         if delta_xy <= self.max_small_correction_translation and delta_yaw <= self.max_small_correction_yaw:
             self.pending_large_candidate = None
             self.pending_large_count = 0
+            self.large_jump_hold_start_time = None
             self.accept_candidate(candidate, f"small_correction dx={delta_xy:.3f} yaw={delta_yaw:.3f}")
             return
 
         if delta_xy > self.max_large_correction_translation or delta_yaw > self.max_large_correction_yaw:
             self.pending_large_candidate = None
             self.pending_large_count = 0
+            self.large_jump_hold_start_time = None
             self.publish_status(f"REJECTED too_large dx={delta_xy:.3f} yaw={delta_yaw:.3f}")
             return
 
@@ -850,11 +943,202 @@ class PriorMapOdomBridge(Node):
             self.accept_candidate(candidate, f"confirmed_large_correction count={self.pending_large_count}")
             self.pending_large_candidate = None
             self.pending_large_count = 0
+            self.large_jump_hold_start_time = None
         else:
             self.publish_status(
                 f"PENDING large_correction count={self.pending_large_count}/"
                 f"{self.required_consistent_frames}"
             )
+
+    def evaluate_candidate_protected(self, candidate: np.ndarray, delta_xy: float, delta_yaw: float):
+        """
+        第一版保护逻辑。
+
+        导航中：
+          - 小修正直接接受；
+          - 中等修正连续稳定后接受；
+          - 大跳默认冻结，不更新 map->odom，只持续发布 last good TF。
+
+        空闲/讲解中：
+          - 允许 1m 内的大修正连续稳定后接受；
+          - 超过 hard_reject 阈值不自动接受。
+        """
+        if delta_xy <= self.max_small_correction_translation and delta_yaw <= self.max_small_correction_yaw:
+            self.pending_large_candidate = None
+            self.pending_large_count = 0
+            self.large_jump_hold_start_time = None
+            self.accept_candidate(candidate, f"small_correction dx={delta_xy:.3f} yaw={delta_yaw:.3f}")
+            return
+
+        if delta_xy > self.max_large_correction_translation or delta_yaw > self.max_large_correction_yaw:
+            self.pending_large_candidate = None
+            self.pending_large_count = 0
+            self.update_large_jump_hold(
+                f"too_large dx={delta_xy:.3f} yaw={delta_yaw:.3f}"
+            )
+            return
+
+        if self.navigation_active:
+            if delta_xy <= self.nav_medium_correction_translation and delta_yaw <= self.nav_medium_correction_yaw:
+                if self.update_pending_candidate(
+                    candidate,
+                    self.nav_medium_required_frames,
+                    "nav_medium_correction",
+                    delta_xy,
+                    delta_yaw,
+                ):
+                    self.accept_candidate(
+                        candidate,
+                        f"confirmed_nav_medium_correction count={self.pending_large_count}",
+                    )
+                    self.pending_large_candidate = None
+                    self.pending_large_count = 0
+                    self.large_jump_hold_start_time = None
+                return
+
+            if self.allow_nav_large_jump:
+                if self.update_pending_candidate(
+                    candidate,
+                    self.required_consistent_frames,
+                    "nav_large_correction",
+                    delta_xy,
+                    delta_yaw,
+                ):
+                    self.accept_candidate(
+                        candidate,
+                        f"confirmed_nav_large_correction count={self.pending_large_count}",
+                    )
+                    self.pending_large_candidate = None
+                    self.pending_large_count = 0
+                    self.large_jump_hold_start_time = None
+                return
+
+            self.pending_large_candidate = None
+            self.pending_large_count = 0
+            self.update_large_jump_hold(
+                f"nav_large_correction dx={delta_xy:.3f} yaw={delta_yaw:.3f}"
+            )
+            return
+
+        if delta_xy > self.hard_reject_translation or delta_yaw > self.hard_reject_yaw:
+            self.pending_large_candidate = None
+            self.pending_large_count = 0
+            self.update_large_jump_hold(
+                f"idle_hard_reject dx={delta_xy:.3f} yaw={delta_yaw:.3f}"
+            )
+            return
+
+        if (
+            self.allow_idle_large_jump
+            and delta_xy <= self.idle_large_correction_translation
+            and delta_yaw <= self.idle_large_correction_yaw
+        ):
+            if self.update_pending_candidate(
+                candidate,
+                self.idle_large_required_frames,
+                "idle_large_correction",
+                delta_xy,
+                delta_yaw,
+            ):
+                self.accept_candidate(
+                    candidate,
+                    f"confirmed_idle_large_correction count={self.pending_large_count}",
+                )
+                self.pending_large_candidate = None
+                self.pending_large_count = 0
+                self.large_jump_hold_start_time = None
+            return
+
+        self.pending_large_candidate = None
+        self.pending_large_count = 0
+        self.update_large_jump_hold(
+            f"idle_large_not_allowed dx={delta_xy:.3f} yaw={delta_yaw:.3f}"
+        )
+
+    def update_pending_candidate(
+        self,
+        candidate: np.ndarray,
+        required_frames: int,
+        label: str,
+        delta_xy: float,
+        delta_yaw: float,
+    ) -> bool:
+        """更新连续一致候选簇；达到 required_frames 时返回 True。"""
+        self.large_jump_hold_start_time = None
+        required_frames = max(1, int(required_frames))
+
+        if self.pending_large_candidate is None:
+            self.pending_large_candidate = candidate
+            self.pending_large_count = 1
+            self.publish_status(
+                f"PENDING {label} count=1/{required_frames} dx={delta_xy:.3f} yaw={delta_yaw:.3f}"
+            )
+            return self.pending_large_count >= required_frames
+
+        consistent_xy, consistent_yaw = correction_delta(candidate, self.pending_large_candidate)
+        if (
+            consistent_xy <= self.consistency_translation_tolerance
+            and consistent_yaw <= self.consistency_yaw_tolerance
+        ):
+            self.pending_large_count += 1
+            self.pending_large_candidate = candidate
+        else:
+            self.pending_large_candidate = candidate
+            self.pending_large_count = 1
+            self.publish_status(
+                f"PENDING reset_{label} spread_xy={consistent_xy:.3f} spread_yaw={consistent_yaw:.3f}"
+            )
+            return False
+
+        if self.pending_large_count >= required_frames:
+            return True
+
+        self.publish_status(
+            f"PENDING {label} count={self.pending_large_count}/{required_frames} "
+            f"dx={delta_xy:.3f} yaw={delta_yaw:.3f}"
+        )
+        return False
+
+    def update_large_jump_hold(self, reason: str):
+        """
+        冻结 map->odom 更新。
+
+        注意这里不是停止发布 TF，而是不更新 accepted_map_to_odom；
+        publish_last_tf 定时器仍会继续重发 last good map->odom，Nav2 的 TF 链不会断。
+        """
+        now = self.get_clock().now()
+        if self.large_jump_hold_start_time is None:
+            self.large_jump_hold_start_time = now
+            self.large_jump_hold_reason = reason
+            self.publish_status(f"HOLD large_jump {reason}")
+            return
+
+        hold_age = (now - self.large_jump_hold_start_time).nanoseconds * 1e-9
+        if hold_age >= self.large_jump_degraded_after_sec:
+            self.publish_status(
+                f"DEGRADED large_jump_hold age={hold_age:.2f}s reason={self.large_jump_hold_reason}"
+            )
+        else:
+            self.publish_status(
+                f"HOLD large_jump age={hold_age:.2f}s reason={self.large_jump_hold_reason}"
+            )
+
+    def publish_jump_protection_monitor(self, delta_xy: float, delta_yaw: float):
+        """monitor 模式只报告第一版策略会怎么处理，不改变原始 TF 接受逻辑。"""
+        if delta_xy <= self.max_small_correction_translation and delta_yaw <= self.max_small_correction_yaw:
+            return
+
+        if self.navigation_active:
+            if delta_xy <= self.nav_medium_correction_translation and delta_yaw <= self.nav_medium_correction_yaw:
+                self.publish_status(f"WOULD_PENDING nav_medium_correction dx={delta_xy:.3f} yaw={delta_yaw:.3f}")
+            else:
+                self.publish_status(f"WOULD_HOLD nav_large_correction dx={delta_xy:.3f} yaw={delta_yaw:.3f}")
+            return
+
+        if delta_xy > self.hard_reject_translation or delta_yaw > self.hard_reject_yaw:
+            self.publish_status(f"WOULD_HOLD idle_hard_reject dx={delta_xy:.3f} yaw={delta_yaw:.3f}")
+        else:
+            self.publish_status(f"WOULD_PENDING idle_large_correction dx={delta_xy:.3f} yaw={delta_yaw:.3f}")
 
     def spin_to_pose_guard_is_active(self) -> bool:
         """判断 SpinToPose 冻结窗口是否仍有效。"""

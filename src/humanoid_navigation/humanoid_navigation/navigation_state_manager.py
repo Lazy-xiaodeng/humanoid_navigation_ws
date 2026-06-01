@@ -863,7 +863,7 @@ class NavigationStateManager(Node):
         return True
 
     def defer_navigation_start_if_robot_not_ready(self, request_data: Dict[str, Any]) -> bool:
-        """动作/Menu 状态下缓存启动导航请求，等机器人回到 Walk 后自动执行。"""
+        """机器人底层状态暂不可用或未就绪时缓存启动请求，等恢复后自动执行。"""
         reason = self.get_navigation_start_block_reason()
         if not reason:
             return False
@@ -872,11 +872,12 @@ class NavigationStateManager(Node):
             self.last_robot_status_update > 0 and
             time.time() - self.last_robot_status_update <= self.robot_status_timeout
         )
+        status_unavailable = not status_fresh
         can_defer = status_fresh and (
             self.robot_motion_busy or self.robot_control_state == "Menu"
         )
 
-        if not can_defer:
+        if not (can_defer or status_unavailable):
             self.get_logger().warning(f"拒绝启动导航: {reason}")
             self.send_acknowledgment("navigation_started", "error", reason)
             self.publish_status_update("navigation_start_rejected", {"reason": reason})
@@ -887,7 +888,9 @@ class NavigationStateManager(Node):
 
         self.pending_navigation_request = json.loads(json.dumps(request_data))
         self.pending_navigation_created_at = time.time()
-        if self.robot_motion_busy:
+        if status_unavailable:
+            pending_message = f"{reason}。已缓存导航请求，等待底层状态恢复并确认 Walk 后再开始导航。"
+        elif self.robot_motion_busy:
             pending_message = f"{reason}。已缓存导航请求，等待动作执行完成并回到 Walk 后再开始导航。"
         else:
             pending_message = f"{reason}。已缓存导航请求，等待机器人回到 Walk 后再开始导航。"
@@ -966,7 +969,7 @@ class NavigationStateManager(Node):
 
         command_type = request_data.get("command_data", {}).get("command_type", "")
         self.get_logger().info(f"机器人已回到 Walk，执行待启动导航: {command_type}")
-        self.send_acknowledgment("navigation_pending", "success", "动作执行完成，机器人已回到 Walk，开始执行待启动导航")
+        self.send_acknowledgment("navigation_pending", "success", "机器人状态已就绪，开始执行待启动导航")
         self.handle_navigation_command(request_data)
 
     def check_obstacle_blockage(self):

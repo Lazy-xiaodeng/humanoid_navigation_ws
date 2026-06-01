@@ -1,17 +1,16 @@
 """
-Open3D prior-map 定位导航启动文件。
+RoboSense lidar_localization 导航启动文件。
 
 数据流：
-  rslidar_sdk -> Fast-LIO -> fastlio_open3d_axis_adapter
-      -> open3d_loc
-      -> /prior_localization/odom
+  rslidar_sdk -> Fast-LIO -> robosense_lidar_localization
+      -> /prior_localization/robosense_odom
       -> prior_map_odom_bridge -> map->odom
       -> Nav2
 
 说明：
-  - 本文件保留现有 Open3D 定位完整链路。
-  - 旧 NDT、HDL、ScanContext 等未使用节点已从本 launch 中移除。
-  - map->odom 只由 prior_map_odom_bridge 发布，避免 TF 冲突。
+  - 本文件只保留当前 ro 链路实际使用的节点。
+  - Open3D、旧 NDT、HDL、ScanContext 的未使用节点不在本文件中定义。
+  - 当前按测试要求：大跳保护为 monitor，SpinToPose 旋转冻结保护关闭。
 """
 
 import os
@@ -31,7 +30,6 @@ from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
-from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
@@ -39,23 +37,28 @@ def generate_launch_description():
 
     default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params_xy_yaw.yaml')
     default_bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_xy_then_yaw.xml')
-    default_prior_map_path = os.path.join(pkg_nav2, 'pcd', 'hall_open3d_grounded.pcd')
+    default_robosense_config_file = (
+        '/home/ubuntu/humanoid_ws/src/robosense_lidar_localization/config/'
+        'robosense_lidar_localization.yaml'
+    )
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     nav2_params_file = LaunchConfiguration('nav2_params_file', default=default_nav2_params_file)
     bt_xml_file = LaunchConfiguration('bt_xml_file', default=default_bt_xml_file)
     enable_fastdds_shm = LaunchConfiguration('enable_fastdds_shm', default='true')
     enable_periodic_clearing = LaunchConfiguration('enable_periodic_clearing', default='true')
-    enable_prior_map_localization = LaunchConfiguration('enable_prior_map_localization', default='true')
 
     prior_pose_topic = LaunchConfiguration('prior_pose_topic', default='/prior_localization/pose')
     prior_pose_with_covariance_topic = LaunchConfiguration(
         'prior_pose_with_covariance_topic',
         default='/prior_localization/pose_with_covariance',
     )
-    prior_odom_topic = LaunchConfiguration('prior_odom_topic', default='/prior_localization/odom')
-    prior_localized_frame = LaunchConfiguration('prior_localized_frame', default='prior_open3d_base')
-    prior_map_path = LaunchConfiguration('prior_map_path', default=default_prior_map_path)
+    prior_odom_topic = LaunchConfiguration('prior_odom_topic', default='/prior_localization/robosense_odom')
+    prior_localized_frame = LaunchConfiguration('prior_localized_frame', default='base_footprint')
+    robosense_config_file = LaunchConfiguration(
+        'robosense_config_file',
+        default=default_robosense_config_file,
+    )
 
     map_yaml_file = os.path.join(pkg_nav2, 'maps', 'hall.yaml')
     fastdds_config_file = PathJoinSubstitution([
@@ -84,10 +87,8 @@ def generate_launch_description():
 
     def nav2_python_node(executable, node_name, extra_parameters=None):
         parameters = [
-            {
-                # 是否使用仿真时间；实机 false，bag 回放 true。
-                'use_sim_time': use_sim_time,
-            }
+            # 是否使用仿真时间；实机 false，bag 回放 true。
+            {'use_sim_time': use_sim_time},
         ]
         if extra_parameters:
             parameters.append(extra_parameters)
@@ -149,7 +150,7 @@ def generate_launch_description():
         ],
         parameters=[
             {
-                # 时间源。
+                # 静态 TF 也跟随系统时间源。
                 'use_sim_time': use_sim_time,
             }
         ],
@@ -306,122 +307,20 @@ def generate_launch_description():
         },
     )
 
-    fastlio_open3d_axis_adapter_node = Node(
-        package='humanoid_open3d_adapter',
-        executable='fastlio_open3d_axis_adapter',
-        name='fastlio_open3d_axis_adapter',
+    robosense_lidar_localization_node = Node(
+        package='robosense_lidar_localization',
+        executable='robosense_lidar_localization_node',
+        name='robosense_lidar_localization_node',
         output='screen',
-        arguments=['--ros-args', '--log-level', 'INFO'],
-        condition=IfCondition(enable_prior_map_localization),
         parameters=[
             {
                 # 时间源。
                 'use_sim_time': use_sim_time,
             },
             {
-                # Fast-LIO 原始里程计输入。
-                'raw_odom_topic': '/odom',
-                # Fast-LIO 原始注册点云输入。
-                'raw_cloud_topic': '/fast_lio/cloud_registered',
-                # 转成标准轴后的 odom 输出，供 open3d_loc 和 bridge 使用。
-                'output_odom_topic': '/prior_localization/open3d_input_odom',
-                # 转成标准轴后的点云输出，供 open3d_loc 使用。
-                'output_cloud_topic': '/prior_localization/open3d_input_cloud',
-                # 输出 odom 的父坐标系。
-                'odom_frame': 'odom',
-                # 输出标准轴虚拟 base，用于隔离 raw body 坐标。
-                'output_base_frame': 'prior_open3d_base',
-                # 发布 odom->prior_open3d_base TF，bridge 可作为 fallback 查询。
-                'publish_tf': True,
-                # raw body 到 base_footprint 的平移，用于对齐 grounded 地图原点。
-                'initial_body_to_base_translation_raw': [0.004, 1.215, 0.072],
+                # RoboSense 定位 YAML，配置地图、话题、外参、初值和匹配阈值。
+                'config_file': robosense_config_file,
             },
-        ],
-    )
-
-    prior_map_localization_node = Node(
-        package='open3d_loc',
-        executable='global_localization_node',
-        name='prior_map_open3d_localization',
-        output='screen',
-        arguments=['--ros-args', '--log-level', 'WARN'],
-        condition=IfCondition(enable_prior_map_localization),
-        parameters=[
-            # Open3D 定位包自带默认参数。
-            PathJoinSubstitution([
-                FindPackageShare('open3d_loc'),
-                'config',
-                'loc_param_g1.yaml',
-            ]),
-            {
-                # 时间源。
-                'use_sim_time': use_sim_time,
-                # Open3D 使用的先验 PCD 地图，必须是标准轴 grounded 地图。
-                'path_map': prior_map_path,
-                # 初始位姿，格式 x/y/z/roll/pitch/yaw。
-                'initialpose': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                # Kalman x 方向过程/测量噪声参数。
-                'kf_baselink2map/x': [0.001, 0.002],
-                # Kalman y 方向过程/测量噪声参数。
-                'kf_baselink2map/y': [0.001, 0.005],
-                # Kalman z 方向过程/测量噪声参数。
-                'kf_baselink2map/z': [0.00001, 0.04],
-                # 禁止 open3d_loc 发布 TF，map->odom 只由 bridge 发布。
-                'publish_tf': False,
-                # 输入点云队列长度。
-                'pcd_queue_maxsize': 10,
-                # 粗匹配体素尺寸，单位 m。
-                'voxelsize_coarse': 0.01,
-                # 细匹配体素尺寸，单位 m。
-                'voxelsize_fine': 0.20,
-                # 跟踪阶段最低 fitness。
-                'threshold_fitness': 0.50,
-                # 初始化阶段最低 fitness。
-                'threshold_fitness_init': 0.50,
-                # 定位更新间隔，单位秒；原参数名保留上游拼写。
-                'loc_frequence': 1.0,
-                # 是否保存 scan 调试文件。
-                'save_scan': False,
-                # 是否使用 hidden point removal。
-                'hidden_removal': False,
-                # 输入 scan 最大点数。
-                'maxpoints_source': 60000,
-                # 地图目标点最大点数。
-                'maxpoints_target': 250000,
-                # 是否对 odom2map 做内部滤波；当前交给 bridge 处理。
-                'filter_odom2map': False,
-                # 直接使用适配后的输入 odom 作为初值。
-                'use_input_odom_pose_directly': True,
-                # Open3D 内部 Kalman 过程噪声。
-                'kalman_processVar2': 0.001,
-                # Open3D 内部 Kalman 测量噪声。
-                'kalman_estimatedMeasVar2': 0.02,
-                # Open3D 内部定位置信度阈值。
-                'confidence_loc_th': 0.7,
-                # 触发局部地图更新的距离阈值，单位 m。
-                'dis_updatemap': 3.5,
-            },
-        ],
-        remappings=[
-            # 输入：适配后的标准轴 odom。
-            ('/Odometry_loc', '/prior_localization/open3d_input_odom'),
-            # 输入：适配后的标准轴点云。
-            ('/cloud_registered_1', '/prior_localization/open3d_input_cloud'),
-            # 输出：Open3D 全局定位候选。
-            ('/baselink2map', '/prior_localization/odom'),
-            # 输出：Open3D 置信度。
-            ('/localization_3d_confidence', '/prior_localization/confidence'),
-            # 输出：调试 pose。
-            ('/localization_3d', '/prior_localization/pose_motion_link'),
-            # 以下为 Open3D 调试/可视化输出，统一挂到 prior_localization 命名空间。
-            ('/odom2map', '/prior_localization/open3d_odom2map'),
-            ('/odom2map_kalman', '/prior_localization/open3d_odom2map_kalman'),
-            ('/baselink2map_kalman', '/prior_localization/open3d_baselink2map_kalman'),
-            ('/motionlink2map', '/prior_localization/open3d_motionlink2map'),
-            ('/map', '/prior_localization/open3d_map'),
-            ('/submap', '/prior_localization/open3d_submap'),
-            ('/scan', '/prior_localization/open3d_scan'),
-            ('/scan2map', '/prior_localization/open3d_scan2map'),
         ],
     )
 
@@ -433,19 +332,19 @@ def generate_launch_description():
             'map_frame': 'map',
             # Fast-LIO 局部里程计坐标系。
             'odom_frame': 'odom',
-            # Open3D pose 的子坐标系，当前为 prior_open3d_base。
+            # ro 输出 pose 的子坐标系；当前为 map->base_footprint。
             'localized_frame': prior_localized_frame,
-            # 兼容 PoseStamped 输入；Open3D 当前不用。
+            # 兼容 PoseStamped 输入；ro 当前不用。
             'prior_pose_topic': prior_pose_topic,
-            # 兼容 PoseWithCovarianceStamped 输入；Open3D 当前不用。
+            # 兼容 PoseWithCovarianceStamped 输入；ro 当前不用。
             'prior_pose_with_covariance_topic': prior_pose_with_covariance_topic,
-            # Open3D 输出的全局定位 Odometry。
+            # ro 输出的全局定位 Odometry，语义 map->base_footprint。
             'prior_odom_topic': prior_odom_topic,
-            # Open3D 置信度话题。
+            # confidence 输入；ro 当前不要求。
             'confidence_topic': '/prior_localization/confidence',
-            # Open3D 必须先有足够置信度，bridge 才接受定位。
-            'require_confidence': True,
-            # 最低置信度。
+            # ro 没有 confidence，关闭置信度门控。
+            'require_confidence': False,
+            # 若启用 confidence，低于该值不接受。
             'min_confidence': 0.50,
             # confidence 超时时间，单位秒。
             'confidence_timeout_sec': 2.0,
@@ -459,10 +358,10 @@ def generate_launch_description():
             'accept_zero_stamp': True,
             # 启动后允许第一帧定位直接初始化 map->odom。
             'allow_initial_pose': True,
-            # 使用适配节点发布的 odom cache，按定位时间戳插值 odom->base。
+            # 使用 ro 发布的 odom cache，按定位时间戳插值 odom->base。
             'use_odom_cache': True,
-            # Open3D 适配节点输出的 odom cache。
-            'odom_cache_topic': '/prior_localization/open3d_input_odom',
+            # ro 发布给 bridge 的 odom cache 话题。
+            'odom_cache_topic': '/prior_localization/robosense_input_odom',
             # odom cache 保存时长，单位秒。
             'odom_cache_duration_sec': 5.0,
             # odom 插值允许的最大相邻帧间隔，单位秒。
@@ -515,7 +414,7 @@ def generate_launch_description():
             'hard_reject_yaw': 0.50,
             # 大跳冻结超过该时间后发布 DEGRADED，单位秒。
             'large_jump_degraded_after_sec': 3.0,
-            # SpinToPose 旋转冻结保护；Open3D 链路保持关闭。
+            # SpinToPose 旋转冻结保护；当前测试 ro 时关闭。
             'enable_spin_to_pose_guard': False,
             # 导航状态话题，用于识别 TURNING/SpinToPose。
             'navigation_status_topic': '/navigation/status',
@@ -699,10 +598,9 @@ def generate_launch_description():
         DeclareLaunchArgument('enable_periodic_clearing', default_value='true', description='是否启动周期性清障节点'),
         DeclareLaunchArgument('prior_pose_topic', default_value='/prior_localization/pose', description='兼容 PoseStamped 定位输入'),
         DeclareLaunchArgument('prior_pose_with_covariance_topic', default_value='/prior_localization/pose_with_covariance', description='兼容 PoseWithCovarianceStamped 定位输入'),
-        DeclareLaunchArgument('prior_odom_topic', default_value='/prior_localization/odom', description='Open3D 全局定位 Odometry 输入'),
-        DeclareLaunchArgument('prior_localized_frame', default_value='prior_open3d_base', description='Open3D 定位 pose 的子坐标系'),
-        DeclareLaunchArgument('enable_prior_map_localization', default_value='true', description='是否启动 Open3D 定位节点'),
-        DeclareLaunchArgument('prior_map_path', default_value=default_prior_map_path, description='Open3D 标准轴 grounded PCD 地图路径'),
+        DeclareLaunchArgument('prior_odom_topic', default_value='/prior_localization/robosense_odom', description='ro 全局定位 Odometry 输入'),
+        DeclareLaunchArgument('prior_localized_frame', default_value='base_footprint', description='ro 定位 pose 的子坐标系'),
+        DeclareLaunchArgument('robosense_config_file', default_value=default_robosense_config_file, description='RoboSense 定位配置 YAML'),
         DeclareLaunchArgument('enable_fastdds_shm', default_value='true', description='是否设置 FastDDS 共享内存环境变量'),
         *fastdds_env_setup,
         rslidar_node,
@@ -715,8 +613,7 @@ def generate_launch_description():
         point_cloud_filter_launch,
         map_server_node,
         map_server_lifecycle,
-        TimerAction(period=3.5, actions=[fastlio_open3d_axis_adapter_node]),
-        TimerAction(period=4.5, actions=[prior_map_localization_node]),
+        TimerAction(period=4.5, actions=[robosense_lidar_localization_node]),
         TimerAction(period=5.5, actions=[prior_map_odom_bridge_node]),
         TimerAction(period=7.5, actions=[robot_realpose_publisher]),
         periodic_clearing_node,
