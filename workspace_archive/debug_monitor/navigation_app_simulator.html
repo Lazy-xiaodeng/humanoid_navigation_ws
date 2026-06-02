@@ -1308,6 +1308,10 @@
       trimArray(state.receivedHistory, MAX_DIAGNOSTIC_HISTORY);
     }
 
+    function isRealtimePathMonitor(message) {
+      return message.data_type === "navigation_path_monitor";
+    }
+
     function recordSentHistory(message, status) {
       state.sentHistory.push(compactMessageRecord("send", message, status));
       trimArray(state.sentHistory, MAX_DIAGNOSTIC_HISTORY);
@@ -1422,6 +1426,19 @@
       ctx.restore();
     }
 
+    function segmentsFromMonitor(items) {
+      if (!Array.isArray(items)) {
+        return [];
+      }
+      return items
+        .map((segment) => pointsFromMonitor(segment))
+        .filter((segment) => segment.length >= 2);
+    }
+
+    function flattenSegments(segments) {
+      return segments.reduce((acc, segment) => acc.concat(segment), []);
+    }
+
     function drawPoint(ctx, point, project, color, radius) {
       if (!point || point.x === null || point.y === null) {
         return;
@@ -1460,6 +1477,7 @@
       }
 
       const plan = pointsFromMonitor(monitor.plan_points);
+      const planHistory = segmentsFromMonitor(monitor.plan_history_segments);
       const trail = pointsFromMonitor(monitor.actual_trail);
       const currentPose = monitor.current_pose
         ? { x: numberValue(monitor.current_pose.x), y: numberValue(monitor.current_pose.y) }
@@ -1469,7 +1487,15 @@
         : null;
       const start = monitor.start ? { x: numberValue(monitor.start.x), y: numberValue(monitor.start.y) } : null;
       const goal = monitor.goal ? { x: numberValue(monitor.goal.x), y: numberValue(monitor.goal.y) } : null;
-      const allPoints = [...plan, ...trail, currentPose, closest, start, goal].filter((p) => p && p.x !== null && p.y !== null);
+      const allPoints = [
+        ...flattenSegments(planHistory),
+        ...plan,
+        ...trail,
+        currentPose,
+        closest,
+        start,
+        goal
+      ].filter((p) => p && p.x !== null && p.y !== null);
       if (!allPoints.length) {
         return;
       }
@@ -1482,6 +1508,25 @@
         const y = 20 + i * (height - 40) / 4;
         ctx.beginPath(); ctx.moveTo(x, 20); ctx.lineTo(x, height - 20); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(20, y); ctx.lineTo(width - 20, y); ctx.stroke();
+      }
+
+      planHistory.forEach((segment) => drawPolyline(ctx, segment, project, "#86efac", 1.5, []));
+
+      if (monitor.plan_available === false || plan.length < 2) {
+        ctx.fillStyle = "#627086";
+        ctx.font = "14px system-ui, sans-serif";
+        ctx.fillText(`等待新路径${monitor.reset_reason ? `：${monitor.reset_reason}` : ""}`, 24, 32);
+        drawPolyline(ctx, trail, project, "#2563eb", 2.4, []);
+        drawPoint(ctx, currentPose, project, "#2563eb", 6);
+        setText("pathDeviationValue", "暂无");
+        setText("pathDeviationMeta", monitor.reset_reason ? `保留历史：${monitor.reset_reason}` : "等待新 /plan");
+        setText("pathRemainingValue", "暂无");
+        setText("pathGoalMeta", "等待目标点");
+        setText("pathProgressValue", "暂无");
+        setText("pathProgressMeta", `历史规划 ${planHistory.length} 段`);
+        setText("pathTrailValue", `${formatNumber(monitor.trail_length_m, 2)} m`);
+        setText("pathTrailMeta", `轨迹点 ${trail.length}，历史规划 ${planHistory.length} 段`);
+        return;
       }
 
       if (start && goal && start.x !== null && goal.x !== null) {
@@ -1510,9 +1555,9 @@
       setText("pathRemainingValue", remaining === null ? "暂无" : `${remaining.toFixed(2)} m`);
       setText("pathGoalMeta", distanceToGoal === null ? "等待目标点" : `直线距目标 ${distanceToGoal.toFixed(2)} m`);
       setText("pathProgressValue", progress === null ? "暂无" : `${(progress * 100).toFixed(1)}%`);
-      setText("pathProgressMeta", planLength === null ? "等待规划路径" : `规划长度 ${planLength.toFixed(2)} m`);
+      setText("pathProgressMeta", planLength === null ? "等待规划路径" : `当前规划 ${planLength.toFixed(2)} m，历史 ${planHistory.length} 段`);
       setText("pathTrailValue", trailLength === null ? "暂无" : `${trailLength.toFixed(2)} m`);
-      setText("pathTrailMeta", `轨迹点 ${trail.length}，规划点 ${plan.length}`);
+      setText("pathTrailMeta", `轨迹点 ${trail.length}，当前规划点 ${plan.length}`);
     }
 
     function getSpeedSource() {
@@ -1667,11 +1712,16 @@
     }
 
     function recordReceived(message) {
-      recordReceivedHistory(message);
-      recordNavigationEvent(message);
+      const realtimePathMonitor = isRealtimePathMonitor(message);
+      if (!realtimePathMonitor) {
+        recordReceivedHistory(message);
+        recordNavigationEvent(message);
+      }
       noteMessageStats(message);
       updateParsedState(message);
-      updateAlertFromMessage(message);
+      if (!realtimePathMonitor) {
+        updateAlertFromMessage(message);
+      }
       const shouldStore = shouldStoreReceived(message);
       const item = {
         at: new Date().toLocaleTimeString(),
@@ -1717,6 +1767,10 @@
 
     function shouldStoreReceived(message) {
       const now = Date.now();
+      if (isRealtimePathMonitor(message)) {
+        return false;
+      }
+
       const isProgress = (
         message.data_type === "navigation_status" &&
         message.data?.event_type === "navigation_progress_update"

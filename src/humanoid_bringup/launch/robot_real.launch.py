@@ -115,19 +115,6 @@ def generate_launch_description():
             GroupAction([
                 launch_app_sc,
                 launch_app_hdl,
-                Node(
-                    package='humanoid_navigation2',
-                    executable='navigation_path_monitor',
-                    name='navigation_path_monitor',
-                    output='screen',
-                    parameters=[{
-                        'use_sim_time': use_sim_time,
-                        'plan_topic': '/plan',
-                        'pose_topic': '/robot_realpose',
-                        'push_topic': '/integration/push_messages',
-                        'publish_rate_hz': 5.0,
-                    }],
-                ),
                 IncludeLaunchDescription(
                     PythonLaunchDescriptionSource(os.path.join(pkg_websocket, 'launch', 'websocket_server.launch.py')),
                     launch_arguments={'use_sim_time': use_sim_time}.items()
