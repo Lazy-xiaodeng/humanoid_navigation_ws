@@ -45,7 +45,6 @@ setup(
             'measure_timestamp_diff = humanoid_navigation2.measure_timestamp_diff:main',
             'save_pcd_map = humanoid_navigation2.save_pcd_map:main',
             'map_coordinate_viewer = humanoid_navigation2.map_coordinate_viewer:main',
-            'periodic_clearing_publisher = humanoid_navigation2.periodic_clearing_publisher:main',
             'periodic_clearing_3d_publisher = humanoid_navigation2.periodic_clearing_3d_publisher:main',
             'lidar_height_clearing_3d_publisher = humanoid_navigation2.lidar_height_clearing_3d_publisher:main',
             'protected_clearing_3d_publisher = humanoid_navigation2.protected_clearing_3d_publisher:main',

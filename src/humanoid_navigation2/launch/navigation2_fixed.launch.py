@@ -220,29 +220,6 @@ def generate_launch_description():
     )
 
     # =========================================================================
-    # 第四部分:辅助节点
-    # =========================================================================
-
-    periodic_clearing_node = TimerAction(
-        period=2.0,
-        actions=[
-            Node(
-                package='humanoid_navigation2',
-                executable='periodic_clearing_publisher',
-                name='periodic_clearing_publisher',
-                parameters=[{
-                    'publish_frequency': 2.0,
-                    'num_rays': 360,
-                    'max_range': 6.0,
-                    'clearing_height': -0.15,
-                    'output_topic': '/costmap_clearing_cloud',
-                }],
-                output='screen'
-            )
-        ]
-    )
-
-    # =========================================================================
     # 第五部分:Nav2导航栈
     # =========================================================================
 
@@ -340,9 +317,6 @@ def generate_launch_description():
         
         # map_server生命周期管理(1.5秒)
         map_server_lifecycle,
-
-        # ========== 第四部分:辅助节点 ==========
-        periodic_clearing_node,
 
         # ========== 第五部分:导航层 ==========
         nav2_nodes,

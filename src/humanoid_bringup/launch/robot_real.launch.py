@@ -152,5 +152,5 @@ def generate_launch_description():
         launch_description,
         launch_nav2_stack,
         launch_app_layer,
-        # rviz_node,
+        rviz_node,
     ])

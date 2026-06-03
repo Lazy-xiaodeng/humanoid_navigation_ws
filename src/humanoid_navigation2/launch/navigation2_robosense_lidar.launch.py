@@ -430,27 +430,6 @@ def generate_launch_description():
         },
     )
 
-    periodic_clearing_node = TimerAction(
-        period=2.0,
-        actions=[
-            Node(
-                package='humanoid_navigation2',
-                executable='periodic_clearing_publisher',
-                name='periodic_clearing_publisher',
-                condition=IfCondition(enable_periodic_clearing),
-                parameters=[
-                    # Nav2 参数中包含清障 scan 的角度、距离和频率。
-                    nav2_params_file,
-                    {
-                        # 时间源。
-                        'use_sim_time': use_sim_time,
-                    },
-                ],
-                output='screen',
-            )
-        ],
-    )
-
     periodic_clearing_3d_node = TimerAction(
         period=2.0,
         actions=[
@@ -617,7 +596,6 @@ def generate_launch_description():
         TimerAction(period=4.5, actions=[robosense_lidar_localization_node]),
         TimerAction(period=5.5, actions=[prior_map_odom_bridge_node]),
         TimerAction(period=7.5, actions=[robot_realpose_publisher]),
-        periodic_clearing_node,
         periodic_clearing_3d_node,
         localization_ready_gate,
         start_nav2_after_localization,

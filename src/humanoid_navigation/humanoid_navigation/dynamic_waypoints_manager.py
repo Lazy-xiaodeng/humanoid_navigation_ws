@@ -117,6 +117,31 @@ class DynamicWaypointsManager(Node):
             )
         
         self.get_logger().info("动态路点管理器启动完成 - 仅负责路点管理")
+
+    @staticmethod
+    def normalize_waypoint_speed_properties(properties: Dict[str, Any]) -> tuple:
+        """Validate waypoint speed and store it as properties.speed."""
+        if not isinstance(properties, dict):
+            return False, "properties 必须是对象", {}
+
+        normalized = dict(properties)
+        speed_keys = ("speed", "target_speed", "navigation_speed")
+        speed_key = next((key for key in speed_keys if key in normalized), None)
+        if speed_key is None:
+            return True, "", normalized
+
+        raw_speed = normalized.get(speed_key)
+        if isinstance(raw_speed, bool) or not isinstance(raw_speed, (int, float)):
+            return False, "路点速度 speed 必须是数字，单位 m/s", normalized
+
+        speed = float(raw_speed)
+        min_speed = 0.15
+        max_speed = 1.0
+        if speed < min_speed or speed > max_speed:
+            return False, f"路点速度 speed 必须在 {min_speed:.2f}~{max_speed:.2f} m/s 范围内", normalized
+
+        normalized["speed"] = speed
+        return True, "", normalized
     
     def setup_communication(self):
         """设置ROS2通信接口"""
@@ -334,6 +359,12 @@ class DynamicWaypointsManager(Node):
             if not waypoint_id or not waypoint_type_str:
                 self.send_app_response("error", "缺少必要参数: id 或 type")
                 return
+
+            properties = waypoint_data.get("properties", {})
+            ok, error_message, normalized_properties = self.normalize_waypoint_speed_properties(properties)
+            if not ok:
+                self.send_app_response("error", error_message)
+                return
             
             # 创建并存储点位
             waypoint_type = WaypointType(waypoint_type_str)
@@ -344,7 +375,7 @@ class DynamicWaypointsManager(Node):
                 position=waypoint_data.get("position", [0.0, 0.0, 0.0]),
                 orientation=waypoint_data.get("orientation", [0.0, 0.0, 0.0, 1.0]),
                 frame_id=waypoint_data.get("frame_id", "map"),
-                properties=waypoint_data.get("properties", {})
+                properties=normalized_properties
             )
             
             self.waypoints[waypoint_type.value][waypoint_id] = waypoint
@@ -378,6 +409,12 @@ class DynamicWaypointsManager(Node):
             if waypoint_id not in self.waypoints[waypoint_type.value]:
                 self.send_app_response("error", f"点位不存在: {waypoint_id}")
                 return
+
+            incoming_properties = waypoint_data.get("properties", {})
+            ok, error_message, normalized_properties = self.normalize_waypoint_speed_properties(incoming_properties)
+            if not ok:
+                self.send_app_response("error", error_message)
+                return
             
             # 更新点位数据
             waypoint = self.waypoints[waypoint_type.value][waypoint_id]
@@ -385,7 +422,7 @@ class DynamicWaypointsManager(Node):
             waypoint.position = waypoint_data.get("position", waypoint.position)
             waypoint.orientation = waypoint_data.get("orientation", waypoint.orientation)
             waypoint.frame_id = waypoint_data.get("frame_id", waypoint.frame_id)
-            waypoint.properties.update(waypoint_data.get("properties", {}))
+            waypoint.properties.update(normalized_properties)
             waypoint.last_modified = time.time()
             
             # 保存数据

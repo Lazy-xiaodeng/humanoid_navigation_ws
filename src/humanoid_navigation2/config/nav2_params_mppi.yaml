@@ -848,7 +848,7 @@ global_costmap:
         enabled: True
         transform_tolerance: 1.0
 
-        observation_sources: pointcloud periodic_clearing
+        observation_sources: pointcloud
 
         pointcloud:
           topic: /airy_points_filtered
@@ -881,21 +881,6 @@ global_costmap:
           # 0.0 表示只使用最新观测，不保留历史点。
           # 如果点云短暂丢帧导致障碍闪烁，可设 0.2~0.5。
           observation_persistence: 0.0
-
-        periodic_clearing:
-          topic: /clearing_scan
-          max_obstacle_height: 1.7
-          min_obstacle_height: 0.05    # ★★★ 最小障碍物高度（3cm，低于此视为地面）★★★
-          clearing: True               # 启用清除（射线追踪清除旧障碍物）
-          marking: False               # 不启用标记（只清除）
-          data_type: "LaserScan"       # 数据类型（LaserScan 或 PointCloud2）
-          raytrace_max_range: 10.0     # 射线追踪最大范围
-          raytrace_min_range: 0.1      # 射线追踪最小范围
-          bstacle_max_range: 15.0      # 障碍物标记最大范围
-          obstacle_min_range: 0.30     # 障碍物标记最小范围
-          observation_persistence: 0.0 # 观测持续时间（0 = 不保留旧观测）
-          min_pixels: 2                # 最小像素数
-          inf_is_valid: True
 
       # ------------------------------------------------------------------------
       # 膨胀层

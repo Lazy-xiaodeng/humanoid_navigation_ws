@@ -621,18 +621,6 @@ def generate_launch_description():
     # =========================================================================
     # 第四部分：辅助节点
     # =========================================================================
-    periodic_clearing_node = TimerAction(
-        period=2.0,
-        actions=[
-            Node(
-                package='humanoid_navigation2',
-                executable='periodic_clearing_publisher',
-                name='periodic_clearing_publisher',
-                parameters=[nav2_params_file, {'use_sim_time': use_sim_time}],
-                output='screen'
-            )
-        ]
-    )
     periodic_clearing_3d_node = TimerAction(
         period=2.0,
         actions=[
@@ -773,7 +761,6 @@ def generate_launch_description():
 
         TimerAction(period=7.5, actions=[robot_realpose_publisher]),
 
-        periodic_clearing_node,
         periodic_clearing_3d_node,
 
         localization_ready_gate,

@@ -16,6 +16,8 @@ from nav_msgs.msg import Odometry, Path
 from nav2_msgs.action import NavigateToPose
 from action_msgs.msg import GoalStatus
 from action_msgs.srv import CancelGoal
+from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
+from rcl_interfaces.srv import SetParameters
 from nav2_msgs.action import NavigateToPose
 from nav2_msgs.msg import BehaviorTreeLog
 import rclpy.duration
@@ -71,7 +73,7 @@ class NavigationStateManager(Node):
             ('waypoint_timeout', 300.0),
             ('status_publish_rate', 2.0),
             ('default_frame_id', 'map'),
-            ('obstacle_block_timeout', 5.0),  # 障碍物阻塞超时时间（秒）
+            ('obstacle_block_timeout', 1.0),  # 障碍物阻塞超时时间（秒）
             ('velocity_threshold', 0.10),  # 判断机器人是否停滞的速度阈值（m/s）
             ('blockage_pose_delta_deadzone', 0.12),  # 抑制定位/机身晃动带来的低速假恢复
             ('blockage_recovery_velocity_threshold', 0.20),  # 解除阻塞需要更明确的持续运动
@@ -81,13 +83,13 @@ class NavigationStateManager(Node):
             ('pending_navigation_timeout', 90.0),
             ('obstacle_block_near_goal_distance', 0.7),
             ('navigation_failure_policy', 'pause_on_failed'),
-            ('auto_pause_on_localization_recovery', True),
+            ('auto_pause_on_localization_recovery', False),
             ('localization_stop_hold_sec', 2.0),
             ('localization_resume_settle_sec', 1.0),
             ('localization_recovery_status_topic', '/localization/recovery_status'),
             ('localization_recovery_request_topic', '/localization/recovery_requests'),
-            ('request_localization_recovery_on_nav_failure', True),
-            ('request_navigation_context_recovery_on_localization_failure', True),
+            ('request_localization_recovery_on_nav_failure', False),
+            ('request_navigation_context_recovery_on_localization_failure', False),
             ('localization_recovery_request_cooldown_sec', 20.0),
             ('localization_recovery_prior_radius_m', 10.0),
             ('localization_context_recovery_request_cooldown_sec', 4.0),
@@ -100,6 +102,11 @@ class NavigationStateManager(Node):
             ('map_frame', 'map'),
             ('base_frame', 'base_footprint'),
             ('pose_tf_timeout_sec', 0.05),
+            ('waypoint_speed_min_mps', 0.15),
+            ('waypoint_speed_max_mps', 1.0),
+            ('default_navigation_speed_mps', 0.5),
+            ('default_reverse_navigation_speed_mps', 0.5),
+            ('controller_server_name', '/controller_server'),
             (
                 'reverse_navigation_bt_xml',
                 '/home/ubuntu/humanoid_ws/src/humanoid_navigation2/config/behavior_tree/'
@@ -160,6 +167,12 @@ class NavigationStateManager(Node):
         self.map_frame = str(self.get_parameter('map_frame').value)
         self.base_frame = str(self.get_parameter('base_frame').value)
         self.pose_tf_timeout_sec = float(self.get_parameter('pose_tf_timeout_sec').value)
+        self.waypoint_speed_min_mps = float(self.get_parameter('waypoint_speed_min_mps').value)
+        self.waypoint_speed_max_mps = float(self.get_parameter('waypoint_speed_max_mps').value)
+        self.default_navigation_speed_mps = float(self.get_parameter('default_navigation_speed_mps').value)
+        self.default_reverse_navigation_speed_mps = float(
+            self.get_parameter('default_reverse_navigation_speed_mps').value)
+        self.controller_server_name = str(self.get_parameter('controller_server_name').value)
         
         # ========== 导航状态 ==========
         self.current_state = NavigationState.IDLE
@@ -207,6 +220,10 @@ class NavigationStateManager(Node):
         self.waypoints_data = {}
         self.navigation_start_time = 0
         self.current_goal_pose = None
+        self.current_waypoint_target_speed = None
+        self.current_waypoint_speed_source = "default"
+        self.current_waypoint_speed_applied = False
+        self.controller_speed_is_custom = False
         
         # ========== Nav2动作客户端 ==========
         self.nav_to_pose_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
@@ -258,6 +275,10 @@ class NavigationStateManager(Node):
 
         # 定位异常自动暂停时，立即补一帧零速度，避免取消 Nav2 goal 前后继续沿旧速度滑行
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.controller_set_parameters_client = self.create_client(
+            SetParameters,
+            f"{self.controller_server_name}/set_parameters"
+        )
 
         self.localization_recovery_request_pub = self.create_publisher(
             String,
@@ -1810,6 +1831,193 @@ class NavigationStateManager(Node):
         if normalized in {"backward", "reverse", "back", "倒走", "倒车", "后退"}:
             return "backward"
         return "forward"
+
+    def get_waypoint_target_speed(self, waypoint_data: Dict[str, Any]) -> Tuple[Optional[float], str]:
+        """Read optional per-waypoint speed from properties."""
+        properties = waypoint_data.get("properties", {}) or {}
+        if not isinstance(properties, dict):
+            return None, "default"
+
+        for key in ("speed", "target_speed", "navigation_speed"):
+            if key not in properties:
+                continue
+
+            raw_speed = properties.get(key)
+            if isinstance(raw_speed, bool) or not isinstance(raw_speed, (int, float)):
+                self.get_logger().warning(
+                    f"路点 {waypoint_data.get('id', '')} 的 {key} 不是数字，使用默认速度"
+                )
+                return None, "invalid_default"
+
+            speed = float(raw_speed)
+            if speed < self.waypoint_speed_min_mps or speed > self.waypoint_speed_max_mps:
+                self.get_logger().warning(
+                    f"路点 {waypoint_data.get('id', '')} 的 {key}={speed:.3f} 超出 "
+                    f"{self.waypoint_speed_min_mps:.2f}~{self.waypoint_speed_max_mps:.2f} m/s，使用默认速度"
+                )
+                return None, "invalid_default"
+
+            return speed, key
+
+        return None, "default"
+
+    @staticmethod
+    def make_double_parameter(name: str, value: float) -> Parameter:
+        parameter = Parameter()
+        parameter.name = name
+        parameter.value = ParameterValue(
+            type=ParameterType.PARAMETER_DOUBLE,
+            double_value=float(value)
+        )
+        return parameter
+
+    def controller_speed_response_success(self, future, speed_mps: float, reason: str) -> bool:
+        try:
+            response = future.result()
+        except Exception as exc:
+            self.get_logger().warning(f"设置控制器速度服务调用失败: {exc}")
+            return False
+
+        failures = [
+            result.reason or "unknown"
+            for result in response.results
+            if not result.successful
+        ]
+        if failures:
+            self.get_logger().warning(
+                f"控制器拒绝速度参数 {speed_mps:.3f} m/s ({reason}): {'; '.join(failures)}"
+            )
+            return False
+
+        self.get_logger().info(
+            f"已设置导航控制器速度: {speed_mps:.3f} m/s, reason={reason}"
+        )
+        return True
+
+    def set_controller_linear_speed_async(self, walk_direction: str, speed_mps: float, reason: str, done_callback=None):
+        """Set Nav2 RPP desired_linear_vel for the active controller."""
+        parameter_names = ["FollowPath.desired_linear_vel"]
+        if walk_direction == "backward":
+            parameter_names = ["FollowPathReverse.desired_linear_vel"]
+
+        if not self.controller_set_parameters_client.wait_for_service(timeout_sec=0.2):
+            self.get_logger().warning(
+                f"控制器参数服务不可用，无法设置路点速度 {speed_mps:.3f} m/s",
+                throttle_duration_sec=2.0
+            )
+            if done_callback:
+                done_callback(False)
+            return
+
+        request = SetParameters.Request()
+        request.parameters = [
+            self.make_double_parameter(parameter_name, speed_mps)
+            for parameter_name in parameter_names
+        ]
+
+        future = self.controller_set_parameters_client.call_async(request)
+        if done_callback:
+            future.add_done_callback(
+                lambda done_future: done_callback(
+                    self.controller_speed_response_success(done_future, speed_mps, reason)
+                )
+            )
+        else:
+            future.add_done_callback(
+                lambda done_future: self.controller_speed_response_success(done_future, speed_mps, reason)
+            )
+
+    def apply_waypoint_controller_speed(self, waypoint_data: Dict[str, Any], walk_direction: str) -> Tuple[float, str, bool]:
+        target_speed, speed_source = self.get_waypoint_target_speed(waypoint_data)
+        if target_speed is None:
+            target_speed = (
+                self.default_reverse_navigation_speed_mps
+                if walk_direction == "backward"
+                else self.default_navigation_speed_mps
+            )
+
+        self.current_waypoint_target_speed = target_speed
+        self.current_waypoint_speed_source = speed_source
+        self.current_waypoint_speed_applied = False
+        self.controller_speed_is_custom = speed_source not in {"default", "invalid_default"}
+        return target_speed, speed_source, False
+
+    def restore_default_controller_speed(self, reason: str = "navigation_reset") -> bool:
+        self.set_controller_linear_speed_async(
+            "forward",
+            self.default_navigation_speed_mps,
+            reason
+        )
+        self.set_controller_linear_speed_async(
+            "backward",
+            self.default_reverse_navigation_speed_mps,
+            reason
+        )
+        self.controller_speed_is_custom = False
+        self.current_waypoint_target_speed = None
+        self.current_waypoint_speed_source = "default"
+        self.current_waypoint_speed_applied = False
+        return True
+
+    def dispatch_nav2_goal(
+        self,
+        goal_msg: NavigateToPose.Goal,
+        waypoint_data: Dict[str, Any],
+        walk_direction: str,
+        target_speed: float,
+        speed_source: str,
+        speed_applied: bool
+    ):
+        """Send the prepared Nav2 goal after the controller speed request has completed."""
+        if self.current_state != NavigationState.EXECUTING:
+            self.get_logger().warning(
+                f"跳过已过期的 Nav2 goal 发送，当前状态: {self.current_state.value}"
+            )
+            return
+
+        expected_waypoint_id = waypoint_data.get("id", "")
+        current_waypoint_id = self.current_waypoint.get("id", "") if self.current_waypoint else ""
+        if expected_waypoint_id != current_waypoint_id:
+            self.get_logger().warning(
+                f"跳过已过期的 Nav2 goal 发送，当前路点已从 {expected_waypoint_id} 切换到 {current_waypoint_id}"
+            )
+            return
+
+        self.current_waypoint_speed_applied = speed_applied
+
+        # 等待动作服务器
+        if not self.nav_to_pose_client.wait_for_server(timeout_sec=5.0):
+            self.get_logger().error("Nav2动作服务器不可用")
+            self.handle_navigation_failed("Nav2服务器不可用")
+            return
+
+        # 发送目标
+        self.future = self.nav_to_pose_client.send_goal_async(
+           goal_msg,
+           feedback_callback=self.nav2_feedback_callback
+        )
+        self.future.add_done_callback(self.nav2_goal_response_callback)
+
+        # 发布路点开始状态
+        self.publish_status_update("waypoint_started", {
+            "waypoint_id": waypoint_data.get("id", ""),
+            "waypoint_name": waypoint_data.get("name", ""),
+            "waypoint_index": self.current_waypoint_index,
+            "total_waypoints": self.total_waypoints,
+            "position": waypoint_data.get("position", []),
+            "walk_direction": walk_direction,
+            "target_speed": target_speed,
+            "target_speed_source": speed_source,
+            "target_speed_applied": speed_applied,
+            "behavior_tree": goal_msg.behavior_tree
+        })
+
+        self.get_logger().info(
+            f"开始导航到路点: {waypoint_data.get('name', '')} "
+            f"({self.current_waypoint_index + 1}/{self.total_waypoints}), "
+            f"walk_direction={walk_direction}, target_speed={target_speed:.3f} m/s, "
+            f"speed_applied={speed_applied}"
+        )
     
     def navigate_to_waypoint(self, waypoint_data: Dict[str, Any], force_walk_direction: Optional[str] = None):
         """导航到指定路点"""
@@ -1823,37 +2031,25 @@ class NavigationStateManager(Node):
             goal_msg = NavigateToPose.Goal()
             goal_msg.pose = goal_pose
             walk_direction = force_walk_direction or self.get_waypoint_walk_direction(waypoint_data)
+            target_speed, speed_source, _ = self.apply_waypoint_controller_speed(
+                waypoint_data,
+                walk_direction
+            )
             if walk_direction == "backward":
                 goal_msg.behavior_tree = self.reverse_navigation_bt_xml
-        
-            # 等待动作服务器
-            if not self.nav_to_pose_client.wait_for_server(timeout_sec=5.0):
-                self.get_logger().error("Nav2动作服务器不可用")
-                self.handle_navigation_failed("Nav2服务器不可用")
-                return
-        
-            # 发送目标
-            self.future = self.nav_to_pose_client.send_goal_async(
-               goal_msg, 
-               feedback_callback=self.nav2_feedback_callback
-            )
-            self.future.add_done_callback(self.nav2_goal_response_callback)
-            
-            # 发布路点开始状态
-            self.publish_status_update("waypoint_started", {
-                "waypoint_id": waypoint_data.get("id", ""),
-                "waypoint_name": waypoint_data.get("name", ""),
-                "waypoint_index": self.current_waypoint_index,
-                "total_waypoints": self.total_waypoints,
-                "position": waypoint_data.get("position", []),
-                "walk_direction": walk_direction,
-                "behavior_tree": goal_msg.behavior_tree
-            })
-            
-            self.get_logger().info(
-                f"开始导航到路点: {waypoint_data.get('name', '')} "
-                f"({self.current_waypoint_index + 1}/{self.total_waypoints}), "
-                f"walk_direction={walk_direction}"
+
+            self.set_controller_linear_speed_async(
+                walk_direction,
+                target_speed,
+                f"waypoint:{waypoint_data.get('id', '')}:{speed_source}",
+                lambda applied: self.dispatch_nav2_goal(
+                    goal_msg,
+                    waypoint_data,
+                    walk_direction,
+                    target_speed,
+                    speed_source,
+                    applied
+                )
             )
             
         except Exception as e:
@@ -2680,6 +2876,7 @@ class NavigationStateManager(Node):
     
     def reset_navigation_state(self):
         """重置导航状态"""
+        self.restore_default_controller_speed("navigation_state_reset")
         self.current_state = NavigationState.IDLE
         self.current_navigation_mode = None
         self.current_sequence_id = None
@@ -2698,6 +2895,10 @@ class NavigationStateManager(Node):
         self.localization_recovery_reason = ""
         self.localization_recovery_started_at = 0.0
         self.localization_recovery_last_status = {}
+        self.current_waypoint_target_speed = None
+        self.current_waypoint_speed_source = "default"
+        self.current_waypoint_speed_applied = False
+        self.controller_speed_is_custom = False
         
         # 重置阻塞检测状态
         self.reset_block_detection()
@@ -2714,6 +2915,7 @@ class NavigationStateManager(Node):
                 self.publish_status_update("navigation_stopped", {
                     "reason": "node_shutdown"
                 })
+            self.restore_default_controller_speed("node_shutdown")
             
             self.get_logger().info("导航状态管理器节点销毁完成")
         except Exception as e:
