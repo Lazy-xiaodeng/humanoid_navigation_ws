@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-WORKSPACE=/home/ubuntu/humanoid_ws
+WORKSPACE="${WORKSPACE:-$HOME/humanoid_ws}"
 
 cd "$WORKSPACE"
 

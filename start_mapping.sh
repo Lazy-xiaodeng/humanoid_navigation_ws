@@ -2,7 +2,7 @@
 set -Eeo pipefail
 set +u
 
-WORKSPACE="${WORKSPACE:-/home/ubuntu/humanoid_ws}"
+WORKSPACE="${WORKSPACE:-$HOME/humanoid_ws}"
 MAP_NAME="${1:-hall}"
 START_TIME="$(date +%Y%m%d_%H%M%S)"
 
@@ -209,7 +209,7 @@ source /opt/ros/jazzy/setup.bash
 source install/setup.bash
 
 export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
-export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-/home/ubuntu/.config/fastdds_shm.xml}"
+export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-$HOME/.config/fastdds_shm.xml}"
 export RMW_FASTRTPS_USE_QOS_FROM_XML="${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
 
 log "Starting Humanoid Mapping"
