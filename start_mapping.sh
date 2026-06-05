@@ -24,6 +24,7 @@ MAPPING_PID=""
 PCD_PID=""
 BAG_PID=""
 FINISHING=0
+INPUT_FD=0
 
 mkdir -p "$MAP_DIR" "$PCD_DIR" "$BAG_ROOT" "$LOG_DIR" "$ROS_LOG_DIR"
 export ROS_LOG_DIR
@@ -55,6 +56,9 @@ stop_process_int() {
   while is_alive "$pid" && [ "$elapsed" -lt "$timeout_sec" ]; do
     sleep 1
     elapsed=$((elapsed + 1))
+    if [ $((elapsed % 5)) -eq 0 ] && is_alive "$pid"; then
+      log "RUNNING: waiting for $name to stop (${elapsed}s elapsed, please wait...)"
+    fi
   done
 
   if is_alive "$pid"; then
@@ -72,6 +76,38 @@ stop_process_int() {
 
 run_ros() {
   bash -lc "cd '$WORKSPACE' && source /opt/ros/jazzy/setup.bash && source install/setup.bash && $*"
+}
+
+run_step() {
+  local label="$1"
+  shift
+  local heartbeat_sec=5
+  local elapsed=0
+  local pid
+  local status
+
+  log "START: $label"
+  "$@" &
+  pid=$!
+
+  while kill -0 "$pid" > /dev/null 2>&1; do
+    sleep "$heartbeat_sec"
+    elapsed=$((elapsed + heartbeat_sec))
+    if kill -0 "$pid" > /dev/null 2>&1; then
+      log "RUNNING: $label (${elapsed}s elapsed, please wait...)"
+    fi
+  done
+
+  set +e
+  wait "$pid"
+  status=$?
+  set -e
+  if [ "$status" -eq 0 ]; then
+    log "DONE: $label"
+  else
+    log "ERROR: $label failed with exit code $status"
+  fi
+  return "$status"
 }
 
 wait_for_service() {
@@ -110,58 +146,61 @@ finish_mapping() {
   FINISHING=1
   trap - INT TERM
 
-  log "Ctrl+C received. Finishing mapping and saving outputs..."
+  log "Finish requested. Finishing mapping and saving outputs..."
+
+  log "[1/8] Stopping recorders and flushing bag/PCD data..."
 
   # Stop data recorders first so bag and PCD are flushed to disk.
   stop_process_int "rosbag recorder" "$BAG_PID" 90
   stop_process_int "PCD saver" "$PCD_PID" 120
 
-  log "Saving Fast-LIO map through /map_save when available..."
+  log "[2/8] Saving Fast-LIO map through /map_save when available..."
   if wait_for_service "/map_save" 5; then
-    run_ros "ros2 service call /map_save std_srvs/srv/Trigger '{}'" || \
+    run_step "Fast-LIO /map_save" run_ros "ros2 service call /map_save std_srvs/srv/Trigger '{}'" || \
       log "WARN: /map_save call failed; continuing with PCD saver output."
   else
     log "WARN: /map_save service unavailable; continuing with PCD saver output."
   fi
 
-  log "Saving 2D occupancy grid map: ${MAP_PREFIX}.yaml/.pgm"
+  log "[3/8] Saving 2D occupancy grid map: ${MAP_PREFIX}.yaml/.pgm"
   if wait_for_service "/slam_toolbox/save_map" 20; then
-    run_ros "ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap \"{name: {data: '$MAP_PREFIX'}}\""
+    run_step "2D occupancy grid map save" run_ros "ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap \"{name: {data: '$MAP_PREFIX'}}\""
   else
     log "WARN: /slam_toolbox/save_map unavailable; trying map_saver_cli."
-    run_ros "ros2 run nav2_map_server map_saver_cli -f '$MAP_PREFIX'" || true
+    run_step "2D occupancy grid map save via map_saver_cli" run_ros "ros2 run nav2_map_server map_saver_cli -f '$MAP_PREFIX'" || true
   fi
 
-  log "Saving slam_toolbox posegraph: ${MAP_PREFIX}.posegraph/.data"
+  log "[4/8] Saving slam_toolbox posegraph: ${MAP_PREFIX}.posegraph/.data"
   if wait_for_service "/slam_toolbox/serialize_map" 20; then
-    run_ros "ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph \"{filename: '$MAP_PREFIX'}\""
+    run_step "slam_toolbox posegraph save" run_ros "ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph \"{filename: '$MAP_PREFIX'}\""
   else
     log "WARN: /slam_toolbox/serialize_map unavailable; posegraph will not be saved."
   fi
 
-  log "Building Scan Context database: $SC_DB_FILE"
+  log "[5/8] Building Scan Context database: $SC_DB_FILE"
   if [ -d "$BAG_DIR" ]; then
-    run_ros "ros2 run humanoid_relocalization build_sc_database.py --bag '$BAG_DIR' --output '$SC_DB_FILE' --cloud-topic /fast_lio/cloud_registered --odom-topic /odom --interval 2.0"
+    run_step "Scan Context database build" run_ros "ros2 run humanoid_relocalization build_sc_database.py --bag '$BAG_DIR' --output '$SC_DB_FILE' --cloud-topic /fast_lio/cloud_registered --odom-topic /odom --interval 2.0"
   else
     log "ERROR: bag directory not found, skip Scan Context database: $BAG_DIR"
   fi
 
+  log "[6/8] Generating derived PCD files..."
   if [ -s "$PCD_FILE" ]; then
     log "Generating standard-frame PCD: $PCD_STANDARD_FILE"
-    run_ros "python3 '$WORKSPACE/src/humanoid_navigation2/humanoid_navigation2/pcd_converter.py' '$PCD_FILE' '$PCD_STANDARD_FILE'" || \
+    run_step "standard-frame PCD generation" run_ros "python3 '$WORKSPACE/src/humanoid_navigation2/humanoid_navigation2/pcd_converter.py' '$PCD_FILE' '$PCD_STANDARD_FILE'" || \
       log "WARN: standard PCD conversion failed."
 
     log "Generating localization PCD: $PCD_LOCALIZATION_FILE"
-    run_ros "python3 '$WORKSPACE/src/humanoid_navigation2/scripts/make_localization_pcd.py' '$PCD_FILE' '$PCD_LOCALIZATION_FILE' --min-z 0.0 --max-z 2.30 --voxel-size 0.10" || \
+    run_step "localization PCD generation" run_ros "python3 '$WORKSPACE/src/humanoid_navigation2/scripts/make_localization_pcd.py' '$PCD_FILE' '$PCD_LOCALIZATION_FILE' --min-z 0.0 --max-z 2.30 --voxel-size 0.10" || \
       log "WARN: localization PCD generation failed."
   else
     log "ERROR: base PCD is missing; skip PCD conversions: $PCD_FILE"
   fi
 
-  log "Stopping mapping launch..."
+  log "[7/8] Stopping mapping launch..."
   stop_process_int "mapping launch" "$MAPPING_PID" 30
 
-  log "Checking output files..."
+  log "[8/8] Checking output files..."
   local failed=0
   check_required_file "${MAP_PREFIX}.yaml" || failed=1
   check_required_file "${MAP_PREFIX}.pgm" || failed=1
@@ -191,9 +230,45 @@ finish_mapping() {
   exit 1
 }
 
-trap finish_mapping INT TERM
+abort_mapping() {
+  if [ "$FINISHING" -eq 1 ]; then
+    return 0
+  fi
+  FINISHING=1
+  trap - INT TERM
+
+  log "Abort requested. Stopping mapping without saving final map outputs..."
+
+  # Keep rosbag SIGINT so rosbag metadata is closed cleanly, but do not build
+  # databases or overwrite map files from this aborted run.
+  stop_process_int "rosbag recorder" "$BAG_PID" 30
+
+  if is_alive "$PCD_PID"; then
+    log "Stopping PCD saver without Ctrl+C save (pid=$PCD_PID)..."
+    kill -TERM "$PCD_PID" > /dev/null 2>&1 || true
+    sleep 2
+    if is_alive "$PCD_PID"; then
+      kill -KILL "$PCD_PID" > /dev/null 2>&1 || true
+    fi
+  fi
+
+  stop_process_int "mapping launch" "$MAPPING_PID" 30
+
+  log "Aborted mapping run. No final map save/check was performed."
+  log "Partial bag, if any, is at: $BAG_DIR"
+  log "Mapping log: $RUN_LOG"
+  exit 2
+}
+
+trap finish_mapping INT
+trap abort_mapping TERM
 
 cd "$WORKSPACE"
+
+if [ -r /dev/tty ]; then
+  exec 3</dev/tty
+  INPUT_FD=3
+fi
 
 if [ ! -f /opt/ros/jazzy/setup.bash ]; then
   log "ERROR: /opt/ros/jazzy/setup.bash not found"
@@ -287,10 +362,29 @@ BAG_PID=$!
 
 log "Mapping is running."
 log "Walk the robot through the whole environment slowly and smoothly."
-log "Press Ctrl+C in this terminal when mapping is complete. The script will save maps, bag, PCD files, Scan Context database, and then check output files."
+log "When mapping is complete, press Ctrl+C in this terminal, or type 'finish' and press Enter."
+log "If this run is invalid and you want to restart without saving maps, type 'abort' and press Enter."
+log "The script will then save maps, bag, PCD files, Scan Context database, and check output files."
 
 while is_alive "$MAPPING_PID"; do
-  sleep 2
+  user_cmd=""
+  if IFS= read -r -t 1 -u "$INPUT_FD" user_cmd; then
+    case "$user_cmd" in
+      finish|FINISH|done|DONE|q|Q|quit|QUIT|exit|EXIT)
+        log "Finish command received from terminal input."
+        finish_mapping
+        ;;
+      abort|ABORT|cancel|CANCEL|discard|DISCARD)
+        log "Abort command received from terminal input."
+        abort_mapping
+        ;;
+      "")
+        ;;
+      *)
+        log "Mapping is still running. Type 'finish' to save, or 'abort' to stop without saving."
+        ;;
+    esac
+  fi
 done
 
 log "Mapping launch exited before Ctrl+C."
