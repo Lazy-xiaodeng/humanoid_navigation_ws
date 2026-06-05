@@ -127,6 +127,11 @@ collect_old_navigation_pids() {
 }
 
 cleanup_old_navigation_processes() {
+  if [ -x "$WORKSPACE/stop_navigation.sh" ]; then
+    "$WORKSPACE/stop_navigation.sh"
+    return 0
+  fi
+
   collect_old_navigation_pids
 
   if [ "${#OLD_PIDS[@]}" -eq 0 ]; then
