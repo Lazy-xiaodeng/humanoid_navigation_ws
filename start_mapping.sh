@@ -12,6 +12,7 @@ BAG_ROOT="${BAG_ROOT:-/home/ubuntu/fast-lio-bags}"
 LOG_DIR="$WORKSPACE/debug_logs"
 ROS_LOG_DIR="$LOG_DIR/ros_mapping_${START_TIME}"
 RUN_LOG="$LOG_DIR/start_mapping_${START_TIME}.log"
+COMMAND_FILE="$WORKSPACE/.start_mapping.command"
 
 MAP_PREFIX="$MAP_DIR/$MAP_NAME"
 PCD_FILE="$PCD_DIR/$MAP_NAME.pcd"
@@ -25,9 +26,11 @@ PCD_PID=""
 BAG_PID=""
 FINISHING=0
 INPUT_FD=0
+MAPPING_STARTED=0
 
 mkdir -p "$MAP_DIR" "$PCD_DIR" "$BAG_ROOT" "$LOG_DIR" "$ROS_LOG_DIR"
 export ROS_LOG_DIR
+rm -f "$COMMAND_FILE"
 
 exec > >(tee -a "$RUN_LOG") 2>&1
 
@@ -144,7 +147,8 @@ finish_mapping() {
     return 0
   fi
   FINISHING=1
-  trap - INT TERM
+  trap - INT TERM EXIT
+  rm -f "$COMMAND_FILE"
 
   log "Finish requested. Finishing mapping and saving outputs..."
 
@@ -235,7 +239,8 @@ abort_mapping() {
     return 0
   fi
   FINISHING=1
-  trap - INT TERM
+  trap - INT TERM EXIT
+  rm -f "$COMMAND_FILE"
 
   log "Abort requested. Stopping mapping without saving final map outputs..."
 
@@ -260,8 +265,26 @@ abort_mapping() {
   exit 2
 }
 
-trap finish_mapping INT
+handle_int() {
+  log "Ctrl+C received. Starting finish/save flow..."
+  finish_mapping
+}
+
+handle_exit() {
+  local status="$1"
+
+  # In some terminal/process-group cases Ctrl+C makes bash leave the main loop
+  # before the INT trap runs. Treat exit status 130 as an interrupted mapping
+  # run and finish it instead of leaving child processes orphaned.
+  if [ "$FINISHING" -eq 0 ] && [ "$MAPPING_STARTED" -eq 1 ] && [ "$status" -eq 130 ]; then
+    log "Interrupted exit detected. Starting finish/save flow..."
+    finish_mapping
+  fi
+}
+
+trap handle_int INT
 trap abort_mapping TERM
+trap 'handle_exit "$?"' EXIT
 
 cd "$WORKSPACE"
 
@@ -298,6 +321,7 @@ log "Run log: $RUN_LOG"
 log "Starting mapping launch..."
 ros2 launch humanoid_bringup robot_mapping.launch.py &
 MAPPING_PID=$!
+MAPPING_STARTED=1
 
 sleep 8
 if ! is_alive "$MAPPING_PID"; then
@@ -364,18 +388,30 @@ log "Mapping is running."
 log "Walk the robot through the whole environment slowly and smoothly."
 log "When mapping is complete, press Ctrl+C in this terminal, or type 'finish' and press Enter."
 log "If this run is invalid and you want to restart without saving maps, type 'abort' and press Enter."
+log "If terminal output is too noisy, use another terminal:"
+log "  echo finish > $COMMAND_FILE"
+log "  echo abort  > $COMMAND_FILE"
 log "The script will then save maps, bag, PCD files, Scan Context database, and check output files."
 
 while is_alive "$MAPPING_PID"; do
   user_cmd=""
-  if IFS= read -r -t 1 -u "$INPUT_FD" user_cmd; then
+  cmd_source=""
+  if [ -f "$COMMAND_FILE" ]; then
+    user_cmd="$(sed -n '1p' "$COMMAND_FILE" 2>/dev/null || true)"
+    rm -f "$COMMAND_FILE"
+    cmd_source="$COMMAND_FILE"
+  elif IFS= read -r -t 1 -u "$INPUT_FD" user_cmd; then
+    cmd_source="terminal input"
+  fi
+
+  if [ -n "$cmd_source" ]; then
     case "$user_cmd" in
       finish|FINISH|done|DONE|q|Q|quit|QUIT|exit|EXIT)
-        log "Finish command received from terminal input."
+        log "Finish command received from $cmd_source."
         finish_mapping
         ;;
       abort|ABORT|cancel|CANCEL|discard|DISCARD)
-        log "Abort command received from terminal input."
+        log "Abort command received from $cmd_source."
         abort_mapping
         ;;
       "")
