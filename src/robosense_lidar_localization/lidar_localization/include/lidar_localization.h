@@ -42,6 +42,9 @@ public:
   // 添加相对位姿
   void addRelPose(const Pose& pose);
 
+  // 注入人工设置的绝对位姿，作为后续 scan-to-map 的先验起点
+  void setManualPose(const Pose& pose);
+
   // 添加激光雷达数据
   void addLidarData(const pcl::PointCloud<RsPointXYZIRT>::Ptr& cloud_ptr);
 
@@ -75,6 +78,7 @@ private:
   // frame
   pcl::PointCloud<PointT>::Ptr undistor_cloud_;
   Pose last_lidar_pose_;
+  std::mutex state_mutex_;
 
   // rel pose
   std::map<double, Pose> rel_poses_map_;

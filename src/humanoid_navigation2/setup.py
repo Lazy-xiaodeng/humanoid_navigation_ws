@@ -54,6 +54,7 @@ setup(
             'nav_pose_issue_monitor = humanoid_navigation2.nav_pose_issue_monitor:main',
             'wait_for_tf = humanoid_navigation2.wait_for_tf:main',
             'dynamic_odom_ground_publisher = humanoid_navigation2.dynamic_odom_ground_publisher:main',
+            'rviz_initialpose_adapter = humanoid_navigation2.rviz_initialpose_adapter:main',
             'hdl_bootstrap_to_initialpose = humanoid_navigation2.hdl_bootstrap_to_initialpose:main',
             'scancontext_to_initialpose = humanoid_navigation2.scancontext_to_initialpose:main',
             'localization_odom_fusion = humanoid_navigation2.localization_odom_fusion:main',

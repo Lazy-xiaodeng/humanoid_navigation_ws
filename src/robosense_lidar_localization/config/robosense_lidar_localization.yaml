@@ -21,8 +21,9 @@ lidar_topic: "/fast_lio/cloud_registered"
 # Fast-LIO 原始里程计。节点用它给匹配提供初值，并生成 bridge 所需的 odom cache。
 rel_pose_topic: "/odom"
 
-# 保留字段：原始 RoboSense 工程中用于绝对位姿输入；当前接入链路不依赖它。
-abs_pose_topic: "/odom"
+# 人工重定位/手动纠偏输入。RViz 的 2D Pose Estimate 会先经适配节点从
+# map_ground 转成 map，再发布到这里，供 RoboSense 更新内部先验。
+abs_pose_topic: "/prior_localization/manual_initialpose"
 
 # =========================
 # Fast-LIO 坐标转换

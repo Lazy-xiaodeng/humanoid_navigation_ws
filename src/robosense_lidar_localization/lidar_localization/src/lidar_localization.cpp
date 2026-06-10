@@ -110,6 +110,17 @@ void LidarLocalization::addRelPose(const Pose &pose) {
   rel_mutex_.unlock();
 }
 
+void LidarLocalization::setManualPose(const Pose &pose) {
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  last_lidar_pose_ = pose;
+  last_lidar_pose_.q.normalize();
+  last_lidar_pose_.source = pose.source.empty() ? "manual_initialpose" : pose.source;
+  status_ = STATUS::LOW_ACCURACY;
+  last_lidar_pose_.setStatus(status_);
+  init_position_ = pose.xyz;
+  init_orientation_ = pose.q;
+}
+
 // 添加激光雷达数据: 主流程
 void LidarLocalization::addLidarData(const pcl::PointCloud<RsPointXYZIRT>::Ptr &lidar_cloud) {
   double lidar_time = lidar_cloud->header.stamp * 1e-6;
@@ -166,6 +177,7 @@ void LidarLocalization::addLidarData(const pcl::PointCloud<RsPointXYZIRT>::Ptr &
   if (debug_print_) {
     std::cout << "semantic_cloud size: " << semantic_cloud->points.size() << std::endl;
   }
+  std::lock_guard<std::mutex> state_lock(state_mutex_);
   switch (status_) {
     case STATUS::IDLE:
     case STATUS::LOST: {

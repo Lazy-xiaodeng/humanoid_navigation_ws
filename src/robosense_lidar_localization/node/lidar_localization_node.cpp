@@ -30,6 +30,7 @@ Copyright 2025 RoboSense Technology Co., Ltd
 #endif
 
 #ifdef ROS2
+#include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
@@ -64,6 +65,7 @@ double registered_cloud_odom_sync_tolerance_sec = 0.15;
 bool publish_odom_cache = true;
 std::string pose_topic = "/prior_localization/robosense_odom";
 std::string odom_cache_topic = "/prior_localization/robosense_input_odom";
+std::string abs_pose_topic = "/prior_localization/manual_initialpose";
 Eigen::Vector3d fastlio_odom_camera_xyz = Eigen::Vector3d::Zero();
 Eigen::Quaterniond fastlio_odom_camera_q(0.5, -0.5, -0.5, 0.5);
 Eigen::Vector3d fastlio_body_base_xyz(0.004, 1.215, 0.072);
@@ -141,6 +143,9 @@ void loadNodeConfig(const YAML::Node &config_node) {
   }
   if (config_node["odom_cache_topic"]) {
     odom_cache_topic = config_node["odom_cache_topic"].as<std::string>();
+  }
+  if (config_node["abs_pose_topic"]) {
+    abs_pose_topic = config_node["abs_pose_topic"].as<std::string>();
   }
   if (config_node["publish_odom_cache"]) {
     publish_odom_cache = config_node["publish_odom_cache"].as<bool>();
@@ -382,6 +387,24 @@ Pose odom2pose(const nav_msgs::msg::Odometry::SharedPtr &odom) {
 }
 #endif
 
+#ifdef ROS2
+Pose poseMsgToPose(
+    const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr &msg) {
+  Pose pose;
+  pose.timestamp =
+      msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
+  pose.xyz << msg->pose.pose.position.x, msg->pose.pose.position.y,
+      msg->pose.pose.position.z;
+  pose.q.x() = msg->pose.pose.orientation.x;
+  pose.q.y() = msg->pose.pose.orientation.y;
+  pose.q.z() = msg->pose.pose.orientation.z;
+  pose.q.w() = msg->pose.pose.orientation.w;
+  pose.q.normalize();
+  pose.source = "manual_initialpose";
+  return pose;
+}
+#endif
+
 #ifdef ROS1
 void relPoseCallback(const nav_msgs::OdometryConstPtr &msg) {
   auto raw_pose = odom2pose(*msg);
@@ -459,6 +482,33 @@ void lidarCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
   normalizePointTimestamps(cloud, msg_time, hasField(msg->fields, "timestamp"));
   lidar_localization_ptr->addLidarData(cloud);
 }
+
+void absPoseCallback(
+    const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg) {
+  if (!lidar_localization_ptr) {
+    return;
+  }
+
+  if (!msg->header.frame_id.empty() && msg->header.frame_id != map_frame_id) {
+    RCLCPP_WARN(
+        rclcpp::get_logger("robosense_lidar_localization_node"),
+        "ignore manual pose in frame %s, expected %s",
+        msg->header.frame_id.c_str(), map_frame_id.c_str());
+    return;
+  }
+
+  Pose pose = poseMsgToPose(msg);
+  if (pose.timestamp <= 0.0) {
+    pose.timestamp = rclcpp::Clock().now().seconds();
+  }
+  pose.setStatus(STATUS::LOW_ACCURACY);
+  lidar_localization_ptr->setManualPose(pose);
+
+  RCLCPP_INFO(
+      rclcpp::get_logger("robosense_lidar_localization_node"),
+      "applied manual initial pose on %s: x=%.3f y=%.3f z=%.3f",
+      abs_pose_topic.c_str(), pose.xyz.x(), pose.xyz.y(), pose.xyz.z());
+}
 #endif
 
 #ifdef ROS2
@@ -511,13 +561,11 @@ int main(int argc, char **argv) {
   std::string config_file = nh->get_parameter("config_file").as_string();
   std::string lidar_topic = "";
   std::string rel_pose_topic = "";
-  std::string abs_pose_topic = "";
   YAML::Node config_node;
   try {
     config_node = YAML::LoadFile(config_file);
     lidar_topic = config_node["lidar_topic"].as<std::string>();
     rel_pose_topic = config_node["rel_pose_topic"].as<std::string>();
-    abs_pose_topic = config_node["abs_pose_topic"].as<std::string>();
     loadNodeConfig(config_node);
   } catch (...) {
     std::cout << "config file load failed!" << std::endl;
@@ -566,13 +614,11 @@ int main(int argc, char **argv) {
 
   std::string lidar_topic = "";
   std::string rel_pose_topic = "";
-  std::string abs_pose_topic = "";
   YAML::Node config_node;
   try {
     config_node = YAML::LoadFile(config_file);
     lidar_topic = config_node["lidar_topic"].as<std::string>();
     rel_pose_topic = config_node["rel_pose_topic"].as<std::string>();
-    abs_pose_topic = config_node["abs_pose_topic"].as<std::string>();
     loadNodeConfig(config_node);
   } catch (...) {
     std::cout << "config file load failed!" << std::endl;
@@ -612,6 +658,9 @@ int main(int argc, char **argv) {
 
   auto rel_pose_sub = nh->create_subscription<nav_msgs::msg::Odometry>(
       rel_pose_topic, 100, relPoseCallback);
+  auto abs_pose_sub =
+      nh->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+          abs_pose_topic, 10, absPoseCallback);
 
   rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 2);
   executor.add_node(nh);

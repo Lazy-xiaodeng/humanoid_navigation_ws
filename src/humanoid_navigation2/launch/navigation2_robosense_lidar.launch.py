@@ -430,6 +430,25 @@ def generate_launch_description():
         },
     )
 
+    rviz_initialpose_adapter_node = nav2_python_node(
+        'rviz_initialpose_adapter',
+        'rviz_initialpose_adapter',
+        {
+            # RViz 手动 2D Pose Estimate 输入。
+            'input_topic': '/initialpose',
+            # 转换到 map 后，先给 bridge 立即修正 map->odom。
+            'bridge_pose_topic': prior_pose_with_covariance_topic,
+            # 同时写入 RoboSense 内部先验，避免下一帧被旧状态拉回。
+            'robosense_pose_topic': '/prior_localization/manual_initialpose',
+            # RViz 当前固定帧。
+            'map_ground_frame': 'map_ground',
+            # RoboSense/bridge 使用的全局帧。
+            'map_frame': 'map',
+            # TF 查询超时，单位秒。
+            'tf_timeout_sec': 0.20,
+        },
+    )
+
     periodic_clearing_3d_node = TimerAction(
         period=2.0,
         actions=[
@@ -595,6 +614,7 @@ def generate_launch_description():
         map_server_lifecycle,
         TimerAction(period=4.5, actions=[robosense_lidar_localization_node]),
         TimerAction(period=5.5, actions=[prior_map_odom_bridge_node]),
+        TimerAction(period=5.8, actions=[rviz_initialpose_adapter_node]),
         TimerAction(period=7.5, actions=[robot_realpose_publisher]),
         periodic_clearing_3d_node,
         localization_ready_gate,
