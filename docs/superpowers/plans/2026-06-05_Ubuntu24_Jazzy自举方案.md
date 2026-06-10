@@ -38,7 +38,7 @@ Expected: exit code 0.
 ### Task 2: Documentation
 
 **Files:**
-- Create: `docs/deployment_ubuntu24_jazzy.md`
+- Create: `docs/Ubuntu24_Jazzy部署说明.md`
 
 - [x] **Step 1: Write user-facing deployment instructions**
 

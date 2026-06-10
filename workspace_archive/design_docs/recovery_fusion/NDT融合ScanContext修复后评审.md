@@ -1,7 +1,7 @@
 # NDT + Odom Fusion + ScanContext 修复后复审记录
 
 > 复审时间: 2026-05-26  
-> 复审对象: `NDT_FUSION_SC_MODIFICATION_REPORT.md` 第十一节修复记录及源码  
+> 复审对象: `NDT融合ScanContext修改报告.md` 第十一节修复记录及源码  
 > 范围: 只评审，不修改源码  
 
 ---

@@ -23,7 +23,7 @@
 - `src/humanoid_nav2_bt_nodes/src/pose_angle_nodes.cpp`
 - `src/humanoid_navigation2/config/nav2_params_xy_yaw.yaml`
 - `src/humanoid_navigation2/config/behavior_tree/navigate_xy_then_yaw.xml`
-- `src/humanoid_navigation2/docs/xy_yaw_staged_navigation.md`
+- `src/humanoid_navigation2/docs/XY到点后再对齐朝向导航方案.md`
 
 修改文件：
 

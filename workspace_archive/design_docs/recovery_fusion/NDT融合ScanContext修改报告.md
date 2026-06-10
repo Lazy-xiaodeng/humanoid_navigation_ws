@@ -894,15 +894,15 @@ python3 debug_monitor/validate_fusion_fix.py
 | Fusion 节点 | `/home/ubuntu/humanoid_ws/src/humanoid_navigation2/humanoid_navigation2/localization_odom_fusion.py` |
 | Fusion+SC Launch | `/home/ubuntu/humanoid_ws/src/humanoid_navigation2/launch/navigation2_fusion_sc.launch.py` |
 | APP SC Launch | `/home/ubuntu/humanoid_ws/src/humanoid_navigation/launch/navigation_fusion_sc.launch.py` |
-| CHANGELOG | `/home/ubuntu/humanoid_ws/CHANGELOG.md` |
-| 分析文档 | `/home/ubuntu/humanoid_ws/NDT_ODOM_SC_COMBINED_RECOVERY_ANALYSIS.md` |
+| CHANGELOG | `/home/ubuntu/humanoid_ws/变更日志.md` |
+| 分析文档 | `/home/ubuntu/humanoid_ws/NDT里程计与ScanContext组合恢复分析.md` |
 | Plan 文件 | `/home/ubuntu/.claude/plans/cosmic-knitting-valley.md` |
 
 ---
 
 ## 十一、代码评审修复记录 (2026-05-26)
 
-> 评审来源: `NDT_FUSION_SC_REVIEW.md`  
+> 评审来源: `NDT融合ScanContext评审.md`  
 > 修复范围: P0（必须修）和 P2（清理项），共 4 个文件
 
 ### 11.1 P0-1: TF 查询混淆 — fusion 读到自己的 map->odom

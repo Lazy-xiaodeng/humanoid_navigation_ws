@@ -820,7 +820,7 @@ Phase 3 (收紧门限, 方案 B 验证通过后):
 | `src/humanoid_navigation2/launch/navigation2_fusion_sc_v2.launch.py` | 方案 C 参数改动位置 |
 | `ndt_baseline_analysis.py` | Baseline 统计分析脚本 |
 | `debug_logs/ndt_fusion_monitor_20260527_142701.jsonl` | 本次分析的原始数据 |
-| `NDT_DRIFT_ROOT_CAUSE_AND_PARAMETER_REDESIGN.md` | 前端 NDT 参数分析和 Phase 0-5 改造计划 |
+| `NDT漂移根因与参数重设计.md` | 前端 NDT 参数分析和 Phase 0-5 改造计划 |
 
 ## A. 附录：Baseline 统计数据详情
 
