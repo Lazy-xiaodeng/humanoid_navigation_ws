@@ -74,6 +74,7 @@ class HumanoidWebSocketClient(Node):
         self.target_velocity = Twist()          # ROS2 回调写入的目标速度（实时变化）
         self.walk_command_timer = None         # 定时器线程对象
         self.walk_command_timer_running = False  # 控制定时器启停的 flag
+        self.walk_command_lock = threading.Lock()
         #测试用
 
         # 启动WebSocket客户端
@@ -188,6 +189,34 @@ class HumanoidWebSocketClient(Node):
         """生成唯一标识符"""
         import uuid
         return str(uuid.uuid4())
+
+    async def send_command_no_response(self, title, data):
+        """
+        发送不承诺成功响应的命令。
+
+        厂商协议中 request_set_walk_vel_sync 成功执行无返回，只有失败时才会异步返回
+        response_set_walk_vel_sync，因此这里不能注册 response_events 等待成功回包。
+        """
+        try:
+            message = {
+                "accid": self.accid,
+                "title": title,
+                "timestamp": int(time.time() * 1000),
+                "guid": self.generate_guid(),
+                "data": data
+            }
+
+            if hasattr(self, 'websocket') and self.websocket:
+                await self.websocket.send(json.dumps(message))
+                self.get_logger().debug(f'已发送命令(不等待响应): {title}')
+                return True
+
+            self.get_logger().error('WebSocket未连接，无法发送命令')
+            return False
+
+        except Exception as e:
+            self.get_logger().error(f'发送命令 {title} 错误: {e}')
+            return False
     
     #测试用
     async def send_walk_vel_command(self, x=0.0, y=0.0, yaw=0.0):
@@ -213,20 +242,8 @@ class HumanoidWebSocketClient(Node):
             "yaw": round(safe_yaw, 3)
         }
 
-        # 发送命令（异步）
-        response = await self.send_command("request_set_walk_vel_sync", data)
-        
-        #此命令执行成功不返回成功消息，指令执行失败时返回此消息。
-        if response and response.get("data", {}).get("result") == "fail_motor":
-            self.get_logger().debug(f"电机错误")
-        if response and response.get("data", {}).get("result") == "fail_imu":
-            self.get_logger().warn(f" IMU 错误")
-        if response and response.get("data", {}).get("result") == "fail_invalid_cmd":
-            self.get_logger().warn(f" 参数错误 ")
-        if response and response.get("data", {}).get("result") == "fail_invalid_mode":
-            self.get_logger().warn(f" 当前状态不允许执行 ")
-        if response and response.get("data", {}).get("result") == "fail_timeout":
-            self.get_logger().warn(f" 切换状态超时 ")
+        # 此命令成功执行无返回，失败时才会异步返回 response_set_walk_vel_sync。
+        await self.send_command_no_response("request_set_walk_vel_sync", data)
     
     def cmd_vel_callback(self, msg: Twist):
         """
@@ -234,7 +251,9 @@ class HumanoidWebSocketClient(Node):
         关闭线程的动作交给 walk_command_loop 自身优雅处理。
         """
         # 1. 更新目标速度缓存（供后台线程读取）
-        self.target_velocity = msg
+        with self.walk_command_lock:
+            self.target_velocity = msg
+            timer_running = self.walk_command_timer_running
 
         # 2. 判断是否有速度输入
         has_speed = (abs(msg.linear.x) > 1e-3 or
@@ -242,8 +261,11 @@ class HumanoidWebSocketClient(Node):
                      abs(msg.angular.z) > 1e-3)
 
         # 3. 如果有速度，且线程没开，则启动定时器线程
-        if has_speed and not self.walk_command_timer_running:
-            self.walk_command_timer_running = True
+        if has_speed and not timer_running:
+            with self.walk_command_lock:
+                if self.walk_command_timer_running:
+                    return
+                self.walk_command_timer_running = True
             self.walk_command_timer = threading.Thread(
                 target=self.walk_command_loop,
                 name="walk_command_timer",
@@ -263,8 +285,11 @@ class HumanoidWebSocketClient(Node):
         import time as _time
         next_time = time.perf_counter() + interval
 
-        while rclpy.ok() and self.walk_command_timer_running:
-            tv = self.target_velocity
+        while rclpy.ok():
+            with self.walk_command_lock:
+                if not self.walk_command_timer_running:
+                    break
+                tv = self.target_velocity
             has_input = (abs(tv.linear.x) > 1e-3 or abs(tv.linear.y) > 1e-3 or abs(tv.angular.z) > 1e-3)
 
             try:
@@ -279,8 +304,8 @@ class HumanoidWebSocketClient(Node):
                             self.send_walk_vel_command(tv.linear.x, tv.linear.y, tv.angular.z),
                             self.ws_loop
                         )
-                        # 给一个合理的超时，不要无限等
-                        future.result(timeout=0.5)
+                        # 这里只等待本地 websocket.send 完成，不等待底层成功响应。
+                        future.result(timeout=0.1)
                 else:
                     # 松开按键：发送 0 速度停车
                     if self.robot_state == RobotState.WALK:
@@ -288,10 +313,11 @@ class HumanoidWebSocketClient(Node):
                             self.send_walk_vel_command(0.0, 0.0, 0.0),
                             self.ws_loop
                         )
-                        future.result(timeout=0.5)
+                        future.result(timeout=0.1)
                     
                     self.get_logger().info("⏹️ 速度归零，机器底盘就地待命。控制线程即将休眠。")
-                    self.walk_command_timer_running = False # 安全退出本线程
+                    with self.walk_command_lock:
+                        self.walk_command_timer_running = False # 安全退出本线程
 
             except Exception as e:
                 self.get_logger().error(f"WalkLoop 获取控制端参数异常: {e}")
@@ -842,7 +868,19 @@ class HumanoidWebSocketClient(Node):
             elif data_type == "response_get_atomic_motion_list":
                 self.get_logger().info(f"收到动作库列表响应: {data}")
             elif data_type == "response_set_walk_vel_sync":
-                pass
+                result = message_data.get("result", "")
+                if result == "fail_motor":
+                    self.get_logger().error("行走速度指令失败: 电机错误")
+                elif result == "fail_imu":
+                    self.get_logger().warn("行走速度指令失败: IMU 错误")
+                elif result == "fail_invalid_cmd":
+                    self.get_logger().warn("行走速度指令失败: 参数错误")
+                elif result == "fail_invalid_mode":
+                    self.get_logger().warn("行走速度指令失败: 当前状态不允许执行")
+                elif result == "fail_timeout":
+                    self.get_logger().warn("行走速度指令失败: 切换状态超时")
+                elif result:
+                    self.get_logger().warn(f"行走速度指令失败: 未知错误 {result}")
             else:
                 self.get_logger().warn(f'收到未知数据类型: {data_type}')
                 

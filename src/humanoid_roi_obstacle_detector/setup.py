@@ -14,7 +14,7 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        ('share/' + package_name, ['README.md']),
+        ('share/' + package_name, ['ROI障碍物检测器说明.md']),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
         (os.path.join('share', package_name, 'docs'), glob('docs/*.md')),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),

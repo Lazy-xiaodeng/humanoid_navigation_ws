@@ -67,6 +67,7 @@ setup(
             'check_map_quality = humanoid_navigation2.check_map_quality:main',
             'ndt_drift_diagnostic = humanoid_navigation2.ndt_drift_diagnostic:main',
             'navigation_path_monitor = humanoid_navigation2.navigation_path_monitor:main',
+            'gait_velocity_test_monitor = humanoid_navigation2.gait_velocity_test_monitor:main',
         ],
     },
 )
