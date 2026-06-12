@@ -671,7 +671,12 @@ class CompleteWebSocketServer(Node):
             
             # 路由到相应的业务命令处理函数
             if command_type in ["waypoint_management", "navigation_control"]:
-                await self.route_to_waypoint_manager(command_type, command_data, client_id)
+                await self.route_to_waypoint_manager(
+                    command_type,
+                    command_data,
+                    client_id,
+                    message_data.get("message_id", "")
+                )
             # 机器人控制命令直接处理
             elif command_type == "robot_control":
                 await self.handle_robot_control(websocket, command_data, client_id)
@@ -686,7 +691,13 @@ class CompleteWebSocketServer(Node):
             self.get_logger().error(f'❌ 处理业务命令错误: {e}')
             await self.send_error_to_client(websocket, client_id, f"处理命令失败: {str(e)}")
     
-    async def route_to_waypoint_manager(self, command_type: str, command_data: Dict, client_id: str) -> bool:
+    async def route_to_waypoint_manager(
+        self,
+        command_type: str,
+        command_data: Dict,
+        client_id: str,
+        request_message_id: str = ""
+    ) -> bool:
         """路由命令到动态路点管理器"""
         try:
             # 展开嵌套的命令结构
@@ -721,12 +732,31 @@ class CompleteWebSocketServer(Node):
                     self.get_logger().error("导航控制命令缺少 command_type")
                     return False
             
-                # 构建扁平化的消息
+                # 构建扁平化的导航控制消息。
+                # 旧导航仍然依赖 waypoint_id / waypoint_ids / exhibition_ids；
+                # route task 新协议依赖 task_session_id / route_waypoints / jump / broadcast 等字段。
+                # 这里作为 websocket 入口层只负责“原样透传”，不判断路线是否合法，也不计算 transit。
                 route_msg = {
                     "command_type": inner_command,
+                    # 旧单点、多点、展厅导航字段，保留以兼容现有 APP 与导航逻辑。
                     "waypoint_id": command_data.get("waypoint_id", ""),
                     "waypoint_ids": command_data.get("waypoint_ids", []),
                     "exhibition_ids": command_data.get("exhibition_ids", []),
+                    # route task 启动字段：完整路线由 APP 一次性下发，顺序以数组顺序为准。
+                    "task_session_id": command_data.get("task_session_id", ""),
+                    "route_id": command_data.get("route_id", ""),
+                    "route_waypoints": command_data.get("route_waypoints", []),
+                    # route task 跳转与播报闭环字段，仅透传给后续状态机处理。
+                    "target_waypoint_id": command_data.get("target_waypoint_id", ""),
+                    "interrupt_broadcast": command_data.get("interrupt_broadcast", True),
+                    "broadcast_id": command_data.get("broadcast_id", ""),
+                    "broadcast_result": command_data.get("broadcast_result", ""),
+                    "broadcast_duration_sec": command_data.get("broadcast_duration_sec", 0),
+                    "reason": command_data.get("reason", ""),
+                    # 用 APP 外层 message_id 对齐后续 navigation_command_result 业务 ack。
+                    # 这里必须用 “显式字段 or 外层 message_id”，不能只用 get(default)：
+                    # 如果 APP 内层误传 None/空字符串，get() 不会触发默认值，后续会出现 "None" 或空追踪 ID。
+                    "request_message_id": command_data.get("request_message_id") or request_message_id,
                     "client_id": client_id,
                     "timestamp": time.time()
                 }

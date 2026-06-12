@@ -93,6 +93,12 @@ def generate_launch_description():
     )
 
     # ================= 第三阶段：应用层（延迟9秒）=================
+    # route task 启动链路说明：
+    # start_navigation.sh 会启动 robot_real.launch.py；robot_real.launch.py 不直接创建
+    # navigation_state_manager 节点，而是按重定位模式 include APP 层 launch。
+    # navigation_fusion_sc.launch.py / navigation_fusion.launch.py 内部已经统一启动
+    # executable='navigation_state_manager'，并携带 route_task.* 参数。
+    # 因此这里不要再重复启动 navigation_state_manager，避免同名节点和 action client 重复。
     # v2/SC 版本 APP 层 (共用)
     launch_app_sc = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(

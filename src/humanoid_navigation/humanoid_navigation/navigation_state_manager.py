@@ -13,10 +13,9 @@ from rclpy.time import Time
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Odometry, Path
-from nav2_msgs.action import NavigateToPose
+from nav2_msgs.action import NavigateToPose, NavigateThroughPoses
 from action_msgs.msg import GoalStatus
 from action_msgs.srv import CancelGoal
-from nav2_msgs.action import NavigateToPose
 from nav2_msgs.msg import BehaviorTreeLog
 import rclpy.duration
 from tf2_ros import Buffer, TransformException, TransformListener
@@ -107,6 +106,12 @@ class NavigationStateManager(Node):
             ('localization_resume_reverse_enabled', True),
             ('localization_resume_reverse_max_distance_m', 2.0),
             ('localization_resume_reverse_rear_angle_deg', 70.0),
+            ('route_task.first_task_reached_tolerance_m', 0.4),
+            ('route_task.transit_passed_tolerance_m', 0.5),
+            ('route_task.transit_projection_passed_enabled', True),
+            ('route_task.nav2_feedback_timeout_sec', 3.0),
+            ('route_task.goal_cancel_timeout_sec', 2.0),
+            ('route_task.default_interrupt_broadcast', True),
             ('map_frame', 'map'),
             ('base_frame', 'base_footprint'),
             ('pose_tf_timeout_sec', 0.05),
@@ -179,6 +184,18 @@ class NavigationStateManager(Node):
             self.get_parameter('localization_resume_reverse_max_distance_m').value)
         self.localization_resume_reverse_rear_angle_rad = math.radians(float(
             self.get_parameter('localization_resume_reverse_rear_angle_deg').value))
+        self.route_task_first_task_reached_tolerance_m = float(
+            self.get_parameter('route_task.first_task_reached_tolerance_m').value)
+        self.route_task_transit_passed_tolerance_m = float(
+            self.get_parameter('route_task.transit_passed_tolerance_m').value)
+        self.route_task_transit_projection_passed_enabled = bool(
+            self.get_parameter('route_task.transit_projection_passed_enabled').value)
+        self.route_task_nav2_feedback_timeout_sec = float(
+            self.get_parameter('route_task.nav2_feedback_timeout_sec').value)
+        self.route_task_goal_cancel_timeout_sec = float(
+            self.get_parameter('route_task.goal_cancel_timeout_sec').value)
+        self.route_task_default_interrupt_broadcast = bool(
+            self.get_parameter('route_task.default_interrupt_broadcast').value)
         self.map_frame = str(self.get_parameter('map_frame').value)
         self.base_frame = str(self.get_parameter('base_frame').value)
         self.pose_tf_timeout_sec = float(self.get_parameter('pose_tf_timeout_sec').value)
@@ -229,9 +246,45 @@ class NavigationStateManager(Node):
         self.waypoints_data = {}
         self.navigation_start_time = 0
         self.current_goal_pose = None
+
+        # Route task 运行态字段。
+        # 这些字段只服务新路线任务，不改变旧单点、多点、展厅导航的状态语义。
+        # 后续 through feedback、jump、broadcast_finished 都必须通过这里的状态做隔离。
+        self.active_route_task = None
+        self.master_route_task_ids = []
+        self.completed_task_ids = []
+        self.skipped_task_ids = []
+        self.current_anchor_task_id = ""
+        self.current_anchor_task_index = -1
+        self.current_target_task_id = ""
+        self.current_target_task_index = -1
+        self.active_segment = None
+        self.awaiting_broadcast = False
+        self.waiting_broadcast_waypoint_id = ""
+        self.waiting_broadcast_id = ""
+        self.jump_interrupts_broadcast = False
+        self.route_task_version = 0
+        # route task 事件 ID 的单调计数器。
+        # 不在 reset_route_task_state() 中清零，避免同一进程内任务重启后短时间事件 ID 重复。
+        self.route_task_event_counter = 0
+        self.active_goal_generation = 0
+        self.current_route_task_goal_generation = 0
+        self.route_task_goal_handle = None
+        # through feedback 最近一次到达时间。
+        # 段启动时先置为当前时间，收到 Nav2 feedback 后刷新；周期检查用它识别 action 卡住。
+        self.route_task_last_feedback_time = 0.0
+        self.last_completed_task_id = ""
+        self.last_completed_broadcast = {
+            "task_session_id": "",
+            "waypoint_id": "",
+            "broadcast_id": ""
+        }
         
         # ========== Nav2动作客户端 ==========
         self.nav_to_pose_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
+        # route task 首版验收目标是 through 执行，因此单独创建 NavigateThroughPoses client。
+        # 旧 NavigateToPose 仍只给旧单点/多点导航使用，避免 route task 退回逐点串行。
+        self.nav_through_poses_client = ActionClient(self, NavigateThroughPoses, 'navigate_through_poses')
         self.current_goal_handle = None
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -554,8 +607,23 @@ class NavigationStateManager(Node):
     
     def navigation_request_callback(self, msg: String):
         """处理路点管理器的导航请求"""
+        request_data: Dict[str, Any] = {}
+        request_type = ""
         try:
             request_data = json.loads(msg.data)
+            if not isinstance(request_data, dict):
+                # JSON 能解析但不是对象，说明 APP/桥接层发来的不是协议 payload。
+                # 这属于请求格式错误，不应误报 internal_error；APP 可提示升级协议或检查 data_type/request_type。
+                self.send_acknowledgment(
+                    "navigation_request",
+                    "error",
+                    "导航请求 payload 必须是 JSON 对象",
+                    {
+                        "error_code": "invalid_request_payload",
+                        "request_type": "",
+                    }
+                )
+                return
             request_type = request_data.get("request_type", "")
             
             self.get_logger().info(f"收到导航请求: {request_type}")
@@ -564,11 +632,31 @@ class NavigationStateManager(Node):
                 self.handle_navigation_command(request_data)
             else:
                 self.get_logger().warning(f"未知的请求类型: {request_type}")
-                self.send_acknowledgment("error", f"未知请求类型: {request_type}")
+                # send_acknowledgment() 的第二个参数是 status，不能把错误文案放进去。
+                # 这里按标准旧 ack 结构返回，data_integration 才能包装成 status=error 的 APP 事件。
+                self.send_acknowledgment(
+                    "unknown_request_type",
+                    "error",
+                    f"未知请求类型: {request_type}",
+                    {
+                        "error_code": "unknown_request_type",
+                        "request_type": request_type,
+                    }
+                )
                 
         except Exception as e:
             self.get_logger().error(f"处理导航请求错误: {e}")
-            self.send_acknowledgment("error", f"处理请求失败: {str(e)}")
+            self.send_acknowledgment(
+                "navigation_request",
+                "error",
+                f"处理请求失败: {str(e)}",
+                {
+                    "error_code": "internal_error",
+                    # JSON 解析失败时 request_data 可能仍为空，但 request_type 已有稳定默认值。
+                    # 这样错误 ack 仍能被 data_integration 包装给 APP，而不会在 except 中二次崩溃。
+                    "request_type": request_type,
+                }
+            )
     
     def waypoints_data_callback(self, msg: String):
         """处理统一格式的路点数据"""
@@ -1209,11 +1297,21 @@ class NavigationStateManager(Node):
     
     def handle_navigation_command(self, request_data: Dict[str, Any]):
         """处理导航命令"""
+        command_data = {}
+        command_type = ""
+        route_task_command_types = {
+            "start_route_task",
+            "jump_to_waypoint",
+            "broadcast_finished",
+        }
         try:
             command_data = request_data.get("command_data", {})
             command_type = command_data.get("command_type", "")
             
             self.get_logger().info(f"执行导航命令: {command_type}")
+
+            if self.reject_legacy_navigation_command_during_route_task(command_type):
+                return
             
             if command_type == "start_single_navigation":
                 self.handle_start_single_navigation(command_data, request_data)
@@ -1233,13 +1331,1635 @@ class NavigationStateManager(Node):
                 self.handle_skip_failed_waypoint(command_data)
             elif command_type == "abort_failed_navigation":
                 self.handle_abort_failed_navigation(command_data)
+            elif command_type == "start_route_task":
+                self.handle_start_route_task(command_data, request_data)
+            elif command_type == "jump_to_waypoint":
+                self.handle_jump_to_waypoint(command_data, request_data)
+            elif command_type == "broadcast_finished":
+                self.handle_broadcast_finished(command_data, request_data)
             else:
                 self.get_logger().warning(f"未知的导航命令: {command_type}")
-                self.send_acknowledgment("error", f"未知命令: {command_type}")
+                # 旧 ack 链路中第二个参数是 status，必须明确写成 "error"。
+                # 如果把错误文案误放到 status 字段，data_integration 无法按标准错误事件包装给 APP。
+                self.send_acknowledgment(
+                    "unknown_navigation_command",
+                    "error",
+                    f"未知命令: {command_type}",
+                    {
+                        "error_code": "unknown_navigation_command",
+                        "command_type": command_type,
+                    }
+                )
                 
         except Exception as e:
             self.get_logger().error(f"执行导航命令错误: {e}")
-            self.send_acknowledgment("error", f"执行命令失败: {str(e)}")
+            if command_type in route_task_command_types:
+                # route task 的业务 ack 必须统一走 navigation_command_result。
+                # 即使 handler 内部出现未预期异常，也不能退回旧 send_acknowledgment，
+                # 否则 APP 会等不到 start/jump/broadcast 对应的业务结果。
+                self.send_route_task_ack(command_type, "error", f"执行命令失败: {str(e)}", command_data, error_code="internal_error")
+                return
+            # 非 route task 的旧命令仍走 /navigation/acknowledgments 兼容链路，
+            # 但也必须保持 status=error 和 error_code=internal_error，方便 APP 统一弹窗和埋点。
+            self.send_acknowledgment(
+                command_type or "navigation_command",
+                "error",
+                f"执行命令失败: {str(e)}",
+                {
+                    "error_code": "internal_error",
+                    "command_type": command_type,
+                }
+            )
+
+    def reject_legacy_navigation_command_during_route_task(self, command_type: str) -> bool:
+        """route task 运行期间拒绝旧普通导航命令。
+
+        首版 route task 只定义了 start_route_task / jump_to_waypoint / broadcast_finished 三类新命令。
+        如果放行旧 stop/pause/resume/retry/skip/abort，旧逻辑会取消 Nav2 goal 或 reset 普通导航状态，
+        但不会完整维护 active_segment、播报等待、完成摘要等 route task 专属状态。
+        因此这里统一返回 busy/reject，避免旧命令静默抢占或破坏 route task。
+        """
+        if self.active_route_task is None:
+            return False
+
+        legacy_commands = {
+            "start_single_navigation",
+            "start_multi_point_navigation",
+            "start_exhibition_navigation",
+            "stop_navigation",
+            # APP 侧若把停止按钮命名成 cancel_navigation，也仍按旧普通导航控制命令处理。
+            # 首版 route task 没有定义专属取消命令，因此这里明确拒绝，避免落入“未知命令”分支。
+            "cancel_navigation",
+            "pause_navigation",
+            "resume_navigation",
+            "retry_failed_waypoint",
+            "skip_failed_waypoint",
+            "abort_failed_navigation",
+        }
+        if command_type not in legacy_commands:
+            return False
+
+        self.send_acknowledgment(
+            command_type,
+            "error",
+            "路线任务正在执行，首版不支持旧普通导航命令抢占或控制 route task",
+            {
+                "error_code": "route_task_active",
+                # 旧 ack 链路会被 data_integration 包装成 navigation_command_result。
+                # 显式携带 command_type，APP 可用 event_data.command_type 知道被拦截的是 stop/cancel/pause 中哪一个按钮。
+                "command_type": command_type,
+                "task_session_id": self.active_route_task.get("task_session_id", ""),
+                "route_id": self.active_route_task.get("route_id", ""),
+                "current_target_task_id": self.current_target_task_id,
+                "segment_id": self.active_segment.get("segment_id", "") if self.active_segment else "",
+            }
+        )
+        self.get_logger().warning(
+            f"route task 运行中拒绝旧导航命令: command_type={command_type}, "
+            f"task_session_id={self.active_route_task.get('task_session_id', '')}"
+        )
+        return True
+
+    def build_route_task_event_id(self, event_type: str, session_id: str = "") -> str:
+        """生成 route task 事件 ID，供 APP 去重和日志追踪使用。"""
+        self.route_task_event_counter += 1
+        # event_id 也属于对外协议追踪字段，必须复用 route_task_id() 的 ID 规则。
+        # 不能写成 session_id or ""，否则未来如果 APP/测试数据传入数字 0，
+        # 会被 Python truthy/falsy 规则误判为缺失，进而退化成 no_session。
+        session_id = self.route_task_id(session_id)
+        if not session_id and self.active_route_task:
+            session_id = self.route_task_id(self.active_route_task.get("task_session_id", ""))
+        # 事件 ID 同时包含 session、事件类型、单调计数和时间戳。
+        # 单调计数解决同一毫秒内多个事件可能撞 ID 的问题，时间戳方便人工排查日志。
+        return (
+            f"route_task_{session_id or 'no_session'}_"
+            f"{event_type}_{self.route_task_event_counter}_{int(time.time() * 1000)}"
+        )
+
+    def publish_route_task_event(self, event_type: str, event_data: Dict[str, Any]):
+        """发布 route task 事件到 /navigation/status。
+
+        data_integration_node_recoverable.py 会把这些离散事件立即推送给 APP。
+        如果当前存在 active_route_task，则自动补齐 task_session_id 和 route_id。
+        """
+        payload = dict(event_data or {})
+        # APP 应按 data.event_type 消费这些 route task 业务事件，而不是用顶层 data_type 区分。
+        # data_type 只表示这是一条 navigation_status 推送；真正的业务动作由 event_type 决定，
+        # 例如 navigation_command_result 表示命令业务 ack，broadcast_requested 表示 APP 需要播报，
+        # waypoint_passed / jump_updated / route_task_completed 则用于刷新路线 UI 和进度。
+        # event_id 优先使用 payload 中已有的 task_session_id。
+        # event_id 用于 APP 去重、埋点和问题复盘；同一 session 下的同类事件可以稳定关联，
+        # 也能避免 websocket 重连、立即推送和周期状态刷新混在一起时前端重复弹窗。
+        # 这样 start_route_task 早期错误（例如缺 route_id）即使还没建立 active_route_task，
+        # 也能生成带 session 的 event_id，方便 APP 和日志系统关联同一次路线任务。
+        payload.setdefault("event_id", self.build_route_task_event_id(event_type, payload.get("task_session_id", "")))
+        # route task 事件既有 publish_status_update() 的外层 timestamp，也要在 event_data
+        # 内补一份业务事件时间。APP 如果只读取 event_data 做排序、去重或问题复盘，
+        # 就不必依赖外层包装结构；已有 timestamp 时保留上游显式传入的值。
+        payload.setdefault("timestamp", time.time())
+        if self.active_route_task:
+            payload.setdefault("task_session_id", self.active_route_task.get("task_session_id", ""))
+            payload.setdefault("route_id", self.active_route_task.get("route_id", ""))
+        self.publish_status_update(event_type, payload)
+
+    def send_route_task_ack(
+        self,
+        command_type: str,
+        status: str,
+        message: str,
+        command_data: Optional[Dict[str, Any]] = None,
+        error_code: str = "",
+        result_reason: str = ""
+    ):
+        """按最终协议发布 route task 业务 ack。
+
+        websocket 的 command_ack 只代表“收到包”；真正业务是否接受，
+        必须由这里发布 navigation_command_result 告诉 APP。
+        """
+        command_data = command_data or {}
+        # APP 收到 status=success 时，只能说明本次命令已被 ROS 业务层接受或完成了同步校验；
+        # 后续机器人是否到点、是否需要播报、是否整条路线完成，仍要继续消费
+        # broadcast_requested / task_waypoint_completed / route_task_completed 等异步事件。
+        # APP 收到 status=error 时，应优先按 error_code 展示推荐文案，并用 request_message_id
+        # 对回原始按钮操作；不要再等待同一命令的成功事件，以免 UI 卡在“发送中”。
+        # request_message_id 允许缺失，但必须走 route_task_id() 做安全归一化。
+        # 否则 None 会变成字符串 "None"，APP 会拿到一个看似有效、实际无法回溯的请求 ID。
+        request_message_id = self.route_task_id(command_data.get("request_message_id"))
+        if not request_message_id:
+            # request_message_id 来源于 APP 外层 message_id。
+            # 缺失时协议允许置空，但必须打日志，方便联调时发现 APP 没有携带可回溯的请求 ID。
+            self.get_logger().warning(
+                f"route task ack 缺少 request_message_id: command_type={command_type}, status={status}"
+            )
+        event_data = {
+            "request_message_id": request_message_id,
+            "ack_type": "navigation_command_result",
+            "command_type": command_type,
+            "task_session_id": self.route_task_id(command_data.get("task_session_id")),
+            "route_id": self.route_task_id(command_data.get("route_id")),
+            "status": status,
+            "result_reason": result_reason if status == "success" else "",
+            "error_code": error_code if status == "error" else "",
+            "message": message
+        }
+        if self.active_route_task:
+            event_data["task_session_id"] = event_data["task_session_id"] or self.active_route_task.get("task_session_id", "")
+            event_data["route_id"] = event_data["route_id"] or self.active_route_task.get("route_id", "")
+        event_data["event_id"] = self.build_route_task_event_id(
+            "navigation_command_result", event_data.get("task_session_id", "")
+        )
+        self.publish_route_task_event("navigation_command_result", event_data)
+
+    @staticmethod
+    def route_task_id(value: Any) -> str:
+        """把 route task 协议中的业务 ID 安全归一化为字符串。
+
+        APP 可能传数字 ID、字符串 ID、None 或带首尾空格的 ID。
+        缺失 ID 返回空字符串，表示“没有可比较的业务 ID”，由上层必填校验或上下文匹配逻辑返回具体错误码。
+        这里不能使用 `str(value)`，因为 None 会变成伪 ID "None"；
+        也不能使用 `value or ""`，因为数字 0 会被误当成缺失。
+        """
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    def normalize_route_task_frame_id(self, value: Any) -> str:
+        """归一化 route waypoint 的 frame_id。
+
+        frame_id 只决定 PoseStamped 使用哪个坐标系。APP 缺失或传空时，
+        使用节点默认 frame_id，避免保存 None 或空字符串导致 Nav2 goal 头部不完整。
+        """
+        frame_id = self.route_task_id(value)
+        return frame_id or self.default_frame_id
+
+    @staticmethod
+    def normalize_route_task_position(value: Any) -> Tuple[List[float], str]:
+        """归一化 route waypoint 的 position 为 [x, y, z]。
+
+        route task 首版 through goal 必须能直接构造 PoseStamped。
+        position 缺失、长度不足或不是有限数字时，启动阶段直接返回 missing_waypoint_pose，
+        不等到 NavigateThroughPoses 下发前才失败。
+        """
+        if isinstance(value, dict):
+            raw_position = [value.get("x"), value.get("y"), value.get("z", 0.0)]
+        elif isinstance(value, (list, tuple)):
+            raw_position = list(value)
+        else:
+            return [], "position must be an array"
+
+        if len(raw_position) < 2:
+            return [], "position must contain at least x and y"
+
+        if len(raw_position) < 3:
+            raw_position.append(0.0)
+
+        try:
+            position = [float(raw_position[0]), float(raw_position[1]), float(raw_position[2])]
+        except (TypeError, ValueError):
+            return [], "position values must be numbers"
+
+        if not all(math.isfinite(component) for component in position):
+            return [], "position values must be finite numbers"
+
+        return position, ""
+
+    @staticmethod
+    def normalize_route_task_orientation(value: Any) -> Tuple[List[float], str]:
+        """归一化 route waypoint 的 orientation 为四元数 [x, y, z, w]。
+
+        清单要求首版 orientation 统一四元数，不在同一字段里混传 yaw。
+        因此这里不为缺失 orientation 静默填默认值，避免机器人朝向被悄悄改成默认朝向。
+        """
+        if isinstance(value, dict):
+            raw_orientation = [value.get("x"), value.get("y"), value.get("z"), value.get("w")]
+        elif isinstance(value, (list, tuple)):
+            raw_orientation = list(value)
+        else:
+            return [], "orientation must be a quaternion array"
+
+        if len(raw_orientation) < 4:
+            return [], "orientation must contain x, y, z and w"
+
+        try:
+            orientation = [
+                float(raw_orientation[0]),
+                float(raw_orientation[1]),
+                float(raw_orientation[2]),
+                float(raw_orientation[3]),
+            ]
+        except (TypeError, ValueError):
+            return [], "orientation values must be numbers"
+
+        if not all(math.isfinite(component) for component in orientation):
+            return [], "orientation values must be finite numbers"
+
+        return orientation, ""
+
+    @staticmethod
+    def route_task_bool(value: Any, default: bool = False) -> bool:
+        """把 APP/properties 中的布尔配置统一转成 bool。
+
+        APP 正常应发送 JSON boolean，但现场配置或旧数据里可能出现 "true"/"false"/"1"/"0"。
+        不能直接使用 bool(value)，因为 Python 中 bool("false") 会得到 True。
+        """
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "1", "yes", "y", "on"}:
+                return True
+            if normalized in {"false", "0", "no", "n", "off", ""}:
+                return False
+        # 无法识别的布尔值回退默认值，由调用方决定是按保守拒绝还是按配置默认继续。
+        # 例如 interrupt_broadcast 缺失时可用节点默认值，避免 APP 传入奇怪字符串直接打断流程。
+        return default
+
+    def current_navigation_mode_value(self) -> Optional[str]:
+        """返回对外发布的导航模式字符串。
+
+        route task 首版内部复用 Nav2 through 和部分旧导航状态字段，
+        但对 APP 来说它不是旧的 multi_point 导航。只要 active_route_task 存在，
+        状态流和事件流都应明确发布 navigation_mode=route_task，
+        避免 APP 把路线任务事件误归类为普通多点导航。
+        """
+        if self.active_route_task is not None:
+            return "route_task"
+        return self.current_navigation_mode.value if self.current_navigation_mode else None
+
+    def build_route_task_status_summary(self) -> Dict[str, Any]:
+        """构建周期状态中的 route task 上下文摘要。
+
+        事件流负责告诉 APP “刚刚发生了什么”，周期状态负责告诉 APP “现在处在哪”。
+        因此这里只在 active_route_task 存在时生成快照，方便 APP/日志面板随时看到
+        当前目标 task、当前段、播报等待和已完成/已跳过集合。
+        """
+        if not self.active_route_task:
+            return {}
+
+        # APP 读取周期 route_task 摘要时，应把它当成“当前态快照”：
+        # awaiting_broadcast 用于恢复播报等待 UI，active_segment 用于恢复路线高亮，
+        # completed/skipped 列表用于展示整体进度；它不是替代离散事件的命令 ack。
+        # active_segment 是运行态字典，先浅拷贝，再把内部列表字段拷贝出来，
+        # 避免周期状态发布后被后续 jump、feedback 或 reset 修改引用内容。
+        active_segment_snapshot = dict(self.active_segment) if self.active_segment else None
+        if active_segment_snapshot:
+            for list_field in (
+                "transit_waypoint_ids",
+                "execution_waypoint_ids",
+                "passed_transit_waypoint_ids",
+            ):
+                active_segment_snapshot[list_field] = list(active_segment_snapshot.get(list_field, []))
+
+        return {
+            "task_session_id": self.active_route_task.get("task_session_id", ""),
+            "route_id": self.active_route_task.get("route_id", ""),
+            "current_anchor_task_id": self.current_anchor_task_id,
+            "current_anchor_task_index": self.current_anchor_task_index,
+            "current_target_task_id": self.current_target_task_id,
+            "current_target_task_index": self.current_target_task_index,
+            "master_route_task_ids": list(self.master_route_task_ids),
+            "completed_task_ids": list(self.completed_task_ids),
+            "skipped_task_ids": list(self.skipped_task_ids),
+            "awaiting_broadcast": self.awaiting_broadcast,
+            "waiting_broadcast_waypoint_id": self.waiting_broadcast_waypoint_id,
+            "waiting_broadcast_id": self.waiting_broadcast_id,
+            "active_segment": active_segment_snapshot,
+            "route_task_version": self.route_task_version,
+            "active_goal_generation": self.current_route_task_goal_generation,
+            "last_feedback_age_sec": (
+                time.time() - self.route_task_last_feedback_time
+                if self.route_task_last_feedback_time > 0 else 0
+            )
+        }
+
+    def normalize_route_task_waypoints(self, route_waypoints: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], str, str]:
+        """归一化 APP 下发的完整 route_waypoints。
+
+        本函数只做 route task 必需的基础清洗：
+        1. waypoint_id 统一转字符串；
+        2. waypoint_role 从显式字段读取，缺失时 fallback 到 properties.waypoint_role；
+        3. task 的播报/停靠字段按显式字段 -> properties -> 默认值归一化；
+        4. transit 强制关闭播报和停靠语义；
+        5. source_index 记录原数组顺序，后续段重建只能按数组顺序计算。
+        """
+        normalized_waypoints = []
+        task_count = 0
+
+        # websocket/桥接层会尽量把 route task 命令转给状态机返回统一业务 ack。
+        # 因此这里必须自己兜住 None、字符串、对象等非数组输入，
+        # 不能假设上游已经拦截，否则坏包会触发 TypeError 而不是 navigation_command_result。
+        if not isinstance(route_waypoints, list):
+            return [], "invalid_route_waypoints", "route_waypoints must be an array"
+
+        for index, waypoint in enumerate(route_waypoints):
+            if not isinstance(waypoint, dict):
+                return [], "invalid_route_waypoints", f"route_waypoints[{index}] must be an object"
+
+            # route_waypoints 内的 ID 也必须和命令 ID 使用同一套归一化规则。
+            # 否则 APP 下发 waypoint_id=" 15 "，后续 jump_to_waypoint 传 "15" 时会查不到目标。
+            waypoint_id = self.route_task_id(waypoint.get("waypoint_id"))
+            if not waypoint_id:
+                return [], "invalid_route_waypoints", f"route_waypoints[{index}] missing waypoint_id"
+
+            properties = waypoint.get("properties", {})
+            if not isinstance(properties, dict):
+                properties = {}
+            frame_id = self.normalize_route_task_frame_id(waypoint.get("frame_id", properties.get("frame_id", "")))
+            position, position_error = self.normalize_route_task_position(waypoint.get("position"))
+            if position_error:
+                return [], "missing_waypoint_pose", f"waypoint {waypoint_id} invalid position: {position_error}"
+            orientation, orientation_error = self.normalize_route_task_orientation(waypoint.get("orientation"))
+            if orientation_error:
+                return [], "missing_waypoint_pose", f"waypoint {waypoint_id} invalid orientation: {orientation_error}"
+            raw_waypoint_role = waypoint.get("waypoint_role", properties.get("waypoint_role", ""))
+            # APP/配置里可能出现 "Task"、" task " 这类写法。
+            # 状态机内部只认小写 task/transit，避免后续分支反复做大小写兼容判断。
+            waypoint_role = str(raw_waypoint_role or "").strip().lower()
+            if waypoint_role not in ("task", "transit"):
+                return [], "invalid_waypoint_role", f"waypoint {waypoint_id} missing valid waypoint_role"
+
+            normalized = dict(waypoint)
+            normalized["waypoint_id"] = waypoint_id
+            normalized["waypoint_role"] = waypoint_role
+            normalized["frame_id"] = frame_id
+            normalized["position"] = position
+            normalized["orientation"] = orientation
+            normalized["source_index"] = index
+            normalized["raw_payload"] = dict(waypoint)
+
+            if waypoint_role == "task":
+                task_need_broadcast = waypoint.get("need_broadcast", properties.get("need_broadcast", False))
+                task_broadcast_id = waypoint.get("broadcast_id", properties.get("broadcast_id", ""))
+                task_broadcast_blocking = waypoint.get(
+                    "broadcast_blocking",
+                    properties.get("broadcast_blocking", True)
+                )
+                task_stop_and_align = waypoint.get("stop_and_align", properties.get("stop_and_align", True))
+
+                # task 才有播报/停靠语义。字段来源优先级和默认值在这里统一固化，
+                # 后续业务流程只读归一化结果，避免不同分支各自解释 properties。
+                normalized["need_broadcast"] = self.route_task_bool(task_need_broadcast, False)
+                normalized["broadcast_id"] = self.route_task_id(task_broadcast_id)
+                normalized["broadcast_blocking"] = self.route_task_bool(task_broadcast_blocking, True)
+                normalized["stop_and_align"] = self.route_task_bool(task_stop_and_align, True)
+                task_count += 1
+            else:
+                # transit 只作为 through 途经点：不播报、不阻塞播报、不停车对齐。
+                # 即使 APP 误传 true，也在归一化阶段强制关闭，保护后续状态机语义。
+                normalized["need_broadcast"] = False
+                normalized["broadcast_id"] = ""
+                normalized["broadcast_blocking"] = False
+                normalized["stop_and_align"] = False
+            normalized_waypoints.append(normalized)
+
+        if task_count == 0:
+            return [], "missing_task_waypoints", "route must contain at least one task waypoint"
+
+        return normalized_waypoints, "", ""
+
+    def build_master_route_task_ids(self, route_waypoints: List[Dict[str, Any]]) -> List[str]:
+        """提取主任务点 ID 列表。
+
+        只有 waypoint_role=task 的点进入主任务序列；transit 只是 through 途经点，
+        不参与 completed_task_ids / skipped_task_ids / 主任务进度计算。
+        """
+        return [
+            waypoint["waypoint_id"]
+            for waypoint in route_waypoints
+            if waypoint.get("waypoint_role") == "task"
+        ]
+
+    def find_route_waypoint_by_id(self, waypoint_id: str) -> Optional[Dict[str, Any]]:
+        """从当前 active route 中按字符串 ID 查找路线点。"""
+        if not self.active_route_task:
+            return None
+        waypoint_id = str(waypoint_id)
+        for waypoint in self.active_route_task.get("route_waypoints", []):
+            if str(waypoint.get("waypoint_id", "")) == waypoint_id:
+                return waypoint
+        return None
+
+    def build_active_segment_by_indices(
+        self,
+        start_index_exclusive: int,
+        target_index: int,
+        anchor_task_id: str,
+        target_task_id: str
+    ) -> Dict[str, Any]:
+        """按 route_waypoints 数组顺序构建当前执行段。
+
+        首段从机器人当前位置出发，但不会创建“当前位置虚拟 waypoint”；
+        execution_waypoint_ids 只包含真实 transit 和最终目标 task。
+        """
+        route_waypoints = self.active_route_task.get("route_waypoints", []) if self.active_route_task else []
+        segment_waypoints = route_waypoints[start_index_exclusive + 1:target_index + 1]
+        transit_ids = [
+            waypoint["waypoint_id"]
+            for waypoint in segment_waypoints
+            if waypoint.get("waypoint_role") == "transit"
+        ]
+        execution_ids = transit_ids + [target_task_id]
+        return {
+            "segment_id": f"seg_{self.route_task_version}_{self.active_goal_generation + 1}",
+            "segment_direction": "forward",
+            "segment_start_task_id": anchor_task_id,
+            "segment_target_task_id": target_task_id,
+            "segment_start_source_index": start_index_exclusive,
+            "segment_target_source_index": target_index,
+            "transit_waypoint_ids": transit_ids,
+            "execution_waypoint_ids": execution_ids,
+            "passed_transit_waypoint_ids": [],
+            "current_segment_progress_index": 0,
+            "segment_goal_generation": self.active_goal_generation + 1
+        }
+
+    def compute_segment_direction(self, start_index: int, target_index: int) -> str:
+        """根据当前进度点和目标点在 route_waypoints 数组中的位置判断段方向。"""
+        return "forward" if target_index >= start_index else "backward"
+
+    def collect_route_interval_waypoints(self, start_index: int, target_index: int) -> List[Dict[str, Any]]:
+        """按方向收集完整 route 区间内的真实 waypoint。
+
+        start_index 表示当前进度所在 source_index；返回结果不包含 start_index，
+        包含 target_index。反向 jump 时返回顺序也按反向执行顺序排列。
+        """
+        route_waypoints = self.active_route_task.get("route_waypoints", []) if self.active_route_task else []
+        if target_index >= start_index:
+            return route_waypoints[start_index + 1:target_index + 1]
+        return list(reversed(route_waypoints[target_index:start_index]))
+
+    def resolve_current_progress_source_index(self) -> int:
+        """解析当前 route task 的 source_index 进度锚点。
+
+        正在等待播报时，机器人已经到达当前 target task，因此进度锚点就是 target task。
+        正在 through 执行时，优先使用当前段最后一个已 passed transit；没有 passed transit
+        时使用当前段的 segment_start_source_index。首段可能是 -1，表示从机器人当前位置出发。
+        """
+        if not self.active_segment:
+            return -1
+        if self.awaiting_broadcast and self.current_target_task_id:
+            target = self.find_route_waypoint_by_id(self.current_target_task_id)
+            if target:
+                return int(target.get("source_index", -1))
+
+        passed_ids = self.active_segment.get("passed_transit_waypoint_ids", [])
+        if passed_ids:
+            last_passed = self.find_route_waypoint_by_id(passed_ids[-1])
+            if last_passed:
+                return int(last_passed.get("source_index", self.active_segment.get("segment_start_source_index", -1)))
+        return int(self.active_segment.get("segment_start_source_index", -1))
+
+    def resolve_current_progress_anchor_task_id(self) -> str:
+        """解析当前进度所属的业务锚点 task。
+
+        jump 重建段时不能盲目把“旧目标 task”当作新段起点：
+        1. 如果正在 WAITING_BROADCAST，说明旧目标 task 已经到达，只是等待 APP 播报回执，此时锚点就是当前目标 task；
+        2. 如果仍在 through 导航途中，旧目标 task 还没完成，锚点应继续沿用上一已完成/已确认的 task；
+        3. 如果没有显式锚点，则退回最后完成 task 或空字符串，避免把未到达的目标写入段起点。
+        """
+        if self.awaiting_broadcast and self.current_target_task_id:
+            return str(self.current_target_task_id)
+        if self.current_anchor_task_id:
+            return str(self.current_anchor_task_id)
+        if self.last_completed_task_id:
+            return str(self.last_completed_task_id)
+        if self.completed_task_ids:
+            return str(self.completed_task_ids[-1])
+        return ""
+
+    def resolve_route_task_index(self, task_id: str) -> int:
+        """把 task_id 转成 master_route_task_ids 内的索引，找不到时返回 -1。"""
+        task_id = str(task_id or "")
+        if task_id and task_id in self.master_route_task_ids:
+            return self.master_route_task_ids.index(task_id)
+        return -1
+
+    def rebuild_segment_from_current_progress(self, target_task_id: str) -> Tuple[Optional[Dict[str, Any]], List[str], str]:
+        """基于完整 route 区间重建 jump 后的新 active_segment。
+
+        不能只看旧 active_segment 剩余点，否则目标跨出旧段时会漏收新区间 transit。
+        只扣除“当前 active_segment 内已经 passed 的 transit”，不做全局 transit 去重。
+        """
+        target_task = self.find_route_waypoint_by_id(target_task_id)
+        if not target_task:
+            return None, [], "target task not found"
+
+        progress_index = self.resolve_current_progress_source_index()
+        progress_anchor_task_id = self.resolve_current_progress_anchor_task_id()
+        target_index = int(target_task.get("source_index", -1))
+        direction = self.compute_segment_direction(progress_index, target_index)
+        interval_waypoints = self.collect_route_interval_waypoints(progress_index, target_index)
+        current_passed_transit = set(self.active_segment.get("passed_transit_waypoint_ids", [])) if self.active_segment else set()
+
+        transit_ids = [
+            waypoint["waypoint_id"]
+            for waypoint in interval_waypoints
+            if waypoint.get("waypoint_role") == "transit"
+            and waypoint.get("waypoint_id") not in current_passed_transit
+        ]
+        execution_ids = transit_ids + [str(target_task_id)]
+
+        skipped_task_ids = []
+        for waypoint in interval_waypoints:
+            waypoint_id = waypoint.get("waypoint_id", "")
+            if waypoint.get("waypoint_role") != "task":
+                continue
+            if waypoint_id == str(target_task_id):
+                continue
+            if waypoint_id in self.completed_task_ids:
+                continue
+            if waypoint_id not in skipped_task_ids:
+                skipped_task_ids.append(waypoint_id)
+
+        segment = {
+            "segment_id": f"seg_{self.route_task_version}_{self.active_goal_generation + 1}",
+            "segment_direction": direction,
+            "segment_start_task_id": progress_anchor_task_id,
+            "segment_target_task_id": str(target_task_id),
+            "segment_start_source_index": progress_index,
+            "segment_target_source_index": target_index,
+            "transit_waypoint_ids": transit_ids,
+            "execution_waypoint_ids": execution_ids,
+            "passed_transit_waypoint_ids": [],
+            "current_segment_progress_index": 0,
+            "segment_goal_generation": self.active_goal_generation + 1
+        }
+        return segment, skipped_task_ids, ""
+
+    def build_first_active_segment(self) -> Tuple[Optional[Dict[str, Any]], str]:
+        """构建首段 active_segment。
+
+        首个 task 是业务目标：如果首个 task 前存在 transit，也会纳入首段 through goal；
+        如果首个 task 正好是 route_waypoints[0]，则首段只导航到该 task。
+        """
+        if not self.active_route_task or not self.master_route_task_ids:
+            return None, "route task has no task waypoint"
+
+        first_task_id = self.master_route_task_ids[0]
+        first_task = self.find_route_waypoint_by_id(first_task_id)
+        if not first_task:
+            return None, f"first task {first_task_id} not found"
+
+        return self.build_active_segment_by_indices(
+            start_index_exclusive=-1,
+            target_index=int(first_task.get("source_index", 0)),
+            anchor_task_id="",
+            target_task_id=first_task_id
+        ), ""
+
+    def build_next_active_segment(self) -> Tuple[Optional[Dict[str, Any]], str]:
+        """当前 task 完成后，按主任务顺序构建下一段。"""
+        next_task_index = self.current_target_task_index + 1
+        if next_task_index >= len(self.master_route_task_ids):
+            return None, ""
+
+        anchor_task_id = self.current_target_task_id
+        next_task_id = self.master_route_task_ids[next_task_index]
+        anchor_task = self.find_route_waypoint_by_id(anchor_task_id)
+        next_task = self.find_route_waypoint_by_id(next_task_id)
+        if not anchor_task or not next_task:
+            return None, "next segment waypoint missing"
+
+        return self.build_active_segment_by_indices(
+            start_index_exclusive=int(anchor_task.get("source_index", 0)),
+            target_index=int(next_task.get("source_index", 0)),
+            anchor_task_id=anchor_task_id,
+            target_task_id=next_task_id
+        ), ""
+
+    def route_waypoint_to_pose_stamped(self, waypoint_id: str) -> Optional[PoseStamped]:
+        """将归一化后的 route waypoint 转换为 NavigateThroughPoses 使用的 PoseStamped。"""
+        waypoint = self.find_route_waypoint_by_id(waypoint_id)
+        if not waypoint:
+            return None
+        try:
+            # route task 在 start_route_task 阶段已经校验并归一化 frame_id/position/orientation。
+            # 这里不要复用旧普通导航的 waypoint_to_pose_stamped()，因为旧函数会给缺失字段填默认值；
+            # route task 需要明确使用归一化后的字段，保证 through goal 与启动校验口径一致。
+            pose = PoseStamped()
+            pose.header.stamp = self.get_clock().now().to_msg()
+            pose.header.frame_id = waypoint.get("frame_id", self.default_frame_id)
+
+            position = waypoint.get("position", [])
+            orientation = waypoint.get("orientation", [])
+
+            pose.pose.position.x = float(position[0])
+            pose.pose.position.y = float(position[1])
+            pose.pose.position.z = float(position[2])
+            pose.pose.orientation.x = float(orientation[0])
+            pose.pose.orientation.y = float(orientation[1])
+            pose.pose.orientation.z = float(orientation[2])
+            pose.pose.orientation.w = float(orientation[3])
+            return pose
+        except Exception as exc:
+            self.get_logger().error(f"route waypoint 转 PoseStamped 失败: {waypoint_id}, {exc}")
+            return None
+
+    def start_active_segment_navigation(
+        self,
+        ack_command_type: str = "start_route_task",
+        ack_command_data: Optional[Dict[str, Any]] = None,
+        send_failure_ack: bool = True
+    ) -> bool:
+        """把当前 active_segment 下发给 NavigateThroughPoses。
+
+        该函数是 route task through 执行的唯一入口；旧 NavigateToPose 不参与路线任务主路径。
+        send_failure_ack 只用于命令触发的段启动：start/jump 失败需要业务 ack；
+        自动进入下一段时没有新的 APP 命令，不应伪造旧命令 ack。
+        """
+        ack_command_data = ack_command_data or self.active_route_task or {}
+        if not self.active_segment:
+            return self.reject_active_segment_start(
+                ack_command_type,
+                ack_command_data,
+                "active segment is empty",
+                "invalid_route_waypoints",
+                send_failure_ack
+            )
+
+        poses = []
+        for waypoint_id in self.active_segment.get("execution_waypoint_ids", []):
+            pose = self.route_waypoint_to_pose_stamped(waypoint_id)
+            if pose is None:
+                return self.reject_active_segment_start(
+                    ack_command_type,
+                    ack_command_data,
+                    f"waypoint {waypoint_id} has no valid pose",
+                    "missing_waypoint_pose",
+                    send_failure_ack
+                )
+            poses.append(pose)
+
+        if not poses:
+            return self.reject_active_segment_start(
+                ack_command_type,
+                ack_command_data,
+                "active segment has no execution waypoint",
+                "invalid_route_waypoints",
+                send_failure_ack
+            )
+
+        if not self.nav_through_poses_client.wait_for_server(timeout_sec=5.0):
+            return self.reject_active_segment_start(
+                ack_command_type,
+                ack_command_data,
+                "NavigateThroughPoses action server unavailable",
+                "navigation_busy",
+                send_failure_ack
+            )
+
+        self.active_goal_generation += 1
+        self.current_route_task_goal_generation = self.active_goal_generation
+        self.active_segment["segment_goal_generation"] = self.current_route_task_goal_generation
+        # 新 through 段刚下发时先从当前时刻开始计时。
+        # 如果 Nav2 action server 接受 goal 后长期没有 feedback，周期检查会按该时间触发失败。
+        self.route_task_last_feedback_time = time.time()
+        self.current_state = NavigationState.EXECUTING
+        self.current_detailed_state = "ROUTE_TASK_SEGMENT_NAVIGATING"
+        self.current_navigation_mode = NavigationMode.MULTI_POINT
+        self.navigation_start_time = time.time()
+
+        goal_msg = NavigateThroughPoses.Goal()
+        goal_msg.poses = poses
+        route_task_version = self.route_task_version
+        try:
+            # 从这里开始，状态机已经进入 ROUTE_TASK_SEGMENT_NAVIGATING。
+            # 如果 send_goal_async 或回调注册阶段抛异常，必须走 route task 失败流程，
+            # 由 handle_route_task_navigation_failed() 发布复盘事件并清理 goal/feedback 状态。
+            send_goal_future = self.nav_through_poses_client.send_goal_async(
+                goal_msg,
+                feedback_callback=lambda feedback_msg,
+                generation=self.current_route_task_goal_generation,
+                version=route_task_version: (
+                    self.route_task_through_feedback_callback(feedback_msg, generation, version)
+                )
+            )
+            send_goal_future.add_done_callback(
+                lambda future,
+                generation=self.current_route_task_goal_generation,
+                version=route_task_version: (
+                    self.route_task_through_goal_response_callback(future, generation, version)
+                )
+            )
+        except Exception as exc:
+            if send_failure_ack:
+                # start_route_task / jump_to_waypoint 是 APP 主动发起的命令。
+                # 即使后续还会发布 navigation_failed 复盘，也必须先给本次命令返回
+                # navigation_command_result(error)，避免 APP 侧业务 ack 等待超时。
+                # 自动下一段调用会传 send_failure_ack=False，因此不会伪造新的命令 ack。
+                self.send_route_task_ack(
+                    ack_command_type,
+                    "error",
+                    f"NavigateThroughPoses send goal failed: {exc}",
+                    ack_command_data,
+                    error_code="send_goal_failed"
+                )
+            self.handle_route_task_navigation_failed(
+                f"NavigateThroughPoses send goal failed: {exc}",
+                failure_code="send_goal_failed"
+            )
+            return False
+        self.get_logger().info(
+            "route task through segment started: "
+            f"segment_id={self.active_segment.get('segment_id', '')}, "
+            f"target={self.current_target_task_id}, "
+            f"generation={self.current_route_task_goal_generation}"
+        )
+        return True
+
+    def reject_active_segment_start(
+        self,
+        ack_command_type: str,
+        ack_command_data: Dict[str, Any],
+        message: str,
+        error_code: str,
+        send_failure_ack: bool
+    ) -> bool:
+        """统一处理 active_segment 启动失败。
+
+        命令入口失败时发 navigation_command_result；自动下一段失败时只写日志，
+        由调用方进入 route task 失败流程，避免给 APP 推送一个并不存在的新命令 ack。
+        """
+        if send_failure_ack:
+            self.send_route_task_ack(
+                ack_command_type,
+                "error",
+                message,
+                ack_command_data,
+                error_code=error_code
+            )
+        self.get_logger().error(
+            f"route task active segment start failed: command={ack_command_type}, "
+            f"error_code={error_code}, message={message}"
+        )
+        return False
+
+    def cleanup_route_task_segment_start_failure(self):
+        """清理命令触发的 route task 段启动失败状态。
+
+        start_route_task 首段启动失败时，状态机已经创建了 active_route_task / active_segment，
+        但 through goal 还没有真正进入可执行状态。这里必须同时清理 route task 专属状态
+        和导航大状态，避免 APP 收到错误 ack 后 ROS 仍残留 EXECUTING 或 feedback 计时上下文。
+        """
+        self.current_route_task_goal_generation = -1
+        self.route_task_last_feedback_time = 0.0
+        self.current_goal_handle = None
+        self.route_task_goal_handle = None
+        self.reset_route_task_state()
+        self.reset_navigation_state()
+
+    def route_task_through_goal_response_callback(self, future, generation: int, route_task_version: int):
+        """处理 NavigateThroughPoses goal response，并用 version + generation 隔离旧回调。"""
+        if (
+            route_task_version != self.route_task_version or
+            generation != self.current_route_task_goal_generation
+        ):
+            self.get_logger().info(
+                f"忽略旧 through goal response: version={route_task_version}, "
+                f"generation={generation}"
+            )
+            return
+        try:
+            goal_handle = future.result()
+            if not goal_handle.accepted:
+                self.handle_route_task_navigation_failed(
+                    "NavigateThroughPoses goal rejected",
+                    failure_code="goal_rejected"
+                )
+                return
+            # goal 真正 accepted 后重置 feedback 计时。
+            # 段下发到 accepted 之间可能存在排队/调度延迟，不能把这段时间算成 Nav2 feedback 静默。
+            self.route_task_last_feedback_time = time.time()
+            self.route_task_goal_handle = goal_handle
+            self.current_goal_handle = goal_handle
+            result_future = goal_handle.get_result_async()
+            result_future.add_done_callback(
+                lambda result_future,
+                result_generation=generation,
+                result_version=route_task_version: (
+                    self.route_task_through_result_callback(result_future, result_generation, result_version)
+                )
+            )
+        except Exception as exc:
+            self.handle_route_task_navigation_failed(
+                f"through goal response error: {exc}",
+                failure_code="goal_response_error"
+            )
+
+    def route_task_through_feedback_callback(self, feedback_msg, generation: int, route_task_version: int):
+        """处理 NavigateThroughPoses feedback。
+
+        优先使用 Nav2 through feedback 的 number_of_poses_remaining 推进 transit 进度；
+        这里只发布 waypoint_passed，不直接完成 task。
+        """
+        if (
+            route_task_version != self.route_task_version or
+            generation != self.current_route_task_goal_generation
+        ):
+            return
+        try:
+            self.route_task_last_feedback_time = time.time()
+            feedback = feedback_msg.feedback
+            self.distance_remaining = float(getattr(feedback, "distance_remaining", self.distance_remaining))
+            poses_remaining = getattr(feedback, "number_of_poses_remaining", None)
+            if poses_remaining is not None:
+                self.resolve_transit_progress_from_feedback(int(poses_remaining))
+            else:
+                # 部分 Nav2 版本或封装不会在 NavigateThroughPoses feedback 中提供
+                # number_of_poses_remaining。此时仍然要靠机器人实时位姿判断 transit 是否已通过，
+                # 否则 APP 侧会迟迟收不到 waypoint_passed 进度事件。
+                self.resolve_transit_progress_from_pose()
+        except Exception as exc:
+            self.get_logger().debug(f"处理 through feedback 失败: {exc}", throttle_duration_sec=2.0)
+
+    def clear_route_task_goal_after_terminal_result(self):
+        """清理已经进入终态的 route task through goal handle。
+
+        NavigateThroughPoses result 已经返回成功/取消/失败后，这个 goal 不再是活动 goal。
+        如果不清理，WAITING_BROADCAST 阶段收到 jump 时可能会尝试取消一个已结束 goal，
+        造成多余日志或旧 cancel 回调干扰排查。
+        """
+        self.current_goal_handle = None
+        self.route_task_goal_handle = None
+        self.route_task_last_feedback_time = 0.0
+
+    def resolve_transit_progress_from_feedback(self, poses_remaining: int):
+        """根据 through feedback 推断当前段 transit passed。
+
+        execution_waypoint_ids = transit... + target_task。
+        当 Nav2 告知剩余 poses 减少时，只把已经越过的 transit 标记为 passed；
+        最后一个 target task 仍由 result success 进入 handle_target_task_arrived()。
+        """
+        if not self.active_segment:
+            return
+        execution_ids = self.active_segment.get("execution_waypoint_ids", [])
+        transit_ids = self.active_segment.get("transit_waypoint_ids", [])
+        if not execution_ids or not transit_ids:
+            return
+
+        passed_pose_count = max(0, min(len(execution_ids), len(execution_ids) - max(0, poses_remaining)))
+        passed_transit_count = min(passed_pose_count, len(transit_ids))
+        for waypoint_id in transit_ids[:passed_transit_count]:
+            self.mark_transit_passed(waypoint_id)
+
+    def resolve_transit_progress_from_pose(self):
+        """用当前机器人位姿补偿 through feedback 缺字段时的 transit 进度。
+
+        这个函数只处理当前 active_segment 内的 transit 点：
+        1. 先用“机器人到 transit 的水平距离 <= 阈值”判定已通过；
+        2. 如果开启 projection fallback，再用“机器人已经沿上一点到 transit 的线段投影越过终点”
+           兜底，避免机器人从 transit 附近擦过但没有刚好落在阈值圆内时漏报；
+        3. 不会把结果写入全局去重集合，因此反向/跳转后的新段可以重新经过同一个 transit。
+        """
+        if not self.active_segment or not self.current_pose:
+            return
+
+        transit_ids = [str(item) for item in self.active_segment.get("transit_waypoint_ids", [])]
+        passed_ids = set(str(item) for item in self.active_segment.get("passed_transit_waypoint_ids", []))
+        if not transit_ids:
+            return
+
+        for waypoint_id in transit_ids:
+            if waypoint_id in passed_ids:
+                continue
+            if self.is_transit_passed_by_current_pose(waypoint_id):
+                self.mark_transit_passed(waypoint_id)
+                passed_ids.add(waypoint_id)
+                continue
+
+            # transit 是按 active_segment 的执行顺序逐个经过的。
+            # 遇到第一个尚未通过且当前位姿也不能确认通过的 transit 后，后续 transit 暂不判断，
+            # 避免机器人距离后续点更近时误把中间点跳过去。
+            break
+
+    def is_transit_passed_by_current_pose(self, waypoint_id: str) -> bool:
+        """判断当前机器人位姿是否已经经过指定 transit 点。"""
+        waypoint = self.find_route_waypoint_by_id(waypoint_id)
+        waypoint_position = self.waypoint_position_tuple(waypoint)
+        if not waypoint_position or not self.current_pose:
+            return False
+
+        robot_x = float(self.current_pose.position.x)
+        robot_y = float(self.current_pose.position.y)
+        dx = robot_x - float(waypoint_position[0])
+        dy = robot_y - float(waypoint_position[1])
+        distance = math.hypot(dx, dy)
+        threshold = max(0.0, float(self.route_task_transit_passed_tolerance_m))
+
+        # 主判定：机器人进入 transit 点附近阈值圆，就认为该 transit 已经过。
+        if distance <= threshold:
+            return True
+
+        if not self.route_task_transit_projection_passed_enabled:
+            return False
+
+        previous_position = self.resolve_previous_execution_position_for_transit(waypoint_id)
+        if previous_position is None:
+            return False
+
+        seg_dx = float(waypoint_position[0]) - float(previous_position[0])
+        seg_dy = float(waypoint_position[1]) - float(previous_position[1])
+        seg_len_sq = seg_dx * seg_dx + seg_dy * seg_dy
+        if seg_len_sq <= 1e-6:
+            return False
+
+        # 兜底判定：机器人沿“上一执行点 -> 当前 transit”的方向已经越过 transit。
+        # 同时要求横向偏离不要太大，避免远处绕行时把 transit 误判为已通过。
+        projection = ((robot_x - float(previous_position[0])) * seg_dx +
+                      (robot_y - float(previous_position[1])) * seg_dy) / seg_len_sq
+        if projection <= 1.0:
+            return False
+
+        cross_track_distance = abs(
+            (robot_x - float(previous_position[0])) * seg_dy -
+            (robot_y - float(previous_position[1])) * seg_dx
+        ) / math.sqrt(seg_len_sq)
+        return cross_track_distance <= max(threshold * 2.0, threshold + 0.2)
+
+    def resolve_previous_execution_position_for_transit(self, waypoint_id: str) -> Optional[Tuple[float, float, float]]:
+        """找到当前 transit 在 active_segment 执行链上的上一个参考点位置。
+
+        第一段从机器人当前位置出发，不会把当前位置塞进 execution_waypoint_ids。
+        因此这里优先找 execution_waypoint_ids 中 transit 前一个真实点；
+        如果 transit 是本段第一个执行点，再退回 segment_start_source_index 对应的路线点。
+        """
+        if not self.active_segment:
+            return None
+
+        waypoint_id = str(waypoint_id)
+        execution_ids = [str(item) for item in self.active_segment.get("execution_waypoint_ids", [])]
+        if waypoint_id in execution_ids:
+            waypoint_index = execution_ids.index(waypoint_id)
+            if waypoint_index > 0:
+                previous_waypoint = self.find_route_waypoint_by_id(execution_ids[waypoint_index - 1])
+                return self.waypoint_position_tuple(previous_waypoint)
+
+        start_source_index = int(self.active_segment.get("segment_start_source_index", -1))
+        route_waypoints = self.active_route_task.get("route_waypoints", []) if self.active_route_task else []
+        if 0 <= start_source_index < len(route_waypoints):
+            return self.waypoint_position_tuple(route_waypoints[start_source_index])
+        return None
+
+    def mark_transit_passed(self, waypoint_id: str):
+        """标记当前 active_segment 内的 transit 已通过，并推送 waypoint_passed。"""
+        if not self.active_segment:
+            return
+        waypoint_id = str(waypoint_id)
+        passed_ids = self.active_segment.setdefault("passed_transit_waypoint_ids", [])
+        if waypoint_id in passed_ids:
+            return
+        passed_ids.append(waypoint_id)
+        self.active_segment["current_segment_progress_index"] = len(passed_ids)
+        # APP 收到 waypoint_passed 后，只更新 through 进度和路线高亮。
+        # transit 不触发播报、不需要 APP 回命令，也不能被当成 task 完成。
+        self.publish_route_task_event("waypoint_passed", {
+            "segment_id": self.active_segment.get("segment_id", ""),
+            "waypoint_id": waypoint_id,
+            "waypoint_role": "transit",
+            # 事件 payload 使用快照拷贝，避免后续段替换或 reset 清理运行态时
+            # 影响 APP 已收到的 transit 通过复盘数据。
+            "passed_transit_waypoint_ids": list(passed_ids),
+            "current_target_task_id": self.current_target_task_id
+        })
+
+    def route_task_through_result_callback(self, future, generation: int, route_task_version: int):
+        """处理 NavigateThroughPoses result，成功时进入目标 task 到达流程。"""
+        if (
+            route_task_version != self.route_task_version or
+            generation != self.current_route_task_goal_generation
+        ):
+            self.get_logger().info(
+                f"忽略旧 through result: version={route_task_version}, generation={generation}"
+            )
+            return
+        try:
+            result = future.result()
+            self.clear_route_task_goal_after_terminal_result()
+            if result.status == GoalStatus.STATUS_SUCCEEDED:
+                self.handle_target_task_arrived()
+            elif result.status == GoalStatus.STATUS_CANCELED:
+                self.handle_route_task_navigation_failed(
+                    "NavigateThroughPoses goal canceled",
+                    failure_code="goal_canceled"
+                )
+            else:
+                self.handle_route_task_navigation_failed(
+                    "NavigateThroughPoses goal failed",
+                    failure_code="goal_failed"
+                )
+        except Exception as exc:
+            self.handle_route_task_navigation_failed(
+                f"through result error: {exc}",
+                failure_code="result_error"
+            )
+
+    def handle_target_task_arrived(self):
+        """当前 active_segment 的目标 task 已到达，进入播报或完成流程。"""
+        target_task = self.find_route_waypoint_by_id(self.current_target_task_id)
+        if not target_task:
+            self.handle_route_task_navigation_failed(
+                "target task missing",
+                failure_code="target_task_missing"
+            )
+            return
+
+        need_broadcast = bool(target_task.get("need_broadcast", False))
+        broadcast_id = str(target_task.get("broadcast_id", ""))
+        if need_broadcast:
+            self.awaiting_broadcast = True
+            self.waiting_broadcast_waypoint_id = self.current_target_task_id
+            self.waiting_broadcast_id = broadcast_id
+            self.current_detailed_state = "WAITING_BROADCAST"
+            # APP 收到 broadcast_requested 后，应进入等待播报/正在播报状态，
+            # 根据 broadcast_id 启动播报，并在播报完成后回传 broadcast_finished。
+            self.publish_route_task_event("broadcast_requested", {
+                "segment_id": self.active_segment.get("segment_id", "") if self.active_segment else "",
+                "waypoint_id": self.current_target_task_id,
+                "broadcast_id": broadcast_id,
+                "current_target_task_id": self.current_target_task_id
+            })
+            return
+
+        self.finalize_task_waypoint_completion(self.current_target_task_id)
+
+    def finalize_task_waypoint_completion(self, waypoint_id: str):
+        """完成一个 task，并自动推进下一段或结束整条路线。"""
+        waypoint_id = str(waypoint_id)
+        if waypoint_id not in self.completed_task_ids:
+            self.completed_task_ids.append(waypoint_id)
+        self.last_completed_task_id = waypoint_id
+        self.awaiting_broadcast = False
+        self.waiting_broadcast_waypoint_id = ""
+        self.waiting_broadcast_id = ""
+        # APP 收到 task_waypoint_completed 后，应标记当前 task 已完成，
+        # 清理该 task 的播报等待态，并根据 next_target_task_id 刷新下一业务目标。
+        self.publish_route_task_event("task_waypoint_completed", {
+            "segment_id": self.active_segment.get("segment_id", "") if self.active_segment else "",
+            "waypoint_id": waypoint_id,
+            # completed_task_ids 是运行态列表，发事件时必须拷贝成快照，
+            # 否则下一段推进或 route reset 后会让复盘语义不稳定。
+            "completed_task_ids": list(self.completed_task_ids),
+            "next_target_task_id": (
+                self.master_route_task_ids[self.current_target_task_index + 1]
+                if self.current_target_task_index + 1 < len(self.master_route_task_ids)
+                else ""
+            )
+        })
+
+        next_segment, error_message = self.build_next_active_segment()
+        if error_message:
+            self.handle_route_task_navigation_failed(
+                error_message,
+                failure_code="next_segment_build_failed"
+            )
+            return
+        if next_segment is None:
+            self.complete_route_task()
+            return
+
+        self.current_anchor_task_id = self.current_target_task_id
+        self.current_anchor_task_index = self.current_target_task_index
+        self.current_target_task_index += 1
+        self.current_target_task_id = self.master_route_task_ids[self.current_target_task_index]
+        self.active_segment = next_segment
+        if not self.start_active_segment_navigation(send_failure_ack=False):
+            self.handle_route_task_navigation_failed(
+                "next route segment start failed",
+                failure_code="next_segment_start_failed"
+            )
+
+    def complete_route_task(self):
+        """发布 route_task_completed 摘要后，再清理 route task 运行态。"""
+        summary = {
+            "task_session_id": self.active_route_task.get("task_session_id", "") if self.active_route_task else "",
+            "route_id": self.active_route_task.get("route_id", "") if self.active_route_task else "",
+            "completed_waypoint_id": self.last_completed_task_id,
+            # APP 收到 route_task_completed 后，应把路线 UI 切到完成态，并用下面两个列表
+            # 展示最终完成/跳过摘要；这也是为什么事件必须在 reset_route_task_state() 之前发布。
+            # 完成摘要要使用列表拷贝，避免后续 reset_route_task_state() 清理运行态时
+            # 影响已发布事件的复盘数据结构。
+            "completed_task_ids": list(self.completed_task_ids),
+            "skipped_task_ids": list(self.skipped_task_ids),
+            "completed_at": time.time(),
+            "result": "success",
+            "summary": {
+                "task_count": len(self.master_route_task_ids),
+                "completed_count": len(self.completed_task_ids),
+                "skipped_count": len(self.skipped_task_ids)
+            }
+        }
+        self.publish_route_task_event("route_task_completed", summary)
+        self.reset_route_task_state()
+        self.reset_navigation_state()
+
+    def reset_route_task_state(self):
+        """清理 route task 专属状态，不影响旧导航字段的 reset_navigation_state 语义。"""
+        # route task 结束或失败清理时，必须让当前 through goal generation 立即失效。
+        # 否则 goal response / feedback / result 晚到时，可能仍通过 generation 校验，
+        # 把旧 goal handle 或旧进度重新写回已经 reset 的状态机。
+        self.current_route_task_goal_generation = -1
+        self.active_goal_generation = 0
+        self.active_route_task = None
+        self.master_route_task_ids = []
+        self.completed_task_ids = []
+        self.skipped_task_ids = []
+        self.current_anchor_task_id = ""
+        self.current_anchor_task_index = -1
+        self.current_target_task_id = ""
+        self.current_target_task_index = -1
+        self.active_segment = None
+        self.awaiting_broadcast = False
+        self.waiting_broadcast_waypoint_id = ""
+        self.waiting_broadcast_id = ""
+        self.jump_interrupts_broadcast = False
+        self.route_task_goal_handle = None
+        self.route_task_last_feedback_time = 0.0
+        self.last_completed_task_id = ""
+        self.last_completed_broadcast = {
+            "task_session_id": "",
+            "waypoint_id": "",
+            "broadcast_id": ""
+        }
+
+    def handle_route_task_navigation_failed(self, message: str, failure_code: str = "navigation_failed"):
+        """处理 route task 失败，并避免进入旧多点导航的自动 skip 策略。
+
+        首版不新增 route_task_failed 事件，仍沿用 navigation_failed 通道通知 APP。
+        但不能继续调用普通 handle_navigation_failed()：旧函数可能根据
+        navigation_failure_policy=skip_failed_continue 自动跳过普通 waypoint，
+        这会破坏 route task 的 active_segment / task / transit 语义。
+        """
+        # route task 失败沿用 navigation_failed 通道，但 payload 必须带完整 route 上下文。
+        # APP 可用这些字段展示“哪条路线、哪个目标 task、哪一段失败”，
+        # 现场复盘时也能看到当时已经完成/跳过了哪些 task，以及当前段还要执行哪些 waypoint。
+        # failure_code 是机器可读分类，APP 可以据此区分 rejected、timeout、canceled 等失败类型；
+        # reason/message 保留给人阅读，便于现场排障。
+        active_segment = self.active_segment or {}
+        failure_context = {
+            "reason": message,
+            "failure_code": failure_code,
+            "route_task": True,
+            "task_session_id": self.active_route_task.get("task_session_id", "") if self.active_route_task else "",
+            "route_id": self.active_route_task.get("route_id", "") if self.active_route_task else "",
+            "current_target_task_id": self.current_target_task_id,
+            "segment_id": active_segment.get("segment_id", ""),
+            "segment_direction": active_segment.get("segment_direction", ""),
+            # 失败复盘字段必须是当时现场快照，不能直接引用 active_segment 内部列表。
+            "execution_waypoint_ids": list(active_segment.get("execution_waypoint_ids", [])),
+            "passed_transit_waypoint_ids": list(active_segment.get("passed_transit_waypoint_ids", [])),
+            "completed_task_ids": list(self.completed_task_ids),
+            "skipped_task_ids": list(self.skipped_task_ids),
+            "failed_at": time.time()
+        }
+        # APP 收到 navigation_failed(route_task=true) 后，应退出路线执行中/播报等待 UI，
+        # 按 failure_code 选择展示文案，并把 route_id、current_target_task_id 和 segment_id
+        # 放进详情或日志，方便现场复盘是哪一段 through 或播报闭环失败。
+        self.publish_status_update("navigation_failed", failure_context)
+        # route task 失败是 /navigation/status 上的状态事件，不是某个 APP 命令的业务 ack。
+        # 这里不能再走旧 /navigation/acknowledgments，否则 data_integration 会额外包装出
+        # navigation_command_result(command_type=navigation_failed)，导致 APP 收到重复且语义混乱的失败通知。
+        if self.current_goal_handle:
+            self.cancel_current_route_goal_safely("failure_cleanup")
+        self.reset_route_task_state()
+        self.reset_navigation_state()
+
+    def is_current_pose_near_route_waypoint(self, waypoint_id: str, tolerance_m: float) -> bool:
+        """判断机器人当前位置是否已经在指定 route waypoint 附近。
+
+        首版只用水平距离做初始 task 到达判断，避免 z 轴噪声导致“明明在点上却不算到达”。
+        这个判断只作为 start_route_task 的首 task 快速进入播报/完成流程使用，
+        不会把机器人当前位置写成虚拟 waypoint，也不会改变 route_waypoints 的数组顺序。
+        """
+        if not self.current_pose:
+            return False
+        waypoint = self.find_route_waypoint_by_id(waypoint_id)
+        waypoint_position = self.waypoint_position_tuple(waypoint)
+        if waypoint_position is None:
+            return False
+        dx = float(self.current_pose.position.x) - float(waypoint_position[0])
+        dy = float(self.current_pose.position.y) - float(waypoint_position[1])
+        return math.hypot(dx, dy) <= max(0.0, float(tolerance_m))
+
+    def should_complete_first_task_without_navigation(self) -> bool:
+        """判断首个 task 是否可以不下发 goal、直接进入到达流程。
+
+        只有当前段没有前置 transit 时才允许快速完成首 task：
+        如果首 task 前面配置了 transit，仍必须交给 NavigateThroughPoses 执行，
+        避免为了“当前位置离 task 很近”而漏发中间 transit 的 waypoint_passed。
+        """
+        if not self.active_segment or self.current_target_task_index != 0:
+            return False
+        if self.active_segment.get("transit_waypoint_ids", []):
+            return False
+        return self.is_current_pose_near_route_waypoint(
+            self.current_target_task_id,
+            self.route_task_first_task_reached_tolerance_m
+        )
+
+    def handle_start_route_task(self, command_data: Dict[str, Any], request_data: Dict[str, Any]):
+        """处理 start_route_task 命令，初始化 route task 并启动首段 through 导航。"""
+        if self.active_route_task is not None:
+            self.send_route_task_ack(
+                "start_route_task", "error", "route task already running",
+                command_data, error_code="route_task_already_running"
+            )
+            return
+
+        if self.is_navigation_active():
+            self.send_route_task_ack(
+                "start_route_task", "error", "navigation is busy",
+                command_data, error_code="navigation_busy"
+            )
+            return
+
+        # route task 启动是后续所有事件和状态摘要的源头。
+        # 这里先统一归一化 ID，避免 active_route_task 保存 "None" 或带首尾空格的业务 ID。
+        task_session_id = self.route_task_id(command_data.get("task_session_id"))
+        route_id = self.route_task_id(command_data.get("route_id"))
+        request_message_id = self.route_task_id(command_data.get("request_message_id"))
+        command_data["task_session_id"] = task_session_id
+        command_data["route_id"] = route_id
+        command_data["request_message_id"] = request_message_id
+
+        # 状态机层做二次必填保护：即使有其它节点绕过 dynamic_waypoints_manager，
+        # 也不能让空 task_session_id / route_id 的 route task 进入运行态。
+        if not task_session_id:
+            self.send_route_task_ack(
+                "start_route_task", "error", "task_session_id is required",
+                command_data, error_code="missing_task_session_id"
+            )
+            return
+        if not route_id:
+            self.send_route_task_ack(
+                "start_route_task", "error", "route_id is required",
+                command_data, error_code="missing_route_id"
+            )
+            return
+
+        route_waypoints = command_data.get("route_waypoints", [])
+        normalized_waypoints, error_code, message = self.normalize_route_task_waypoints(route_waypoints)
+        if error_code:
+            self.send_route_task_ack("start_route_task", "error", message, command_data, error_code=error_code)
+            return
+
+        self.route_task_version += 1
+        self.active_goal_generation = 0
+        self.current_route_task_goal_generation = 0
+        self.active_route_task = {
+            "task_session_id": task_session_id,
+            "route_id": route_id,
+            "request_message_id": request_message_id,
+            "route_waypoints": normalized_waypoints,
+            "started_at": time.time(),
+            "route_task_version": self.route_task_version
+        }
+        self.master_route_task_ids = self.build_master_route_task_ids(normalized_waypoints)
+        self.completed_task_ids = []
+        self.skipped_task_ids = []
+        self.current_anchor_task_id = ""
+        self.current_anchor_task_index = -1
+        self.current_target_task_index = 0
+        self.current_target_task_id = self.master_route_task_ids[0]
+        self.last_completed_broadcast = {
+            "task_session_id": "",
+            "waypoint_id": "",
+            "broadcast_id": ""
+        }
+
+        first_segment, segment_error = self.build_first_active_segment()
+        if segment_error:
+            self.send_route_task_ack("start_route_task", "error", segment_error, command_data, error_code="invalid_route_waypoints")
+            self.reset_route_task_state()
+            return
+        self.active_segment = first_segment
+
+        if self.should_complete_first_task_without_navigation():
+            self.current_state = NavigationState.EXECUTING
+            self.current_detailed_state = "ROUTE_TASK_FIRST_TASK_ALREADY_REACHED"
+            # 首 task 已在附近时不会真正下发 through goal，但 APP 仍会进入 route task 执行流。
+            # 这里补齐普通 through 段会设置的运行态字段，保证等待播报期间的
+            # navigation_mode 和 navigation_duration 与正常首段执行路径一致。
+            self.current_navigation_mode = NavigationMode.MULTI_POINT
+            self.navigation_start_time = time.time()
+            self.send_route_task_ack(
+                "start_route_task", "success", "first route task waypoint already reached",
+                command_data, result_reason="first_task_already_reached"
+            )
+            self.handle_target_task_arrived()
+            return
+
+        if not self.start_active_segment_navigation():
+            self.cleanup_route_task_segment_start_failure()
+            return
+
+        self.send_route_task_ack(
+            "start_route_task", "success", "route task accepted and first through segment started",
+            command_data
+        )
+
+    def cancel_current_route_goal_safely(self, reason: str = "route_task"):
+        """安全取消当前 route task through goal。
+
+        route task 不能直接复用普通 cancel_navigation()：
+        普通 cancel 回调会无条件清理 current_goal_handle，若 APP 很快启动新路线，
+        旧 cancel 回调可能晚于新 goal response 返回，从而把新 goal handle 误置空。
+        这里捕获“被取消的旧 goal handle”，回调里只允许清理同一个旧对象，
+        用于 jump 重规划、route task 失败清理等所有 route task 专属取消场景。
+        """
+        goal_handle = self.current_goal_handle
+        cancel_generation = self.current_route_task_goal_generation
+        if not goal_handle:
+            self.get_logger().info(f"route task {reason} 无旧 through goal 需要取消")
+            return
+
+        # 先让旧 result callback 失效；jump 场景下随后 start_active_segment_navigation 会写入新的 generation。
+        # 失败清理场景下 reset_route_task_state() 会清空运行态，新旧回调也都不能再推进任务。
+        self.current_route_task_goal_generation = -1
+        try:
+            future = goal_handle.cancel_goal_async()
+            future.add_done_callback(
+                lambda cancel_future, old_goal_handle=goal_handle, old_generation=cancel_generation: (
+                    self.route_task_cancel_callback(cancel_future, old_goal_handle, old_generation)
+                )
+            )
+            self.get_logger().info(
+                f"route task {reason} 已发送旧 through goal 取消请求: generation={cancel_generation}"
+            )
+        except Exception as exc:
+            self.get_logger().warning(f"route task {reason} 取消旧 through goal 失败: {exc}")
+
+    def cancel_current_route_goal_for_replan(self):
+        """为 route task jump 重规划取消旧 through goal。
+
+        这个包装函数保留 jump 语义，实际取消逻辑统一走 cancel_current_route_goal_safely()。
+        """
+        self.cancel_current_route_goal_safely("jump_replan")
+
+    def route_task_cancel_callback(self, future, old_goal_handle, old_generation: int):
+        """处理 route task 专用取消回调，避免旧取消结果污染新 through goal。"""
+        try:
+            response = future.result()
+            if response.return_code != CancelGoal.Response.ERROR_NONE:
+                self.get_logger().warning(
+                    f"route task 旧 through goal 取消未被接受: generation={old_generation}, "
+                    f"return_code={response.return_code}"
+                )
+                return
+
+            if self.current_goal_handle is old_goal_handle:
+                # 只有当前仍然指向旧 goal 时才清空；如果新 goal 已经写入，这里绝不覆盖。
+                self.current_goal_handle = None
+                if self.route_task_goal_handle is old_goal_handle:
+                    self.route_task_goal_handle = None
+            self.get_logger().info(f"route task 旧 through goal 已取消: generation={old_generation}")
+        except Exception as exc:
+            self.get_logger().warning(f"route task 旧 through goal 取消回调处理失败: {exc}")
+
+    def handle_jump_to_waypoint(self, command_data: Dict[str, Any], request_data: Dict[str, Any]):
+        """处理 jump_to_waypoint 命令。
+
+        所有合法性校验和新段重建都先在本地变量中完成；
+        只有确认合法后才会取消旧 goal、清理等待播报状态并替换 active_segment。
+        """
+        if self.active_route_task is None:
+            self.send_route_task_ack(
+                "jump_to_waypoint", "error", "route task is not running",
+                command_data, error_code="route_task_not_running"
+            )
+            return
+
+        # route task 命令 ID 统一走 route_task_id()，避免 None 被转成字符串 "None"。
+        task_session_id = self.route_task_id(command_data.get("task_session_id"))
+        if task_session_id != self.active_route_task.get("task_session_id", ""):
+            self.send_route_task_ack(
+                "jump_to_waypoint", "error", "invalid task session",
+                command_data, error_code="invalid_task_session"
+            )
+            return
+
+        target_waypoint_id = self.route_task_id(command_data.get("target_waypoint_id"))
+        target_waypoint = self.find_route_waypoint_by_id(target_waypoint_id)
+        if not target_waypoint:
+            self.send_route_task_ack(
+                "jump_to_waypoint", "error", "target waypoint not found",
+                command_data, error_code="invalid_target_waypoint"
+            )
+            return
+        if target_waypoint.get("waypoint_role") != "task":
+            self.send_route_task_ack(
+                "jump_to_waypoint", "error", "target waypoint is not task",
+                command_data, error_code="target_waypoint_not_task"
+            )
+            return
+
+        if target_waypoint_id == self.current_target_task_id:
+            self.send_route_task_ack(
+                "jump_to_waypoint", "success", "target is already current route task target",
+                command_data, result_reason="already_current_target"
+            )
+            return
+
+        # APP 可能把布尔值传成字符串，例如 "false"。
+        # 这里必须走 route_task_bool()，不能直接用 Python bool("false")，
+        # 否则字符串 "false" 会被误判为 True，导致本应拒绝的播报等待 jump 被错误放行。
+        interrupt_broadcast = self.route_task_bool(
+            command_data.get("interrupt_broadcast", self.route_task_default_interrupt_broadcast),
+            self.route_task_default_interrupt_broadcast
+        )
+        if self.awaiting_broadcast and not interrupt_broadcast:
+            self.send_route_task_ack(
+                "jump_to_waypoint", "error", "interrupt_broadcast=false is not supported",
+                command_data, error_code="interrupt_broadcast_false_not_supported"
+            )
+            return
+
+        new_segment, new_skipped_task_ids, rebuild_error = self.rebuild_segment_from_current_progress(target_waypoint_id)
+        if rebuild_error:
+            self.send_route_task_ack(
+                "jump_to_waypoint", "error", rebuild_error,
+                command_data, error_code="invalid_target_waypoint"
+            )
+            return
+
+        interrupted_broadcast = {}
+        if self.awaiting_broadcast:
+            interrupted_broadcast = {
+                "waypoint_id": self.waiting_broadcast_waypoint_id,
+                "broadcast_id": self.waiting_broadcast_id
+            }
+            self.awaiting_broadcast = False
+            self.waiting_broadcast_waypoint_id = ""
+            self.waiting_broadcast_id = ""
+
+        if self.current_goal_handle:
+            self.cancel_current_route_goal_for_replan()
+
+        for skipped_task_id in new_skipped_task_ids:
+            if skipped_task_id not in self.skipped_task_ids and skipped_task_id not in self.completed_task_ids:
+                self.skipped_task_ids.append(skipped_task_id)
+
+        self.current_target_task_id = target_waypoint_id
+        self.current_target_task_index = self.master_route_task_ids.index(target_waypoint_id)
+        self.active_segment = new_segment
+        # jump 后的 anchor 必须来自重建段时解析出的“当前进度锚点”。
+        # 这样正在去 15 的路上跳走时不会把未到达的 15 错写为锚点；
+        # 但已经在 15 等播报时，锚点会正确记录为 15。
+        self.current_anchor_task_id = self.active_segment.get("segment_start_task_id", "")
+        self.current_anchor_task_index = self.resolve_route_task_index(self.current_anchor_task_id)
+        self.current_detailed_state = "JUMP_REPLANNING"
+
+        if not self.start_active_segment_navigation("jump_to_waypoint", command_data):
+            # start_active_segment_navigation() 内部可能已经进入 route task 失败流程
+            # 并清理 active_route_task，例如 send_goal_async 抛异常时会发布 send_goal_failed。
+            # 这里仅在任务仍然存在时补发 jump 语义的失败，避免 APP 收到两份 navigation_failed。
+            if self.active_route_task is not None:
+                self.handle_route_task_navigation_failed(
+                    "jump through segment start failed",
+                    failure_code="jump_segment_start_failed"
+                )
+            return
+
+        # 只有新 through goal 已经成功发起后，才发布 jump_updated。
+        # 这样 APP 不会先切到新执行段 UI，随后又马上收到新段启动失败事件。
+        # APP 收到 jump_updated 后，应切换当前目标 task、高亮新 active_segment，
+        # 清理旧目标高亮；若 interrupted_broadcast 非空，还应退出旧播报等待 UI。
+        self.publish_route_task_event("jump_updated", {
+            "segment_id": self.active_segment.get("segment_id", ""),
+            "target_waypoint_id": target_waypoint_id,
+            "segment_direction": self.active_segment.get("segment_direction", ""),
+            # jump_updated 是 APP 更新当前执行段 UI 的依据，列表字段同样使用快照，
+            # 避免后续继续追加 skipped task 或替换 active_segment 时影响本次事件。
+            "execution_waypoint_ids": list(self.active_segment.get("execution_waypoint_ids", [])),
+            "skipped_task_ids": list(self.skipped_task_ids),
+            "interrupt_broadcast": interrupt_broadcast,
+            "interrupted_broadcast": interrupted_broadcast
+        })
+
+        self.send_route_task_ack(
+            "jump_to_waypoint", "success", "jump request accepted",
+            command_data
+        )
+
+    def handle_broadcast_finished(self, command_data: Dict[str, Any], request_data: Dict[str, Any]):
+        """处理 broadcast_finished 命令，校验播报上下文并推进 task 完成。"""
+        if self.active_route_task is None:
+            self.send_route_task_ack(
+                "broadcast_finished", "error", "route task is not running",
+                command_data, error_code="route_task_not_running"
+            )
+            return
+        # 播报回执中的三个 ID 都要和等待播报上下文做精确比较。
+        # 统一使用 route_task_id()，可以同时处理数字 ID、首尾空格和 None。
+        task_session_id = self.route_task_id(command_data.get("task_session_id"))
+        waypoint_id = self.route_task_id(command_data.get("waypoint_id"))
+        broadcast_id = self.route_task_id(command_data.get("broadcast_id"))
+        # APP 回传播报结果时可能出现 "Completed" 或 " completed " 这类大小写/空格差异。
+        # 这里不能写成 `command_data.get(...) or "completed"`：显式空字符串代表 APP
+        # 回传了无效结果，必须返回 unsupported_broadcast_result，不能被误当成缺失字段自动完成。
+        raw_broadcast_result = command_data.get("broadcast_result", "completed")
+        if raw_broadcast_result is None:
+            raw_broadcast_result = "completed"
+        broadcast_result = str(raw_broadcast_result).strip().lower()
+
+        # 先单独校验 task_session_id，避免把“会话不匹配”混进 broadcast_context_mismatch。
+        # APP 可以据此提示用户刷新路线任务状态，而不是误以为只是播报点位上下文错误。
+        if task_session_id != self.active_route_task.get("task_session_id", ""):
+            self.send_route_task_ack(
+                "broadcast_finished", "error", "invalid task session",
+                command_data, error_code="invalid_task_session"
+            )
+            return
+
+        if broadcast_result != "completed":
+            self.send_route_task_ack(
+                "broadcast_finished", "error", "unsupported broadcast result",
+                command_data, error_code="unsupported_broadcast_result"
+            )
+            return
+
+        last_broadcast = self.last_completed_broadcast or {}
+        if (
+            task_session_id == last_broadcast.get("task_session_id", "") and
+            waypoint_id == last_broadcast.get("waypoint_id", "") and
+            broadcast_id == last_broadcast.get("broadcast_id", "")
+        ):
+            self.send_route_task_ack(
+                "broadcast_finished", "success", "duplicate broadcast_finished ignored",
+                command_data, result_reason="duplicate_broadcast_finished"
+            )
+            return
+
+        if not self.awaiting_broadcast:
+            self.send_route_task_ack(
+                "broadcast_finished", "error", "route task is not waiting for broadcast",
+                command_data, error_code="broadcast_not_waiting"
+            )
+            return
+
+        if waypoint_id != self.waiting_broadcast_waypoint_id or broadcast_id != self.waiting_broadcast_id:
+            self.send_route_task_ack(
+                "broadcast_finished", "error", "broadcast context mismatch",
+                command_data, error_code="broadcast_context_mismatch"
+            )
+            return
+
+        self.last_completed_broadcast = {
+            "task_session_id": task_session_id,
+            "waypoint_id": waypoint_id,
+            "broadcast_id": broadcast_id
+        }
+        self.send_route_task_ack(
+            "broadcast_finished", "success", "broadcast completion accepted",
+            command_data
+        )
+        # APP 收到 broadcast_finished success ack 后，只能说明播报完成回执已被 ROS 接受；
+        # 单个 task 是否完成、是否进入下一段或整条路线是否结束，要继续消费随后发布的
+        # task_waypoint_completed 或 route_task_completed 事件，不能只靠这个 ack 更新最终进度。
+        self.finalize_task_waypoint_completion(waypoint_id)
     
     def handle_start_single_navigation(self, command_data: Dict[str, Any], request_data: Dict[str, Any]):
         """处理单点导航"""
@@ -1264,7 +2984,19 @@ class NavigationStateManager(Node):
                 waypoint_data = self.find_waypoint_data_by_id(waypoint_id)
             
                 if not waypoint_data:                
-                   self.send_acknowledgment("error", f"点位 '{waypoint_id}' 不存在")
+                   # 旧普通导航错误也会被 data_integration 包装成 navigation_command_result。
+                   # 因此这里必须使用明确 ack_type + status=error + error_code，
+                   # 不能再把通用错误标识放到 ack_type 后直接跟错误文案，否则会污染 status 字段。
+                   self.send_acknowledgment(
+                       "start_single_navigation",
+                       "error",
+                       f"点位 '{waypoint_id}' 不存在",
+                       {
+                           "error_code": "waypoint_not_found",
+                           "command_type": "start_single_navigation",
+                           "waypoint_id": waypoint_id,
+                       }
+                   )
                    return
             
             # 设置导航状态
@@ -1308,7 +3040,16 @@ class NavigationStateManager(Node):
         # 获取点位ID列表
             waypoint_ids = command_data.get("waypoint_ids", [])
             if not waypoint_ids:
-                self.send_acknowledgment("error", "点位列表不能为空")
+                # 多点导航的入参校验失败同样走标准旧 ack 结构，方便 APP 统一弹窗和埋点。
+                self.send_acknowledgment(
+                    "start_multi_point_navigation",
+                    "error",
+                    "点位列表不能为空",
+                    {
+                        "error_code": "empty_waypoint_list",
+                        "command_type": "start_multi_point_navigation",
+                    }
+                )
                 return
         
         # 验证所有点位是否存在
@@ -1316,7 +3057,16 @@ class NavigationStateManager(Node):
             for wp_id in waypoint_ids:
                 waypoint_data = self.find_waypoint_data_by_id(wp_id)
                 if not waypoint_data:
-                    self.send_acknowledgment("error", f"点位 '{wp_id}' 不存在")
+                    self.send_acknowledgment(
+                        "start_multi_point_navigation",
+                        "error",
+                        f"点位 '{wp_id}' 不存在",
+                        {
+                            "error_code": "waypoint_not_found",
+                            "command_type": "start_multi_point_navigation",
+                            "waypoint_id": wp_id,
+                        }
+                    )
                     return
                 valid_waypoints.append(waypoint_data)
           
@@ -1366,7 +3116,15 @@ class NavigationStateManager(Node):
                 exhibition_points = self.waypoints_data.get("exhibition_point", {})
             
                 if not exhibition_points:
-                   self.send_acknowledgment("error", "没有可用的展台点位")
+                   self.send_acknowledgment(
+                       "start_exhibition_navigation",
+                       "error",
+                       "没有可用的展台点位",
+                       {
+                           "error_code": "empty_exhibition_points",
+                           "command_type": "start_exhibition_navigation",
+                       }
+                   )
                    return
             
             # 提取点位ID列表
@@ -2259,9 +4017,44 @@ class NavigationStateManager(Node):
         if self.current_state != NavigationState.EXECUTING:
             return
 
+        self.check_route_task_feedback_timeout()
+
         # 记录距离，用于 APP 端的 UI 进度条显示
         if self.current_pose and self.current_waypoint:
             self.last_known_distance = self.calculate_distance_to_waypoint()
+
+    def check_route_task_feedback_timeout(self):
+        """检查 route task through feedback 是否长时间静默。
+
+        这里只检查 `ROUTE_TASK_SEGMENT_NAVIGATING`：
+        1. 该阶段应该由 NavigateThroughPoses 持续反馈；
+        2. `WAITING_BROADCAST` 阶段已经到达目标 task，等待的是 APP 播报回执，不应按 Nav2 feedback 超时处理；
+        3. 超时后进入 route task 专用失败流程，避免旧普通导航失败策略自动 skip。
+        """
+        if self.active_route_task is None:
+            return
+        if self.current_detailed_state != "ROUTE_TASK_SEGMENT_NAVIGATING":
+            return
+        if not self.current_goal_handle:
+            return
+        timeout_sec = max(0.0, float(self.route_task_nav2_feedback_timeout_sec))
+        if timeout_sec <= 0:
+            return
+        if self.route_task_last_feedback_time <= 0:
+            return
+
+        feedback_age = time.time() - self.route_task_last_feedback_time
+        if feedback_age <= timeout_sec:
+            return
+
+        self.get_logger().error(
+            f"route task through feedback 超时: age={feedback_age:.2f}s, "
+            f"timeout={timeout_sec:.2f}s, segment_id={self.active_segment.get('segment_id', '') if self.active_segment else ''}"
+        )
+        self.handle_route_task_navigation_failed(
+            "NavigateThroughPoses feedback timeout",
+            failure_code="feedback_timeout"
+        )
     
     def check_timeout(self):
         """检查导航超时"""
@@ -2363,7 +4156,7 @@ class NavigationStateManager(Node):
         completion_context = {
             "completed_waypoints": self.total_waypoints,
             "total_waypoints": self.total_waypoints,
-            "navigation_mode": self.current_navigation_mode.value if self.current_navigation_mode else None,
+            "navigation_mode": self.current_navigation_mode_value(),
             "skipped_waypoints": self.skipped_waypoints
         }
         
@@ -2398,7 +4191,7 @@ class NavigationStateManager(Node):
             "total_waypoints": self.total_waypoints,
             "remaining_waypoint_ids": remaining_waypoint_ids,
             "current_sequence_id": self.current_sequence_id,
-            "navigation_mode": self.current_navigation_mode.value if self.current_navigation_mode else None,
+            "navigation_mode": self.current_navigation_mode_value(),
             "skipped_waypoints": self.skipped_waypoints,
             "available_actions": [
                 "retry_failed_waypoint",
@@ -2603,7 +4396,7 @@ class NavigationStateManager(Node):
                 "next_waypoint": next_context,
                 "selected_prior": selected_prior_meta,
                 "current_sequence_id": self.current_sequence_id,
-                "navigation_mode": self.current_navigation_mode.value if self.current_navigation_mode else None,
+                "navigation_mode": self.current_navigation_mode_value(),
                 "total_waypoints": self.total_waypoints,
             },
         }
@@ -2900,7 +4693,7 @@ class NavigationStateManager(Node):
                 "event_data": event_data,
                 "timestamp": time.time(),
                 "current_state": self.current_state.value,
-                "navigation_mode": self.current_navigation_mode.value if self.current_navigation_mode else None,
+                "navigation_mode": self.current_navigation_mode_value(),
                 "sequence_id": self.current_sequence_id
             }
             
@@ -2944,7 +4737,7 @@ class NavigationStateManager(Node):
         status_summary = {
             "timestamp": time.time(),
             "current_state": self.current_state.value,
-            "navigation_mode": self.current_navigation_mode.value if self.current_navigation_mode else None,
+            "navigation_mode": self.current_navigation_mode_value(),
             "sequence_id": self.current_sequence_id,
             "current_waypoint_index": self.current_waypoint_index,
             "total_waypoints": self.total_waypoints,
@@ -3018,6 +4811,10 @@ class NavigationStateManager(Node):
                     "z": self.current_velocity.angular.z
                 }
             }
+
+        if self.active_route_task is not None:
+            # 周期状态补充 route task 上下文，帮助 APP/调试端在没有新事件时也能知道当前路线任务进度。
+            status_summary["route_task"] = self.build_route_task_status_summary()
         
         return status_summary
     

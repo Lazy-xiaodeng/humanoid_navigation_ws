@@ -720,33 +720,50 @@ class UnifiedDataIntegrationNode(Node):
             status = ack_data.get("status", "")
             message = ack_data.get("message", "")
     
-            # 使用统一消息格式
+            # navigation_command_result 是导航状态事件，不再作为顶层 data_type。
+            # 这样 APP 可以统一从 navigation_status 数据流里消费所有导航事件。
             push_msg = self.create_base_message(
                message_type="push",
-               data_type="navigation_command_result",
+               data_type="navigation_status",
                source="data_integration",
                destination="all"
             )
         
-            # 填充业务数据。保留 navigation_state_manager_recoverable.py
-            # 附加的 recoverable / failed_waypoint / available_actions 等字段。
-            push_msg["data"] = dict(ack_data)
-            push_msg["data"].setdefault("ack_type", ack_type)
-            push_msg["data"].setdefault("status", status)
-            push_msg["data"].setdefault("message", message)
-            push_msg["data"].setdefault("timestamp", time.time())
+            # 兼容旧 /navigation/acknowledgments 话题：
+            # 旧状态机会把 ack_type/status/message 等字段直接发出来；
+            # 这里不丢弃旧字段，而是整体放进 event_data，并补齐新协议需要的追踪字段。
+            event_data = dict(ack_data)
+            event_data.setdefault("event_id", f"nav_ack_{int(time.time() * 1000)}")
+            event_data.setdefault("request_message_id", ack_data.get("request_message_id", ""))
+            event_data.setdefault("ack_type", ack_type)
+            event_data.setdefault("command_type", ack_data.get("command_type", ack_type))
+            event_data.setdefault("status", status)
+            event_data.setdefault("result_reason", ack_data.get("result_reason", ""))
+            event_data.setdefault("error_code", ack_data.get("error_code", ""))
+            event_data.setdefault("message", message)
+            event_data.setdefault("timestamp", time.time())
+            # 业务错误码优先使用状态机透传的 error_code。
+            # 如果仍然用固定 nav_error 或 ack_type，APP 的弹窗/埋点就无法区分
+            # route_task_active、navigation_busy、invalid_target_waypoint 等具体原因。
+            business_error_code = event_data.get("error_code") or ack_type or "nav_error"
+            # 新协议统一要求业务 ack 的识别方式为：
+            # data_type=navigation_status + data.event_type=navigation_command_result。
+            push_msg["data"] = {
+                "event_type": "navigation_command_result",
+                "event_data": event_data
+            }
         
             # 填充元数据
             push_msg["metadata"]["status"] = status
             if status == "error":
-                push_msg["metadata"]["error_code"] = "nav_error"
+                push_msg["metadata"]["error_code"] = business_error_code
                 push_msg["metadata"]["error_message"] = message
                 self.publish_system_exception(
                     category="navigation",
                     severity="error",
                     title="导航异常",
                     message=message or "导航命令执行失败",
-                    code=ack_type or "nav_error",
+                    code=business_error_code,
                     source_event="navigation_ack",
                     details=ack_data,
                 )
@@ -756,7 +773,7 @@ class UnifiedDataIntegrationNode(Node):
             push_str.data = json.dumps(push_msg, ensure_ascii=False)
             self.push_message_pub.publish(push_str)
     
-            self.get_logger().info(f"������ 转发导航确认: {ack_type} - {status}")
+            self.get_logger().info(f"转发导航确认: {ack_type} - {status}")
     
         except Exception as e:
             self.get_logger().error(f'❌ 处理导航确认消息错误: {e}')
@@ -795,28 +812,49 @@ class UnifiedDataIntegrationNode(Node):
         }:
             return
 
+        # /navigation/status 的离散事件一般是 {"event_type": ..., "event_data": {...}}。
+        # 旧事件也可能把 reason/error_code 等字段直接放在顶层。这里先统一出 event_payload：
+        # route task 的 failure_code、route_id、current_target_task_id 都在 event_data 里，
+        # 如果继续只读顶层，系统异常会把路线任务失败误判成普通导航失败。
+        event_data = status_data.get("event_data", {})
+        event_payload = event_data if isinstance(event_data, dict) else status_data
         message = (
-            status_data.get("message")
+            event_payload.get("message")
+            or event_payload.get("reason")
+            or event_payload.get("error_message")
+            or status_data.get("message")
             or status_data.get("reason")
             or status_data.get("error_message")
             or event_type
         )
         title = "导航异常"
         category = "navigation"
+        route_task_failure_code = event_payload.get("failure_code") or event_type
         if "localization" in event_type:
             title = "定位恢复异常"
             category = "localization"
         elif event_type == "navigation_obstacle_blocked":
             title = "导航受阻"
+        elif event_type == "navigation_failed" and event_payload.get("route_task"):
+            # route task 失败仍沿用 navigation_failed 事件，但 APP 展示要能看出这是路线任务失败。
+            # 目标 task 和路线 ID 放进文案，现场人员不用展开 details 也能快速判断失败位置。
+            # failure_code 是状态机给 APP/日志系统的机器可读分类，用作异常 code 便于前端分流展示。
+            title = "路线任务导航失败"
+            route_id = event_payload.get("route_id", "")
+            target_task_id = event_payload.get("current_target_task_id", "")
+            if target_task_id:
+                message = f"路线任务在目标点 {target_task_id} 导航失败：{message}"
+            if route_id:
+                message = f"{message}（路线 {route_id}）"
 
         self.publish_system_exception(
             category=category,
             severity="error" if event_type != "navigation_obstacle_blocked" else "warning",
             title=title,
             message=message,
-            code=event_type,
+            code=route_task_failure_code if event_payload.get("route_task") else event_type,
             source_event=event_type,
-            details=status_data,
+            details=event_payload if event_payload.get("route_task") else status_data,
         )
 
     @staticmethod
@@ -843,7 +881,13 @@ class UnifiedDataIntegrationNode(Node):
             "navigation_localization_manual_override",
             "navigation_localization_recovered",
             "navigation_localization_resume_waiting",
-            "navigation_localization_resume_failed"
+            "navigation_localization_resume_failed",
+            "navigation_command_result",
+            "broadcast_requested",
+            "waypoint_passed",
+            "jump_updated",
+            "task_waypoint_completed",
+            "route_task_completed",
         }
 
     @staticmethod

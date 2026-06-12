@@ -13,6 +13,8 @@
   <depend>geometry_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>nav2_msgs</depend>
+  <!-- 路线任务通过 GoalStatus 判断 NavigateThroughPoses 结果，并通过 CancelGoal 取消旧 through goal。 -->
+  <depend>action_msgs</depend>
   <depend>tf2_ros_py</depend>
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>

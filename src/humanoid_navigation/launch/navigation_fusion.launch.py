@@ -79,6 +79,21 @@ def generate_launch_description():
             'localization_resume_reverse_enabled': True,
             'localization_resume_reverse_max_distance_m': 2.0,
             'localization_resume_reverse_rear_angle_deg': 70.0,
+            # 路线任务参数：首个 task 的近距离判定阈值。
+            # 如果机器人启动时已经在首个 task 附近，仍会进入 task 完成/播报流程，不额外生成虚拟起点。
+            'route_task.first_task_reached_tolerance_m': 0.4,
+            # 路线任务参数：through feedback 缺少 number_of_poses_remaining 时，
+            # 用当前机器人 pose 到 transit 的水平距离判断 waypoint_passed。
+            'route_task.transit_passed_tolerance_m': 0.5,
+            # 路线任务参数：允许“上一执行点 -> transit”投影越过终点时补判 transit 已经过，
+            # 用来兜底机器人擦边经过 transit、但没有正好落入阈值圆的情况。
+            'route_task.transit_projection_passed_enabled': True,
+            # 路线任务参数：预留的 Nav2 feedback 超时阈值，后续如需监控 through feedback 中断可直接使用。
+            'route_task.nav2_feedback_timeout_sec': 3.0,
+            # 路线任务参数：jump 或停止时取消旧 goal 的等待阈值，避免旧回调污染新段。
+            'route_task.goal_cancel_timeout_sec': 2.0,
+            # 路线任务参数：首版只支持 jump 打断播报，false 会返回明确错误。
+            'route_task.default_interrupt_broadcast': True,
             'reverse_navigation_bt_xml': PathJoinSubstitution([
                 pkg_humanoid_navigation2, 'behavior_tree', 'navigate_reverse_xy_then_yaw.xml'
             ])

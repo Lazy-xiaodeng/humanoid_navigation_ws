@@ -208,8 +208,14 @@ class DynamicWaypointsManager(Node):
             
             self.get_logger().info(f"收到APP导航命令: {command_type} - 转发给状态管理器")
             
-            # 立即响应APP，表示请求已接收
-            #self.send_app_response("success", f"导航命令已接收: {command_type}")
+            # 桥接层只做最小字段完整性校验，避免明显坏包进入状态机。
+            # jump 合法性、task/transit 语义、播报上下文匹配仍由 navigation_state_manager 负责。
+            if not self.validate_navigation_command(command_data):
+                self.send_app_response("error", f"导航命令校验失败: {command_type}")
+                return
+
+            # 所有业务 ID 在进入状态机前统一为字符串，避免 15 和 "15" 比较不相等。
+            command_data = self.normalize_navigation_command(command_data)
 
             # 转发导航请求给状态管理器
             self.send_navigation_request(command_data)
@@ -245,12 +251,82 @@ class DynamicWaypointsManager(Node):
                     if not exhibition_points:
                         self.get_logger().error("展台导航验证失败: 没有设置展台点")
                         return False
+
+            elif command_type == "start_route_task":
+                # route task 的业务 ack 统一由 navigation_state_manager 通过
+                # navigation_command_result 返回。桥接层不再硬拒绝缺字段，
+                # 只记录明显问题并继续转发，让状态机返回 missing_task_session_id、
+                # missing_route_id、invalid_route_waypoints 等精确错误码。
+                # 这样 APP 不需要同时等待 waypoint_response 和 navigation_command_result 两套业务结果。
+                if not command_data.get("task_session_id"):
+                    self.get_logger().warning("路线任务启动字段缺失: task_session_id，继续转发给状态机返回业务 ack")
+                if not command_data.get("route_id"):
+                    self.get_logger().warning("路线任务启动字段缺失: route_id，继续转发给状态机返回业务 ack")
+                route_waypoints = command_data.get("route_waypoints", [])
+                if not isinstance(route_waypoints, list) or not route_waypoints:
+                    self.get_logger().warning("路线任务启动字段异常: route_waypoints 为空或不是数组，继续转发给状态机返回业务 ack")
+
+            elif command_type == "jump_to_waypoint":
+                # jump 的会话、目标点、是否允许跳到该点，都由状态机统一返回业务 ack。
+                # 桥接层只做日志提示，避免字段缺失时 APP 收不到 navigation_command_result。
+                if not command_data.get("task_session_id") or not command_data.get("target_waypoint_id"):
+                    self.get_logger().warning("路线任务跳转字段缺失: task_session_id 或 target_waypoint_id，继续转发给状态机返回业务 ack")
+
+            elif command_type == "broadcast_finished":
+                # 播报完成回执也交给状态机做严格上下文匹配。
+                # 即使缺少字段，也继续转发，让状态机通过 navigation_command_result
+                # 返回 invalid_task_session 或 broadcast_context_mismatch 等业务错误码。
+                required_fields = ("task_session_id", "waypoint_id", "broadcast_id")
+                missing_fields = [field for field in required_fields if not command_data.get(field)]
+                if missing_fields:
+                    self.get_logger().warning(f"播报完成字段缺失: {missing_fields}，继续转发给状态机返回业务 ack")
             
             return True
             
         except Exception as e:
             self.get_logger().error(f"验证导航命令错误: {e}")
             return False
+
+    def normalize_navigation_command(self, command_data: Dict[str, Any]) -> Dict[str, Any]:
+        """在转发给状态机前归一化导航命令 ID 字段。
+
+        APP 可能把 waypoint_id 传成数字，也可能传成字符串。状态机内部统一按字符串比较，
+        这里提前归一化可以降低 completed/skipped/jump 匹配时的类型风险。
+        """
+        normalized = dict(command_data)
+
+        # 顶层 ID 字段统一转字符串；字段不存在时不主动补业务默认值。
+        for field in (
+            "waypoint_id",
+            "target_waypoint_id",
+            "task_session_id",
+            "route_id",
+            "broadcast_id",
+            "request_message_id",
+        ):
+            if field in normalized and normalized[field] is not None:
+                normalized[field] = str(normalized[field])
+
+        if "waypoint_ids" in normalized and isinstance(normalized["waypoint_ids"], list):
+            # 兼容旧多点导航，避免旧 waypoint_ids 列表里混入数字 ID。
+            normalized["waypoint_ids"] = [str(waypoint_id) for waypoint_id in normalized["waypoint_ids"]]
+
+        route_waypoints = normalized.get("route_waypoints")
+        if isinstance(route_waypoints, list):
+            normalized_route_waypoints = []
+            for waypoint in route_waypoints:
+                if isinstance(waypoint, dict):
+                    # route_waypoints 是 APP 下发的完整路线，只复制并规范 waypoint_id，
+                    # 不在桥接层改 waypoint_role、need_broadcast、pose 等业务字段。
+                    normalized_waypoint = dict(waypoint)
+                    if normalized_waypoint.get("waypoint_id") is not None:
+                        normalized_waypoint["waypoint_id"] = str(normalized_waypoint["waypoint_id"])
+                    normalized_route_waypoints.append(normalized_waypoint)
+                else:
+                    normalized_route_waypoints.append(waypoint)
+            normalized["route_waypoints"] = normalized_route_waypoints
+
+        return normalized
     
     def send_navigation_request(self, command_data: Dict[str, Any]):
         """发送导航请求给状态管理器"""
