@@ -459,8 +459,8 @@ def percentile(values: list[float], q: float) -> float:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bag", default="/home/ubuntu/fast-lio-bags/hall_mapping")
-    parser.add_argument("--database", default="/home/ubuntu/humanoid_ws/src/humanoid_navigation2/maps/hall_sc_fastlio_registered.bin")
-    parser.add_argument("--waypoints", default="/home/ubuntu/humanoid_ws/data/dynamic_waypoints.json")
+    parser.add_argument("--database", default="/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall_sc_fastlio_registered.bin")
+    parser.add_argument("--waypoints", default="/home/ubuntu/software/Todesk/Files/humanoid_ws/data/dynamic_waypoints.json")
     parser.add_argument("--waypoint-group", default="latest", help="latest, earliest, or ids:id1,id2,...")
     parser.add_argument("--output-dir", default="")
     parser.add_argument("--cloud-topic", default="/fast_lio/cloud_registered")
@@ -504,7 +504,7 @@ def main() -> None:
     args = parser.parse_args()
 
     started = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = Path(args.output_dir or f"/home/ubuntu/humanoid_ws/debug_monitor/scancontext_bag_validation_{started}")
+    output_dir = Path(args.output_dir or f"/home/ubuntu/software/Todesk/Files/humanoid_ws/debug_monitor/scancontext_bag_validation_{started}")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     cfg, keyframes = load_database(Path(args.database), args)

@@ -13,7 +13,7 @@
     # 地图配置
     # ==========================================
     use_pcd_map: true
-    map_path: "/home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd"
+    map_path: "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd"
 
     # ==========================================
     # 全局搜索参数

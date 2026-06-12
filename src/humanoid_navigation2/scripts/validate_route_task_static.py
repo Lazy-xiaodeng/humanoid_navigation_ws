@@ -12,7 +12,29 @@ from pathlib import Path
 import sys
 
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
+def resolve_workspace_root() -> Path:
+    """定位源码工作区根目录。
+
+    源码路径运行时，脚本位于 `src/humanoid_navigation2/scripts`；
+    install 路径运行时，脚本位于 `install/.../share/humanoid_navigation2/scripts`。
+    后者没有固定的 `parents[3] -> workspace` 关系，因此优先使用当前工作目录，
+    再沿脚本路径向上寻找包含关键源码包的目录。
+    """
+    candidates = [Path.cwd()]
+    candidates.extend(Path(__file__).resolve().parents)
+    for candidate in candidates:
+        if (
+            (candidate / "src/humanoid_navigation/humanoid_navigation/navigation_state_manager.py").exists()
+            and (candidate / "src/humanoid_navigation2/scripts/validate_route_task_static.py").exists()
+        ):
+            return candidate
+    raise RuntimeError(
+        "无法定位源码工作区根目录。请在 humanoid_ws 根目录运行，"
+        "或使用源码路径 src/humanoid_navigation2/scripts/validate_route_task_static.py。"
+    )
+
+
+WORKSPACE_ROOT = resolve_workspace_root()
 
 
 def read_text(relative_path: str) -> str:
@@ -77,17 +99,21 @@ def main() -> int:
     navigation_package_xml = read_text("src/humanoid_navigation/package.xml")
     robot_real_launch = read_text("src/humanoid_bringup/launch/robot_real.launch.py")
     navigation_launch = read_text("src/humanoid_navigation/launch/navigation.launch.py")
-    fusion_launch = read_text("src/humanoid_navigation/launch/navigation_fusion.launch.py")
     fusion_sc_launch = read_text("src/humanoid_navigation/launch/navigation_fusion_sc.launch.py")
+    nav2_param_files = sorted((WORKSPACE_ROOT / "src/humanoid_navigation2/config").glob("nav2_params*.yaml"))
+    nav2_param_texts = {str(path.relative_to(WORKSPACE_ROOT)): path.read_text(encoding="utf-8") for path in nav2_param_files}
+    navigation2_launch = read_text("src/humanoid_navigation2/launch/navigation2.launch.py")
+    navigation2_robosense_launch = read_text("src/humanoid_navigation2/launch/navigation2_robosense_lidar.launch.py")
+    through_bt_xml = read_text("src/humanoid_navigation2/config/behavior_tree/navigate_through_poses_no_backup.xml")
     implementation_checklist = read_text("src/humanoid_navigation2/docs/路线任务改造函数级实施清单.md")
     data_integration_doc_section = extract_between(
         implementation_checklist,
         "### 6.9 `data_integration_node_recoverable.py`",
-        "### 6.10 `navigation_state_manager_recoverable.py`",
+        "### 6.10",
     )
     bridge_route_task_validation_body = extract_between(
         dynamic_waypoints,
-        'elif command_type == "start_route_task":',
+        'if command_type == "start_route_task":',
         "return True",
     )
     publish_event_body = extract_function_body(navigation_state, "publish_route_task_event")
@@ -100,34 +126,123 @@ def main() -> int:
     route_task_status_body = extract_function_body(navigation_state, "build_route_task_status_summary")
     reset_route_task_body = extract_function_body(navigation_state, "reset_route_task_state")
     normalize_route_waypoints_body = extract_function_body(navigation_state, "normalize_route_task_waypoints")
+    normalize_orientation_body = extract_function_body(navigation_state, "normalize_route_task_orientation")
     route_waypoint_pose_body = extract_function_body(navigation_state, "route_waypoint_to_pose_stamped")
     start_active_segment_body = extract_function_body(navigation_state, "start_active_segment_navigation")
     status_summary_body = extract_function_body(navigation_state, "get_current_status_summary")
     navigation_request_body = extract_function_body(navigation_state, "navigation_request_callback")
     navigation_command_body = extract_function_body(navigation_state, "handle_navigation_command")
     start_route_task_body = extract_function_body(navigation_state, "handle_start_route_task")
+    pause_route_task_body = extract_function_body(navigation_state, "handle_pause_route_task")
+    resume_route_task_body = extract_function_body(navigation_state, "handle_resume_route_task")
+    stop_route_task_body = extract_function_body(navigation_state, "handle_stop_route_task")
     navigation_status_callback_body = extract_function_body(data_integration, "navigation_status_callback")
     maybe_navigation_exception_body = extract_function_body(data_integration, "maybe_publish_navigation_exception")
     jump_body = extract_function_body(navigation_state, "handle_jump_to_waypoint")
     broadcast_finished_body = extract_function_body(navigation_state, "handle_broadcast_finished")
     route_task_id_body = extract_function_body(navigation_state, "route_task_id")
     route_task_bool_body = extract_function_body(navigation_state, "route_task_bool")
-    legacy_reject_body = extract_function_body(navigation_state, "reject_legacy_navigation_command_during_route_task")
     through_goal_response_body = extract_function_body(navigation_state, "route_task_through_goal_response_callback")
     through_feedback_body = extract_function_body(navigation_state, "route_task_through_feedback_callback")
     through_result_body = extract_function_body(navigation_state, "route_task_through_result_callback")
     resolve_feedback_body = extract_function_body(navigation_state, "resolve_transit_progress_from_feedback")
     resolve_pose_body = extract_function_body(navigation_state, "resolve_transit_progress_from_pose")
+    obstacle_wait_body = extract_function_body(navigation_state, "enter_obstacle_wait_state")
 
-    # through 主路径：首版验收目标必须是 NavigateThroughPoses，不能退回逐点 NavigateToPose 串行。
+    runtime_path_texts = {
+        "src/humanoid_navigation2/launch/navigation2.launch.py": navigation2_launch,
+        "src/humanoid_navigation2/launch/navigation2_robosense_lidar.launch.py": navigation2_robosense_launch,
+        "src/humanoid_navigation2/config/behavior_tree/navigate_through_poses_no_backup.xml": through_bt_xml,
+        "src/humanoid_navigation/humanoid_navigation/navigation_state_manager.py": navigation_state,
+        "src/humanoid_navigation/humanoid_navigation/dynamic_waypoints_manager.py": dynamic_waypoints,
+        "src/humanoid_websocket/humanoid_websocket/websocket_server.py": websocket_server,
+        "src/humanoid_websocket/humanoid_websocket/data_integration_node_recoverable.py": data_integration,
+        "src/humanoid_navigation/launch/navigation.launch.py": navigation_launch,
+        "src/humanoid_navigation/launch/navigation_fusion_sc.launch.py": fusion_sc_launch,
+        "src/humanoid_bringup/launch/robot_real.launch.py": robot_real_launch,
+    }
+    runtime_path_texts.update(nav2_param_texts)
+    for runtime_path, runtime_text in runtime_path_texts.items():
+        require_not_contains(
+            runtime_text,
+            "/home/ubuntu/humanoid_ws",
+            f"{runtime_path} 不应引用主工作区绝对路径，Todesk 验证必须路径隔离",
+            failures,
+        )
+
+    # route task 运动策略：transit 段用 NavigateThroughPoses，最终 task 用 NavigateToPose 收尾对齐。
     require_contains(navigation_state, "NavigateThroughPoses", "导入/使用 NavigateThroughPoses", failures)
+    require_contains(navigation_state, "NavigateToPose", "导入/使用 NavigateToPose 做最终 task 对齐", failures)
     require_contains(navigation_state, "self.nav_through_poses_client", "创建 through action client", failures)
+    require_contains(navigation_state, "self.nav_to_pose_client", "创建最终 task NavigateToPose action client", failures)
     require_contains(navigation_state, "NavigateThroughPoses.Goal()", "构造 through goal", failures)
+    require_contains(navigation_state, "NavigateToPose.Goal()", "构造最终 task NavigateToPose goal", failures)
     require_contains(navigation_state, "goal_msg.poses = poses", "一次性下发当前段 poses", failures)
+    for through_launch_name, through_launch_text in (
+        ("navigation2.launch.py", navigation2_launch),
+        ("navigation2_robosense_lidar.launch.py", navigation2_robosense_launch),
+    ):
+        require_contains(
+            through_launch_text,
+            "default_through_bt_xml_file",
+            f"{through_launch_name} 声明 through 专用 BT 默认文件",
+            failures,
+        )
+        require_contains(
+            through_launch_text,
+            "through_bt_xml_file = LaunchConfiguration('through_bt_xml_file'",
+            f"{through_launch_name} 暴露 through_bt_xml_file 参数",
+            failures,
+        )
+        require_contains(
+            through_launch_text,
+            "'default_nav_through_poses_bt_xml': through_bt_xml_file",
+            f"{through_launch_name} through action 使用 through 专用 BT",
+            failures,
+        )
+        require_not_contains(
+            through_launch_text,
+            "'default_nav_through_poses_bt_xml': bt_xml_file",
+            f"{through_launch_name} through action 不得复用单点 bt_xml_file",
+            failures,
+        )
+    for needle, description in (
+        ('goals="{goals}"', "through BT 使用 goals 黑板"),
+        ("ComputePathThroughPoses", "through BT 使用 ComputePathThroughPoses"),
+        ("RemovePassedGoals", "through BT 自动移除已通过目标"),
+        ('goal_checker_id="xy_goal_checker"', "through BT FollowPath 显式使用 xy_goal_checker"),
+    ):
+        require_contains(through_bt_xml, needle, description, failures)
+    require_not_contains(through_bt_xml, "ComputePathToPose", "through BT 不得使用单点 ComputePathToPose", failures)
+    require_not_contains(through_bt_xml, 'goal="{goal}"', "through BT 不得使用单点 goal 黑板", failures)
+    if not nav2_param_texts:
+        failures.append("缺失: Nav2 参数文件 -> src/humanoid_navigation2/config/nav2_params*.yaml")
+    for nav2_param_path, nav2_param_text in nav2_param_texts.items():
+        require_contains(
+            nav2_param_text,
+            'navigators: ["navigate_to_pose", "navigate_through_poses"]',
+            f"{nav2_param_path} 注册 NavigateThroughPoses navigator",
+            failures,
+        )
+        require_contains(
+            nav2_param_text,
+            'plugin: "nav2_bt_navigator::NavigateToPoseNavigator"',
+            f"{nav2_param_path} 注册 NavigateToPoseNavigator plugin",
+            failures,
+        )
+        require_contains(
+            nav2_param_text,
+            'plugin: "nav2_bt_navigator::NavigateThroughPosesNavigator"',
+            f"{nav2_param_path} 注册 NavigateThroughPosesNavigator plugin",
+            failures,
+        )
     require_contains(navigation_package_xml, "<depend>nav2_msgs</depend>", "package.xml 声明 nav2_msgs 依赖", failures)
     require_contains(navigation_package_xml, "<depend>action_msgs</depend>", "package.xml 声明 action_msgs 依赖", failures)
     for command_type, handler in (
         ('"start_route_task"', "self.handle_start_route_task(command_data, request_data)"),
+        ('"pause_route_task"', "self.handle_pause_route_task(command_data, request_data)"),
+        ('"resume_route_task"', "self.handle_resume_route_task(command_data, request_data)"),
+        ('"stop_route_task"', "self.handle_stop_route_task(command_data, request_data)"),
         ('"jump_to_waypoint"', "self.handle_jump_to_waypoint(command_data, request_data)"),
         ('"broadcast_finished"', "self.handle_broadcast_finished(command_data, request_data)"),
     ):
@@ -139,6 +254,17 @@ def main() -> int:
         "状态机定义 route task 命令集合用于异常兜底",
         failures,
     )
+    for route_task_control in (
+        '"pause_route_task"',
+        '"resume_route_task"',
+        '"stop_route_task"',
+    ):
+        require_contains(
+            navigation_command_body,
+            route_task_control,
+            f"route task 控制命令进入异常兜底集合 {route_task_control}",
+            failures,
+        )
     require_contains(
         navigation_command_body,
         "if command_type in route_task_command_types:",
@@ -447,11 +573,52 @@ def main() -> int:
         "jump 成功后 current_anchor_task_id 来自新段起点快照",
         failures,
     )
-    require_order(
+    require_contains(
         jump_body,
-        'if not self.start_active_segment_navigation("jump_to_waypoint", command_data):',
-        'self.publish_route_task_event("jump_updated"',
-        "jump_updated 必须在新 through goal 发起成功之后发布，避免 APP 先收到跳点更新再收到启动失败",
+        "will_complete_without_navigation = self.should_complete_active_segment_without_navigation()",
+        "jump 必须识别无需 Nav2 的快捷完成分支，避免同步完成后 active_segment 被 reset",
+        failures,
+    )
+    require_contains(
+        jump_body,
+        "if will_complete_without_navigation:",
+        "jump 快捷完成分支必须单独处理 jump_updated/ack 时序",
+        failures,
+    )
+    require_contains(
+        jump_body,
+        "甚至可能一路推进到 route_task_completed 并 reset active_segment",
+        "jump 快捷完成分支注释必须说明为什么要先发 jump_updated 和 ack",
+        failures,
+    )
+    require_contains(
+        jump_body,
+        "if will_complete_without_navigation:\n            return",
+        "jump 快捷完成分支启动后必须直接返回，避免 route reset 后再次读取 active_segment",
+        failures,
+    )
+    require_contains(
+        jump_body,
+        "interrupted_waypoint_id = self.waiting_broadcast_waypoint_id",
+        "jump 打断等待播报时必须记录被中断 task",
+        failures,
+    )
+    require_contains(
+        jump_body,
+        "self.skipped_task_ids.append(interrupted_waypoint_id)",
+        "jump 打断等待播报 task 后必须计入 skipped，保证最终统计闭合",
+        failures,
+    )
+    require_contains(
+        jump_body,
+        "if target_waypoint_id in self.skipped_task_ids:",
+        "jump 目标点重新成为 active target 时必须从 skipped_task_ids 移除",
+        failures,
+    )
+    require_contains(
+        jump_body,
+        "if skipped_task_id != target_waypoint_id",
+        "jump 目标点移出 skipped 时只能移除当前目标",
         failures,
     )
     require_contains(
@@ -574,6 +741,30 @@ def main() -> int:
     )
     require_contains(
         normalize_route_waypoints_body,
+        "seen_waypoint_ids = set()",
+        "route_waypoints 归一化必须维护 seen_waypoint_ids，拒绝重复 waypoint_id",
+        failures,
+    )
+    require_contains(
+        normalize_route_waypoints_body,
+        "if waypoint_id in seen_waypoint_ids:",
+        "route_waypoints 归一化必须检测重复 waypoint_id",
+        failures,
+    )
+    require_contains(
+        normalize_route_waypoints_body,
+        '"duplicate_waypoint_id"',
+        "route_waypoints 重复 waypoint_id 必须返回 duplicate_waypoint_id",
+        failures,
+    )
+    require_contains(
+        normalize_route_waypoints_body,
+        "seen_waypoint_ids.add(waypoint_id)",
+        "route_waypoints 归一化必须记录已出现 waypoint_id",
+        failures,
+    )
+    require_contains(
+        normalize_route_waypoints_body,
         'normalized["waypoint_id"] = waypoint_id',
         "route_waypoints[] 保存归一化后的 waypoint_id",
         failures,
@@ -582,6 +773,25 @@ def main() -> int:
         normalize_route_waypoints_body,
         'normalized["broadcast_id"] = self.route_task_id(task_broadcast_id)',
         "task.broadcast_id 使用 route_task_id 归一化",
+        failures,
+    )
+    require_contains(
+        normalize_route_waypoints_body,
+        'if normalized["need_broadcast"] and not normalized["broadcast_id"]:',
+        "task need_broadcast=true 时必须拒绝空 broadcast_id",
+        failures,
+    )
+    require_contains(
+        normalize_route_waypoints_body,
+        '"missing_broadcast_id"',
+        "task need_broadcast=true 且 broadcast_id 为空必须返回 missing_broadcast_id",
+        failures,
+    )
+    require_order(
+        normalize_route_waypoints_body,
+        'normalized["broadcast_id"] = self.route_task_id(task_broadcast_id)',
+        'if normalized["need_broadcast"] and not normalized["broadcast_id"]:',
+        "broadcast_id 必须先归一化再做必填判断",
         failures,
     )
     require_contains(
@@ -600,6 +810,30 @@ def main() -> int:
         normalize_route_waypoints_body,
         'orientation, orientation_error = self.normalize_route_task_orientation(waypoint.get("orientation"))',
         "route_waypoints[].orientation 在归一化阶段校验",
+        failures,
+    )
+    require_contains(
+        normalize_orientation_body,
+        "norm = math.sqrt",
+        "orientation 归一化必须计算四元数范数",
+        failures,
+    )
+    require_contains(
+        normalize_orientation_body,
+        "if norm <= 1e-6:",
+        "orientation 归一化必须拒绝零长度四元数",
+        failures,
+    )
+    require_contains(
+        normalize_orientation_body,
+        "orientation quaternion norm must be greater than zero",
+        "orientation 零长度四元数必须返回明确错误",
+        failures,
+    )
+    require_contains(
+        normalize_orientation_body,
+        "orientation = [component / norm for component in orientation]",
+        "orientation 归一化必须输出单位四元数",
         failures,
     )
     require_contains(
@@ -662,6 +896,47 @@ def main() -> int:
     require_contains(navigation_state, "send_failure_ack: bool = True", "段启动失败 ack 开关", failures)
     require_contains(navigation_state, "def reject_active_segment_start", "段启动失败统一处理", failures)
     require_contains(navigation_state, "def cleanup_route_task_segment_start_failure", "命令触发的段启动失败状态清理 helper", failures)
+    final_pose_body = extract_function_body(navigation_state, "start_active_segment_final_pose_navigation")
+    through_result_body = extract_function_body(navigation_state, "route_task_through_result_callback")
+    complete_without_navigation_body = extract_function_body(navigation_state, "complete_active_segment_without_navigation")
+    require_contains(
+        navigation_state,
+        "def start_active_segment_final_pose_navigation",
+        "route task 最终 task NavigateToPose 收尾 helper",
+        failures,
+    )
+    require_contains(
+        start_active_segment_body,
+        'if not self.active_segment.get("transit_waypoint_ids", []):',
+        "无 transit 段必须直接走最终 task NavigateToPose",
+        failures,
+    )
+    require_contains(
+        start_active_segment_body,
+        "self.start_active_segment_final_pose_navigation(",
+        "无 transit 段调用最终 task 对齐 helper",
+        failures,
+    )
+    require_contains(
+        through_result_body,
+        "self.start_active_segment_final_pose_navigation(",
+        "through 成功后必须进入最终 task 对齐，而不是直接播报",
+        failures,
+    )
+    require_contains(
+        complete_without_navigation_body,
+        "self.start_active_segment_final_pose_navigation(",
+        "近距离快捷完成也必须进入最终 task 对齐",
+        failures,
+    )
+    require_contains(
+        final_pose_body,
+        "goal_msg.behavior_tree = self.reverse_navigation_bt_xml",
+        "倒走 task 必须设置 reverse BT",
+        failures,
+    )
+    require_contains(final_pose_body, '"final_align_started"', "最终对齐开始事件", failures)
+    require_contains(navigation_state, '"final_align_completed"', "最终对齐完成事件", failures)
     cleanup_segment_start_failure_body = extract_function_body(navigation_state, "cleanup_route_task_segment_start_failure")
     for cleanup_field in (
         "self.current_route_task_goal_generation = -1",
@@ -704,8 +979,8 @@ def main() -> int:
     require_order(
         start_route_task_body,
         'result_reason="first_task_already_reached"',
-        "self.handle_target_task_arrived()",
-        "首 task 快速路径必须先返回 start_route_task success ack，再发布播报/完成事件",
+        "self.complete_active_segment_without_navigation()",
+        "首 task 快速路径必须先返回 start_route_task success ack，再进入最终对齐/播报流程",
         failures,
     )
     require_contains(navigation_state, "send_failure_ack=False", "自动下一段失败不伪造命令 ack", failures)
@@ -714,8 +989,15 @@ def main() -> int:
     require_order(
         broadcast_finished_body,
         'error_code="invalid_task_session"',
+        'error_code="invalid_route_id"',
+        "broadcast_finished 应先返回 invalid_task_session，再判断 route_id",
+        failures,
+    )
+    require_order(
+        broadcast_finished_body,
+        'error_code="invalid_route_id"',
         'error_code="broadcast_context_mismatch"',
-        "broadcast_finished 应先返回 invalid_task_session，再判断播报上下文",
+        "broadcast_finished 应先返回 invalid_route_id，再判断播报上下文",
         failures,
     )
     require_not_contains(
@@ -741,6 +1023,19 @@ def main() -> int:
         route_task_failure_body,
         "self.cancel_navigation()",
         "route task 失败路径不应使用通用 cancel_navigation",
+        failures,
+    )
+    require_contains(
+        obstacle_wait_body,
+        'self.cancel_current_route_goal_safely("obstacle_wait")',
+        "route task 障碍等待暂停应使用专用安全取消，避免旧 cancel 回调清空恢复后的新 goal",
+        failures,
+    )
+    require_order(
+        obstacle_wait_body,
+        "if self.active_route_task:",
+        'self.cancel_current_route_goal_safely("obstacle_wait")',
+        "障碍等待暂停应先判断 active_route_task 再使用 route task 专用安全取消",
         failures,
     )
     for field in (
@@ -784,28 +1079,27 @@ def main() -> int:
             failures,
         )
 
-    # route task 运行期间旧命令必须 busy/reject，避免 stop/pause/resume 破坏 route task 状态机。
-    require_contains(navigation_state, "reject_legacy_navigation_command_during_route_task", "旧普通导航命令拦截", failures)
-    require_contains(navigation_state, '"error_code": "route_task_active"', "旧命令 route_task_active 错误码", failures)
-    require_contains(
-        legacy_reject_body,
-        '"command_type": command_type',
-        "route_task_active 旧命令拒绝 ack 必须显式携带原始 command_type",
+    # APP 对外导航入口只保留 route task 新命令，旧单点/多点/展台/旧暂停继续终止不再分发。
+    for legacy_command in (
+        'command_type == "start_single_navigation"',
+        'command_type == "start_multi_point_navigation"',
+        'command_type == "start_exhibition_navigation"',
+        'command_type == "stop_navigation"',
+        'command_type == "pause_navigation"',
+        'command_type == "resume_navigation"',
+    ):
+        require_not_contains(
+            navigation_command_body,
+            legacy_command,
+            f"状态机不应继续分发旧 APP 导航命令 {legacy_command}",
+            failures,
+        )
+    require_not_contains(
+        navigation_state,
+        "reject_legacy_navigation_command_during_route_task",
+        "不再保留 route_task_active 旧命令拦截函数，旧命令应直接下线",
         failures,
     )
-    for legacy_command in (
-        '"start_single_navigation"',
-        '"start_multi_point_navigation"',
-        '"start_exhibition_navigation"',
-        '"stop_navigation"',
-        '"cancel_navigation"',
-        '"pause_navigation"',
-        '"resume_navigation"',
-        '"retry_failed_waypoint"',
-        '"skip_failed_waypoint"',
-        '"abort_failed_navigation"',
-    ):
-        require_contains(legacy_reject_body, legacy_command, f"route task 运行中拦截旧命令 {legacy_command}", failures)
 
     # 完成事件必须先发摘要再清状态，APP 才能收到 completed_task_ids/skipped_task_ids。
     require_order(
@@ -928,6 +1222,18 @@ def main() -> int:
         "navigation_command_result 使用 route_task_id 归一化 route_id",
         failures,
     )
+    require_not_contains(
+        send_ack_body,
+        'event_data["task_session_id"] = event_data["task_session_id"] or self.active_route_task.get("task_session_id", "")',
+        "navigation_command_result 不应使用 active_route_task 回填缺失 task_session_id",
+        failures,
+    )
+    require_not_contains(
+        send_ack_body,
+        'event_data["route_id"] = event_data["route_id"] or self.active_route_task.get("route_id", "")',
+        "navigation_command_result 不应使用 active_route_task 回填缺失 route_id",
+        failures,
+    )
     require_contains(
         jump_body,
         'task_session_id = self.route_task_id(command_data.get("task_session_id"))',
@@ -936,17 +1242,42 @@ def main() -> int:
     )
     require_contains(
         jump_body,
+        'route_id = self.route_task_id(command_data.get("route_id"))',
+        "jump_to_waypoint 使用 route_task_id 归一化 route_id",
+        failures,
+    )
+    require_contains(
+        jump_body,
+        'error_code="invalid_route_id"',
+        "jump_to_waypoint 校验 route_id 与当前任务一致",
+        failures,
+    )
+    require_order(
+        jump_body,
+        'error_code="invalid_task_session"',
+        'error_code="invalid_route_id"',
+        "jump_to_waypoint 应先返回 invalid_task_session，再判断 route_id",
+        failures,
+    )
+    require_contains(
+        jump_body,
         'target_waypoint_id = self.route_task_id(command_data.get("target_waypoint_id"))',
         "jump_to_waypoint 使用 route_task_id 归一化 target_waypoint_id",
         failures,
     )
-    for field_name in ("task_session_id", "waypoint_id", "broadcast_id"):
+    for field_name in ("task_session_id", "route_id", "waypoint_id", "broadcast_id"):
         require_contains(
             broadcast_finished_body,
             f'{field_name} = self.route_task_id(command_data.get("{field_name}"))',
             f"broadcast_finished 使用 route_task_id 归一化 {field_name}",
             failures,
         )
+    require_contains(
+        broadcast_finished_body,
+        'error_code="invalid_route_id"',
+        "broadcast_finished 校验 route_id 与当前任务一致",
+        failures,
+    )
 
     for field in (
         '"segment_id"',
@@ -982,6 +1313,24 @@ def main() -> int:
         finalize_task_body,
         '"completed_task_ids": list(self.completed_task_ids)',
         "task_waypoint_completed 必须发布 completed_task_ids 快照拷贝",
+        failures,
+    )
+    require_contains(
+        finalize_task_body,
+        "if waypoint_id in self.skipped_task_ids:",
+        "实际完成 task 时必须从 skipped_task_ids 移除，避免完成/跳过重叠",
+        failures,
+    )
+    require_contains(
+        finalize_task_body,
+        "if skipped_task_id != waypoint_id",
+        "实际完成 task 时只移除当前 task 的 skipped 记录",
+        failures,
+    )
+    require_contains(
+        finalize_task_body,
+        '"skipped_task_ids": list(self.skipped_task_ids)',
+        "task_waypoint_completed 必须发布 skipped_task_ids 快照拷贝",
         failures,
     )
 
@@ -1029,8 +1378,20 @@ def main() -> int:
         failures,
     )
     require_contains(websocket_server, '"route_waypoints"', "websocket 透传 route_waypoints", failures)
+    require_contains(
+        websocket_server,
+        '"broadcast_result": command_data.get("broadcast_result", "completed")',
+        "websocket 缺省 broadcast_result 时按 completed 透传",
+        failures,
+    )
     require_contains(dynamic_waypoints, 'command_data.get("task_session_id")', "桥接层校验 task_session_id", failures)
     require_contains(dynamic_waypoints, 'command_data.get("route_id")', "桥接层校验 route_id", failures)
+    require_contains(
+        bridge_route_task_validation_body,
+        'required_fields = ("task_session_id", "route_id", "waypoint_id", "broadcast_id")',
+        "桥接层 broadcast_finished 缺字段提示包含 route_id",
+        failures,
+    )
     require_contains(dynamic_waypoints, "normalized_waypoint[\"waypoint_id\"] = str", "桥接层 waypoint_id 字符串化", failures)
     require_contains(dynamic_waypoints, "继续转发给状态机返回业务 ack", "桥接层 route task 缺字段继续转发说明", failures)
     require_not_contains(
@@ -1043,7 +1404,6 @@ def main() -> int:
     # launch：默认和 fusion 启动都必须进入已改造的新入口，并显式带 route task 参数。
     for launch_name, launch_text in (
         ("navigation.launch.py", navigation_launch),
-        ("navigation_fusion.launch.py", fusion_launch),
         ("navigation_fusion_sc.launch.py", fusion_sc_launch),
     ):
         require_contains(launch_text, "executable='navigation_state_manager'", f"{launch_name} 启动新状态管理器", failures)
@@ -1060,7 +1420,10 @@ def main() -> int:
     # robot_real 是整机 bringup 间接入口：它不直接创建状态机，而是 include APP 层 launch。
     # 这样既能保证 start_navigation.sh 主链路进入新状态机，也避免同名 navigation_state_manager 重复启动。
     require_contains(robot_real_launch, "navigation_fusion_sc.launch.py", "robot_real include SC APP 层 launch", failures)
-    require_contains(robot_real_launch, "navigation_fusion.launch.py", "robot_real include HDL APP 层 launch", failures)
+    require_contains(robot_real_launch, "navigation2_robosense_lidar.launch.py", "robot_real include ro 定位链路", failures)
+    require_contains(robot_real_launch, "navigation2.launch.py", "robot_real include Open3D prior 定位链路", failures)
+    require_not_contains(robot_real_launch, "navigation_fusion.launch.py", "robot_real 不再暴露 HDL APP 旧入口", failures)
+    require_not_contains(robot_real_launch, "navigation2_fusion", "robot_real 不再暴露 SC/HDL 旧导航栈入口", failures)
     require_contains(robot_real_launch, "route task 启动链路说明", "robot_real 说明 route task 间接入口", failures)
     require_contains(
         implementation_checklist,
@@ -1299,12 +1662,6 @@ def main() -> int:
         implementation_checklist,
         "route task 失败只通过 `/navigation/status` 的 `navigation_failed` 事件通知 APP",
         "清单说明 route task 失败不得再走旧 acknowledgments 双通道",
-        failures,
-    )
-    require_contains(
-        implementation_checklist,
-        "`cancel_navigation` 若由 APP 发送，也按旧普通导航控制命令拒绝",
-        "清单必须说明首版 cancel_navigation 不作为 route task 专属取消能力",
         failures,
     )
     require_contains(

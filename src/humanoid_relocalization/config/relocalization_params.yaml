@@ -2,10 +2,10 @@ relocalization_node:
   ros__parameters:
     # ========== 路径配置 (★ 必须修改) ==========
     # SC 数据库路径 - 由 build_sc_database.py 生成
-    sc_database_path: "/home/ubuntu/humanoid_ws/src/humanoid_navigation2/maps/hall_sc.bin"
+    sc_database_path: "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall_sc.bin"
     
     # PCD 地图路径 - Fast-LIO 建图生成的点云地图
-    pcd_map_path: "/home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd"
+    pcd_map_path: "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd"
     
     # ========== 话题配置 (根据你的系统修改) ==========
     cloud_topic: "/fast_lio/cloud_registered"  # Fast-LIO 输出的点云话题

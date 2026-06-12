@@ -123,9 +123,17 @@ install(DIRECTORY include/
 install(DIRECTORY
   config
   launch
-  kernels
   DESTINATION share/${PROJECT_NAME}
 )
+
+# kernels 只在 SYCL 版本存在时安装。
+# 当前默认 CPU/OpenMP 构建不依赖 kernels，目录缺失不应阻断整个导航工作区构建。
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/kernels")
+  install(DIRECTORY
+    kernels
+    DESTINATION share/${PROJECT_NAME}
+  )
+endif()
 
 ament_export_include_directories(include)
 ament_export_dependencies(

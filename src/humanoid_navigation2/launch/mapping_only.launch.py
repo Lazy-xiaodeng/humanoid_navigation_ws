@@ -28,7 +28,7 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     
     pkg_nav2 = get_package_share_directory('humanoid_navigation2')
-    default_save_path = os.path.expanduser('~/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd')
+    default_save_path = '/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd'
     pcd_map_file = LaunchConfiguration('pcd_map_file', default=default_save_path)
     default_slam_mapping_file = os.path.join(pkg_nav2, 'config', 'slam_toolbox_fastlio_raster.yaml')
     slam_mapping_file = LaunchConfiguration('slam_mapping_file', default=default_slam_mapping_file)

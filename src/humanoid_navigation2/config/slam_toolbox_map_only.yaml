@@ -26,7 +26,7 @@ slam_toolbox:
     scan_queue_size: 0                # 不缓存扫描数据
     
     # ========== 地图加载参数 ==========
-    map_file_name: "/home/ubuntu/humanoid_ws/src/humanoid_navigation2/maps/hall"  # posegraph 路径（不含扩展名）
+    map_file_name: "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall"  # posegraph 路径（不含扩展名）
     map_start_at_dock: false          # 不在 dock 点启动
     map_start_with_all: true          # 启动时加载完整地图
     

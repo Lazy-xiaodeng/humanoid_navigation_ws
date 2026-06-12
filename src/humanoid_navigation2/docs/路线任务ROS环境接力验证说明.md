@@ -308,3 +308,77 @@ ROS 环境 Codex 修改任何代码后，必须同步更新：
 11. 修改记录已追加 ROS 环境验证结果。
 
 > 中文注释：只有这些都满足，才建议把 route task 首版标记为可验收。若只完成源码静态检查，不能替代 ROS runtime 和 APP 联调。
+
+
+---
+
+## 13. 本轮 ROS 环境新增发现：`/navigate_through_poses` 未注册
+
+本轮在 ROS2 Jazzy 环境中实际执行：
+
+```bash
+ros2 action list
+```
+
+当前输出只有：
+
+```text
+/compute_path_through_poses
+/compute_path_to_pose
+/follow_path
+/navigate_to_pose
+/spin
+```
+
+这说明当前运行中的 `bt_navigator` 没有注册 `/navigate_through_poses` action server。代码侧虽然已经接入 `NavigateThroughPoses`，但如果运行环境没有该 action，路线任务会在 through 段启动时失败。
+
+已在 Todesk 目录下 6 套 `src/humanoid_navigation2/config/nav2_params*.yaml` 补齐：
+
+```yaml
+navigators: ["navigate_to_pose", "navigate_through_poses"]
+navigate_to_pose:
+  plugin: "nav2_bt_navigator::NavigateToPoseNavigator"
+navigate_through_poses:
+  plugin: "nav2_bt_navigator::NavigateThroughPosesNavigator"
+```
+
+验证要求更新为：修改后必须重启 Nav2/整机导航，再重新执行：
+
+```bash
+ros2 action list | grep navigate_through_poses
+ros2 action info /navigate_through_poses
+```
+
+如果重启后仍没有 `/navigate_through_poses`，需要继续检查实际启动使用的 `nav2_params_file` 是否是 Todesk 目录下已修改的参数文件，或者 launch 是否被其它安装空间/旧 install 覆盖。
+
+
+---
+
+## 14. 路径隔离与 through action 临时验证补充
+
+Todesk 实施目录已补充路径隔离要求：核心运行文件和安装产物不得再引用 `/home/ubuntu/humanoid_ws`。验证命令：
+
+```bash
+rg -n "/home/ubuntu/humanoid_ws" install/humanoid_navigation install/humanoid_navigation2 install/humanoid_bringup -S
+```
+
+期望无输出。
+
+已完成一次不启动整机导航的临时 through action 验证：
+
+1. source Todesk install。
+2. 用 `/route_task_check` 命名空间临时启动 `bt_navigator`。
+3. lifecycle configure 后可看到：
+
+```text
+/route_task_check/navigate_through_poses
+/route_task_check/navigate_to_pose
+```
+
+4. `ros2 action type /route_task_check/navigate_through_poses` 输出：
+
+```text
+nav2_msgs/action/NavigateThroughPoses
+```
+
+这证明 Todesk 的 Nav2 参数已经能让 bt_navigator 注册 through action。完整可用性仍需在整机 Nav2 启动后确认非命名空间的 `/navigate_through_poses`，并继续做 APP 端路线任务联调。

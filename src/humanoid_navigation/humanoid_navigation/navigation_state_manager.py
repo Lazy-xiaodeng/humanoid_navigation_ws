@@ -12,8 +12,8 @@ from rclpy.duration import Duration
 from rclpy.time import Time
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
-from nav_msgs.msg import Odometry, Path
-from nav2_msgs.action import NavigateToPose, NavigateThroughPoses
+from nav_msgs.msg import Odometry, OccupancyGrid
+from nav2_msgs.action import NavigateThroughPoses, NavigateToPose
 from action_msgs.msg import GoalStatus
 from action_msgs.srv import CancelGoal
 from nav2_msgs.msg import BehaviorTreeLog
@@ -45,7 +45,6 @@ class NavigationState(Enum):
     REACHED_WAYPOINT = "reached_waypoint"
     COMPLETED = "completed"
     FAILED = "failed"
-    RECOVERABLE_FAILED = "recoverable_failed"
     CANCELLED = "cancelled"
 
 class NavigationMode(Enum):
@@ -59,9 +58,8 @@ class NavigationStateManager(Node):
     """
     导航状态管理器节点 - prior-map 定位版本。
 
-    这个文件是从 navigation_state_manager_fusion.py 拆出来的新入口。
-    旧 fusion 文件保留原定位逻辑，便于回退；本文件只认
-    prior_map_odom_bridge 发布的定位健康状态。
+    当前工作区已收口为 ro/RoboSense 与 op/Open3D 两条 prior-map 定位链路；
+    状态管理器只认 prior_map_odom_bridge 发布的定位健康状态。
     """
 
     def __init__(self):
@@ -71,60 +69,50 @@ class NavigationStateManager(Node):
         self.declare_parameters(namespace='', parameters=[
             ('position_tolerance', 0.15),
             ('orientation_tolerance', 0.3),
-            ('waypoint_timeout', 300.0),
             ('status_publish_rate', 2.0),
             ('default_frame_id', 'map'),
-            ('obstacle_block_timeout', 5.0),  # 障碍物阻塞超时时间（秒）
+            ('obstacle_block_timeout', 2.0),  # 障碍物阻塞超时时间（秒）：停稳约2秒后进入动态障碍暂停等待
             ('velocity_threshold', 0.10),  # 判断机器人是否停滞的速度阈值（m/s）
             ('blockage_pose_delta_deadzone', 0.12),  # 抑制定位/机身晃动带来的低速假恢复
             ('blockage_recovery_velocity_threshold', 0.20),  # 解除阻塞需要更明确的持续运动
             ('blockage_recovery_confirm_sec', 1.0),
+            ('obstacle_wait_enable', True),
+            ('obstacle_wait_push_interval_sec', 4.0),
+            ('obstacle_clear_required_frames', 5),
+            ('obstacle_clear_check_rate_hz', 5.0),
+            ('obstacle_clear_cost_threshold', 253),
+            ('obstacle_clear_front_min_x_m', 0.15),
+            ('obstacle_clear_front_max_x_m', 1.20),
+            ('obstacle_clear_half_width_m', 0.45),
+            ('local_costmap_topic', '/local_costmap/costmap'),
             ('require_walk_mode_for_navigation', True),
             ('robot_status_timeout', 2.0),
             ('pending_navigation_timeout', 90.0),
             ('obstacle_block_near_goal_distance', 0.7),
-            ('navigation_failure_policy', 'pause_on_failed'),
-            ('auto_pause_on_localization_recovery', False),
-            ('localization_stop_hold_sec', 2.0),
-            ('localization_resume_settle_sec', 1.0),
-            ('localization_auto_resume_require_recovery_done', True),
             ('localization_resume_stable_frames', 3),
             ('localization_health_status_topic', '/localization/prior_map_odom_bridge_status'),
             ('localization_health_timeout_sec', 3.0),
             ('localization_allow_start_with_last_good_tf', True),
             ('localization_last_good_tf_max_age_sec', 0.0),
-            ('localization_recovery_status_topic', '/localization/recovery_status'),
-            ('localization_recovery_request_topic', '/localization/recovery_requests'),
-            ('request_localization_recovery_on_nav_failure', False),
-            ('request_navigation_context_recovery_on_localization_failure', False),
-            ('localization_recovery_request_cooldown_sec', 20.0),
-            ('localization_recovery_prior_radius_m', 10.0),
-            ('localization_context_recovery_request_cooldown_sec', 4.0),
-            ('localization_context_prior_radius_m', 5.0),
-            ('localization_context_prior_max_previous_age_sec', 300.0),
-            ('localization_context_prior_min_segment_length_m', 0.2),
-            ('localization_resume_reverse_enabled', True),
-            ('localization_resume_reverse_max_distance_m', 2.0),
-            ('localization_resume_reverse_rear_angle_deg', 70.0),
             ('route_task.first_task_reached_tolerance_m', 0.4),
             ('route_task.transit_passed_tolerance_m', 0.5),
             ('route_task.transit_projection_passed_enabled', True),
             ('route_task.nav2_feedback_timeout_sec', 3.0),
             ('route_task.goal_cancel_timeout_sec', 2.0),
+            ('route_task.goal_reject_retry_timeout_sec', 8.0),
             ('route_task.default_interrupt_broadcast', True),
             ('map_frame', 'map'),
             ('base_frame', 'base_footprint'),
             ('pose_tf_timeout_sec', 0.05),
             (
                 'reverse_navigation_bt_xml',
-                '/home/ubuntu/humanoid_ws/src/humanoid_navigation2/config/behavior_tree/'
+                '/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/config/behavior_tree/'
                 'navigate_reverse_xy_then_yaw.xml'
             )
         ])
 
         self.position_tolerance = self.get_parameter('position_tolerance').value
         self.orientation_tolerance = self.get_parameter('orientation_tolerance').value
-        self.waypoint_timeout = self.get_parameter('waypoint_timeout').value
         self.status_publish_rate = self.get_parameter('status_publish_rate').value
         self.default_frame_id = self.get_parameter('default_frame_id').value
         self.obstacle_block_timeout = self.get_parameter('obstacle_block_timeout').value
@@ -134,19 +122,26 @@ class NavigationStateManager(Node):
             self.get_parameter('blockage_recovery_velocity_threshold').value)
         self.blockage_recovery_confirm_sec = float(
             self.get_parameter('blockage_recovery_confirm_sec').value)
+        self.obstacle_wait_enable = bool(self.get_parameter('obstacle_wait_enable').value)
+        self.obstacle_wait_push_interval_sec = float(
+            self.get_parameter('obstacle_wait_push_interval_sec').value)
+        self.obstacle_clear_required_frames = max(
+            1, int(self.get_parameter('obstacle_clear_required_frames').value))
+        self.obstacle_clear_check_rate_hz = max(
+            1.0, float(self.get_parameter('obstacle_clear_check_rate_hz').value))
+        self.obstacle_clear_cost_threshold = int(
+            self.get_parameter('obstacle_clear_cost_threshold').value)
+        self.obstacle_clear_front_min_x_m = float(
+            self.get_parameter('obstacle_clear_front_min_x_m').value)
+        self.obstacle_clear_front_max_x_m = float(
+            self.get_parameter('obstacle_clear_front_max_x_m').value)
+        self.obstacle_clear_half_width_m = float(
+            self.get_parameter('obstacle_clear_half_width_m').value)
+        self.local_costmap_topic = str(self.get_parameter('local_costmap_topic').value)
         self.require_walk_mode_for_navigation = self.get_parameter('require_walk_mode_for_navigation').value
         self.robot_status_timeout = float(self.get_parameter('robot_status_timeout').value)
         self.pending_navigation_timeout = float(self.get_parameter('pending_navigation_timeout').value)
         self.obstacle_block_near_goal_distance = float(self.get_parameter('obstacle_block_near_goal_distance').value)
-        self.navigation_failure_policy = str(self.get_parameter('navigation_failure_policy').value)
-        self.auto_pause_on_localization_recovery = bool(
-            self.get_parameter('auto_pause_on_localization_recovery').value)
-        self.localization_stop_hold_sec = float(
-            self.get_parameter('localization_stop_hold_sec').value)
-        self.localization_resume_settle_sec = float(
-            self.get_parameter('localization_resume_settle_sec').value)
-        self.localization_auto_resume_require_recovery_done = bool(
-            self.get_parameter('localization_auto_resume_require_recovery_done').value)
         self.localization_resume_stable_frames = int(
             self.get_parameter('localization_resume_stable_frames').value)
         self.localization_health_status_topic = str(
@@ -158,32 +153,6 @@ class NavigationStateManager(Node):
         self.localization_last_good_tf_max_age_sec = float(
             self.get_parameter('localization_last_good_tf_max_age_sec').value)
         self.reverse_navigation_bt_xml = str(self.get_parameter('reverse_navigation_bt_xml').value)
-        self.localization_recovery_status_topic = str(
-            self.get_parameter('localization_recovery_status_topic').value)
-        self.localization_recovery_request_topic = str(
-            self.get_parameter('localization_recovery_request_topic').value)
-        self.request_localization_recovery_on_nav_failure = bool(
-            self.get_parameter('request_localization_recovery_on_nav_failure').value)
-        self.request_navigation_context_recovery_on_localization_failure = bool(
-            self.get_parameter('request_navigation_context_recovery_on_localization_failure').value)
-        self.localization_recovery_request_cooldown_sec = float(
-            self.get_parameter('localization_recovery_request_cooldown_sec').value)
-        self.localization_recovery_prior_radius_m = float(
-            self.get_parameter('localization_recovery_prior_radius_m').value)
-        self.localization_context_recovery_request_cooldown_sec = float(
-            self.get_parameter('localization_context_recovery_request_cooldown_sec').value)
-        self.localization_context_prior_radius_m = float(
-            self.get_parameter('localization_context_prior_radius_m').value)
-        self.localization_context_prior_max_previous_age_sec = float(
-            self.get_parameter('localization_context_prior_max_previous_age_sec').value)
-        self.localization_context_prior_min_segment_length_m = float(
-            self.get_parameter('localization_context_prior_min_segment_length_m').value)
-        self.localization_resume_reverse_enabled = bool(
-            self.get_parameter('localization_resume_reverse_enabled').value)
-        self.localization_resume_reverse_max_distance_m = float(
-            self.get_parameter('localization_resume_reverse_max_distance_m').value)
-        self.localization_resume_reverse_rear_angle_rad = math.radians(float(
-            self.get_parameter('localization_resume_reverse_rear_angle_deg').value))
         self.route_task_first_task_reached_tolerance_m = float(
             self.get_parameter('route_task.first_task_reached_tolerance_m').value)
         self.route_task_transit_passed_tolerance_m = float(
@@ -194,6 +163,8 @@ class NavigationStateManager(Node):
             self.get_parameter('route_task.nav2_feedback_timeout_sec').value)
         self.route_task_goal_cancel_timeout_sec = float(
             self.get_parameter('route_task.goal_cancel_timeout_sec').value)
+        self.route_task_goal_reject_retry_timeout_sec = float(
+            self.get_parameter('route_task.goal_reject_retry_timeout_sec').value)
         self.route_task_default_interrupt_broadcast = bool(
             self.get_parameter('route_task.default_interrupt_broadcast').value)
         self.map_frame = str(self.get_parameter('map_frame').value)
@@ -204,16 +175,15 @@ class NavigationStateManager(Node):
         self.current_state = NavigationState.IDLE
         self.current_detailed_state = "IDLE"
         self.current_navigation_mode = None
-        self.current_sequence_id = None
         self.current_waypoint_index = 0
         self.total_waypoints = 0
         self.current_waypoint = None
-        self.waypoint_ids = []
-        self.skipped_waypoints = []
-        self.last_failure_context = {}
         self.waypoint_arrived_by_position = False
         self.pause_time = 0
         self.pause_duration_limit = 0
+        self.current_pause_source = ""
+        self.current_pause_reason = ""
+        self.current_resume_mode = ""
         
         # ========== 机器人状态 ==========
         self.current_pose = None
@@ -241,6 +211,16 @@ class NavigationStateManager(Node):
         self.block_reported = False  # 防止重复上报
         self.block_recovery_candidate_start_time = None
         self.block_recovery_candidate_source = ""
+
+        # ========== 动态障碍物等待恢复状态 ==========
+        # 单独维护“因障碍暂停”的内部状态，避免和 APP/用户手动暂停混在一起。
+        self.obstacle_wait_active = False
+        self.obstacle_wait_started_at = 0.0
+        self.obstacle_wait_last_push_time = 0.0
+        self.obstacle_clear_confirm_count = 0
+        self.latest_front_obstacle_blocked = False
+        self.latest_front_obstacle_stats = {}
+        self.latest_local_costmap_stamp = 0.0
         
         # ========== 从路点管理器接收的数据 ==========
         self.waypoints_data = {}
@@ -270,6 +250,9 @@ class NavigationStateManager(Node):
         self.active_goal_generation = 0
         self.current_route_task_goal_generation = 0
         self.route_task_goal_handle = None
+        self.route_task_goal_reject_retry_deadline = 0.0
+        self.route_task_goal_reject_retry_count = 0
+        self.route_task_goal_reject_retry_segment_id = ""
         # through feedback 最近一次到达时间。
         # 段启动时先置为当前时间，收到 Nav2 feedback 后刷新；周期检查用它识别 action 卡住。
         self.route_task_last_feedback_time = 0.0
@@ -281,36 +264,25 @@ class NavigationStateManager(Node):
         }
         
         # ========== Nav2动作客户端 ==========
+        # route task 采用“状态管理器分段编排 + 专用行为树”的方式：
+        # 1. 有 transit 的段先走 NavigateThroughPoses，辅助点只丝滑通过；
+        # 2. 最终 task 再走 NavigateToPose，复用正常/倒走 BT 完成最终 yaw 对齐；
+        # 3. 无 transit 的段直接走 NavigateToPose，避免任务点丢失原有的到点后 Spin 对齐。
+        # 旧 APP 单点/多点/展台命令仍然下线，这里的 NavigateToPose 只服务新 route task。
         self.nav_to_pose_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
-        # route task 首版验收目标是 through 执行，因此单独创建 NavigateThroughPoses client。
-        # 旧 NavigateToPose 仍只给旧单点/多点导航使用，避免 route task 退回逐点串行。
         self.nav_through_poses_client = ActionClient(self, NavigateThroughPoses, 'navigate_through_poses')
         self.current_goal_handle = None
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        # ========== 定位恢复联动状态 ==========
-        self.localization_recovery_active = False
+        # ========== prior-map 定位健康状态 ==========
+        # 状态管理器只监听 prior_map_odom_bridge 的健康状态，用于控制 route task 是否允许启动/恢复；
+        # 不再向全局重定位节点发送 recovery_requests，也不再消费 recovery_status。
         self.localization_auto_paused = False
-        self.localization_resume_pending = False
-        self.localization_recovery_reason = ""
-        self.localization_recovery_started_at = 0.0
-        self.localization_recovery_last_status = {}
-        self.localization_stop_until = 0.0
-        self.localization_recovered_at = 0.0
-        self.localization_recovery_done = False
         self.localization_resume_stable_count = 0
         self.last_localization_status_summary = {}
         self.localization_has_last_good_tf = False
         self.localization_last_good_tf_time = 0.0
-        self.last_resume_wait_log_time = 0.0
-        self.last_localization_recovery_request_time = 0.0
-        self.last_navigation_context_recovery_request_time = 0.0
-        self.last_navigation_context_recovery_key = ""
-        self.last_succeeded_waypoint = None
-        self.last_succeeded_waypoint_index = -1
-        self.last_succeeded_pose = None
-        self.last_succeeded_time = 0.0
         
         # ========== 设置ROS2通信 ==========
         self.setup_communication()
@@ -334,17 +306,8 @@ class NavigationStateManager(Node):
         # 发布当前目标给Nav2
         self.navigation_goal_pub = self.create_publisher(PoseStamped, '/goal_pose', 10)
         
-        # 发布导航路径（用于可视化）
-        self.navigation_path_pub = self.create_publisher(Path, '/navigation/current_path', 10)
-
-        # 定位异常自动暂停时，立即补一帧零速度，避免取消 Nav2 goal 前后继续沿旧速度滑行
+        # 动态障碍等待、手动暂停等主动取消 goal 的场景，立即补零速度压制底盘残余速度。
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
-
-        self.localization_recovery_request_pub = self.create_publisher(
-            String,
-            self.localization_recovery_request_topic,
-            10
-        )
         
         # ========== 订阅器 ==========
         # 订阅路点管理器的导航请求
@@ -362,18 +325,16 @@ class NavigationStateManager(Node):
             Odometry, '/odom', self.odom_callback, 10
         )
 
+        # 订阅 local costmap，用前方窗口做“障碍已清除”的连续多帧确认。
+        self.local_costmap_sub = self.create_subscription(
+            OccupancyGrid, self.local_costmap_topic, self.local_costmap_callback, 10
+        )
+
         self.robot_status_sub = self.create_subscription(
             String, '/robot_status_raw', self.robot_status_callback, 10
         )
         
         self.nav2_behavior_log_sub = self.create_subscription(BehaviorTreeLog,'/behavior_tree_log',self.nav2_log_callback,10)
-
-        self.localization_recovery_sub = self.create_subscription(
-            String,
-            self.localization_recovery_status_topic,
-            self.localization_recovery_status_callback,
-            10
-        )
 
         # prior_map_odom_bridge 是新定位链路里唯一维护 map->odom 的节点。
         # 状态管理器不参与点云匹配，也不直接发布 TF；这里只判断导航启动
@@ -421,8 +382,6 @@ class NavigationStateManager(Node):
             self._is_localization_healthy = True
             self._localization_healthy_count += 1
             self.localization_resume_stable_count += 1
-            if self._localization_healthy_count >= max(1, self.localization_resume_stable_frames):
-                self._handle_localization_healthy()
             return
 
         # SPIN_GUARD 表示 bridge 正在按设计冻结 map->odom，不能说明定位失效；
@@ -462,128 +421,6 @@ class NavigationStateManager(Node):
         now = time.time() if now is None else now
         return (now - self.localization_last_good_tf_time) <= max_age
 
-    def _handle_localization_degraded(self, reason: str):
-        """定位链路确认失效时暂停导航，并请求外部重定位。"""
-        if self.current_state not in (NavigationState.EXECUTING, NavigationState.PLANNING):
-            return
-
-        self.localization_auto_paused = True
-        self.localization_resume_pending = False
-        self.localization_recovery_active = True
-        self.localization_recovery_done = False
-        self.localization_resume_stable_count = 0
-        self.localization_recovery_reason = f"prior-map定位异常: {reason}"
-        self.localization_recovered_at = 0.0
-
-        self.current_state = NavigationState.PAUSED
-        self.current_detailed_state = "LOCALIZATION_RECOVERY"
-        self.pause_time = time.time()
-        self.pause_duration_limit = 0
-        self.reset_block_detection()
-        self.begin_localization_stop_hold()
-
-        if self.current_goal_handle:
-            self.cancel_navigation()
-
-        event_data = {
-            "pause_source": "prior_map_degraded",
-            "localization_reason": reason,
-            "reason": self.localization_recovery_reason,
-            "current_waypoint_id": self.current_waypoint.get("id", ""),
-            "current_waypoint_name": self.current_waypoint.get("name", ""),
-            "waypoint_index": self.current_waypoint_index,
-            "total_waypoints": self.total_waypoints,
-        }
-        self.publish_status_update("navigation_paused", event_data)
-        self.send_acknowledgment(
-            "navigation_auto_paused", "success",
-            "定位异常，已暂停导航并开始自动重定位", event_data)
-        self.get_logger().warn(
-            f'[prior_map] 定位异常 ({reason}), 暂停导航 + zero cmd hold')
-
-        # 发 recovery 请求
-        status = {"event_type": "localization_failure", "reason": reason}
-        self.request_navigation_context_recovery_for_localization(reason, status)
-
-    def _handle_localization_healthy(self):
-        """prior-map 定位恢复健康后，尝试恢复被定位流程暂停的导航。"""
-        if not self.localization_auto_paused:
-            return
-        if self.localization_auto_resume_require_recovery_done and not self.localization_recovery_done:
-            now = time.time()
-            if now - self.last_resume_wait_log_time > 2.0:
-                self.last_resume_wait_log_time = now
-                self.publish_status_update("navigation_localization_resume_waiting", {
-                    "reason": "prior-map定位已接受，但定位恢复流程尚未确认完成，暂不恢复导航",
-                    "localization_event": self.localization_recovery_last_status.get("event_type", ""),
-                    "localization_stable_count": self.localization_resume_stable_count,
-                    "required_localization_stable_frames": self.localization_resume_stable_frames,
-                    "localization_status": self.last_localization_status_summary,
-                })
-            return
-        self._localization_healthy_count = 0
-        if not self.localization_resume_pending:
-            self.localization_resume_pending = True     # R4: try_resume依赖此标志
-        if self.localization_recovered_at <= 0.0:
-            self.localization_recovered_at = time.time()
-        self.get_logger().info('[prior_map] 定位恢复健康, 尝试 resume 导航')
-        self.try_resume_after_localization_recovery()
-
-    def _cache_navigation_for_recovery(self, request_data: dict):
-        """定位恢复期间收到的新点位请求 → 缓存 + 告知 APP pending
-
-        Pending 语义:
-          - 只保留最后一个请求 (新请求覆盖旧请求)
-          - 覆盖时通知 APP: "pending_overwritten"
-          - 用户 cancel_navigation 时清除 pending request
-          - 恢复后自动执行 (延迟 1s 等定位/costmap 稳定)
-          - pending 超时 (pending_navigation_timeout: 90s) → 通知 APP 失败
-        """
-        was_pending = self.pending_navigation_request is not None
-        self.pending_navigation_request = json.loads(json.dumps(request_data))
-        self.pending_navigation_created_at = time.time()
-        self.pending_navigation_reason = "等待定位恢复后自动执行"
-        self.send_acknowledgment(
-            "navigation_pending_overwritten" if was_pending else "navigation_pending",
-            "pending",
-            f"定位异常(prior-map不健康)，导航请求已{'覆盖' if was_pending else '缓存'}，定位恢复后自动执行")
-        self.get_logger().info(
-            f'[prior_map] 新点位请求已缓存 (定位不健康), '
-            f'{"覆盖旧请求" if was_pending else "首次缓存"}')
-
-    def _execute_pending_navigation_later(self, delay_sec: float = 1.0):
-        """延迟执行缓存的新点位 (等定位/costmap 稳定)"""
-        if self.pending_navigation_request is None:
-            return
-        self.get_logger().info(
-            f'[prior_map] 将在 {delay_sec}s 后执行缓存的新点位导航')
-        self.create_timer(delay_sec, self._execute_pending_navigation_now, oneshot=True)
-
-    def _execute_pending_navigation_now(self):
-        """立即执行缓存的导航请求 (复用现有 dispatch)"""
-        if self.pending_navigation_request is None:
-            return
-        if self.current_state != NavigationState.IDLE:
-            self.get_logger().warn(
-                '[prior_map] 待执行缓存导航时状态非 IDLE, 跳过')
-            return
-
-        if not self._is_localization_healthy:
-            self.get_logger().info(
-                '[prior_map] 待执行缓存导航时定位仍不健康，继续等待')
-            return
-
-        request_data = self.pending_navigation_request
-        self.pending_navigation_request = None
-        self.pending_navigation_reason = ""
-
-        command_type = request_data.get("command_data", {}).get("command_type", "")
-        self.get_logger().info(
-            f'[prior_map] 定位恢复, 执行缓存的新点位导航: {command_type}')
-        # 复用现有导航命令 dispatch
-        self.handle_navigation_command(request_data)
-
-
     def setup_timers(self):
         """设置定时器"""
         # 状态发布定时器
@@ -592,18 +429,13 @@ class NavigationStateManager(Node):
         # 导航检查定时器
         self.create_timer(0.5, self.check_navigation_status)  # 2Hz
         
-        # 超时检查定时器
-        self.create_timer(5.0, self.check_timeout)  # 每5秒检查一次超时
-
         # 待启动导航检查定时器
         self.create_timer(0.2, self.try_execute_pending_navigation)
 
-        # 定位恢复后自动继续未完成导航
-        self.create_timer(0.5, self.try_resume_after_localization_recovery)
-
-        # 定位恢复期间持续压零速度，避免异步 cancel 期间沿旧 cmd_vel 继续走
-        # P1-1: 提高到 30Hz 压制 Nav2 controller (20Hz), 防止竞态导致 robot 继续移动
-        self.create_timer(0.033, self.enforce_localization_stop)
+        # 动态障碍物等待恢复定时器：
+        # 1. 每 4s 持续给 APP 推等待文案
+        # 2. 使用 costmap clear 多帧确认后自动恢复导航
+        self.create_timer(1.0 / self.obstacle_clear_check_rate_hz, self.process_obstacle_wait_state)
     
     def navigation_request_callback(self, msg: String):
         """处理路点管理器的导航请求"""
@@ -851,6 +683,112 @@ class NavigationStateManager(Node):
         except Exception as e:
             self.get_logger().error(f'❌ 处理里程计数据错误: {e}')
 
+    def local_costmap_callback(self, msg: OccupancyGrid):
+        """处理 local costmap。
+
+        这里不做 Nav2 那套完整碰撞检查，只做一个稳定、可调的“机器人前方窗口”
+        是否仍有高代价障碍物判断，用来支撑“障碍消失后自动恢复导航”。
+        """
+        try:
+            self.latest_local_costmap_stamp = time.time()
+            blocked, stats = self.analyze_front_obstacle_window(msg)
+            self.latest_front_obstacle_blocked = blocked
+            self.latest_front_obstacle_stats = stats
+        except Exception as e:
+            self.get_logger().error(f'❌ 处理 local costmap 错误: {e}')
+
+    def lookup_robot_pose_in_frame(self, target_frame: str):
+        """读取 base_footprint 在指定 frame 下的实时位姿。"""
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                target_frame,
+                self.base_frame,
+                Time(),
+                timeout=Duration(seconds=self.pose_tf_timeout_sec),
+            )
+        except TransformException as exc:
+            self.get_logger().debug(
+                f'等待 TF {target_frame}->{self.base_frame}: {exc}',
+                throttle_duration_sec=1.0,
+            )
+            return None
+
+        pose_stamped = PoseStamped()
+        pose_stamped.header = transform.header
+        pose_stamped.pose.position.x = transform.transform.translation.x
+        pose_stamped.pose.position.y = transform.transform.translation.y
+        pose_stamped.pose.position.z = transform.transform.translation.z
+        pose_stamped.pose.orientation = transform.transform.rotation
+        return pose_stamped.pose
+
+    def analyze_front_obstacle_window(self, msg: OccupancyGrid) -> Tuple[bool, Dict[str, Any]]:
+        """分析机器人前方矩形窗口是否仍被障碍物占据。"""
+        robot_pose = self.lookup_robot_pose_in_frame(msg.header.frame_id)
+        if robot_pose is None:
+            return True, {
+                "available": False,
+                "reason": f"missing_tf:{msg.header.frame_id}->{self.base_frame}",
+            }
+
+        resolution = float(msg.info.resolution)
+        width = int(msg.info.width)
+        height = int(msg.info.height)
+        origin_x = float(msg.info.origin.position.x)
+        origin_y = float(msg.info.origin.position.y)
+        robot_x = float(robot_pose.position.x)
+        robot_y = float(robot_pose.position.y)
+        robot_yaw = yaw_from_pose(robot_pose)
+
+        occupied_cells = 0
+        max_cost = 0
+        sample_cells = 0
+
+        cos_yaw = math.cos(robot_yaw)
+        sin_yaw = math.sin(robot_yaw)
+        for cell_y in range(height):
+            world_y = origin_y + (cell_y + 0.5) * resolution
+            for cell_x in range(width):
+                world_x = origin_x + (cell_x + 0.5) * resolution
+
+                dx = world_x - robot_x
+                dy = world_y - robot_y
+
+                # 把 costmap 中的世界坐标转到“机器人前向坐标系”。
+                forward_x = cos_yaw * dx + sin_yaw * dy
+                lateral_y = -sin_yaw * dx + cos_yaw * dy
+
+                if forward_x < self.obstacle_clear_front_min_x_m:
+                    continue
+                if forward_x > self.obstacle_clear_front_max_x_m:
+                    continue
+                if abs(lateral_y) > self.obstacle_clear_half_width_m:
+                    continue
+
+                sample_cells += 1
+                idx = cell_y * width + cell_x
+                if idx < 0 or idx >= len(msg.data):
+                    continue
+
+                cost = int(msg.data[idx])
+                if cost > max_cost:
+                    max_cost = cost
+                if cost >= self.obstacle_clear_cost_threshold:
+                    occupied_cells += 1
+
+        blocked = occupied_cells > 0
+        stats = {
+            "available": True,
+            "frame_id": msg.header.frame_id,
+            "window_front_min_x_m": round(self.obstacle_clear_front_min_x_m, 3),
+            "window_front_max_x_m": round(self.obstacle_clear_front_max_x_m, 3),
+            "window_half_width_m": round(self.obstacle_clear_half_width_m, 3),
+            "sample_cells": sample_cells,
+            "occupied_cells": occupied_cells,
+            "max_cost": max_cost,
+            "blocked": blocked,
+        }
+        return blocked, stats
+
     def robot_status_callback(self, msg: String):
         """跟踪机器人底层控制状态，导航启动前必须确认已回到 Walk。"""
         try:
@@ -1001,11 +939,6 @@ class NavigationStateManager(Node):
             return
 
         if self.current_state != NavigationState.IDLE:
-            # R5: 定位恢复期间(PAUSED+LOCALIZATION_RECOVERY)不清除pending,
-            # 等待恢复后执行。其他非IDLE状态才是真正的冲突。
-            if (self.current_state == NavigationState.PAUSED and
-                self.localization_auto_paused):
-                return  # 等待定位恢复
             pending_request = self.pending_navigation_request
             self.pending_navigation_request = None
             self.pending_navigation_reason = ""
@@ -1123,6 +1056,9 @@ class NavigationStateManager(Node):
 
     def get_obstacle_blockage_suppression_reason(self) -> Optional[str]:
         """返回当前是否应暂停障碍物阻塞计时，以及暂停原因。"""
+        if self.active_route_task and self.awaiting_broadcast:
+            return "route task 等待 APP 播报完成"
+
         if self.robot_motion_busy:
             motion_text = f"({self.robot_current_motion})" if self.robot_current_motion else ""
             return f"机器人动作执行阶段{motion_text}"
@@ -1153,6 +1089,46 @@ class NavigationStateManager(Node):
         # RecoveryNode / Wait 只是行为树控制节点，不能屏蔽前方障碍物长时间阻塞上报。
         return node_name in {"SpinToPose", "Spin", "BackUp"}
 
+    def clear_obstacle_wait_state(self):
+        """清理“因障碍等待恢复”的内部状态。"""
+        self.obstacle_wait_active = False
+        self.obstacle_wait_started_at = 0.0
+        self.obstacle_wait_last_push_time = 0.0
+        self.obstacle_clear_confirm_count = 0
+
+    def build_pause_event_data(
+        self,
+        pause_source: str,
+        reason: str,
+        resume_mode: str,
+        extra_data: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """统一构造暂停事件字段，确保 APP 能稳定区分暂停来源。"""
+        pause_location = None
+        if self.current_pose:
+            pause_location = {
+                "x": self.current_pose.position.x,
+                "y": self.current_pose.position.y,
+                "z": self.current_pose.position.z,
+            }
+
+        event_data = {
+            "pause_source": pause_source,
+            "reason": reason,
+            "resume_mode": resume_mode,
+            "waiting_for_obstacle_clear": pause_source == "obstacle_wait",
+            "pause_location": pause_location,
+            "pause_time": self.pause_time,
+            "pause_duration": self.pause_duration_limit,
+            "current_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
+            "current_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
+            "waypoint_index": self.current_waypoint_index,
+            "total_waypoints": self.total_waypoints,
+        }
+        if extra_data:
+            event_data.update(extra_data)
+        return event_data
+
     def reset_block_detection(self):
         """重置阻塞检测状态"""
         self.is_blocked_by_obstacle = False
@@ -1162,117 +1138,95 @@ class NavigationStateManager(Node):
         if self.current_detailed_state == "BLOCKED_BY_OBSTACLE":
             self.current_detailed_state = "EXECUTING"
 
-    def handle_obstacle_block_timeout(self, block_duration: float):
-        """处理障碍物阻塞超时，上报异常给APP"""
-        if self.block_reported:
-            return  # 防止重复上报
-
-        self.block_reported = True
-        self.current_detailed_state = "BLOCKED_BY_OBSTACLE"
-
-        self.get_logger().error(
-            f"🚨 障碍物阻塞超时 ({block_duration:.1f}秒)，上报导航异常"
-        )
-
-        # 上报阻塞异常
+    def publish_obstacle_blocked_event(self, block_duration: float, send_ack: bool = False):
+        """向 APP 推送“障碍仍在等待中”的事件。"""
         error_reason = "检测到障碍物，前方路径被挡住"
-        self.publish_status_update("navigation_obstacle_blocked", {
+        event_data = {
             "reason": error_reason,
             "block_duration": round(block_duration, 1),
             "blocked_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
             "blocked_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
             "blocked_waypoint_index": self.current_waypoint_index,
             "total_waypoints": self.total_waypoints,
-            "position": self.current_waypoint.get("position", []) if self.current_waypoint else []
-        })
+            "position": self.current_waypoint.get("position", []) if self.current_waypoint else [],
+            "waiting_for_obstacle_clear": True,
+            "clear_confirmed_frames": self.obstacle_clear_confirm_count,
+            "clear_required_frames": self.obstacle_clear_required_frames,
+            "pause_source": "obstacle_wait",
+        }
+        if self.latest_front_obstacle_stats:
+            event_data["front_obstacle_stats"] = self.latest_front_obstacle_stats
 
-        # 发送错误确认消息
-        self.send_acknowledgment("navigation_obstacle_blocked", "error", error_reason)
+        self.publish_status_update("navigation_obstacle_blocked", event_data)
+        if send_ack:
+            # 首次进入障碍等待时保留一次兼容确认；周期提醒只走 navigation_status，
+            # 避免 APP 每 4 秒同时收到“命令结果”和“状态事件”两类提示。
+            self.send_acknowledgment("navigation_obstacle_blocked", "error", error_reason)
 
-        # 注意：这里不取消导航，机器人继续尝试，但APP已收到异常通知
-        # 如果需要取消导航，可以取消注释下面的代码
-        # if self.current_goal_handle:
-        #     self.cancel_navigation()
-    def nav2_goal_response_callback(self, future):
-        """处理Nav2目标响应"""
-        try:
-            goal_handle = future.result()
-            if not goal_handle.accepted:
-                self.get_logger().error("Nav2目标被拒绝")
-                self.handle_navigation_failed("Nav2目标被拒绝")
-                return
-            
-            self.current_goal_handle = goal_handle
-            if self.current_state == NavigationState.PAUSED and self.localization_auto_paused:
-                self.get_logger().info("Nav2目标已接受，但定位恢复暂停中，立即取消该目标")
+    def enter_obstacle_wait_state(self, block_duration: float):
+        """进入“动态障碍物等待恢复”流程。
+
+        这里不再让 Nav2 自己 Wait 10s 后盲重试，而是：
+        1. 复用现有暂停导航流程取消当前 goal；
+        2. 对 APP 明确标记 pause_source=obstacle_wait；
+        3. 持续监听 costmap，直到前方 clear 多帧后再自动恢复。
+        """
+        if self.obstacle_wait_active:
+            return
+
+        self.block_reported = True
+        self.current_state = NavigationState.PAUSED
+        self.current_detailed_state = "OBSTACLE_WAITING"
+        self.pause_time = time.time()
+        self.pause_duration_limit = 0
+        self.current_pause_source = "obstacle_wait"
+        self.current_pause_reason = "检测到障碍物，前方路径被挡住"
+        self.current_resume_mode = "auto"
+        self.obstacle_wait_active = True
+        self.obstacle_wait_started_at = self.pause_time
+        self.obstacle_wait_last_push_time = 0.0
+        self.obstacle_clear_confirm_count = 0
+
+        # 进入等待态后重置普通阻塞计时，避免重复触发“刚暂停又马上超时”。
+        self.reset_block_detection()
+
+        if self.current_goal_handle:
+            if self.active_route_task:
+                # route task 的 through goal 不能走普通 cancel_navigation()：
+                # 普通 cancel 回调会无条件清空 current_goal_handle，若障碍消失后新段已经恢复启动，
+                # 旧 cancel 回调晚到可能误清掉新 goal handle。
+                self.cancel_current_route_goal_safely("obstacle_wait")
+            else:
                 self.cancel_navigation()
-                return
+        self.publish_zero_cmd_vel()
 
-            self.get_logger().info("Nav2目标已接受")
-        
-            # 获取结果
-            result_future = goal_handle.get_result_async()
-            result_future.add_done_callback(self.nav2_result_callback)
-        
-        except Exception as e:
-            self.get_logger().error(f"处理Nav2目标响应错误: {e}")
+        pause_event = self.build_pause_event_data(
+            pause_source="obstacle_wait",
+            reason=self.current_pause_reason,
+            resume_mode="auto",
+            extra_data={
+                "block_duration": round(block_duration, 1),
+                "waiting_for_obstacle_clear": True,
+                "clear_confirmed_frames": self.obstacle_clear_confirm_count,
+                "clear_required_frames": self.obstacle_clear_required_frames,
+            },
+        )
+        self.publish_status_update("navigation_paused", pause_event)
+        self.send_acknowledgment("navigation_paused", "success", "导航已因障碍物暂停", pause_event)
 
+        # 进入等待态时立即推一次障碍提示，后续再由定时器按 4s 周期重复推送。
+        self.publish_obstacle_blocked_event(block_duration, send_ack=True)
+        self.obstacle_wait_last_push_time = time.time()
 
-    def nav2_result_callback(self, future):
-        """处理Nav2导航结果"""
-        try:
-            result = future.result()
-            status = result.status
-        
-            if status == GoalStatus.STATUS_SUCCEEDED:
-                self.handle_nav2_succeeded()
-            elif status == GoalStatus.STATUS_CANCELED:
-                self.handle_nav2_cancelled()       # ← 区分取消和失败
-            else:
-                self.handle_nav2_failed()
-            
-        except Exception as e:
-            self.get_logger().error(f"处理Nav2结果错误: {e}")
-            self.handle_nav2_failed()
-    
-    def nav2_feedback_callback(self, feedback_msg):
-        try:
-            feedback = feedback_msg.feedback
-            
-            # 获取 Nav2 原生计算的剩余距离
-            self.distance_remaining = float(getattr(feedback, 'distance_remaining', float('inf')))
-            
-            # 提取预计剩余时间（解析 ROS Duration 对象）
-            est_time = getattr(feedback, 'estimated_time_remaining', None)
-            if est_time and hasattr(est_time, 'sec') and hasattr(est_time, 'nanosec'):
-                self.estimated_time_remaining = float(est_time.sec + est_time.nanosec * 1e-9)
-            else:
-                self.estimated_time_remaining = 0.0
-                
-            # 提取已导航时间（解析 ROS Duration 对象）
-            nav_time = getattr(feedback, 'navigation_time', None)
-            nav_time_sec = 0.0
-            if nav_time and hasattr(nav_time, 'sec') and hasattr(nav_time, 'nanosec'):
-                nav_time_sec = float(nav_time.sec + nav_time.nanosec * 1e-9)
-            elif nav_time and hasattr(nav_time, 'sec'): # fallback
-                nav_time_sec = float(nav_time.sec)
-        
-            # 实时发布进度更新事件，让上层立刻感知
-            self.publish_status_update("navigation_progress_update", {
-                "current_pose": {
-                    "position": {
-                        "x": float(feedback.current_pose.pose.position.x),
-                        "y": float(feedback.current_pose.pose.position.y),
-                        "z": float(feedback.current_pose.pose.position.z)
-                    }
-                },
-                "distance_remaining": self.distance_remaining,
-                "estimated_time_remaining": self.estimated_time_remaining,
-                "navigation_time_sec": nav_time_sec
-            })
-        except Exception as e:
-            # 修改为更明显的错误信息方便以后排查，从 debug 提升到 warning 或 error
-            self.get_logger().warning(f"解析 Nav2 反馈或发布状态失败: {e}")
+        self.get_logger().warning(
+            f"🚧 检测到前方障碍持续阻塞 {block_duration:.1f}s，已暂停导航，等待障碍物消失后自动恢复"
+        )
+
+    def handle_obstacle_block_timeout(self, block_duration: float):
+        """处理障碍物阻塞超时：改为进入“暂停等待障碍消失”的恢复流程。"""
+        if self.block_reported or not self.obstacle_wait_enable:
+            return
+        self.enter_obstacle_wait_state(block_duration)
 
     # 优化进度百分比计算逻辑
     def calculate_progress_percentage(self) -> float:
@@ -1301,6 +1255,9 @@ class NavigationStateManager(Node):
         command_type = ""
         route_task_command_types = {
             "start_route_task",
+            "pause_route_task",
+            "resume_route_task",
+            "stop_route_task",
             "jump_to_waypoint",
             "broadcast_finished",
         }
@@ -1310,29 +1267,16 @@ class NavigationStateManager(Node):
             
             self.get_logger().info(f"执行导航命令: {command_type}")
 
-            if self.reject_legacy_navigation_command_during_route_task(command_type):
-                return
-            
-            if command_type == "start_single_navigation":
-                self.handle_start_single_navigation(command_data, request_data)
-            elif command_type == "start_multi_point_navigation":  # 新增多点导航
-                self.handle_start_multi_point_navigation(command_data, request_data)    
-            elif command_type == "start_exhibition_navigation":
-                self.handle_start_exhibition_navigation(command_data, request_data)
-            elif command_type == "stop_navigation":
-                self.handle_stop_navigation(command_data)
-            elif command_type == "pause_navigation":
-                self.handle_pause_navigation(command_data)
-            elif command_type == "resume_navigation":
-                self.handle_resume_navigation(command_data)
-            elif command_type == "retry_failed_waypoint":
-                self.handle_retry_failed_waypoint(command_data)
-            elif command_type == "skip_failed_waypoint":
-                self.handle_skip_failed_waypoint(command_data)
-            elif command_type == "abort_failed_navigation":
-                self.handle_abort_failed_navigation(command_data)
-            elif command_type == "start_route_task":
+            # 对 APP 暴露的导航命令现在只保留 route task 新协议。
+            # 旧单点/多点/展台/旧暂停继续终止入口已经下线，避免 APP 和 ROS 同时维护两套路线上下文。
+            if command_type == "start_route_task":
                 self.handle_start_route_task(command_data, request_data)
+            elif command_type == "pause_route_task":
+                self.handle_pause_route_task(command_data, request_data)
+            elif command_type == "resume_route_task":
+                self.handle_resume_route_task(command_data, request_data)
+            elif command_type == "stop_route_task":
+                self.handle_stop_route_task(command_data, request_data)
             elif command_type == "jump_to_waypoint":
                 self.handle_jump_to_waypoint(command_data, request_data)
             elif command_type == "broadcast_finished":
@@ -1370,55 +1314,6 @@ class NavigationStateManager(Node):
                     "command_type": command_type,
                 }
             )
-
-    def reject_legacy_navigation_command_during_route_task(self, command_type: str) -> bool:
-        """route task 运行期间拒绝旧普通导航命令。
-
-        首版 route task 只定义了 start_route_task / jump_to_waypoint / broadcast_finished 三类新命令。
-        如果放行旧 stop/pause/resume/retry/skip/abort，旧逻辑会取消 Nav2 goal 或 reset 普通导航状态，
-        但不会完整维护 active_segment、播报等待、完成摘要等 route task 专属状态。
-        因此这里统一返回 busy/reject，避免旧命令静默抢占或破坏 route task。
-        """
-        if self.active_route_task is None:
-            return False
-
-        legacy_commands = {
-            "start_single_navigation",
-            "start_multi_point_navigation",
-            "start_exhibition_navigation",
-            "stop_navigation",
-            # APP 侧若把停止按钮命名成 cancel_navigation，也仍按旧普通导航控制命令处理。
-            # 首版 route task 没有定义专属取消命令，因此这里明确拒绝，避免落入“未知命令”分支。
-            "cancel_navigation",
-            "pause_navigation",
-            "resume_navigation",
-            "retry_failed_waypoint",
-            "skip_failed_waypoint",
-            "abort_failed_navigation",
-        }
-        if command_type not in legacy_commands:
-            return False
-
-        self.send_acknowledgment(
-            command_type,
-            "error",
-            "路线任务正在执行，首版不支持旧普通导航命令抢占或控制 route task",
-            {
-                "error_code": "route_task_active",
-                # 旧 ack 链路会被 data_integration 包装成 navigation_command_result。
-                # 显式携带 command_type，APP 可用 event_data.command_type 知道被拦截的是 stop/cancel/pause 中哪一个按钮。
-                "command_type": command_type,
-                "task_session_id": self.active_route_task.get("task_session_id", ""),
-                "route_id": self.active_route_task.get("route_id", ""),
-                "current_target_task_id": self.current_target_task_id,
-                "segment_id": self.active_segment.get("segment_id", "") if self.active_segment else "",
-            }
-        )
-        self.get_logger().warning(
-            f"route task 运行中拒绝旧导航命令: command_type={command_type}, "
-            f"task_session_id={self.active_route_task.get('task_session_id', '')}"
-        )
-        return True
 
     def build_route_task_event_id(self, event_type: str, session_id: str = "") -> str:
         """生成 route task 事件 ID，供 APP 去重和日志追踪使用。"""
@@ -1502,9 +1397,11 @@ class NavigationStateManager(Node):
             "error_code": error_code if status == "error" else "",
             "message": message
         }
-        if self.active_route_task:
-            event_data["task_session_id"] = event_data["task_session_id"] or self.active_route_task.get("task_session_id", "")
-            event_data["route_id"] = event_data["route_id"] or self.active_route_task.get("route_id", "")
+        # navigation_command_result 是“本次命令”的业务 ack。
+        # 这里不能用 active_route_task 回填缺失的 task_session_id / route_id：
+        # 如果 APP 漏传 route_id，却收到带当前 route_id 的 invalid_route_id，
+        # 前端和现场日志会误以为自己传了正确路线 ID。路线上下文事件会由
+        # publish_route_task_event() 对非 ack 业务事件自动补齐；ack 必须保留原始命令语义。
         event_data["event_id"] = self.build_route_task_event_id(
             "navigation_command_result", event_data.get("task_session_id", "")
         )
@@ -1593,6 +1490,11 @@ class NavigationStateManager(Node):
         if not all(math.isfinite(component) for component in orientation):
             return [], "orientation values must be finite numbers"
 
+        norm = math.sqrt(sum(component * component for component in orientation))
+        if norm <= 1e-6:
+            return [], "orientation quaternion norm must be greater than zero"
+
+        orientation = [component / norm for component in orientation]
         return orientation, ""
 
     @staticmethod
@@ -1688,6 +1590,7 @@ class NavigationStateManager(Node):
         """
         normalized_waypoints = []
         task_count = 0
+        seen_waypoint_ids = set()
 
         # websocket/桥接层会尽量把 route task 命令转给状态机返回统一业务 ack。
         # 因此这里必须自己兜住 None、字符串、对象等非数组输入，
@@ -1704,6 +1607,9 @@ class NavigationStateManager(Node):
             waypoint_id = self.route_task_id(waypoint.get("waypoint_id"))
             if not waypoint_id:
                 return [], "invalid_route_waypoints", f"route_waypoints[{index}] missing waypoint_id"
+            if waypoint_id in seen_waypoint_ids:
+                return [], "duplicate_waypoint_id", f"route_waypoints contains duplicate waypoint_id: {waypoint_id}"
+            seen_waypoint_ids.add(waypoint_id)
 
             properties = waypoint.get("properties", {})
             if not isinstance(properties, dict):
@@ -1744,6 +1650,8 @@ class NavigationStateManager(Node):
                 # 后续业务流程只读归一化结果，避免不同分支各自解释 properties。
                 normalized["need_broadcast"] = self.route_task_bool(task_need_broadcast, False)
                 normalized["broadcast_id"] = self.route_task_id(task_broadcast_id)
+                if normalized["need_broadcast"] and not normalized["broadcast_id"]:
+                    return [], "missing_broadcast_id", f"waypoint {waypoint_id} need_broadcast=true but missing broadcast_id"
                 normalized["broadcast_blocking"] = self.route_task_bool(task_broadcast_blocking, True)
                 normalized["stop_and_align"] = self.route_task_bool(task_stop_and_align, True)
                 task_count += 1
@@ -1893,7 +1801,12 @@ class NavigationStateManager(Node):
         target_index = int(target_task.get("source_index", -1))
         direction = self.compute_segment_direction(progress_index, target_index)
         interval_waypoints = self.collect_route_interval_waypoints(progress_index, target_index)
-        current_passed_transit = set(self.active_segment.get("passed_transit_waypoint_ids", [])) if self.active_segment else set()
+        # 只有仍在 through 导航途中再次跳步时，才扣除当前段已经实际通过的 transit。
+        # 如果已到达 task 并正在等待播报，上一段已经结束；此时反向跳步必须重新吸收
+        # 区间内 transit，例如 G -> B 应重新经过 F/E，而不能因为 B -> G 时通过过就去重。
+        current_passed_transit = set()
+        if self.active_segment and not self.awaiting_broadcast:
+            current_passed_transit = set(self.active_segment.get("passed_transit_waypoint_ids", []))
 
         transit_ids = [
             waypoint["waypoint_id"]
@@ -1981,7 +1894,9 @@ class NavigationStateManager(Node):
             # 这里不要复用旧普通导航的 waypoint_to_pose_stamped()，因为旧函数会给缺失字段填默认值；
             # route task 需要明确使用归一化后的字段，保证 through goal 与启动校验口径一致。
             pose = PoseStamped()
-            pose.header.stamp = self.get_clock().now().to_msg()
+            # Route task 的 through goal 可能在 jump/定位刚恢复/lifecycle 激活边界被 Nav2 延后处理。
+            # 使用 stamp=0 请求 TF latest，避免旧时间戳在 map->map_ground 转换时触发 extrapolation。
+            pose.header.stamp = Time().to_msg()
             pose.header.frame_id = waypoint.get("frame_id", self.default_frame_id)
 
             position = waypoint.get("position", [])
@@ -1999,15 +1914,216 @@ class NavigationStateManager(Node):
             self.get_logger().error(f"route waypoint 转 PoseStamped 失败: {waypoint_id}, {exc}")
             return None
 
+    def get_route_waypoint_walk_direction(self, waypoint: Dict[str, Any]) -> str:
+        """读取 route waypoint 的行走方向。
+
+        APP/后台可能把行走方向放在顶层 walk_direction，也可能放在 properties 里。
+        这里统一兼容旧字段名，只有明确配置 backward/reverse/倒走 时才走倒走 BT；
+        其他值全部按 forward 处理，避免误触发倒车。
+        """
+        properties = waypoint.get("properties", {}) or {}
+        direction = (
+            waypoint.get("walk_direction")
+            or properties.get("walk_direction")
+            or properties.get("navigation_direction")
+            or properties.get("drive_direction")
+            or properties.get("motion_direction")
+            or "forward"
+        )
+        if isinstance(direction, bool):
+            return "backward" if direction else "forward"
+        normalized = str(direction).strip().lower()
+        if normalized in {"backward", "reverse", "back", "倒走", "倒车", "后退"}:
+            return "backward"
+        return "forward"
+
+    def start_active_segment_final_pose_navigation(
+        self,
+        ack_command_type: str,
+        ack_command_data: Dict[str, Any],
+        send_failure_ack: bool,
+        detailed_state: str
+    ) -> bool:
+        """下发当前段最终 task 的 NavigateToPose。
+
+        这个函数只服务 route task 的最终任务点：
+        - 普通 task：不设置 behavior_tree，使用 Nav2 默认 navigate_xy_then_yaw.xml；
+        - 倒走 task：设置 reverse_navigation_bt_xml，复用倒走 BT；
+        - transit：不会调用这里，因此辅助点不会触发 final yaw align。
+        """
+        target_task = self.find_route_waypoint_by_id(self.current_target_task_id)
+        if not target_task:
+            return self.reject_active_segment_start(
+                ack_command_type,
+                ack_command_data,
+                "target task missing",
+                "target_task_missing",
+                send_failure_ack
+            )
+
+        pose = self.route_waypoint_to_pose_stamped(self.current_target_task_id)
+        if pose is None:
+            return self.reject_active_segment_start(
+                ack_command_type,
+                ack_command_data,
+                f"waypoint {self.current_target_task_id} has no valid pose",
+                "missing_waypoint_pose",
+                send_failure_ack
+            )
+
+        if not self.nav_to_pose_client.wait_for_server(timeout_sec=5.0):
+            return self.reject_active_segment_start(
+                ack_command_type,
+                ack_command_data,
+                "NavigateToPose action server unavailable",
+                "navigation_busy",
+                send_failure_ack
+            )
+
+        self.active_goal_generation += 1
+        self.current_route_task_goal_generation = self.active_goal_generation
+        if self.active_segment is not None:
+            self.active_segment["segment_goal_generation"] = self.current_route_task_goal_generation
+
+        self.current_state = NavigationState.EXECUTING
+        self.current_detailed_state = detailed_state
+        self.current_navigation_mode = NavigationMode.MULTI_POINT
+        self.navigation_start_time = time.time()
+
+        goal_msg = NavigateToPose.Goal()
+        goal_msg.pose = pose
+        walk_direction = self.get_route_waypoint_walk_direction(target_task)
+        if walk_direction == "backward":
+            goal_msg.behavior_tree = self.reverse_navigation_bt_xml
+
+        route_task_version = self.route_task_version
+        try:
+            # 注意：这里不是恢复旧 APP 单点导航，而是 route task 的“最终 task 收尾动作”。
+            # 只有最终 task 会走到这里，transit 辅助点不会触发对齐、播报或停车等待。
+            send_goal_future = self.nav_to_pose_client.send_goal_async(goal_msg)
+            send_goal_future.add_done_callback(
+                lambda future,
+                generation=self.current_route_task_goal_generation,
+                version=route_task_version: (
+                    self.route_task_final_pose_goal_response_callback(future, generation, version)
+                )
+            )
+        except Exception as exc:
+            if send_failure_ack:
+                self.send_route_task_ack(
+                    ack_command_type,
+                    "error",
+                    f"NavigateToPose send goal failed: {exc}",
+                    ack_command_data,
+                    error_code="send_goal_failed"
+                )
+            self.handle_route_task_navigation_failed(
+                f"NavigateToPose send goal failed: {exc}",
+                failure_code="send_goal_failed"
+            )
+            return False
+
+        self.publish_route_task_event("final_align_started", {
+            "segment_id": self.active_segment.get("segment_id", "") if self.active_segment else "",
+            "waypoint_id": self.current_target_task_id,
+            "walk_direction": walk_direction,
+            "behavior_tree": goal_msg.behavior_tree,
+            "align_reason": detailed_state
+        })
+        self.get_logger().info(
+            "route task final pose navigation started: "
+            f"segment_id={self.active_segment.get('segment_id', '') if self.active_segment else ''}, "
+            f"target={self.current_target_task_id}, walk_direction={walk_direction}, "
+            f"generation={self.current_route_task_goal_generation}"
+        )
+        return True
+
+    def route_task_final_pose_goal_response_callback(self, future, generation: int, route_task_version: int):
+        """处理最终 task NavigateToPose goal response，并隔离旧回调。"""
+        if (
+            route_task_version != self.route_task_version or
+            generation != self.current_route_task_goal_generation
+        ):
+            self.get_logger().info(
+                f"忽略旧 final pose goal response: version={route_task_version}, generation={generation}"
+            )
+            return
+        try:
+            goal_handle = future.result()
+            if not goal_handle.accepted:
+                self.handle_route_task_navigation_failed(
+                    "NavigateToPose goal rejected",
+                    failure_code="final_pose_goal_rejected"
+                )
+                return
+            self.route_task_goal_handle = goal_handle
+            self.current_goal_handle = goal_handle
+            result_future = goal_handle.get_result_async()
+            result_future.add_done_callback(
+                lambda result_future,
+                result_generation=generation,
+                result_version=route_task_version: (
+                    self.route_task_final_pose_result_callback(result_future, result_generation, result_version)
+                )
+            )
+        except Exception as exc:
+            self.handle_route_task_navigation_failed(
+                f"final pose goal response error: {exc}",
+                failure_code="final_pose_goal_response_error"
+            )
+
+    def route_task_final_pose_result_callback(self, future, generation: int, route_task_version: int):
+        """处理最终 task NavigateToPose result。
+
+        NavigateToPose 成功才表示最终 task 已经完成 XY 到达和 yaw 对齐；
+        因此只有这里成功后，才允许进入播报等待或 task 完成流程。
+        """
+        if (
+            route_task_version != self.route_task_version or
+            generation != self.current_route_task_goal_generation
+        ):
+            self.get_logger().info(
+                f"忽略旧 final pose result: version={route_task_version}, generation={generation}"
+            )
+            return
+        try:
+            result = future.result()
+            self.clear_route_task_goal_after_terminal_result()
+            if result.status == GoalStatus.STATUS_SUCCEEDED:
+                self.publish_route_task_event("final_align_completed", {
+                    "segment_id": self.active_segment.get("segment_id", "") if self.active_segment else "",
+                    "waypoint_id": self.current_target_task_id
+                })
+                self.handle_target_task_arrived()
+            elif result.status == GoalStatus.STATUS_CANCELED:
+                if self.obstacle_wait_active:
+                    self.get_logger().info("NavigateToPose 取消是由障碍等待暂停触发，保留 route task 现场")
+                    return
+                self.handle_route_task_navigation_failed(
+                    "NavigateToPose goal canceled",
+                    failure_code="final_pose_goal_canceled"
+                )
+            else:
+                self.handle_route_task_navigation_failed(
+                    "NavigateToPose goal failed",
+                    failure_code="final_pose_goal_failed"
+                )
+        except Exception as exc:
+            self.handle_route_task_navigation_failed(
+                f"final pose result error: {exc}",
+                failure_code="final_pose_result_error"
+            )
+
     def start_active_segment_navigation(
         self,
         ack_command_type: str = "start_route_task",
         ack_command_data: Optional[Dict[str, Any]] = None,
         send_failure_ack: bool = True
     ) -> bool:
-        """把当前 active_segment 下发给 NavigateThroughPoses。
+        """按当前 active_segment 的内容选择 route task 执行策略。
 
-        该函数是 route task through 执行的唯一入口；旧 NavigateToPose 不参与路线任务主路径。
+        有 transit 的段先交给 NavigateThroughPoses，保证辅助点不停车、不 Spin、不播报；
+        没有 transit 的段直接交给 NavigateToPose，让任务点继续复用“到 XY 后 Spin 对齐 yaw”的 BT。
         send_failure_ack 只用于命令触发的段启动：start/jump 失败需要业务 ack；
         自动进入下一段时没有新的 APP 命令，不应伪造旧命令 ack。
         """
@@ -2021,7 +2137,35 @@ class NavigationStateManager(Node):
                 send_failure_ack
             )
 
+        if self.should_complete_active_segment_without_navigation():
+            # 即使无需真正下发 Nav2 goal，也要推进 generation，保证 segment_id/回调隔离
+            # 与真实 through goal 一样单调变化，避免 APP 复盘时看到重复段号。
+            self.active_goal_generation += 1
+            self.current_route_task_goal_generation = self.active_goal_generation
+            self.active_segment["segment_goal_generation"] = self.current_route_task_goal_generation
+            self.complete_active_segment_without_navigation()
+            return True
+
+        if not self.active_segment.get("transit_waypoint_ids", []):
+            return self.start_active_segment_final_pose_navigation(
+                ack_command_type,
+                ack_command_data,
+                send_failure_ack,
+                detailed_state="ROUTE_TASK_FINAL_POSE_NAVIGATING"
+            )
+
+        if not self.nav_through_poses_client.wait_for_server(timeout_sec=5.0):
+            return self.reject_active_segment_start(
+                ack_command_type,
+                ack_command_data,
+                "NavigateThroughPoses action server unavailable",
+                "navigation_busy",
+                send_failure_ack
+            )
+
         poses = []
+        # 等 action server 可用后再构造 PoseStamped，避免 server/定位等待期间生成的旧 stamp
+        # 在 Nav2 内部转换 map->map_ground 时触发 TF extrapolation into the past。
         for waypoint_id in self.active_segment.get("execution_waypoint_ids", []):
             pose = self.route_waypoint_to_pose_stamped(waypoint_id)
             if pose is None:
@@ -2043,18 +2187,16 @@ class NavigationStateManager(Node):
                 send_failure_ack
             )
 
-        if not self.nav_through_poses_client.wait_for_server(timeout_sec=5.0):
-            return self.reject_active_segment_start(
-                ack_command_type,
-                ack_command_data,
-                "NavigateThroughPoses action server unavailable",
-                "navigation_busy",
-                send_failure_ack
-            )
-
         self.active_goal_generation += 1
         self.current_route_task_goal_generation = self.active_goal_generation
         self.active_segment["segment_goal_generation"] = self.current_route_task_goal_generation
+        segment_id = self.active_segment.get("segment_id", "")
+        if self.route_task_goal_reject_retry_segment_id != segment_id:
+            self.route_task_goal_reject_retry_segment_id = segment_id
+            self.route_task_goal_reject_retry_deadline = (
+                time.time() + max(0.0, self.route_task_goal_reject_retry_timeout_sec)
+            )
+            self.route_task_goal_reject_retry_count = 0
         # 新 through 段刚下发时先从当前时刻开始计时。
         # 如果 Nav2 action server 接受 goal 后长期没有 feedback，周期检查会按该时间触发失败。
         self.route_task_last_feedback_time = time.time()
@@ -2166,6 +2308,8 @@ class NavigationStateManager(Node):
         try:
             goal_handle = future.result()
             if not goal_handle.accepted:
+                if self.retry_route_task_goal_rejected(generation, route_task_version):
+                    return
                 self.handle_route_task_navigation_failed(
                     "NavigateThroughPoses goal rejected",
                     failure_code="goal_rejected"
@@ -2189,6 +2333,55 @@ class NavigationStateManager(Node):
                 f"through goal response error: {exc}",
                 failure_code="goal_response_error"
             )
+
+    def retry_route_task_goal_rejected(self, generation: int, route_task_version: int) -> bool:
+        """Nav2 lifecycle 刚激活边界可能短暂拒绝 through goal，允许同段短时重试。"""
+        if (
+            route_task_version != self.route_task_version or
+            generation != self.current_route_task_goal_generation or
+            not self.active_route_task or
+            not self.active_segment
+        ):
+            return False
+
+        now = time.time()
+        if now > self.route_task_goal_reject_retry_deadline:
+            return False
+
+        self.route_task_goal_reject_retry_count += 1
+        retry_count = self.route_task_goal_reject_retry_count
+        retry_delay_sec = 0.5
+        self.get_logger().warning(
+            "NavigateThroughPoses goal rejected，可能是 bt_navigator lifecycle 尚未 active，"
+            f"{retry_delay_sec:.1f}s 后重试同一路线段: "
+            f"segment_id={self.active_segment.get('segment_id', '')}, retry={retry_count}"
+        )
+
+        timer_ref = {}
+
+        def _retry_once():
+            timer = timer_ref.get("timer")
+            if timer:
+                timer.cancel()
+            if (
+                route_task_version != self.route_task_version or
+                generation != self.current_route_task_goal_generation or
+                not self.active_route_task or
+                not self.active_segment
+            ):
+                return
+            if not self.start_active_segment_navigation(
+                ack_command_type="route_task_goal_retry",
+                ack_command_data=self.active_route_task,
+                send_failure_ack=False
+            ):
+                self.handle_route_task_navigation_failed(
+                    "NavigateThroughPoses retry start failed",
+                    failure_code="goal_rejected_retry_start_failed"
+                )
+
+        timer_ref["timer"] = self.create_timer(retry_delay_sec, _retry_once)
+        return True
 
     def route_task_through_feedback_callback(self, feedback_msg, generation: int, route_task_version: int):
         """处理 NavigateThroughPoses feedback。
@@ -2380,8 +2573,23 @@ class NavigationStateManager(Node):
             result = future.result()
             self.clear_route_task_goal_after_terminal_result()
             if result.status == GoalStatus.STATUS_SUCCEEDED:
-                self.handle_target_task_arrived()
+                # through 成功只代表 transit 和最终 task 的 XY 路径已经走完；
+                # 最终 task 仍必须进入 NavigateToPose 收尾，让正常/倒走 BT 完成 yaw 对齐。
+                # 这样 11/12 这类 transit 不会触发 Spin，只有 segment_target_task_id 会对齐。
+                if not self.start_active_segment_final_pose_navigation(
+                    "route_task_final_align",
+                    self.active_route_task or {},
+                    send_failure_ack=False,
+                    detailed_state="ROUTE_TASK_FINAL_ALIGNING"
+                ) and self.active_route_task is not None:
+                    self.handle_route_task_navigation_failed(
+                        "final task alignment start failed",
+                        failure_code="final_align_start_failed"
+                    )
             elif result.status == GoalStatus.STATUS_CANCELED:
+                if self.obstacle_wait_active:
+                    self.get_logger().info("NavigateThroughPoses 取消是由障碍等待暂停触发，保留 route task 现场")
+                    return
                 self.handle_route_task_navigation_failed(
                     "NavigateThroughPoses goal canceled",
                     failure_code="goal_canceled"
@@ -2431,6 +2639,14 @@ class NavigationStateManager(Node):
         waypoint_id = str(waypoint_id)
         if waypoint_id not in self.completed_task_ids:
             self.completed_task_ids.append(waypoint_id)
+        # 反向跳回后，之前被 jump 标记为 skipped 的 task 可能会被重新实际执行。
+        # 真实完成优先级高于跳过，避免最终 summary 同时出现“已完成”和“已跳过”。
+        if waypoint_id in self.skipped_task_ids:
+            self.skipped_task_ids = [
+                skipped_task_id
+                for skipped_task_id in self.skipped_task_ids
+                if skipped_task_id != waypoint_id
+            ]
         self.last_completed_task_id = waypoint_id
         self.awaiting_broadcast = False
         self.waiting_broadcast_waypoint_id = ""
@@ -2443,6 +2659,7 @@ class NavigationStateManager(Node):
             # completed_task_ids 是运行态列表，发事件时必须拷贝成快照，
             # 否则下一段推进或 route reset 后会让复盘语义不稳定。
             "completed_task_ids": list(self.completed_task_ids),
+            "skipped_task_ids": list(self.skipped_task_ids),
             "next_target_task_id": (
                 self.master_route_task_ids[self.current_target_task_index + 1]
                 if self.current_target_task_index + 1 < len(self.master_route_task_ids)
@@ -2517,6 +2734,9 @@ class NavigationStateManager(Node):
         self.waiting_broadcast_id = ""
         self.jump_interrupts_broadcast = False
         self.route_task_goal_handle = None
+        self.route_task_goal_reject_retry_deadline = 0.0
+        self.route_task_goal_reject_retry_count = 0
+        self.route_task_goal_reject_retry_segment_id = ""
         self.route_task_last_feedback_time = 0.0
         self.last_completed_task_id = ""
         self.last_completed_broadcast = {
@@ -2526,11 +2746,10 @@ class NavigationStateManager(Node):
         }
 
     def handle_route_task_navigation_failed(self, message: str, failure_code: str = "navigation_failed"):
-        """处理 route task 失败，并避免进入旧多点导航的自动 skip 策略。
+        """处理 route task 失败，并避免进入普通 waypoint 导航失败策略。
 
         首版不新增 route_task_failed 事件，仍沿用 navigation_failed 通道通知 APP。
-        但不能继续调用普通 handle_navigation_failed()：旧函数可能根据
-        navigation_failure_policy=skip_failed_continue 自动跳过普通 waypoint，
+        但不能继续调用普通 handle_navigation_failed()：普通失败策略面向单点 goal，
         这会破坏 route task 的 active_segment / task / transit 语义。
         """
         # route task 失败沿用 navigation_failed 通道，但 payload 必须带完整 route 上下文。
@@ -2599,6 +2818,55 @@ class NavigationStateManager(Node):
             self.current_target_task_id,
             self.route_task_first_task_reached_tolerance_m
         )
+
+    def should_complete_active_segment_without_navigation(self) -> bool:
+        """当前段所有执行点都已在当前位置附近时，直接完成段。
+
+        只有 transit 和最终 task 全部满足距离容差才短路，避免漏走真正需要经过的辅助点。
+        """
+        if not self.active_segment or not self.current_pose:
+            return False
+
+        execution_ids = [str(item) for item in self.active_segment.get("execution_waypoint_ids", [])]
+        if not execution_ids:
+            return False
+
+        target_task_id = str(self.current_target_task_id)
+        for waypoint_id in execution_ids:
+            tolerance = (
+                self.route_task_first_task_reached_tolerance_m
+                if waypoint_id == target_task_id
+                else self.route_task_transit_passed_tolerance_m
+            )
+            if not self.is_current_pose_near_route_waypoint(waypoint_id, tolerance):
+                return False
+        return True
+
+    def complete_active_segment_without_navigation(self):
+        """当前段距离上已经满足要求时，跳过 through 并进入最终 task 对齐。
+
+        这里不能直接 handle_target_task_arrived()：
+        距离近只说明 XY 已经足够接近，不能证明最终 yaw 已经对齐。
+        因此仍然要走一次 NavigateToPose，让正常/倒走 BT 完成最终朝向收尾。
+        """
+        self.current_state = NavigationState.EXECUTING
+        self.current_detailed_state = "ROUTE_TASK_SEGMENT_ALREADY_REACHED"
+        self.current_navigation_mode = NavigationMode.MULTI_POINT
+        self.navigation_start_time = time.time()
+
+        for waypoint_id in self.active_segment.get("transit_waypoint_ids", []):
+            self.mark_transit_passed(str(waypoint_id))
+
+        if not self.start_active_segment_final_pose_navigation(
+            "route_task_final_align",
+            self.active_route_task or {},
+            send_failure_ack=False,
+            detailed_state="ROUTE_TASK_FINAL_ALIGNING"
+        ) and self.active_route_task is not None:
+            self.handle_route_task_navigation_failed(
+                "final task alignment start failed",
+                failure_code="final_align_start_failed"
+            )
 
     def handle_start_route_task(self, command_data: Dict[str, Any], request_data: Dict[str, Any]):
         """处理 start_route_task 命令，初始化 route task 并启动首段 through 导航。"""
@@ -2678,6 +2946,11 @@ class NavigationStateManager(Node):
         self.active_segment = first_segment
 
         if self.should_complete_first_task_without_navigation():
+            # 首点近距离命中也属于一个真实执行段；即使不下发 Nav2 goal，
+            # 也要占用一次 generation，避免后续 jump/下一段复用 seg_?_1。
+            self.active_goal_generation += 1
+            self.current_route_task_goal_generation = self.active_goal_generation
+            self.active_segment["segment_goal_generation"] = self.current_route_task_goal_generation
             self.current_state = NavigationState.EXECUTING
             self.current_detailed_state = "ROUTE_TASK_FIRST_TASK_ALREADY_REACHED"
             # 首 task 已在附近时不会真正下发 through goal，但 APP 仍会进入 route task 执行流。
@@ -2689,7 +2962,7 @@ class NavigationStateManager(Node):
                 "start_route_task", "success", "first route task waypoint already reached",
                 command_data, result_reason="first_task_already_reached"
             )
-            self.handle_target_task_arrived()
+            self.complete_active_segment_without_navigation()
             return
 
         if not self.start_active_segment_navigation():
@@ -2697,12 +2970,241 @@ class NavigationStateManager(Node):
             return
 
         self.send_route_task_ack(
-            "start_route_task", "success", "route task accepted and first through segment started",
+            "start_route_task", "success", "route task accepted and first segment started",
             command_data
         )
 
+    def validate_active_route_task_control(self, command_type: str, command_data: Dict[str, Any]) -> bool:
+        """校验 route task 控制命令是否属于当前正在运行的路线任务。
+
+        pause_route_task / resume_route_task / stop_route_task 都是“会改变当前任务状态”的命令，
+        所以不能只看按钮动作本身，还必须校验 APP 带来的 task_session_id 和 route_id。
+        这样可以避免 APP 重连后发出旧 session 的控制命令，误暂停或终止当前正在跑的新路线。
+        """
+        if self.active_route_task is None:
+            self.send_route_task_ack(
+                command_type, "error", "route task is not running",
+                command_data, error_code="route_task_not_running"
+            )
+            return False
+
+        task_session_id = self.route_task_id(command_data.get("task_session_id"))
+        route_id = self.route_task_id(command_data.get("route_id"))
+        if task_session_id != self.active_route_task.get("task_session_id", ""):
+            self.send_route_task_ack(
+                command_type, "error", "invalid task session",
+                command_data, error_code="invalid_task_session"
+            )
+            return False
+        if route_id != self.active_route_task.get("route_id", ""):
+            self.send_route_task_ack(
+                command_type, "error", "invalid route id",
+                command_data, error_code="invalid_route_id"
+            )
+            return False
+        return True
+
+    def handle_pause_route_task(self, command_data: Dict[str, Any], request_data: Dict[str, Any]):
+        """处理 pause_route_task 命令，暂停当前路线任务但保留 route task 上下文。
+
+        普通导航暂停逻辑可能清理或覆盖 route task 的 active_segment。
+        这里使用 route task 专属暂停：只安全取消当前 route task goal，保留
+        active_route_task / active_segment / completed_task_ids / skipped_task_ids / 播报等待态，
+        后续 resume_route_task 可以从当前段继续恢复。
+        """
+        if not self.validate_active_route_task_control("pause_route_task", command_data):
+            return
+
+        if self.current_state == NavigationState.PAUSED:
+            self.send_route_task_ack(
+                "pause_route_task", "success", "route task already paused",
+                command_data, result_reason="route_task_already_paused"
+            )
+            return
+
+        if self.current_state != NavigationState.EXECUTING and not self.awaiting_broadcast:
+            self.send_route_task_ack(
+                "pause_route_task", "error", "route task is not executing",
+                command_data, error_code="invalid_route_task_state"
+            )
+            return
+
+        pause_params = command_data.get("pause_parameters", {})
+        if not isinstance(pause_params, dict):
+            pause_params = {}
+        pause_duration = pause_params.get("pause_duration", 0)
+        self.current_state = NavigationState.PAUSED
+        self.current_detailed_state = "PAUSED"
+        self.pause_time = time.time()
+        self.pause_duration_limit = pause_duration
+        self.current_pause_source = "route_task_user_request"
+        self.current_pause_reason = command_data.get("reason", "用户手动暂停路线任务")
+        self.current_resume_mode = "manual"
+        self.clear_obstacle_wait_state()
+        self.reset_block_detection()
+
+        # route task 的当前 goal 必须用专属安全取消，不能复用普通 cancel_navigation()。
+        # 普通 cancel 回调可能晚到并清掉新恢复的 goal handle，造成恢复后又被旧回调打断。
+        if self.current_goal_handle or self.route_task_goal_handle:
+            self.cancel_current_route_goal_safely("route_task_pause")
+        self.publish_zero_cmd_vel()
+
+        event_data = self.build_pause_event_data(
+            pause_source="route_task_user_request",
+            reason=self.current_pause_reason,
+            resume_mode="manual",
+            extra_data={
+                "task_session_id": self.active_route_task.get("task_session_id", ""),
+                "route_id": self.active_route_task.get("route_id", ""),
+                "current_target_task_id": self.current_target_task_id,
+                "segment_id": self.active_segment.get("segment_id", "") if self.active_segment else "",
+                "route_task": True,
+            },
+        )
+        self.send_route_task_ack(
+            "pause_route_task", "success", "route task paused",
+            command_data, result_reason="route_task_paused"
+        )
+        self.publish_status_update("navigation_paused", event_data)
+
+    def handle_resume_route_task(self, command_data: Dict[str, Any], request_data: Dict[str, Any]):
+        """处理 resume_route_task 命令，恢复当前暂停中的路线任务。
+
+        该命令同时覆盖两类场景：
+        1. APP 手动暂停后点击继续；
+        2. 障碍物等待期间，现场人工清障后 APP 点击继续。
+
+        恢复时不能调用旧 APP 单点命令链路；必须重新走 start_active_segment_navigation()，
+        由它根据当前段是否包含 transit 选择 through 或最终 task NavigateToPose 收尾。
+        """
+        if not self.validate_active_route_task_control("resume_route_task", command_data):
+            return
+
+        if self.current_state != NavigationState.PAUSED:
+            self.send_route_task_ack(
+                "resume_route_task", "error", "route task is not paused",
+                command_data, error_code="route_task_not_paused"
+            )
+            return
+
+        if self.is_localization_resume_blocked():
+            self.send_route_task_ack(
+                "resume_route_task", "error",
+                "localization recovery is active, route task resume is blocked",
+                command_data, error_code="localization_resume_blocked"
+            )
+            return
+
+        if not self.active_segment and not self.awaiting_broadcast:
+            self.send_route_task_ack(
+                "resume_route_task", "error", "route task segment is missing",
+                command_data, error_code="missing_active_segment"
+            )
+            return
+
+        pause_elapsed = time.time() - self.pause_time if self.pause_time else 0.0
+        resume_source = self.current_pause_source or "route_task_user_request"
+        if self.obstacle_wait_active:
+            # 人工清障后点击继续时，退出障碍等待态，后面重新启动当前 active_segment。
+            self.clear_obstacle_wait_state()
+
+        self.current_state = NavigationState.EXECUTING
+        self.current_detailed_state = "WAITING_BROADCAST" if self.awaiting_broadcast else "EXECUTING"
+        self.current_pause_source = ""
+        self.current_pause_reason = ""
+        self.current_resume_mode = ""
+
+        event_data = {
+            "task_session_id": self.active_route_task.get("task_session_id", ""),
+            "route_id": self.active_route_task.get("route_id", ""),
+            "route_task": True,
+            "current_target_task_id": self.current_target_task_id,
+            "segment_id": self.active_segment.get("segment_id", "") if self.active_segment else "",
+            "pause_duration_actual": round(pause_elapsed, 1),
+            "resume_reason": command_data.get("reason", "route_task_user_request"),
+            "resume_source": resume_source,
+            "awaiting_broadcast": self.awaiting_broadcast,
+            "waiting_broadcast_waypoint_id": self.waiting_broadcast_waypoint_id,
+            "waiting_broadcast_id": self.waiting_broadcast_id,
+        }
+
+        if self.awaiting_broadcast:
+            # 如果暂停发生在“已到点等待 APP 播报”阶段，恢复时不重新发导航 goal；
+            # APP 继续完成当前 broadcast_finished 闭环即可。
+            self.send_route_task_ack(
+                "resume_route_task", "success", "route task broadcast wait resumed",
+                command_data, result_reason="route_task_broadcast_wait_resumed"
+            )
+            self.publish_status_update("navigation_resumed", event_data)
+            return
+
+        if not self.start_active_segment_navigation(
+            ack_command_type="resume_route_task",
+            ack_command_data=command_data,
+            send_failure_ack=False,
+        ):
+            self.handle_route_task_navigation_failed(
+                "route task manual resume failed",
+                failure_code="route_task_resume_failed",
+            )
+            return
+
+        self.send_route_task_ack(
+            "resume_route_task", "success", "route task resumed",
+            command_data, result_reason="route_task_resumed"
+        )
+        self.publish_status_update("navigation_resumed", event_data)
+
+    def handle_stop_route_task(self, command_data: Dict[str, Any], request_data: Dict[str, Any]):
+        """处理 stop_route_task 命令，终止当前路线任务并清理 route task 状态。
+
+        终止路线任务不能只做普通取消：除了取消 Nav2 goal，还要清理
+        active_route_task、active_segment、播报等待态、goal generation 等专属状态。
+        这样终止后重新 start_route_task 不会继承上一条路线的残留上下文。
+        """
+        if not self.validate_active_route_task_control("stop_route_task", command_data):
+            return
+
+        stop_params = command_data.get("stop_parameters", {})
+        if not isinstance(stop_params, dict):
+            stop_params = {}
+        emergency_stop = self.route_task_bool(stop_params.get("emergency_stop", False), False)
+        stop_reason = command_data.get("reason") or stop_params.get("reason", "route_task_user_stop")
+        completed_task_ids = list(self.completed_task_ids)
+        skipped_task_ids = list(self.skipped_task_ids)
+        active_segment_snapshot = dict(self.active_segment) if self.active_segment else {}
+
+        if self.current_goal_handle or self.route_task_goal_handle:
+            self.cancel_current_route_goal_safely("route_task_stop")
+        self.publish_zero_cmd_vel()
+
+        event_data = {
+            "task_session_id": self.active_route_task.get("task_session_id", ""),
+            "route_id": self.active_route_task.get("route_id", ""),
+            "route_task": True,
+            "reason": stop_reason,
+            "emergency_stop": emergency_stop,
+            "current_target_task_id": self.current_target_task_id,
+            "segment_id": active_segment_snapshot.get("segment_id", ""),
+            "completed_task_ids": completed_task_ids,
+            "skipped_task_ids": skipped_task_ids,
+            "completed_count": len(completed_task_ids),
+            "skipped_count": len(skipped_task_ids),
+            "task_count": len(self.master_route_task_ids),
+            "stopped_at": time.time(),
+        }
+        self.current_state = NavigationState.CANCELLED
+        self.current_detailed_state = "CANCELLED"
+        self.send_route_task_ack(
+            "stop_route_task", "success", "route task stopped",
+            command_data, result_reason="route_task_stopped"
+        )
+        self.publish_status_update("navigation_stopped", event_data)
+        self.reset_route_task_state()
+        self.reset_navigation_state()
+
     def cancel_current_route_goal_safely(self, reason: str = "route_task"):
-        """安全取消当前 route task through goal。
+        """安全取消当前 route task goal。
 
         route task 不能直接复用普通 cancel_navigation()：
         普通 cancel 回调会无条件清理 current_goal_handle，若 APP 很快启动新路线，
@@ -2713,7 +3215,7 @@ class NavigationStateManager(Node):
         goal_handle = self.current_goal_handle
         cancel_generation = self.current_route_task_goal_generation
         if not goal_handle:
-            self.get_logger().info(f"route task {reason} 无旧 through goal 需要取消")
+            self.get_logger().info(f"route task {reason} 无旧 goal 需要取消")
             return
 
         # 先让旧 result callback 失效；jump 场景下随后 start_active_segment_navigation 会写入新的 generation。
@@ -2727,25 +3229,25 @@ class NavigationStateManager(Node):
                 )
             )
             self.get_logger().info(
-                f"route task {reason} 已发送旧 through goal 取消请求: generation={cancel_generation}"
+                f"route task {reason} 已发送旧 goal 取消请求: generation={cancel_generation}"
             )
         except Exception as exc:
-            self.get_logger().warning(f"route task {reason} 取消旧 through goal 失败: {exc}")
+            self.get_logger().warning(f"route task {reason} 取消旧 goal 失败: {exc}")
 
     def cancel_current_route_goal_for_replan(self):
-        """为 route task jump 重规划取消旧 through goal。
+        """为 route task jump 重规划取消旧 goal。
 
         这个包装函数保留 jump 语义，实际取消逻辑统一走 cancel_current_route_goal_safely()。
         """
         self.cancel_current_route_goal_safely("jump_replan")
 
     def route_task_cancel_callback(self, future, old_goal_handle, old_generation: int):
-        """处理 route task 专用取消回调，避免旧取消结果污染新 through goal。"""
+        """处理 route task 专用取消回调，避免旧取消结果污染新 goal。"""
         try:
             response = future.result()
             if response.return_code != CancelGoal.Response.ERROR_NONE:
                 self.get_logger().warning(
-                    f"route task 旧 through goal 取消未被接受: generation={old_generation}, "
+                    f"route task 旧 goal 取消未被接受: generation={old_generation}, "
                     f"return_code={response.return_code}"
                 )
                 return
@@ -2755,9 +3257,9 @@ class NavigationStateManager(Node):
                 self.current_goal_handle = None
                 if self.route_task_goal_handle is old_goal_handle:
                     self.route_task_goal_handle = None
-            self.get_logger().info(f"route task 旧 through goal 已取消: generation={old_generation}")
+            self.get_logger().info(f"route task 旧 goal 已取消: generation={old_generation}")
         except Exception as exc:
-            self.get_logger().warning(f"route task 旧 through goal 取消回调处理失败: {exc}")
+            self.get_logger().warning(f"route task 旧 goal 取消回调处理失败: {exc}")
 
     def handle_jump_to_waypoint(self, command_data: Dict[str, Any], request_data: Dict[str, Any]):
         """处理 jump_to_waypoint 命令。
@@ -2778,6 +3280,13 @@ class NavigationStateManager(Node):
             self.send_route_task_ack(
                 "jump_to_waypoint", "error", "invalid task session",
                 command_data, error_code="invalid_task_session"
+            )
+            return
+        route_id = self.route_task_id(command_data.get("route_id"))
+        if route_id != self.active_route_task.get("route_id", ""):
+            self.send_route_task_ack(
+                "jump_to_waypoint", "error", "invalid route id",
+                command_data, error_code="invalid_route_id"
             )
             return
 
@@ -2831,6 +3340,17 @@ class NavigationStateManager(Node):
                 "waypoint_id": self.waiting_broadcast_waypoint_id,
                 "broadcast_id": self.waiting_broadcast_id
             }
+            interrupted_waypoint_id = self.waiting_broadcast_waypoint_id
+            if (
+                interrupted_waypoint_id
+                and interrupted_waypoint_id != target_waypoint_id
+                and interrupted_waypoint_id not in self.completed_task_ids
+                and interrupted_waypoint_id not in self.skipped_task_ids
+            ):
+                # 已到达但尚未收到 broadcast_finished 的 task，被 jump 打断后不能算完成。
+                # 先计入 skipped，保证最终 task_count = completed + skipped；
+                # 如果后面又跳回该点并完成，finalize_task_waypoint_completion() 会自动移除。
+                self.skipped_task_ids.append(interrupted_waypoint_id)
             self.awaiting_broadcast = False
             self.waiting_broadcast_waypoint_id = ""
             self.waiting_broadcast_id = ""
@@ -2841,6 +3361,14 @@ class NavigationStateManager(Node):
         for skipped_task_id in new_skipped_task_ids:
             if skipped_task_id not in self.skipped_task_ids and skipped_task_id not in self.completed_task_ids:
                 self.skipped_task_ids.append(skipped_task_id)
+        if target_waypoint_id in self.skipped_task_ids:
+            # 用户主动跳回某个之前被跳过的 task 时，该 task 已重新成为当前目标，
+            # 不应在 jump_updated 中继续展示为 skipped，避免 APP 同时高亮目标和跳过态。
+            self.skipped_task_ids = [
+                skipped_task_id
+                for skipped_task_id in self.skipped_task_ids
+                if skipped_task_id != target_waypoint_id
+            ]
 
         self.current_target_task_id = target_waypoint_id
         self.current_target_task_index = self.master_route_task_ids.index(target_waypoint_id)
@@ -2852,22 +3380,7 @@ class NavigationStateManager(Node):
         self.current_anchor_task_index = self.resolve_route_task_index(self.current_anchor_task_id)
         self.current_detailed_state = "JUMP_REPLANNING"
 
-        if not self.start_active_segment_navigation("jump_to_waypoint", command_data):
-            # start_active_segment_navigation() 内部可能已经进入 route task 失败流程
-            # 并清理 active_route_task，例如 send_goal_async 抛异常时会发布 send_goal_failed。
-            # 这里仅在任务仍然存在时补发 jump 语义的失败，避免 APP 收到两份 navigation_failed。
-            if self.active_route_task is not None:
-                self.handle_route_task_navigation_failed(
-                    "jump through segment start failed",
-                    failure_code="jump_segment_start_failed"
-                )
-            return
-
-        # 只有新 through goal 已经成功发起后，才发布 jump_updated。
-        # 这样 APP 不会先切到新执行段 UI，随后又马上收到新段启动失败事件。
-        # APP 收到 jump_updated 后，应切换当前目标 task、高亮新 active_segment，
-        # 清理旧目标高亮；若 interrupted_broadcast 非空，还应退出旧播报等待 UI。
-        self.publish_route_task_event("jump_updated", {
+        jump_event_data = {
             "segment_id": self.active_segment.get("segment_id", ""),
             "target_waypoint_id": target_waypoint_id,
             "segment_direction": self.active_segment.get("segment_direction", ""),
@@ -2877,7 +3390,37 @@ class NavigationStateManager(Node):
             "skipped_task_ids": list(self.skipped_task_ids),
             "interrupt_broadcast": interrupt_broadcast,
             "interrupted_broadcast": interrupted_broadcast
-        })
+        }
+        will_complete_without_navigation = self.should_complete_active_segment_without_navigation()
+        if will_complete_without_navigation:
+            # 快捷完成分支会同步调用 handle_target_task_arrived()/finalize_task_waypoint_completion()，
+            # 甚至可能一路推进到 route_task_completed 并 reset active_segment。
+            # 因此必须先发 jump_updated 和业务 ack，保证 APP 能收到本次 jump 已被接受，
+            # 再接收后续 waypoint_passed/task_completed/route_completed 事件。
+            self.publish_route_task_event("jump_updated", jump_event_data)
+            self.send_route_task_ack(
+                "jump_to_waypoint", "success", "jump request accepted",
+                command_data
+            )
+
+        if not self.start_active_segment_navigation("jump_to_waypoint", command_data):
+            # start_active_segment_navigation() 内部可能已经进入 route task 失败流程
+            # 并清理 active_route_task，例如 send_goal_async 抛异常时会发布 send_goal_failed。
+            # 这里仅在任务仍然存在时补发 jump 语义的失败，避免 APP 收到两份 navigation_failed。
+            if self.active_route_task is not None:
+                self.handle_route_task_navigation_failed(
+                    "jump route segment start failed",
+                    failure_code="jump_segment_start_failed"
+                )
+            return
+        if will_complete_without_navigation:
+            return
+
+        # 只有新 route goal 已经成功发起后，才发布 jump_updated。
+        # 这样 APP 不会先切到新执行段 UI，随后又马上收到新段启动失败事件。
+        # APP 收到 jump_updated 后，应切换当前目标 task、高亮新 active_segment，
+        # 清理旧目标高亮；若 interrupted_broadcast 非空，还应退出旧播报等待 UI。
+        self.publish_route_task_event("jump_updated", jump_event_data)
 
         self.send_route_task_ack(
             "jump_to_waypoint", "success", "jump request accepted",
@@ -2897,6 +3440,7 @@ class NavigationStateManager(Node):
         task_session_id = self.route_task_id(command_data.get("task_session_id"))
         waypoint_id = self.route_task_id(command_data.get("waypoint_id"))
         broadcast_id = self.route_task_id(command_data.get("broadcast_id"))
+        route_id = self.route_task_id(command_data.get("route_id"))
         # APP 回传播报结果时可能出现 "Completed" 或 " completed " 这类大小写/空格差异。
         # 这里不能写成 `command_data.get(...) or "completed"`：显式空字符串代表 APP
         # 回传了无效结果，必须返回 unsupported_broadcast_result，不能被误当成缺失字段自动完成。
@@ -2911,6 +3455,13 @@ class NavigationStateManager(Node):
             self.send_route_task_ack(
                 "broadcast_finished", "error", "invalid task session",
                 command_data, error_code="invalid_task_session"
+            )
+            return
+
+        if route_id != self.active_route_task.get("route_id", ""):
+            self.send_route_task_ack(
+                "broadcast_finished", "error", "invalid route id",
+                command_data, error_code="invalid_route_id"
             )
             return
 
@@ -2960,757 +3511,14 @@ class NavigationStateManager(Node):
         # 单个 task 是否完成、是否进入下一段或整条路线是否结束，要继续消费随后发布的
         # task_waypoint_completed 或 route_task_completed 事件，不能只靠这个 ack 更新最终进度。
         self.finalize_task_waypoint_completion(waypoint_id)
-    
-    def handle_start_single_navigation(self, command_data: Dict[str, Any], request_data: Dict[str, Any]):
-        """处理单点导航"""
-        try:
-            # 检查当前状态
-            if self.current_state != NavigationState.IDLE:
-                self.send_acknowledgment("start_single_navigation", "error", "当前正在执行其他导航任务")
-                return
-
-            # prior-map 定位未接受结果时缓存请求，不立即执行。
-            if self.get_localization_start_block_reason():
-                self._cache_navigation_for_recovery(request_data)
-                return
-
-            if self.defer_navigation_start_if_robot_not_ready(request_data):
-                return
-            
-            waypoint_id = command_data.get("waypoint_id")
-            waypoint_data = request_data.get("waypoint_data", {})
-            
-            if not waypoint_data:                # 从本地数据中查找点位
-                waypoint_data = self.find_waypoint_data_by_id(waypoint_id)
-            
-                if not waypoint_data:                
-                   # 旧普通导航错误也会被 data_integration 包装成 navigation_command_result。
-                   # 因此这里必须使用明确 ack_type + status=error + error_code，
-                   # 不能再把通用错误标识放到 ack_type 后直接跟错误文案，否则会污染 status 字段。
-                   self.send_acknowledgment(
-                       "start_single_navigation",
-                       "error",
-                       f"点位 '{waypoint_id}' 不存在",
-                       {
-                           "error_code": "waypoint_not_found",
-                           "command_type": "start_single_navigation",
-                           "waypoint_id": waypoint_id,
-                       }
-                   )
-                   return
-            
-            # 设置导航状态
-            self.current_state = NavigationState.PLANNING
-            self.current_navigation_mode = NavigationMode.SINGLE_POINT
-            self.current_sequence_id = f"single_{int(time.time())}"
-            self.waypoint_ids = [waypoint_id]
-            self.total_waypoints = 1
-            self.current_waypoint_index = 0
-            self.navigation_start_time = time.time()
-            
-            # 发送确认消息
-            self.send_acknowledgment("navigation_started", "success", 
-                                   f"开始单点导航到 '{waypoint_data.get('name', waypoint_id)}'")
-            
-            # 开始导航
-            self.navigate_to_waypoint(waypoint_data)
-            
-        except Exception as e:
-            self.get_logger().error(f"开始单点导航错误: {e}")
-            self.send_acknowledgment("navigation_started", "error", f"开始导航失败: {str(e)}")
-    
-    def handle_start_multi_point_navigation(self, command_data: Dict[str, Any], request_data: Dict[str, Any]):
-        """处理多点导航"""
-        try:
-             # 检查当前状态
-            if self.current_state != NavigationState.IDLE:
-               self.send_acknowledgment("start_multi_point_navigation", "error", "当前正在执行其他导航任务")
-               return
-
-            # prior-map 定位未接受结果时缓存请求，不立即执行。
-            if self.get_localization_start_block_reason():
-                self._cache_navigation_for_recovery(request_data)
-                return
-
-            if self.defer_navigation_start_if_robot_not_ready(request_data):
-               return
-
-            self.merge_request_waypoints_data(request_data)
-        
-        # 获取点位ID列表
-            waypoint_ids = command_data.get("waypoint_ids", [])
-            if not waypoint_ids:
-                # 多点导航的入参校验失败同样走标准旧 ack 结构，方便 APP 统一弹窗和埋点。
-                self.send_acknowledgment(
-                    "start_multi_point_navigation",
-                    "error",
-                    "点位列表不能为空",
-                    {
-                        "error_code": "empty_waypoint_list",
-                        "command_type": "start_multi_point_navigation",
-                    }
-                )
-                return
-        
-        # 验证所有点位是否存在
-            valid_waypoints = []
-            for wp_id in waypoint_ids:
-                waypoint_data = self.find_waypoint_data_by_id(wp_id)
-                if not waypoint_data:
-                    self.send_acknowledgment(
-                        "start_multi_point_navigation",
-                        "error",
-                        f"点位 '{wp_id}' 不存在",
-                        {
-                            "error_code": "waypoint_not_found",
-                            "command_type": "start_multi_point_navigation",
-                            "waypoint_id": wp_id,
-                        }
-                    )
-                    return
-                valid_waypoints.append(waypoint_data)
-          
-        # 设置导航状态
-            self.current_state = NavigationState.PLANNING
-            self.current_navigation_mode = NavigationMode.MULTI_POINT
-            self.current_sequence_id = f"multi_{int(time.time())}"
-            self.waypoint_ids = waypoint_ids
-            self.total_waypoints = len(waypoint_ids)
-            self.current_waypoint_index = 0
-            self.navigation_start_time = time.time()
-        
-        # 发送确认消息
-            self.send_acknowledgment("navigation_started", "success", 
-                               f"开始多点导航，共 {self.total_waypoints} 个点位")
-        
-        # 开始导航序列
-            self.start_navigation_sequence()
-        
-        except Exception as e:                 
-            self.get_logger().error(f"开始多点导航错误: {e}")
-            self.send_acknowledgment("navigation_started", "error", f"开始导航失败: {str(e)}")
-
-    def handle_start_exhibition_navigation(self, command_data: Dict[str, Any], request_data: Dict[str, Any]):
-        """处理展台导航"""
-        try:
-            # 检查当前状态
-            if self.current_state != NavigationState.IDLE:
-                self.send_acknowledgment("start_exhibition_navigation", "error", "当前正在执行其他导航任务")
-                return
-
-            # prior-map 定位未接受结果时缓存请求，不立即执行。
-            if self.get_localization_start_block_reason():
-                self._cache_navigation_for_recovery(request_data)
-                return
-
-            if self.defer_navigation_start_if_robot_not_ready(request_data):
-                return
-            
-            # 获取展台点位数据
-            exhibition_points = request_data.get("waypoints_data", {})
-            if exhibition_points:
-                self.merge_request_waypoints_data(request_data)
-
-            if not exhibition_points:
-                # 从本地数据中获取展台点
-                exhibition_points = self.waypoints_data.get("exhibition_point", {})
-            
-                if not exhibition_points:
-                   self.send_acknowledgment(
-                       "start_exhibition_navigation",
-                       "error",
-                       "没有可用的展台点位",
-                       {
-                           "error_code": "empty_exhibition_points",
-                           "command_type": "start_exhibition_navigation",
-                       }
-                   )
-                   return
-            
-            # 提取点位ID列表
-            waypoint_ids = list(exhibition_points.keys())
-            
-            # 设置导航状态
-            self.current_state = NavigationState.PLANNING
-            self.current_navigation_mode = NavigationMode.EXHIBITION_TOUR
-            self.current_sequence_id = f"exhibition_{int(time.time())}"
-            self.waypoint_ids = waypoint_ids
-            self.total_waypoints = len(waypoint_ids)
-            self.current_waypoint_index = 0
-            self.navigation_start_time = time.time()
-            
-            # 发送确认消息
-            self.send_acknowledgment("navigation_started", "success", 
-                                   f"开始展台导航，共 {self.total_waypoints} 个点位")
-            
-            # 开始导航序列
-            self.start_navigation_sequence()
-            
-        except Exception as e:
-            self.get_logger().error(f"开始展台导航错误: {e}")
-            self.send_acknowledgment("navigation_started", "error", f"开始导航失败: {str(e)}")
-    
-    def handle_stop_navigation(self, command_data: Dict[str, Any]):
-        """处理停止导航"""
-        try:
-            if self.current_state == NavigationState.IDLE and self.pending_navigation_request is not None:
-                self.pending_navigation_request = None
-                self.pending_navigation_reason = ""
-                self.send_acknowledgment("navigation_pending_cancelled", "success", "已取消待执行导航")
-                self.publish_status_update("navigation_pending_cancelled", {
-                    "reason": "user_stop"
-                })
-                self.get_logger().info("已取消待执行导航")
-                return
-
-            if self.current_state == NavigationState.IDLE:
-                self.send_acknowledgment("stop_navigation", "error", "当前没有在执行导航")
-                return
-            
-            stop_params = command_data.get("stop_parameters", {})
-            emergency_stop = stop_params.get("emergency_stop", False)
-            stop_reason = stop_params.get("reason", "user_request")
-
-            # 取消当前导航目标
-            if self.current_goal_handle:
-                self.cancel_navigation()
-            self.publish_zero_cmd_vel()
-            
-            # 更新状态
-            completed = self.current_waypoint_index
-            total = self.total_waypoints
-            
-            self.current_state = NavigationState.CANCELLED
-            
-            # 计算导航总结
-            navigation_duration = time.time() - self.navigation_start_time if self.navigation_start_time > 0 else 0
-            completion_percentage = (completed / total * 100) if total > 0 else 0
-            # 发送确认消息
-            self.send_acknowledgment("navigation_stopped", "success", 
-                                   f"导航已停止，完成 {completed}/{total} 个点位")
-            
-            # 发布状态更新
-            self.publish_status_update("navigation_stopped", {
-                "reason": stop_reason,
-                "emergency_stop": emergency_stop,
-                "completed_waypoints": completed,
-                "total_waypoints": total,
-                "navigation_duration": round(navigation_duration, 1),
-                "completion_percentage": round(completion_percentage, 1),
-                "last_waypoint_reached": self.waypoint_ids[completed - 1] if completed > 0 else None
-            })
-            
-            # 重置状态
-            self.reset_navigation_state()
-            
-            self.get_logger().info(f"导航已停止 (原因: {stop_reason}, 紧急: {emergency_stop})")
-            
-        except Exception as e:
-            self.get_logger().error(f"停止导航错误: {e}")
-            self.send_acknowledgment("navigation_stopped", "error", f"停止导航失败: {str(e)}")
-    
-    def handle_pause_navigation(self, command_data: Dict[str, Any]):
-        """处理暂停导航"""
-        try:
-            if self.current_state != NavigationState.EXECUTING:
-                self.send_acknowledgment("pause_navigation", "error", "当前没有在执行导航")
-                return
-        
-            # ✅ 使用 command_data 中的参数
-            pause_params = command_data.get("pause_parameters", {})
-            pause_duration = pause_params.get("pause_duration", 0)  # 0=无限期
-        
-            # 暂停导航
-            self.current_state = NavigationState.PAUSED
-            self.pause_time = time.time()
-            self.pause_duration_limit = pause_duration
-            self.reset_block_detection()
-        
-            # 物理打断底盘：取消当前 Nav2 目标
-            if self.current_goal_handle:
-                self.cancel_navigation()
-        
-            # 记录暂停位置
-            pause_location = None
-            if self.current_pose:
-                pause_location = {
-                "x": self.current_pose.position.x,
-                "y": self.current_pose.position.y,
-                "z": self.current_pose.position.z
-                }
-        
-            # 发送确认消息
-            self.send_acknowledgment("pause_navigation", "success", "导航已暂停")
-        
-            # 发布状态更新
-            self.publish_status_update("navigation_paused", {
-            "pause_location": pause_location,
-            "pause_time": self.pause_time,
-            "pause_duration": pause_duration,
-            "current_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
-            "current_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
-            "waypoint_index": self.current_waypoint_index,
-            "total_waypoints": self.total_waypoints
-             })
-        
-            self.get_logger().info(f"导航已暂停 (暂停时长限制: {'无限期' if pause_duration == 0 else f'{pause_duration}秒'})")
-        
-        except Exception as e:
-            self.get_logger().error(f"暂停导航错误: {e}")
-            self.send_acknowledgment("pause_navigation", "error", f"暂停导航失败: {str(e)}")
-    
-    def handle_resume_navigation(self, command_data: Dict[str, Any]):
-        """处理恢复导航"""
-        try:
-            if self.current_state == NavigationState.RECOVERABLE_FAILED:
-                self.send_acknowledgment(
-                    "navigation_resumed",
-                    "error",
-                    "导航处于失败可恢复状态，请使用 retry_failed_waypoint 或 skip_failed_waypoint"
-                )
-                return
-
-            if self.current_state != NavigationState.PAUSED:
-                self.send_acknowledgment("resume_navigation", "error", "导航未暂停")
-                return
-
-            if self.is_localization_resume_blocked():
-                self.reject_resume_during_localization_recovery()
-                return
-            
-            # 检查是否有可恢复的路点
-            if not self.current_waypoint:
-                self.send_acknowledgment("navigation_resumed", "error", "没有可恢复的导航目标")
-                self.reset_navigation_state()
-                return
-
-            if self.reject_navigation_start_if_robot_not_ready("navigation_resumed"):
-                return
-            
-            # ✅ 使用 command_data（虽然当前表格中 resume 没有额外参数，但预留扩展性）
-            resume_reason = command_data.get("reason", "user_request")
-        
-            # 计算暂停了多久
-            pause_elapsed = time.time() - self.pause_time if hasattr(self, 'pause_time') else 0
-
-            # 恢复导航
-            self.current_state = NavigationState.EXECUTING
-            
-            # 发送确认消息
-            self.send_acknowledgment("navigation_resumed", "success", "导航已恢复")
-            
-            # 发布状态更新
-            self.publish_status_update("navigation_resumed", {
-            "resumed_waypoint_id": self.current_waypoint.get("id", ""),
-            "resumed_waypoint_name": self.current_waypoint.get("name", ""),
-            "waypoint_index": self.current_waypoint_index,
-            "total_waypoints": self.total_waypoints,
-            "pause_duration_actual": round(pause_elapsed, 1),
-            "resume_reason": resume_reason
-            })
-            
-            # 重新导航到当前路点
-            self.navigate_to_waypoint(self.current_waypoint)
-        
-            self.get_logger().info(
-                 f"导航已恢复，暂停了 {pause_elapsed:.1f}秒，继续前往: "
-                 f"{self.current_waypoint.get('name', '')} ({self.current_waypoint_index + 1}/{self.total_waypoints})"
-            )
-        
-        except Exception as e:
-            self.get_logger().error(f"恢复导航错误: {e}")
-            self.send_acknowledgment("navigation_resumed", "error", f"恢复导航失败: {str(e)}")
 
     def is_localization_resume_blocked(self) -> bool:
-        """定位恢复链路还没完成时，禁止 App 手动恢复覆盖自动保护。"""
-        return (
-            self.localization_recovery_active or
-            self.localization_auto_paused or
-            self.localization_resume_pending or
-            self.current_detailed_state == "LOCALIZATION_RECOVERY"
-        )
+        """prior-map 定位未达到启动条件时，禁止 APP 恢复 route task。
 
-    def reject_resume_during_localization_recovery(self):
-        reason = "定位恢复中，暂不能手动恢复导航；定位准确且 TF 恢复后系统会自动继续未完成导航"
-        last_event = ""
-        if isinstance(self.localization_recovery_last_status, dict):
-            last_event = self.localization_recovery_last_status.get("event_type", "")
-
-        event_data = {
-            "reason": reason,
-            "blocked_command": "resume_navigation",
-            "manual_resume_rejected": True,
-            "localization_recovery_active": self.localization_recovery_active,
-            "localization_auto_paused": self.localization_auto_paused,
-            "localization_resume_pending": self.localization_resume_pending,
-            "localization_reason": self.localization_recovery_reason,
-            "localization_event": last_event,
-            "current_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
-            "current_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
-            "waypoint_index": self.current_waypoint_index,
-            "total_waypoints": self.total_waypoints,
-            "auto_resume_pending": self.localization_auto_paused or self.localization_resume_pending,
-        }
-
-        self.send_acknowledgment(
-            "resume_navigation",
-            "error",
-            reason,
-            event_data
-        )
-        self.publish_status_update("navigation_localization_resume_waiting", event_data)
-        self.get_logger().warning(f"拒绝手动恢复导航: {reason}")
-
-    def localization_recovery_status_callback(self, msg: String):
-        """定位恢复状态回调：定位失锁时暂停导航，恢复后继续当前未完成路点。"""
-        try:
-            status = json.loads(msg.data)
-            event_type = status.get("event_type", "")
-            self.localization_recovery_last_status = status
-
-            if event_type == "localization_recovery_started":
-                self.handle_localization_recovery_started(status)
-            elif event_type in (
-                "localization_recovery_prior_published",
-                "localization_relocalize_requested",
-                "localization_relocalize_completed",
-                "localization_initialpose_published",
-                "localization_recovery_waiting",
-                "localization_recovery_clearing_buffer",
-                "localization_recovery_buffer_cleared",
-            ):
-                self.handle_localization_recovery_progress(status)
-            elif event_type == "localization_relocalize_failed":
-                self.handle_localization_recovery_failed(status)
-            elif event_type == "localization_manual_initialpose_override":
-                self.handle_localization_manual_initialpose_override(status)
-            elif event_type == "localization_recovered":
-                self.handle_localization_recovered(status)
-
-        except Exception as e:
-            self.get_logger().error(f"处理定位恢复状态错误: {e}")
-
-    def handle_localization_recovery_started(self, status: Dict[str, Any]):
-        if not self.auto_pause_on_localization_recovery:
-            return
-
-        # recovery_started 事件用于跟踪状态和发送 nav_context prior。
-        reason = status.get("reason", "定位异常，正在重定位")
-        self.localization_recovery_active = True
-        self.localization_recovery_done = False
-        self.localization_resume_stable_count = 0
-        self.localization_recovery_reason = reason
-        self.localization_recovery_started_at = time.time()
-        self.localization_recovered_at = 0.0
-
-        if self.current_state in (NavigationState.EXECUTING, NavigationState.PLANNING):
-            self.localization_auto_paused = True
-            self.localization_resume_pending = False
-            self.current_state = NavigationState.PAUSED
-            self.current_detailed_state = "LOCALIZATION_RECOVERY"
-            self.pause_time = time.time()
-            self.pause_duration_limit = 0
-            self.reset_block_detection()
-            self.begin_localization_stop_hold()
-
-            if self.current_goal_handle:
-                self.cancel_navigation()
-
-            event_data = self.build_localization_pause_context(status)
-            self.publish_status_update("navigation_paused", event_data)
-            self.publish_status_update("navigation_localization_recovery_started", event_data)
-            self.send_acknowledgment(
-                "navigation_auto_paused",
-                "success",
-                "定位异常，已暂停导航并开始自动重定位",
-                event_data
-            )
-            self.get_logger().warning(f"定位异常，自动暂停导航: {reason}")
-            self.request_navigation_context_recovery_for_localization(reason, status)
-            return
-
-        if self.current_state == NavigationState.PAUSED and self.localization_auto_paused:
-            self.publish_status_update(
-                "navigation_localization_recovery_started",
-                self.build_localization_pause_context(status)
-            )
-            self.request_navigation_context_recovery_for_localization(reason, status)
-
-    def handle_localization_recovery_progress(self, status: Dict[str, Any]):
-        if not self.localization_recovery_active:
-            return
-
-        self.publish_status_update("navigation_localization_recovery_progress", {
-            "reason": status.get("reason", self.localization_recovery_reason),
-            "localization_event": status.get("event_type", ""),
-            "recovery_count": status.get("recovery_count", 0),
-            "relocalize_attempts": status.get("relocalize_attempts", 0),
-            "current_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
-            "current_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
-            "waypoint_index": self.current_waypoint_index,
-            "total_waypoints": self.total_waypoints,
-            "auto_resume_pending": self.localization_auto_paused,
-        })
-
-    def handle_localization_recovery_failed(self, status: Dict[str, Any]):
-        self.localization_recovery_active = True
-        self.localization_recovery_done = False
-        self.localization_resume_pending = False
-        self.localization_resume_stable_count = 0
-        self.localization_recovery_reason = status.get("reason", self.localization_recovery_reason)
-        self.localization_recovered_at = 0.0
-        self.publish_status_update("navigation_localization_recovery_failed", {
-            "reason": self.localization_recovery_reason,
-            "current_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
-            "current_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
-            "waypoint_index": self.current_waypoint_index,
-            "total_waypoints": self.total_waypoints,
-            "auto_resume_pending": self.localization_auto_paused,
-        })
-
-    def handle_localization_manual_initialpose_override(self, status: Dict[str, Any]):
-        self.localization_recovery_active = False
-        self.localization_recovery_done = False
-        self.localization_resume_pending = False
-        self.localization_resume_stable_count = 0
-        self.localization_recovery_reason = status.get("reason", "人工重定位已接管")
-
-        self.publish_status_update("navigation_localization_manual_override", {
-            "reason": self.localization_recovery_reason,
-            "localization_event": status.get("event_type", ""),
-            "manual_lockout_sec": status.get("manual_lockout_sec", 0.0),
-            "current_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
-            "current_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
-            "waypoint_index": self.current_waypoint_index,
-            "total_waypoints": self.total_waypoints,
-            "auto_resume_pending": self.localization_auto_paused,
-        })
-
-    def handle_localization_recovered(self, status: Dict[str, Any]):
-        self.localization_recovery_active = False
-        self.localization_recovery_done = True
-        self.localization_resume_stable_count = 0
-        self.localization_recovery_reason = status.get("reason", "定位已恢复")
-        self.localization_recovered_at = time.time()
-
-        event_data = {
-            "reason": self.localization_recovery_reason,
-            "recovery_duration": round(time.time() - self.localization_recovery_started_at, 1)
-                if self.localization_recovery_started_at else 0.0,
-            "current_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
-            "current_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
-            "waypoint_index": self.current_waypoint_index,
-            "total_waypoints": self.total_waypoints,
-            "auto_resume_pending": self.localization_auto_paused,
-        }
-        self.publish_status_update("navigation_localization_recovered", event_data)
-
-        if self.localization_auto_paused:
-            self.localization_resume_pending = True
-            self.try_resume_after_localization_recovery()
-
-    def try_resume_after_localization_recovery(self):
-        if not self.localization_resume_pending:
-            return
-
-        if self.current_state != NavigationState.PAUSED or not self.localization_auto_paused:
-            self.localization_resume_pending = False
-            return
-
-        if self.localization_auto_resume_require_recovery_done and (
-                self.localization_recovery_active or not self.localization_recovery_done):
-            self.publish_status_update("navigation_localization_resume_waiting", {
-                "reason": "定位恢复流程尚未确认完成，暂不恢复导航",
-                "localization_event": self.localization_recovery_last_status.get("event_type", ""),
-                "current_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
-                "current_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
-                "waypoint_index": self.current_waypoint_index,
-                "total_waypoints": self.total_waypoints,
-            })
-            return
-
-        if not self.current_waypoint:
-            self.localization_resume_pending = False
-            self.localization_auto_paused = False
-            self.publish_status_update("navigation_localization_resume_failed", {
-                "reason": "没有可恢复的导航目标"
-            })
-            self.reset_navigation_state()
-            return
-
-        block_reason = self.get_navigation_start_block_reason()
-        if block_reason:
-            self.publish_status_update("navigation_localization_resume_waiting", {
-                "reason": block_reason,
-                "current_waypoint_id": self.current_waypoint.get("id", ""),
-                "current_waypoint_name": self.current_waypoint.get("name", ""),
-                "waypoint_index": self.current_waypoint_index,
-                "total_waypoints": self.total_waypoints,
-            })
-            return
-
-        required_stable_frames = max(0, self.localization_resume_stable_frames)
-        if (not self._is_localization_healthy or
-                self.localization_resume_stable_count < required_stable_frames):
-            self.publish_status_update("navigation_localization_resume_waiting", {
-                "reason": (
-                    f"等待 prior-map 定位稳定帧 "
-                    f"{self.localization_resume_stable_count}/{required_stable_frames}"
-                ),
-                "localization_stable_count": self.localization_resume_stable_count,
-                "required_localization_stable_frames": required_stable_frames,
-                "localization_status": self.last_localization_status_summary,
-                "current_waypoint_id": self.current_waypoint.get("id", ""),
-                "current_waypoint_name": self.current_waypoint.get("name", ""),
-                "waypoint_index": self.current_waypoint_index,
-                "total_waypoints": self.total_waypoints,
-            })
-            return
-
-        settle_remaining = (
-            self.localization_recovered_at +
-            max(0.0, self.localization_resume_settle_sec) -
-            time.time()
-        )
-        if settle_remaining > 0.0:
-            self.publish_status_update("navigation_localization_resume_waiting", {
-                "reason": f"定位恢复后等待 prior-map/代价地图稳定 {settle_remaining:.1f}s",
-                "settle_remaining_sec": round(settle_remaining, 2),
-                "current_waypoint_id": self.current_waypoint.get("id", ""),
-                "current_waypoint_name": self.current_waypoint.get("name", ""),
-                "waypoint_index": self.current_waypoint_index,
-                "total_waypoints": self.total_waypoints,
-            })
-            return
-
-        pause_elapsed = time.time() - self.pause_time if self.pause_time else 0.0
-        event_data = {
-            "resumed_waypoint_id": self.current_waypoint.get("id", ""),
-            "resumed_waypoint_name": self.current_waypoint.get("name", ""),
-            "waypoint_index": self.current_waypoint_index,
-            "total_waypoints": self.total_waypoints,
-            "pause_duration_actual": round(pause_elapsed, 1),
-            "resume_reason": "localization_recovered",
-            "localization_reason": self.localization_recovery_reason,
-        }
-        reverse_resume, reverse_context = self.should_reverse_resume_to_current_waypoint()
-        event_data.update(reverse_context)
-
-        # ★ Phase 3: Waypoint 保留强化
-        # 1. 清除 waypoint 到达标志 — 防止 recovery 期间 pose 跳变导致误判到达
-        self.waypoint_arrived_by_position = False
-        self.waypoint_arrived_locked = False
-        # 2. 验证 current_waypoint 数据完整性
-        if not isinstance(self.current_waypoint, dict) or "position" not in self.current_waypoint:
-            self.get_logger().error(
-                '[prior_map] current_waypoint 数据损坏, 无法恢复导航')
-            self.localization_resume_pending = False
-            self.localization_auto_paused = False
-            self.localization_stop_until = 0.0
-            self.send_acknowledgment(
-                "navigation_resumed", "error",
-                "无法恢复导航: waypoint 数据损坏, 请联系管理员")
-            self.reset_navigation_state()
-            return
-
-        self.localization_resume_pending = False
-        self.localization_auto_paused = False
-        self.localization_stop_until = 0.0
-        self.current_state = NavigationState.EXECUTING
-        self.current_detailed_state = "EXECUTING"
-
-        self.send_acknowledgment(
-            "navigation_auto_resumed",
-            "success",
-            "定位已恢复，继续未完成导航",
-            event_data
-        )
-        self.publish_status_update("navigation_resumed", event_data)
-        self.navigate_to_waypoint(
-            self.current_waypoint,
-            force_walk_direction="backward" if reverse_resume else None,
-        )
-
-        if reverse_resume:
-            self.get_logger().info(
-                f"定位恢复后当前点在身后不远，使用倒走回补: "
-                f"{self.current_waypoint.get('name', '')} "
-                f"({self.current_waypoint_index + 1}/{self.total_waypoints}), "
-                f"distance={reverse_context.get('reverse_resume_distance_m', 0.0):.2f}m"
-            )
-        else:
-            self.get_logger().info(
-                f"定位恢复后自动继续导航: {self.current_waypoint.get('name', '')} "
-                f"({self.current_waypoint_index + 1}/{self.total_waypoints})"
-            )
-
-    def should_reverse_resume_to_current_waypoint(self) -> Tuple[bool, Dict[str, Any]]:
-        context: Dict[str, Any] = {
-            "reverse_resume_selected": False,
-            "reverse_resume_reason": "",
-        }
-        if not self.localization_resume_reverse_enabled:
-            context["reverse_resume_reason"] = "disabled"
-            return False, context
-        if not self.current_pose or not self.current_waypoint:
-            context["reverse_resume_reason"] = "missing current pose or waypoint"
-            return False, context
-
-        current_position = self.waypoint_position_tuple(self.current_waypoint)
-        if current_position is None:
-            context["reverse_resume_reason"] = "current waypoint has no valid position"
-            return False, context
-
-        dx = float(current_position[0]) - float(self.current_pose.position.x)
-        dy = float(current_position[1]) - float(self.current_pose.position.y)
-        distance = math.hypot(dx, dy)
-        context["reverse_resume_distance_m"] = round(distance, 3)
-        if distance <= max(self.position_tolerance, 0.05):
-            context["reverse_resume_reason"] = "already within waypoint tolerance"
-            return False, context
-        if distance > max(0.0, self.localization_resume_reverse_max_distance_m):
-            context["reverse_resume_reason"] = (
-                f"waypoint too far for reverse resume: {distance:.2f}m"
-            )
-            return False, context
-
-        robot_yaw = yaw_from_pose(self.current_pose)
-        target_bearing = math.atan2(dy, dx)
-        rear_error = abs(normalize_angle(target_bearing - robot_yaw - math.pi))
-        context["reverse_resume_rear_angle_deg"] = round(math.degrees(rear_error), 1)
-        if rear_error > max(0.0, self.localization_resume_reverse_rear_angle_rad):
-            context["reverse_resume_reason"] = (
-                f"waypoint is not behind robot: rear_error={math.degrees(rear_error):.1f}deg"
-            )
-            return False, context
-
-        previous_waypoint, _, previous_source = self.resolve_previous_waypoint_context(time.time())
-        previous_position = self.waypoint_position_tuple(previous_waypoint)
-        overshot_segment = False
-        raw_projection = None
-        if previous_position is not None:
-            seg_dx = float(current_position[0]) - float(previous_position[0])
-            seg_dy = float(current_position[1]) - float(previous_position[1])
-            seg_len_sq = seg_dx * seg_dx + seg_dy * seg_dy
-            if seg_len_sq > 1e-6:
-                raw_projection = (
-                    ((float(self.current_pose.position.x) - float(previous_position[0])) * seg_dx +
-                     (float(self.current_pose.position.y) - float(previous_position[1])) * seg_dy) /
-                    seg_len_sq
-                )
-                overshot_segment = raw_projection > 1.0
-
-        context.update({
-            "reverse_resume_selected": True,
-            "reverse_resume_reason": "current waypoint is behind robot after localization recovery",
-            "reverse_resume_overshot_segment": overshot_segment,
-            "reverse_resume_projection_ratio": (
-                round(raw_projection, 3) if raw_projection is not None else None
-            ),
-            "reverse_resume_previous_source": previous_source,
-            "reverse_resume_behavior_tree": self.reverse_navigation_bt_xml,
-        })
-        return True, context
+        旧链路会等待 /localization/recovery_status 和 recovery_done；
+        当前新链路只认 prior_map_odom_bridge_status，避免恢复按钮被已下线的全局重定位状态卡住。
+        """
+        return self.get_localization_start_block_reason() is not None
 
     def publish_zero_cmd_vel(self):
         try:
@@ -3718,300 +3526,6 @@ class NavigationStateManager(Node):
         except Exception as e:
             self.get_logger().error(f"发布零速度失败: {e}")
 
-    def begin_localization_stop_hold(self):
-        now = time.time()
-        self.localization_stop_until = max(
-            self.localization_stop_until,
-            now + max(0.0, self.localization_stop_hold_sec)
-        )
-        # P1-1: 连续发 3 帧零速度 (间隔 0.01s), 压制 Nav2 controller 的残余非零 cmd_vel
-        for _ in range(3):
-            self.publish_zero_cmd_vel()
-            time.sleep(0.01)
-
-    def enforce_localization_stop(self):
-        now = time.time()
-        localization_pause_active = (
-            self.localization_auto_paused and
-            self.current_state == NavigationState.PAUSED and
-            self.current_detailed_state == "LOCALIZATION_RECOVERY"
-        )
-        if localization_pause_active or now < self.localization_stop_until:
-            self.publish_zero_cmd_vel()
-
-    def build_localization_pause_context(self, status: Dict[str, Any]) -> Dict[str, Any]:
-        pause_location = None
-        if self.current_pose:
-            pause_location = {
-                "x": self.current_pose.position.x,
-                "y": self.current_pose.position.y,
-                "z": self.current_pose.position.z,
-            }
-
-        return {
-            "pause_source": "localization_recovery",
-            "reason": status.get("reason", "定位异常，正在重定位"),
-            "pause_location": pause_location,
-            "pause_time": self.pause_time,
-            "pause_duration": 0,
-            "current_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
-            "current_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
-            "waypoint_index": self.current_waypoint_index,
-            "total_waypoints": self.total_waypoints,
-            "localization_event": status.get("event_type", ""),
-            "recovery_count": status.get("recovery_count", 0),
-            "use_prior": status.get("use_prior", False),
-        }
-
-    def handle_retry_failed_waypoint(self, command_data: Dict[str, Any]):
-        """失败可恢复状态下，重试当前失败点。"""
-        try:
-            if self.current_state != NavigationState.RECOVERABLE_FAILED:
-                self.send_acknowledgment("retry_failed_waypoint", "error", "当前没有可重试的失败导航")
-                return
-
-            if not self.current_waypoint:
-                self.send_acknowledgment("retry_failed_waypoint", "error", "失败点位信息缺失，无法重试")
-                self.reset_navigation_state()
-                return
-
-            if self.reject_navigation_start_if_robot_not_ready("retry_failed_waypoint"):
-                return
-
-            context = self.build_failure_recovery_context()
-            self.current_state = NavigationState.EXECUTING
-            self.current_detailed_state = "EXECUTING"
-            self.reset_block_detection()
-
-            self.send_acknowledgment(
-                "retry_failed_waypoint",
-                "success",
-                f"重试失败点: {self.current_waypoint.get('name', '')}",
-                context
-            )
-            self.publish_status_update("navigation_retry_failed_waypoint", context)
-            self.navigate_to_waypoint(self.current_waypoint)
-
-        except Exception as e:
-            self.get_logger().error(f"重试失败点错误: {e}")
-            self.send_acknowledgment("retry_failed_waypoint", "error", f"重试失败点失败: {str(e)}")
-
-    def handle_skip_failed_waypoint(self, command_data: Dict[str, Any]):
-        """失败可恢复状态下，跳过当前失败点继续后续点位。"""
-        try:
-            if self.current_state != NavigationState.RECOVERABLE_FAILED:
-                self.send_acknowledgment("skip_failed_waypoint", "error", "当前没有可跳过的失败导航")
-                return
-
-            failed_context = self.build_failure_recovery_context()
-            failed_waypoint = self.current_waypoint or {}
-            next_waypoint_index = self.current_waypoint_index + 1
-            has_next_waypoint = next_waypoint_index < self.total_waypoints
-            next_waypoint_data = None
-            next_waypoint_id = ""
-
-            if has_next_waypoint:
-                if self.reject_navigation_start_if_robot_not_ready("skip_failed_waypoint"):
-                    return
-
-                next_waypoint_id = self.waypoint_ids[next_waypoint_index]
-                next_waypoint_data = self.find_waypoint_data_by_id(next_waypoint_id)
-                if not next_waypoint_data:
-                    self.send_acknowledgment(
-                        "skip_failed_waypoint",
-                        "error",
-                        f"下一个路点 '{next_waypoint_id}' 不存在",
-                        failed_context
-                    )
-                    return
-
-            skipped_waypoint = {
-                "waypoint_index": self.current_waypoint_index,
-                "waypoint_id": failed_waypoint.get("id", ""),
-                "waypoint_name": failed_waypoint.get("name", ""),
-                "reason": failed_context.get("reason", "")
-            }
-            self.skipped_waypoints.append(skipped_waypoint)
-
-            self.current_waypoint_index = next_waypoint_index
-            self.current_goal_handle = None
-            self.reset_block_detection()
-
-            if not has_next_waypoint:
-                completion_context = dict(failed_context)
-                completion_context.update({
-                    "recoverable": False,
-                    "available_actions": [],
-                    "skipped_waypoint": skipped_waypoint,
-                    "skipped_waypoints": self.skipped_waypoints,
-                    "remaining_waypoint_ids": []
-                })
-                self.send_acknowledgment(
-                    "skip_failed_waypoint",
-                    "success",
-                    "已跳过失败点，后续没有更多点位，导航完成",
-                    completion_context
-                )
-                self.handle_navigation_completed()
-                return
-
-            context = dict(failed_context)
-            context.update({
-                "recoverable": False,
-                "available_actions": ["pause_navigation", "stop_navigation"],
-                "skipped_from": failed_context,
-                "skipped_waypoint": skipped_waypoint,
-                "skipped_waypoints": self.skipped_waypoints,
-                "next_waypoint_index": self.current_waypoint_index,
-                "next_waypoint_id": next_waypoint_id,
-                "next_waypoint_name": next_waypoint_data.get("name", ""),
-                "remaining_waypoint_ids": self.waypoint_ids[self.current_waypoint_index:]
-            })
-            self.current_state = NavigationState.PLANNING
-            self.current_detailed_state = "PLANNING"
-            self.send_acknowledgment(
-                "skip_failed_waypoint",
-                "success",
-                f"已跳过失败点，继续导航到: {next_waypoint_data.get('name', next_waypoint_id)}",
-                context
-            )
-            self.publish_status_update("navigation_skip_failed_waypoint", context)
-            self.navigate_to_waypoint(next_waypoint_data)
-
-        except Exception as e:
-            self.get_logger().error(f"跳过失败点错误: {e}")
-            self.send_acknowledgment("skip_failed_waypoint", "error", f"跳过失败点失败: {str(e)}")
-
-    def handle_abort_failed_navigation(self, command_data: Dict[str, Any]):
-        """失败可恢复状态下，终止整轮任务并清空上下文。"""
-        try:
-            if self.current_state not in (NavigationState.RECOVERABLE_FAILED, NavigationState.FAILED):
-                self.send_acknowledgment("abort_failed_navigation", "error", "当前没有可终止的失败导航")
-                return
-
-            context = self.build_failure_recovery_context()
-            self.send_acknowledgment(
-                "abort_failed_navigation",
-                "success",
-                "已终止失败导航任务",
-                context
-            )
-            self.publish_status_update("navigation_aborted", context)
-            self.reset_navigation_state()
-
-        except Exception as e:
-            self.get_logger().error(f"终止失败导航错误: {e}")
-            self.send_acknowledgment("abort_failed_navigation", "error", f"终止失败导航失败: {str(e)}")
-    
-    def start_navigation_sequence(self):
-        """开始导航序列"""
-        if not self.waypoint_ids or self.current_waypoint_index >= len(self.waypoint_ids):
-            self.get_logger().error("导航序列为空或已完成")
-            return
-        
-        # 获取第一个路点
-        waypoint_id = self.waypoint_ids[self.current_waypoint_index]
-        waypoint_data = self.find_waypoint_data_by_id(waypoint_id)
-        
-        if not waypoint_data:           
-            self.get_logger().error(f"路点 '{waypoint_id}' 不存在")
-            self.handle_navigation_failed(f"路点 '{waypoint_id}' 不存在")
-            return
-        
-        # 开始导航到第一个路点
-        self.navigate_to_waypoint(waypoint_data)
-
-    def get_waypoint_walk_direction(self, waypoint_data: Dict[str, Any]) -> str:
-        """读取点位行走方向。默认正走；properties.walk_direction=backward 时倒走。"""
-        properties = waypoint_data.get("properties", {}) or {}
-        direction = (
-            properties.get("walk_direction")
-            or properties.get("navigation_direction")
-            or properties.get("drive_direction")
-            or properties.get("motion_direction")
-            or waypoint_data.get("walk_direction")
-            or "forward"
-        )
-
-        if isinstance(direction, bool):
-            return "backward" if direction else "forward"
-
-        normalized = str(direction).strip().lower()
-        if normalized in {"backward", "reverse", "back", "倒走", "倒车", "后退"}:
-            return "backward"
-        return "forward"
-    
-    def navigate_to_waypoint(self, waypoint_data: Dict[str, Any], force_walk_direction: Optional[str] = None):
-        """导航到指定路点"""
-        try:
-            self.current_waypoint = waypoint_data
-            self.current_state = NavigationState.EXECUTING
-            self.current_waypoint_start_time = time.time()
-            
-            # 创建导航目标
-            goal_pose = self.waypoint_to_pose_stamped(waypoint_data)
-            goal_msg = NavigateToPose.Goal()
-            goal_msg.pose = goal_pose
-            walk_direction = force_walk_direction or self.get_waypoint_walk_direction(waypoint_data)
-            if walk_direction == "backward":
-                goal_msg.behavior_tree = self.reverse_navigation_bt_xml
-        
-            # 等待动作服务器
-            if not self.nav_to_pose_client.wait_for_server(timeout_sec=5.0):
-                self.get_logger().error("Nav2动作服务器不可用")
-                self.handle_navigation_failed("Nav2服务器不可用")
-                return
-        
-            # 发送目标
-            self.future = self.nav_to_pose_client.send_goal_async(
-               goal_msg, 
-               feedback_callback=self.nav2_feedback_callback
-            )
-            self.future.add_done_callback(self.nav2_goal_response_callback)
-            
-            # 发布路点开始状态
-            self.publish_status_update("waypoint_started", {
-                "waypoint_id": waypoint_data.get("id", ""),
-                "waypoint_name": waypoint_data.get("name", ""),
-                "waypoint_index": self.current_waypoint_index,
-                "total_waypoints": self.total_waypoints,
-                "position": waypoint_data.get("position", []),
-                "walk_direction": walk_direction,
-                "behavior_tree": goal_msg.behavior_tree
-            })
-            
-            self.get_logger().info(
-                f"开始导航到路点: {waypoint_data.get('name', '')} "
-                f"({self.current_waypoint_index + 1}/{self.total_waypoints}), "
-                f"walk_direction={walk_direction}"
-            )
-            
-        except Exception as e:
-            self.get_logger().error(f"导航到路点错误: {e}")
-            self.handle_navigation_failed(f"导航到路点失败: {str(e)}")
-    
-    def waypoint_to_pose_stamped(self, waypoint_data: Dict[str, Any]) -> PoseStamped:
-        """将点位数据转换为PoseStamped"""
-        pose = PoseStamped()
-        pose.header.stamp = self.get_clock().now().to_msg()
-        pose.header.frame_id = waypoint_data.get("frame_id", self.default_frame_id)
-        
-        position = waypoint_data.get("position", [0.0, 0.0, 0.0])
-        orientation = waypoint_data.get("orientation", [0.0, 0.0, 0.0, 1.0])
-        
-        # 设置位置
-        pose.pose.position.x = float(position[0])
-        pose.pose.position.y = float(position[1])
-        pose.pose.position.z = float(position[2])
-        
-        # 设置方向
-        pose.pose.orientation.x = float(orientation[0])
-        pose.pose.orientation.y = float(orientation[1])
-        pose.pose.orientation.z = float(orientation[2])
-        pose.pose.orientation.w = float(orientation[3])
-        
-        return pose
-    
     def check_navigation_status(self):
         """检查导航状态 - 方案A：仅用于超时监控，不触发到达逻辑"""
         if self.current_state != NavigationState.EXECUTING:
@@ -4055,18 +3569,100 @@ class NavigationStateManager(Node):
             "NavigateThroughPoses feedback timeout",
             failure_code="feedback_timeout"
         )
-    
-    def check_timeout(self):
-        """检查导航超时"""
-        if (self.current_state == NavigationState.EXECUTING and 
-            self.current_waypoint is not None):
-            
-            current_time = time.time()
-            waypoint_duration = current_time - self.current_waypoint_start_time
-            
-            if waypoint_duration > self.waypoint_timeout:
-                self.get_logger().warning(f"路点导航超时，持续时间: {waypoint_duration:.1f}秒")
-                self.handle_navigation_failed("路点导航超时")
+
+    def process_obstacle_wait_state(self):
+        """处理“因动态障碍物暂停等待”的周期逻辑。"""
+        if not self.obstacle_wait_active:
+            return
+        if self.current_state != NavigationState.PAUSED:
+            return
+
+        now = time.time()
+        block_duration = now - self.obstacle_wait_started_at if self.obstacle_wait_started_at > 0.0 else 0.0
+
+        # 每 4 秒持续给 APP 推送一次等待文案，保证 UI 和播报都能维持“仍在受阻”。
+        if (
+            self.obstacle_wait_push_interval_sec > 0.0 and
+            now - self.obstacle_wait_last_push_time >= self.obstacle_wait_push_interval_sec
+        ):
+            self.publish_obstacle_blocked_event(block_duration, send_ack=False)
+            self.obstacle_wait_last_push_time = now
+
+        # costmap 太久没更新时，不做 clear 判定，避免用陈旧数据误恢复导航。
+        max_costmap_age = max(1.0, 2.0 / self.obstacle_clear_check_rate_hz)
+        if now - self.latest_local_costmap_stamp > max_costmap_age:
+            self.obstacle_clear_confirm_count = 0
+            return
+
+        if self.latest_front_obstacle_blocked:
+            self.obstacle_clear_confirm_count = 0
+            return
+
+        self.obstacle_clear_confirm_count += 1
+        if self.obstacle_clear_confirm_count < self.obstacle_clear_required_frames:
+            return
+
+        self.resume_from_obstacle_wait()
+
+    def resume_from_obstacle_wait(self):
+        """障碍物消失后自动恢复当前导航目标。
+
+        route task 会恢复当前 NavigateThroughPoses 段；非 route task 只作为内部兜底，
+        不再对应任何 APP 旧导航控制命令。
+        """
+        if not self.obstacle_wait_active:
+            return
+        if self.current_state != NavigationState.PAUSED:
+            return
+        if not self.current_waypoint:
+            self.get_logger().warning("障碍物已清除，但当前 waypoint 丢失，无法自动恢复导航")
+            self.clear_obstacle_wait_state()
+            self.reset_navigation_state()
+            return
+
+        pause_elapsed = time.time() - self.pause_time if self.pause_time else 0.0
+        self.clear_obstacle_wait_state()
+        self.current_state = NavigationState.EXECUTING
+        self.current_detailed_state = "EXECUTING"
+        self.current_pause_source = ""
+        self.current_pause_reason = ""
+        self.current_resume_mode = ""
+
+        event_data = {
+            "resumed_waypoint_id": self.current_waypoint.get("id", ""),
+            "resumed_waypoint_name": self.current_waypoint.get("name", ""),
+            "waypoint_index": self.current_waypoint_index,
+            "total_waypoints": self.total_waypoints,
+            "pause_duration_actual": round(pause_elapsed, 1),
+            "resume_reason": "obstacle_cleared_auto_resume",
+            "resume_source": "obstacle_wait",
+        }
+        if self.latest_front_obstacle_stats:
+            event_data["front_obstacle_stats"] = self.latest_front_obstacle_stats
+
+        self.send_acknowledgment("navigation_resumed", "success", "障碍物已消失，导航自动恢复", event_data)
+        self.publish_status_update("navigation_resumed", event_data)
+        if self.active_route_task and self.active_segment:
+            # 障碍恢复时必须重启当前 active_segment，并继续走 route task 策略选择器；
+            # 不能退回旧 navigate_to_waypoint 命令链路，否则会破坏 task/transit/播报语义。
+            if not self.start_active_segment_navigation(
+                ack_command_type="obstacle_cleared_auto_resume",
+                ack_command_data=self.active_route_task,
+                send_failure_ack=False,
+            ):
+                self.handle_route_task_navigation_failed(
+                    "obstacle cleared auto resume failed",
+                    failure_code="obstacle_auto_resume_failed",
+                )
+                return
+        else:
+            # 旧 APP 单点/多点导航入口已下线；如果没有 active_segment，说明当前状态不属于
+            # 新路线任务不能绕开 start_active_segment_navigation()，否则会丢失
+            # 跳步、transit、最终对齐和播报闭环上下文。
+            self.get_logger().error("障碍恢复失败：当前没有 route task active_segment")
+            self.handle_navigation_failed("missing route task active segment on obstacle resume")
+            return
+        self.get_logger().info("前方障碍物已连续 clear 多帧，自动恢复当前导航目标")
     
     def calculate_distance_to_waypoint(self) -> float:
         """计算到当前路点的距离"""
@@ -4087,148 +3683,6 @@ class NavigationStateManager(Node):
             self.get_logger().error(f"计算距离错误: {e}")
             return float('inf')
     
-    def handle_nav2_succeeded(self):
-        """处理Nav2成功到达"""
-        if (self.current_state == NavigationState.EXECUTING and 
-            self.current_waypoint is not None):
-
-            self.waypoint_arrived_by_nav2 = True
-            waypoint_id = self.current_waypoint.get("id", "")
-            waypoint_name = self.current_waypoint.get("name", "")
-            
-            # 发布路点到达状态
-            self.publish_status_update("waypoint_reached", {
-                "waypoint_id": waypoint_id,
-                "waypoint_name": waypoint_name,
-                "waypoint_index": self.current_waypoint_index,
-                "total_waypoints": self.total_waypoints,
-                "confirmation_source": "nav2"
-            })
-            
-            self.get_logger().info(f"Nav2确认到达路点: {waypoint_name}")
-            self.record_last_succeeded_waypoint(self.current_waypoint, self.current_waypoint_index)
-            
-            # 移动到下一个路点或完成导航
-            self.current_waypoint_index += 1
-            
-            if self.current_waypoint_index >= self.total_waypoints:
-                self.handle_navigation_completed()
-            else:
-                next_waypoint_id = self.waypoint_ids[self.current_waypoint_index]
-                next_waypoint_data = self.find_waypoint_data_by_id(next_waypoint_id)
-            
-                if next_waypoint_data:
-                    def trigger_next_waypoint():
-                        # 第一时间取消定时器，防止它无限循环（实现 oneshot 的效果）
-                        if hasattr(self, '_next_waypoint_timer') and self._next_waypoint_timer:
-                            self._next_waypoint_timer.cancel()
-                            self._next_waypoint_timer = None
-                        # 执行前往下一个路点的指令
-                        self.navigate_to_waypoint(next_waypoint_data)
-                        
-                    # 创建普通的定时器，把包装好的销毁函数绑上去
-                    self._next_waypoint_timer = self.create_timer(1.0, trigger_next_waypoint)
-                else:
-                    self.handle_navigation_failed(f"下一个路点 '{next_waypoint_id}' 不存在")
-    
-    def handle_nav2_failed(self):
-        """处理Nav2失败"""
-        self.handle_navigation_failed("Nav2导航失败")
-    
-    def handle_nav2_cancelled(self):
-        """处理Nav2取消"""
-        if self.current_state == NavigationState.PAUSED:
-            if self.localization_auto_paused:
-                self.get_logger().info("Nav2 取消是由定位恢复自动暂停触发，忽略重置操作")
-            else:
-                self.get_logger().info("Nav2 取消是由用户暂停触发，忽略重置操作")
-            return
-        if self.current_state == NavigationState.EXECUTING:
-            self.current_state = NavigationState.CANCELLED
-            self.publish_status_update("navigation_cancelled", {
-                "reason": "nav2_cancelled"
-            })
-            self.reset_navigation_state()
-    
-    def handle_navigation_completed(self):
-        """处理导航完成"""
-        self.current_state = NavigationState.COMPLETED
-        completion_context = {
-            "completed_waypoints": self.total_waypoints,
-            "total_waypoints": self.total_waypoints,
-            "navigation_mode": self.current_navigation_mode_value(),
-            "skipped_waypoints": self.skipped_waypoints
-        }
-        
-        # 发送确认消息
-        self.send_acknowledgment("navigation_completed", "success", 
-                               f"导航完成，共完成 {self.total_waypoints} 个点位",
-                               completion_context)
-        
-        # 发布状态更新
-        self.publish_status_update("navigation_completed", completion_context)
-        
-        self.get_logger().info("导航完成")
-        
-        # 重置状态
-        self.reset_navigation_state()
-
-    def build_failure_recovery_context(self, reason: str = "") -> Dict[str, Any]:
-        """构建失败恢复上下文，供 APP 展示和决策使用。"""
-        current_waypoint = self.current_waypoint or {}
-        failed_index = self.current_waypoint_index
-        remaining_waypoint_ids = []
-        if self.waypoint_ids and 0 <= failed_index < len(self.waypoint_ids):
-            remaining_waypoint_ids = self.waypoint_ids[failed_index:]
-
-        return {
-            "recoverable": True,
-            "reason": reason or self.last_failure_context.get("reason", ""),
-            "failed_waypoint_index": failed_index,
-            "failed_waypoint_id": current_waypoint.get("id", ""),
-            "failed_waypoint_name": current_waypoint.get("name", ""),
-            "completed_waypoints": failed_index,
-            "total_waypoints": self.total_waypoints,
-            "remaining_waypoint_ids": remaining_waypoint_ids,
-            "current_sequence_id": self.current_sequence_id,
-            "navigation_mode": self.current_navigation_mode_value(),
-            "skipped_waypoints": self.skipped_waypoints,
-            "available_actions": [
-                "retry_failed_waypoint",
-                "skip_failed_waypoint",
-                "stop_navigation"
-            ],
-            "resume_navigation_allowed": False
-        }
-
-    @staticmethod
-    def pose_orientation_dict(orientation: Any) -> Dict[str, float]:
-        if isinstance(orientation, dict):
-            return {
-                "x": float(orientation.get("x", 0.0)),
-                "y": float(orientation.get("y", 0.0)),
-                "z": float(orientation.get("z", 0.0)),
-                "w": float(orientation.get("w", 1.0)),
-            }
-        if isinstance(orientation, (list, tuple)) and len(orientation) >= 4:
-            return {
-                "x": float(orientation[0]),
-                "y": float(orientation[1]),
-                "z": float(orientation[2]),
-                "w": float(orientation[3]),
-            }
-        return {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}
-
-    @staticmethod
-    def quaternion_from_yaw(yaw: float) -> Dict[str, float]:
-        half_yaw = yaw * 0.5
-        return {
-            "x": 0.0,
-            "y": 0.0,
-            "z": math.sin(half_yaw),
-            "w": math.cos(half_yaw),
-        }
-
     @staticmethod
     def waypoint_position_tuple(waypoint: Optional[Dict[str, Any]]) -> Optional[Tuple[float, float, float]]:
         if not waypoint:
@@ -4245,330 +3699,37 @@ class NavigationStateManager(Node):
         except (TypeError, ValueError):
             return None
 
-    def waypoint_context_dict(self, waypoint: Optional[Dict[str, Any]], index: int) -> Optional[Dict[str, Any]]:
-        position = self.waypoint_position_tuple(waypoint)
-        if not waypoint or position is None:
-            return None
-        return {
-            "id": waypoint.get("id", ""),
-            "name": waypoint.get("name", ""),
-            "index": index,
-            "frame_id": waypoint.get("frame_id", self.default_frame_id),
-            "position": {
-                "x": position[0],
-                "y": position[1],
-                "z": position[2],
-            },
-        }
-
-    def resolve_previous_waypoint_context(self, now: float):
-        if self.waypoint_ids and self.current_waypoint_index > 0:
-            previous_index = self.current_waypoint_index - 1
-            previous_waypoint = self.find_waypoint_data_by_id(self.waypoint_ids[previous_index])
-            if previous_waypoint:
-                return previous_waypoint, previous_index, "current_sequence_previous"
-
-        if not self.last_succeeded_waypoint:
-            return None, -1, "none"
-
-        current_id = self.current_waypoint.get("id", "") if self.current_waypoint else ""
-        previous_id = self.last_succeeded_waypoint.get("id", "")
-        if current_id and previous_id and current_id == previous_id:
-            return None, -1, "none"
-
-        age = now - self.last_succeeded_time if self.last_succeeded_time > 0.0 else float("inf")
-        max_age = self.localization_context_prior_max_previous_age_sec
-        if max_age > 0.0 and age > max_age:
-            return None, -1, "last_succeeded_too_old"
-
-        return self.last_succeeded_waypoint, self.last_succeeded_waypoint_index, "last_succeeded_waypoint"
-
-    def resolve_next_waypoint_context(self):
-        if not self.waypoint_ids:
-            return None, -1
-        next_index = self.current_waypoint_index + 1
-        if next_index < 0 or next_index >= len(self.waypoint_ids):
-            return None, -1
-        next_waypoint = self.find_waypoint_data_by_id(self.waypoint_ids[next_index])
-        return next_waypoint, next_index
-
-    def build_navigation_context_recovery_request(
-        self,
-        reason: str,
-        trigger_event: str,
-        radius_m: float,
-        status: Optional[Dict[str, Any]] = None,
-        event_type: str = "navigation_context_recovery_request",
-    ) -> Optional[Dict[str, Any]]:
-        current_waypoint = self.current_waypoint
-        current_position = self.waypoint_position_tuple(current_waypoint)
-        if not current_waypoint or current_position is None:
-            return None
-
-        now = time.time()
-        previous_waypoint, previous_index, previous_source = self.resolve_previous_waypoint_context(now)
-        previous_position = self.waypoint_position_tuple(previous_waypoint)
-        next_waypoint, next_index = self.resolve_next_waypoint_context()
-
-        selected_prior_source = "navigation_context_current_goal"
-        selected_prior = {
-            "position": {
-                "x": current_position[0],
-                "y": current_position[1],
-                "z": current_position[2],
-            },
-            "orientation": self.pose_orientation_dict(
-                current_waypoint.get("orientation", [0.0, 0.0, 0.0, 1.0])
-            ),
-        }
-        selected_prior_meta = {
-            "method": "current_goal",
-            "previous_source": previous_source,
-        }
-
-        if previous_position is not None:
-            dx = current_position[0] - previous_position[0]
-            dy = current_position[1] - previous_position[1]
-            dz = current_position[2] - previous_position[2]
-            segment_length = math.hypot(dx, dy)
-
-            if segment_length >= max(0.0, self.localization_context_prior_min_segment_length_m):
-                if self.current_pose:
-                    reference_x = float(self.current_pose.position.x)
-                    reference_y = float(self.current_pose.position.y)
-                else:
-                    reference_x = current_position[0]
-                    reference_y = current_position[1]
-
-                projection = (
-                    ((reference_x - previous_position[0]) * dx + (reference_y - previous_position[1]) * dy) /
-                    max(segment_length * segment_length, 1e-6)
-                )
-                projection_clamped = max(0.0, min(1.0, projection))
-                prior_x = previous_position[0] + projection_clamped * dx
-                prior_y = previous_position[1] + projection_clamped * dy
-                prior_z = previous_position[2] + projection_clamped * dz
-                prior_yaw = math.atan2(dy, dx)
-
-                selected_prior_source = "navigation_context_segment"
-                selected_prior = {
-                    "position": {
-                        "x": prior_x,
-                        "y": prior_y,
-                        "z": prior_z,
-                    },
-                    "orientation": self.quaternion_from_yaw(prior_yaw),
-                }
-                selected_prior_meta = {
-                    "method": "projected_previous_to_current_segment",
-                    "previous_source": previous_source,
-                    "segment_length_m": round(segment_length, 3),
-                    "projection_ratio": round(projection_clamped, 3),
-                    "raw_projection_ratio": round(projection, 3),
-                    "reference_pose_source": "current_map_pose" if self.current_pose else "current_goal",
-                }
-
-        radius_m = max(0.0, float(radius_m))
-        current_context = self.waypoint_context_dict(current_waypoint, self.current_waypoint_index)
-        previous_context = self.waypoint_context_dict(previous_waypoint, previous_index)
-        next_context = self.waypoint_context_dict(next_waypoint, next_index)
-
-        payload = {
-            "event_type": event_type,
-            "source": "navigation_state_manager",
-            "reason": reason,
-            "timestamp": now,
-            "trigger_event": trigger_event,
-            "prior_source": selected_prior_source,
-            "prior_frame_id": current_waypoint.get("frame_id", self.default_frame_id),
-            "prior_pose": selected_prior,
-            "search_radius_m": radius_m,
-            "prior_max_xy_m": radius_m,
-            "allow_full_global_fallback": True,
-            "failed_waypoint_index": self.current_waypoint_index,
-            "failed_waypoint_id": current_waypoint.get("id", ""),
-            "failed_waypoint_name": current_waypoint.get("name", ""),
-            "current_pose": self.pose_to_dict(self.current_pose) if self.current_pose else None,
-            "current_detailed_state": self.current_detailed_state,
-            "navigation_context": {
-                "current_waypoint": current_context,
-                "previous_waypoint": previous_context,
-                "next_waypoint": next_context,
-                "selected_prior": selected_prior_meta,
-                "current_sequence_id": self.current_sequence_id,
-                "navigation_mode": self.current_navigation_mode_value(),
-                "total_waypoints": self.total_waypoints,
-            },
-        }
-
-        if status:
-            payload["localization_status"] = {
-                "event_type": status.get("event_type", ""),
-                "recovery_count": status.get("recovery_count", 0),
-                "relocalize_attempts": status.get("relocalize_attempts", 0),
-                "prior_reason": status.get("prior_reason", ""),
-            }
-
-        return payload
-
-    def publish_localization_recovery_request(self, payload: Dict[str, Any]):
-        msg = String()
-        msg.data = json.dumps(payload, ensure_ascii=False)
-        self.localization_recovery_request_pub.publish(msg)
-        self.publish_status_update("navigation_localization_recovery_requested", payload)
-
-    def request_navigation_context_recovery_for_localization(self, reason: str, status: Dict[str, Any]):
-        """定位异常触发重定位时，把当前导航上下文作为动态先验发给 HDL。"""
-        if not self.request_navigation_context_recovery_on_localization_failure:
-            return
-        if not self.current_waypoint:
-            return
-
-        now = time.time()
-        current_id = self.current_waypoint.get("id", "")
-        recovery_count = status.get("recovery_count", 0) if isinstance(status, dict) else 0
-        request_key = f"{self.current_sequence_id}:{self.current_waypoint_index}:{current_id}:{recovery_count}"
-        if request_key == self.last_navigation_context_recovery_key:
-            return
-
-        if (
-            now - self.last_navigation_context_recovery_request_time <
-            self.localization_context_recovery_request_cooldown_sec
-        ):
-            self.get_logger().warning(
-                "定位异常上下文恢复请求仍在冷却中，跳过本次触发",
-                throttle_duration_sec=3.0,
-            )
-            return
-
-        payload = self.build_navigation_context_recovery_request(
-            reason=reason,
-            trigger_event="localization_failure",
-            radius_m=self.localization_context_prior_radius_m,
-            status=status,
-            event_type="localization_failure_navigation_context_recovery_request",
-        )
-        if not payload:
-            return
-
-        self.publish_localization_recovery_request(payload)
-        self.last_navigation_context_recovery_request_time = now
-        self.last_navigation_context_recovery_key = request_key
-
-        context = payload.get("navigation_context", {})
-        previous_name = (context.get("previous_waypoint") or {}).get("name", "")
-        current_name = (context.get("current_waypoint") or {}).get("name", "")
-        selected = context.get("selected_prior", {})
-        self.get_logger().warning(
-            f"定位异常后请求 HDL 使用导航上下文重定位: "
-            f"prior={payload['prior_source']}, prev={previous_name}, current={current_name}, "
-            f"method={selected.get('method', '')}, 半径={payload['prior_max_xy_m']:.1f}m, reason={reason}"
-        )
-
-    def record_last_succeeded_waypoint(self, waypoint: Dict[str, Any], index: int):
-        self.last_succeeded_waypoint = dict(waypoint)
-        self.last_succeeded_waypoint_index = index
-        self.last_succeeded_pose = self.pose_to_dict(self.current_pose) if self.current_pose else None
-        self.last_succeeded_time = time.time()
-
-    def request_localization_recovery_for_failed_navigation(self, reason: str):
-        """导航失败后按需唤醒 HDL，全局重定位优先搜索失败目标点附近。"""
-        if not self.request_localization_recovery_on_nav_failure:
-            return
-        if not self.current_waypoint:
-            return
-
-        now = time.time()
-        if now - self.last_localization_recovery_request_time < self.localization_recovery_request_cooldown_sec:
-            self.get_logger().warning(
-                "定位恢复请求仍在冷却中，跳过本次导航失败触发",
-                throttle_duration_sec=3.0,
-            )
-            return
-
-        payload = self.build_navigation_context_recovery_request(
-            reason=reason,
-            trigger_event="navigation_failure",
-            radius_m=self.localization_recovery_prior_radius_m,
-            event_type="navigation_failure_recovery_request",
-        )
-        if not payload:
-            return
-
-        self.publish_localization_recovery_request(payload)
-        self.last_localization_recovery_request_time = now
-        context = payload.get("navigation_context", {})
-        selected = context.get("selected_prior", {})
-        self.get_logger().warning(
-            f"导航失败后请求 HDL 按需重定位: 先验={payload['prior_source']} "
-            f"目标={payload['failed_waypoint_name']}, method={selected.get('method', '')}, "
-            f"半径={payload['prior_max_xy_m']:.1f}m, reason={reason}"
-        )
-
-    @staticmethod
-    def pose_to_dict(pose) -> Dict[str, Any]:
-        return {
-            "position": {
-                "x": float(pose.position.x),
-                "y": float(pose.position.y),
-                "z": float(pose.position.z),
-            },
-            "orientation": {
-                "x": float(pose.orientation.x),
-                "y": float(pose.orientation.y),
-                "z": float(pose.orientation.z),
-                "w": float(pose.orientation.w),
-            },
-        }
-    
     def handle_navigation_failed(self, reason: str):
         """处理导航失败"""
         # 如果当前状态是 PAUSED(暂停)，说明是我们为了互动主动取消的，不要标记为失败，也不要重置数据
         if self.current_state == NavigationState.PAUSED:
-            if self.localization_auto_paused:
-                self.get_logger().info("检测到导航由定位恢复自动暂停，保留数据以备恢复...")
+            if self.obstacle_wait_active:
+                self.get_logger().info("检测到导航由障碍等待自动暂停，保留数据以备障碍物消失后恢复...")
             else:
                 self.get_logger().info("检测到导航由用户主动暂停，保留数据以备恢复...")
-            return
-
-        if self.navigation_failure_policy == "abort_all":
-            self.current_state = NavigationState.FAILED
-            self.send_acknowledgment("navigation_failed", "error", reason)
-            self.publish_status_update("navigation_failed", {
-                "reason": reason,
-                "failed_waypoint_index": self.current_waypoint_index,
-                "failed_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else ""
-            })
-            self.get_logger().error(f"导航失败: {reason}")
-            self.reset_navigation_state()
-            return
-
-        if self.navigation_failure_policy == "skip_failed_continue":
-            if self.current_goal_handle:
-                self.cancel_navigation()
-            self.current_state = NavigationState.RECOVERABLE_FAILED
-            self.last_failure_context = self.build_failure_recovery_context(reason)
-            self.handle_skip_failed_waypoint({})
             return
 
         # 只有在非暂停状态下的取消/报错，才视为真实失败
         if self.current_goal_handle:
             self.cancel_navigation()
 
-        self.current_state = NavigationState.RECOVERABLE_FAILED
-        self.current_detailed_state = "RECOVERABLE_FAILED"
+        self.current_state = NavigationState.FAILED
+        self.current_detailed_state = "FAILED"
         self.current_goal_handle = None
         self.reset_block_detection()
-        self.last_failure_context = self.build_failure_recovery_context(reason)
-        
-        # 发送确认消息
-        self.send_acknowledgment("navigation_failed", "error", reason, self.last_failure_context)
-        
-        # 发布状态更新
-        self.publish_status_update("navigation_failed", self.last_failure_context)
-        self.request_localization_recovery_for_failed_navigation(reason)
-        
-        self.get_logger().error(f"导航失败，进入可恢复失败状态: {reason}")
+
+        failure_context = {
+            "reason": reason,
+            "failed_waypoint_index": self.current_waypoint_index,
+            "failed_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
+            "failed_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
+            "navigation_mode": self.current_navigation_mode_value(),
+            "route_task": self.active_route_task is not None,
+        }
+        self.send_acknowledgment("navigation_failed", "error", reason, failure_context)
+        self.publish_status_update("navigation_failed", failure_context)
+
+        self.get_logger().error(f"导航失败: {reason}")
     
     def nav2_log_callback(self, msg):
         """解析 Nav2 行为树日志，识别当前正在进行的具体动作"""
@@ -4693,8 +3854,7 @@ class NavigationStateManager(Node):
                 "event_data": event_data,
                 "timestamp": time.time(),
                 "current_state": self.current_state.value,
-                "navigation_mode": self.current_navigation_mode_value(),
-                "sequence_id": self.current_sequence_id
+                "navigation_mode": self.current_navigation_mode_value()
             }
             
             update_msg = String()
@@ -4706,39 +3866,12 @@ class NavigationStateManager(Node):
         except Exception as e:
             self.get_logger().error(f"发布状态更新错误: {e}")
     
-    def publish_navigation_path(self):
-        """发布导航路径（用于可视化）"""
-        try:
-            if not self.waypoint_ids or self.current_waypoint_index >= len(self.waypoint_ids):
-                return
-            
-            # 创建路径消息
-            path_msg = Path()
-            path_msg.header.stamp = self.get_clock().now().to_msg()
-            path_msg.header.frame_id = self.default_frame_id
-            
-            # 从当前路点开始添加剩余路径点
-            remaining_waypoint_ids = self.waypoint_ids[self.current_waypoint_index:]
-            
-            for waypoint_id in remaining_waypoint_ids:
-                waypoint_data = self.find_waypoint_data_by_id(waypoint_id)
-                if waypoint_data:
-                    pose_stamped = self.waypoint_to_pose_stamped(waypoint_data)
-                    path_msg.poses.append(pose_stamped)
-            
-            # 发布路径
-            self.navigation_path_pub.publish(path_msg)
-            
-        except Exception as e:
-            self.get_logger().error(f"发布导航路径错误: {e}")
-    
     def get_current_status_summary(self) -> Dict[str, Any]:
         """获取当前状态摘要"""
         status_summary = {
             "timestamp": time.time(),
             "current_state": self.current_state.value,
             "navigation_mode": self.current_navigation_mode_value(),
-            "sequence_id": self.current_sequence_id,
             "current_waypoint_index": self.current_waypoint_index,
             "total_waypoints": self.total_waypoints,
             "progress_percentage": self.calculate_progress_percentage(),
@@ -4757,14 +3890,23 @@ class NavigationStateManager(Node):
                 if self.pending_navigation_request is not None else 0
             ),
             "pending_navigation_reason": self.pending_navigation_reason,
-            "failure_recoverable": self.current_state == NavigationState.RECOVERABLE_FAILED,
-            "failure_context": self.last_failure_context,
-            "skipped_waypoints": self.skipped_waypoints,
-            "localization_recovery_active": self.localization_recovery_active,
             "localization_auto_paused": self.localization_auto_paused,
-            "localization_resume_pending": self.localization_resume_pending,
-            "localization_recovery_reason": self.localization_recovery_reason,
-            "localization_recovery_status": self.localization_recovery_last_status
+            "localization_health_status": self.last_localization_status_summary,
+            "localization_healthy": self._is_localization_healthy,
+            "localization_has_last_good_tf": self.localization_has_last_good_tf,
+            "pause_source": self.current_pause_source,
+            "pause_reason": self.current_pause_reason,
+            "resume_mode": self.current_resume_mode,
+            "waiting_for_obstacle_clear": self.obstacle_wait_active,
+            "obstacle_wait_active": self.obstacle_wait_active,
+            "obstacle_wait_duration": (
+                time.time() - self.obstacle_wait_started_at
+                if self.obstacle_wait_active and self.obstacle_wait_started_at > 0.0 else 0.0
+            ),
+            "obstacle_clear_confirm_count": self.obstacle_clear_confirm_count,
+            "obstacle_clear_required_frames": self.obstacle_clear_required_frames,
+            "front_obstacle_blocked": self.latest_front_obstacle_blocked,
+            "front_obstacle_stats": self.latest_front_obstacle_stats,
         }
         
         # 添加当前位置信息
@@ -4849,8 +3991,7 @@ class NavigationStateManager(Node):
         active_states = [
             NavigationState.PLANNING,
             NavigationState.EXECUTING,
-            NavigationState.PAUSED,
-            NavigationState.RECOVERABLE_FAILED
+            NavigationState.PAUSED
         ]
         return self.current_state in active_states
     
@@ -4859,22 +4000,16 @@ class NavigationStateManager(Node):
         self.current_state = NavigationState.IDLE
         self.current_detailed_state = "IDLE"
         self.current_navigation_mode = None
-        self.current_sequence_id = None
         self.current_waypoint_index = 0
         self.total_waypoints = 0
         self.current_waypoint = None
-        self.waypoint_ids = []
-        self.skipped_waypoints = []
-        self.last_failure_context = {}
         self.navigation_start_time = 0
         self.current_goal_handle = None
-        self.waypoint_arrived_by_nav2 = False
-        self.localization_recovery_active = False
         self.localization_auto_paused = False
-        self.localization_resume_pending = False
-        self.localization_recovery_reason = ""
-        self.localization_recovery_started_at = 0.0
-        self.localization_recovery_last_status = {}
+        self.current_pause_source = ""
+        self.current_pause_reason = ""
+        self.current_resume_mode = ""
+        self.clear_obstacle_wait_state()
         
         # 重置阻塞检测状态
         self.reset_block_detection()
@@ -4902,16 +4037,23 @@ def main(args=None):
     """prior-map 定位版本入口。"""
     rclpy.init(args=args)
 
+    node = None
     try:
         node = NavigationStateManager()
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info("收到键盘中断信号")
+        if node is not None:
+            node.get_logger().info("收到键盘中断信号")
     except Exception as e:
-        node.get_logger().error(f"导航状态管理器运行错误: {e}")
+        if node is not None:
+            node.get_logger().error(f"导航状态管理器运行错误: {e}")
+        else:
+            print(f"导航状态管理器初始化失败: {e}")
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        if node is not None:
+            node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

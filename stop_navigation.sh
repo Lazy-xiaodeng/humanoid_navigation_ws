@@ -2,7 +2,9 @@
 set -eo pipefail
 set +u
 
-WORKSPACE="${WORKSPACE:-$HOME/humanoid_ws}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 默认停止脚本所在工作区对应的导航进程，避免误清理其它工作区的在线源码上下文。
+WORKSPACE="${WORKSPACE:-$SCRIPT_DIR}"
 PID_FILE="$WORKSPACE/.start_navigation.pid"
 
 OLD_PIDS=()
@@ -83,12 +85,7 @@ collect_navigation_pids() {
     "dynamic_odom_ground_publisher"
     "nav2_map_server.*/map_server"
     "nav2_lifecycle_manager.*/lifecycle_manager"
-    "hdl_global_localization_node"
-    "component_container_mt.*hdl_bootstrap_container"
-    "scancontext_global_localizer"
-    "lidar_localization_node"
     "robosense_lidar_localization_node"
-    "hdl_bootstrap_to_initialpose"
     "prior_map_odom_bridge"
     "robot_realpose_publisher"
     "periodic_clearing_publisher"

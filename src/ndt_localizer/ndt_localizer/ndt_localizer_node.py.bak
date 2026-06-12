@@ -32,7 +32,7 @@ class NDTLocalizer(Node):
         super().__init__('ndt_localizer')
         
         # ===== 参数声明 =====
-        self.declare_parameter('pcd_map_path', '/home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd')
+        self.declare_parameter('pcd_map_path', '/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd')
         self.declare_parameter('input_cloud_topic', '/fast_lio/cloud_registered')
         self.declare_parameter('output_pose_topic', '/ndt_pose')
         self.declare_parameter('publish_rate', 10.0)

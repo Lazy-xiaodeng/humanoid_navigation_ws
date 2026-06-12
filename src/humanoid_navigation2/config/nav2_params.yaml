@@ -1,5 +1,5 @@
 # ==============================================================================
-# 文件名：nav2_params_rpp.yaml
+# 文件名：nav2_params.yaml
 #
 # 功能说明：
 #   人形机器人 Nav2 导航配置文件
@@ -61,7 +61,21 @@ bt_navigator:
     # 关键：
     #   分阶段导航行为树：
     #     先转向目标点方向 -> 只按 XY 导航到点 -> 再对齐最终 yaw。
-    default_bt_xml_filename: "/home/ubuntu/humanoid_ws/src/humanoid_navigation2/config/behavior_tree/navigate_xy_then_yaw.xml"
+    default_bt_xml_filename: "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/config/behavior_tree/navigate_xy_then_yaw.xml"
+
+    # --------------------------------------------------------------------------
+    # Nav2 navigator action 注册
+    #
+    # Jazzy 下如果不显式声明 navigators，bt_navigator 可能只暴露
+    # /navigate_to_pose，导致路线任务的 NavigateThroughPoses 客户端一直等不到
+    # /navigate_through_poses action server。路线任务丝滑 through 依赖这里。
+    # --------------------------------------------------------------------------
+    navigators: ["navigate_to_pose", "navigate_through_poses"]
+    navigate_to_pose:
+      plugin: "nav2_bt_navigator::NavigateToPoseNavigator"
+    navigate_through_poses:
+      plugin: "nav2_bt_navigator::NavigateThroughPosesNavigator"
+
 
     # 自定义 BT 插件库：
     #   Nav2 Jazzy 会自动加载内置 BT 节点库，这里只追加自定义库。

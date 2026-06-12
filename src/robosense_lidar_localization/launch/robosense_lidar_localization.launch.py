@@ -14,7 +14,7 @@ def generate_launch_description():
     # 该配置决定输入点云/odom话题、地图路径、初始位姿、坐标转换、输出话题和匹配阈值。
     config_file = LaunchConfiguration(
         'config_file',
-        default='/home/ubuntu/humanoid_ws/src/robosense_lidar_localization/config/robosense_lidar_localization.yaml',
+        default='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/robosense_lidar_localization/config/robosense_lidar_localization.yaml',
     )
 
     return LaunchDescription([
@@ -25,7 +25,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'config_file',
-            default_value='/home/ubuntu/humanoid_ws/src/robosense_lidar_localization/config/robosense_lidar_localization.yaml',
+            default_value='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/robosense_lidar_localization/config/robosense_lidar_localization.yaml',
             description='RoboSense lidar_localization YAML 配置文件路径'
         ),
 

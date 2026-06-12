@@ -29,6 +29,9 @@ setup(
 
         #安装 rviz 目录
         (os.path.join('share', package_name, 'rviz'), glob('rviz/*')),
+
+        # 安装路线任务静态/动态验证脚本，方便交接机器只依赖 install 产物复测。
+        (os.path.join('share', package_name, 'scripts'), glob('scripts/*.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -44,7 +47,6 @@ setup(
             'lidar_imu_time_calibrator = humanoid_navigation2.lidar_imu_time_calibrator:main',
             'measure_timestamp_diff = humanoid_navigation2.measure_timestamp_diff:main',
             'save_pcd_map = humanoid_navigation2.save_pcd_map:main',
-            'map_coordinate_viewer = humanoid_navigation2.map_coordinate_viewer:main',
             'periodic_clearing_3d_publisher = humanoid_navigation2.periodic_clearing_3d_publisher:main',
             'lidar_height_clearing_3d_publisher = humanoid_navigation2.lidar_height_clearing_3d_publisher:main',
             'protected_clearing_3d_publisher = humanoid_navigation2.protected_clearing_3d_publisher:main',
@@ -55,18 +57,10 @@ setup(
             'wait_for_tf = humanoid_navigation2.wait_for_tf:main',
             'dynamic_odom_ground_publisher = humanoid_navigation2.dynamic_odom_ground_publisher:main',
             'rviz_initialpose_adapter = humanoid_navigation2.rviz_initialpose_adapter:main',
-            'hdl_bootstrap_to_initialpose = humanoid_navigation2.hdl_bootstrap_to_initialpose:main',
-            'scancontext_to_initialpose = humanoid_navigation2.scancontext_to_initialpose:main',
-            'localization_odom_fusion = humanoid_navigation2.localization_odom_fusion:main',
             'prior_map_odom_bridge = humanoid_navigation2.prior_map_odom_bridge:main',
-            'prior_map_bag_monitor = humanoid_navigation2.prior_map_bag_monitor:main',
-            'fastlio_open3d_axis_adapter = humanoid_navigation2.fastlio_open3d_axis_adapter:main',
             'imu_transformer = humanoid_navigation2.imu_transformer:main',
             'pcd_converter = humanoid_navigation2.pcd_converter:main',
-            'ndt_fusion_monitor = humanoid_navigation2.ndt_fusion_monitor:main',
             'check_map_quality = humanoid_navigation2.check_map_quality:main',
-            'ndt_drift_diagnostic = humanoid_navigation2.ndt_drift_diagnostic:main',
-            'navigation_path_monitor = humanoid_navigation2.navigation_path_monitor:main',
         ],
     },
 )

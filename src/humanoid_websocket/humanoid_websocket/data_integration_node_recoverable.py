@@ -294,11 +294,6 @@ class UnifiedDataIntegrationNode(Node):
                 String, '/navigation/acknowledgments', self.navigation_ack_callback, 10
             )
 
-            # 订阅定位恢复/重定位状态，转换为 APP 异常弹窗事件。
-            self.localization_recovery_status_sub = self.create_subscription(
-                String, '/localization/recovery_status', self.localization_recovery_status_callback, 10
-            )
-
             # 订阅动作完成结果，立即推送给 APP。
             self.action_result_sub = self.create_subscription(
                 String, '/robot/action_result', self.action_result_callback, 10
@@ -606,67 +601,6 @@ class UnifiedDataIntegrationNode(Node):
             self.publish_push_message(push_msg)
         except Exception as e:
             self.get_logger().error(f'❌ 推送系统异常失败: {e}')
-
-    def localization_recovery_status_callback(self, msg: String):
-        """将定位恢复状态转换为 APP 可展示的定位异常/恢复事件。"""
-        try:
-            status = json.loads(msg.data)
-            event_type = status.get("event_type", "")
-            reason = status.get("reason", "")
-            result_code = status.get("result_code", "")
-
-            title = ""
-            severity = "info"
-            popup = True
-            code = result_code or event_type or "localization_event"
-            message = reason or event_type
-
-            if event_type == "localization_recovery_started":
-                title = "定位异常，正在重定位"
-                severity = "warning"
-            elif event_type == "localization_relocalize_requested":
-                title = "定位重定位请求已发出"
-                severity = "info"
-                popup = False
-            elif event_type == "localization_relocalize_attempt_deferred":
-                title = "定位重定位暂未接受"
-                severity = "warning" if result_code not in {
-                    "globalmap_not_ready",
-                    "no_scan",
-                    "not_enough_accumulated_scans",
-                    "held_for_consistency",
-                } else "info"
-            elif event_type == "localization_relocalize_accepted":
-                title = "定位重定位结果已接受"
-                severity = "info"
-            elif event_type == "localization_initialpose_published":
-                title = "定位初始位姿已更新"
-                severity = "info"
-            elif event_type == "localization_relocalize_failed":
-                title = "定位重定位失败"
-                severity = "error"
-            elif event_type == "localization_recovered":
-                title = "定位已恢复"
-                severity = "info"
-            elif event_type == "localization_manual_initialpose_override":
-                title = "定位已手动校正"
-                severity = "info"
-            else:
-                return
-
-            self.publish_system_exception(
-                category="localization",
-                severity=severity,
-                title=title,
-                message=message,
-                code=code,
-                source_event=event_type,
-                details=status,
-                popup=popup,
-                dedupe_sec=2.0 if event_type == "localization_relocalize_attempt_deferred" else 0.5,
-            )
-        except Exception as e:
-            self.get_logger().error(f'❌ 处理定位恢复状态错误: {e}')
 
     def action_result_callback(self, msg: String):
         """处理动作完成结果，转成统一 push 消息发给 APP。"""

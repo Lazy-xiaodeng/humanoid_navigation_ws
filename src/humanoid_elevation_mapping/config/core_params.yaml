@@ -109,4 +109,4 @@ elevation_mapping:
     save_map_default_topic: 'elevation_map'         # 保存地图时的默认话题名。
     save_map_storage_id: 'mcap'                     # ROS2 录包的存储格式。
     service_namespace: '/elevation_mapping_cupy'    # 提供服务的命名空间前缀。
-    plugin_config_file: '/home/ubuntu/humanoid_ws/src/humanoid_elevation_mapping/config/plugin_config.yaml'
+    plugin_config_file: '/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_elevation_mapping/config/plugin_config.yaml'

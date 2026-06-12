@@ -95,12 +95,12 @@ def main():
         "/bin/bash",
         "-lc",
         (
-            "source /home/ubuntu/humanoid_ws/install/setup.bash && "
+            "source /home/ubuntu/software/Todesk/Files/humanoid_ws/install/setup.bash && "
             f"ros2 bag play {args.bag} --clock --rate {args.rate} "
             f"--read-ahead-queue-size 100{play_duration} --disable-keyboard-controls"
         ),
     ]
-    proc = subprocess.Popen(cmd, cwd="/home/ubuntu/humanoid_ws", env=env, stdout=(out / "rosbag_play.log").open("w"), stderr=subprocess.STDOUT)
+    proc = subprocess.Popen(cmd, cwd="/home/ubuntu/software/Todesk/Files/humanoid_ws", env=env, stdout=(out / "rosbag_play.log").open("w"), stderr=subprocess.STDOUT)
     samples = []
     prev_proc = {}
     prev_total = read_total_jiffies()

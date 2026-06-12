@@ -2,7 +2,9 @@
 set -eo pipefail
 set +u
 
-WORKSPACE="${WORKSPACE:-$HOME/humanoid_ws}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 默认使用脚本所在工作区，避免从 Todesk 目录启动时误切到其它工作区。
+WORKSPACE="${WORKSPACE:-$SCRIPT_DIR}"
 START_TIME="$(date +%Y%m%d_%H%M%S)"
 LOG_DIR="$WORKSPACE/debug_logs"
 LOG_FILE="$LOG_DIR/start_navigation_${START_TIME}.log"
@@ -78,7 +80,6 @@ collect_old_navigation_pids() {
   local patterns=(
     "ros2 launch humanoid_bringup robot_real.launch.py"
     "ros2 launch humanoid_description display.launch.py"
-    "ros2 launch humanoid_navigation2 navigation_stack.launch.py"
     "ros2 launch humanoid_navigation navigation.launch.py"
     "ros2 launch humanoid_websocket websocket_server.launch.py"
     "ros2 launch humanoid_locomotion locomotion.launch.py"
@@ -93,12 +94,7 @@ collect_old_navigation_pids() {
     "static_transform_publisher.*tf_base_footprint_to_clearing_lidar"
     "dynamic_odom_ground_publisher"
     "nav2_map_server.*/map_server"
-    "nav2_lifecycle_manager.*/lifecycle_manager.*lifecycle_manager_(map|ndt|navigation)"
-    "hdl_global_localization_node"
-    "component_container_mt.*hdl_bootstrap_container"
-    "scancontext_global_localizer"
-    "lidar_localization_node"
-    "hdl_bootstrap_to_initialpose"
+    "nav2_lifecycle_manager.*/lifecycle_manager.*lifecycle_manager_(map|navigation)"
     "robot_realpose_publisher"
     "periodic_clearing_publisher"
     "periodic_clearing_3d_publisher"
@@ -108,7 +104,7 @@ collect_old_navigation_pids() {
     "nav2_behaviors.*/behavior_server"
     "nav2_bt_navigator.*/bt_navigator"
     "dynamic_waypoints_manager"
-    "navigation_state_manager_recoverable"
+    "navigation_state_manager"
     "websocket_server_node"
     "data_integration_node_recoverable"
     "websocket_client_node"
@@ -173,7 +169,24 @@ if [ ! -f /opt/ros/jazzy/setup.bash ]; then
   exit 1
 fi
 
+# 清理当前终端里可能残留的其它 ROS 工作区环境。
+# 这样即使用户之前 source 过主工作区，也不会在 Todesk 测试时混入旧包。
+unset AMENT_PREFIX_PATH
+unset CMAKE_PREFIX_PATH
+unset COLCON_PREFIX_PATH
+unset PYTHONPATH
+unset LD_LIBRARY_PATH
+
 source /opt/ros/jazzy/setup.bash
+
+OPEN3D_PREFIX="$WORKSPACE/third_party/open3d-0.18.0"
+if [ -f "$OPEN3D_PREFIX/lib/cmake/Open3D/Open3DConfig.cmake" ]; then
+  # Todesk 工作区自带 Open3D，干净构建时显式指定它，避免依赖其它工作区的 CMake 查找路径。
+  export Open3D_DIR="${Open3D_DIR:-$OPEN3D_PREFIX/lib/cmake/Open3D}"
+  export LD_LIBRARY_PATH="$OPEN3D_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+else
+  echo "WARN: Open3DConfig.cmake not found under $OPEN3D_PREFIX, open3d_loc may fail to build."
+fi
 
 # Keep the parent launch process and every child node on the same DDS profile.
 # Large PointCloud2 topics such as /airy_points need this profile to avoid
@@ -185,12 +198,15 @@ export RMW_FASTRTPS_USE_QOS_FROM_XML="${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
 echo "Building workspace..."
 colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 
-if [ ! -f "$WORKSPACE/install/setup.bash" ]; then
-  echo "ERROR: $WORKSPACE/install/setup.bash not found after build."
+if [ ! -f "$WORKSPACE/install/local_setup.bash" ]; then
+  echo "ERROR: $WORKSPACE/install/local_setup.bash not found after build."
   exit 1
 fi
 
-source "$WORKSPACE/install/setup.bash"
+# 只叠加当前 Todesk 工作区的本地安装空间。
+# 不 source install/setup.bash，是为了避免它读取构建时记录的 parent underlay，
+# 从而把其它工作区的旧包混进本次测试。
+source "$WORKSPACE/install/local_setup.bash"
 
 export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
 export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-$HOME/.config/fastdds_shm.xml}"
@@ -209,12 +225,12 @@ for package_name in required:
 
 if missing:
     raise SystemExit(
-        "ERROR: missing Python package metadata after sourcing install/setup.bash: "
+        "ERROR: missing Python package metadata after sourcing install/local_setup.bash: "
         + ", ".join(missing)
     )
 PY
 
-echo "ROS environment loaded from $WORKSPACE/install/setup.bash"
+echo "ROS environment loaded from /opt/ros/jazzy + $WORKSPACE/install/local_setup.bash"
 
 cleanup_old_navigation_processes
 

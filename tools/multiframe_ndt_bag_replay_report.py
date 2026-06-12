@@ -263,7 +263,7 @@ def run_one_bag(label, bag, output_dir, rate, playback_duration):
         "lidar_localization_node",
         "--ros-args",
         "--params-file",
-        "/home/ubuntu/humanoid_ws/src/lidar_localization/param/localization.yaml",
+        "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/lidar_localization/param/localization.yaml",
         "-p",
         "use_sim_time:=true",
         "-p",
@@ -706,7 +706,7 @@ def main():
     args = parser.parse_args()
 
     started = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = args.output_dir or f"/home/ubuntu/humanoid_ws/workspace_archive/debug_monitor/multiframe_ndt_replay_{started}"
+    output_dir = args.output_dir or f"/home/ubuntu/software/Todesk/Files/humanoid_ws/workspace_archive/debug_monitor/multiframe_ndt_replay_{started}"
     selected = BAGS
     if args.bags:
         wanted = set(args.bags)

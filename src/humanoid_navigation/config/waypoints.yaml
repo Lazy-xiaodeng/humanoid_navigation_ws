@@ -8,7 +8,7 @@ dynamic_waypoints:
     enabled: true
     auto_save: true
     save_interval: 300  # 自动保存间隔（秒）
-    file_path: "~/humanoid_ws/src//humanoid_navigation/data/dynamic_waypoints_data.json"
+    file_path: "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation/data/dynamic_waypoints_data.json"
     backup_count: 5
     
   # 点位类型定义（与APP端保持一致）

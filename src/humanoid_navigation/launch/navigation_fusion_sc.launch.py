@@ -36,7 +36,7 @@ def generate_launch_description():
                 pkg_humanoid_navigation, 'config', 'waypoints.yaml'
             ]),
             'data_storage.enabled': True,
-            'data_storage.file_path': '/home/ubuntu/humanoid_ws/data/dynamic_waypoints.json',
+            'data_storage.file_path': '/home/ubuntu/software/Todesk/Files/humanoid_ws/data/dynamic_waypoints.json',
             'navigation.position_tolerance': 0.15,
             'navigation.orientation_tolerance': 0.2,
             'navigation.default_frame_id': 'map'
@@ -55,10 +55,6 @@ def generate_launch_description():
             'position_tolerance': 0.15,
             'publish_tf': True,
             'default_frame_id': 'map',
-            'auto_pause_on_localization_recovery': False,
-            'localization_stop_hold_sec': 2.0,
-            'localization_resume_settle_sec': 1.0,
-            'localization_auto_resume_require_recovery_done': True,
             'localization_resume_stable_frames': 3,
             'localization_health_status_topic': '/localization/prior_map_odom_bridge_status',
             'localization_health_timeout_sec': 3.0,
@@ -66,18 +62,6 @@ def generate_launch_description():
             'localization_allow_start_with_last_good_tf': True,
             # 0 表示不限制 last good TF 年龄；如果现场需要更保守，可改成 10~30 秒。
             'localization_last_good_tf_max_age_sec': 0.0,
-            'localization_recovery_status_topic': '/localization/recovery_status',
-            'localization_recovery_request_topic': '/localization/recovery_requests',
-            'request_localization_recovery_on_nav_failure': False,
-            'request_navigation_context_recovery_on_localization_failure': False,
-            'localization_recovery_request_cooldown_sec': 20.0,
-            'localization_recovery_prior_radius_m': 10.0,
-            'localization_context_recovery_request_cooldown_sec': 4.0,
-            'localization_context_prior_radius_m': 5.0,
-            'localization_context_prior_max_previous_age_sec': 300.0,
-            'localization_context_prior_min_segment_length_m': 0.2,
-            'localization_resume_reverse_enabled': True,
-            'localization_resume_reverse_max_distance_m': 2.0,
             'localization_resume_reverse_rear_angle_deg': 70.0,
             # 路线任务参数：首个 task 的近距离判定阈值。
             # 如果机器人启动时已经在首个 task 附近，仍会进入 task 完成/播报流程，不额外生成虚拟起点。

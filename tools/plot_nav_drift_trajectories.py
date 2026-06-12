@@ -158,10 +158,10 @@ def main():
         description="把导航 bag 中的 FAST-LIO 原始里程计、全局定位轨迹和 map->odom 修正量画到地图上。"
     )
     parser.add_argument("--bag", default="/home/ubuntu/nav_drift_test/nav_drift_test30")
-    parser.add_argument("--map-yaml", default="/home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.yaml")
-    parser.add_argument("--map-image", default="/home/ubuntu/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.pgm")
-    parser.add_argument("--waypoints", default="/home/ubuntu/humanoid_ws/data/dynamic_waypoints.json")
-    parser.add_argument("--out-dir", default="/home/ubuntu/humanoid_ws/debug_logs/nav_drift_trajectories")
+    parser.add_argument("--map-yaml", default="/home/ubuntu/software/Todesk/Files/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.yaml")
+    parser.add_argument("--map-image", default="/home/ubuntu/software/Todesk/Files/humanoid_ws/install/humanoid_navigation2/share/humanoid_navigation2/maps/hall.pgm")
+    parser.add_argument("--waypoints", default="/home/ubuntu/software/Todesk/Files/humanoid_ws/data/dynamic_waypoints.json")
+    parser.add_argument("--out-dir", default="/home/ubuntu/software/Todesk/Files/humanoid_ws/debug_logs/nav_drift_trajectories")
     args = parser.parse_args()
 
     setup_chinese_font()

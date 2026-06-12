@@ -2,8 +2,10 @@
 set -eo pipefail
 set +u
 
-WORKSPACE="${WORKSPACE:-/home/ubuntu}"
-HUMANOID_WS="${HUMANOID_WS:-/home/ubuntu/humanoid_ws}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 默认使用脚本所在工作区，避免停止服务时误指向其它工作区。
+WORKSPACE="${WORKSPACE:-$SCRIPT_DIR}"
+HUMANOID_WS="${HUMANOID_WS:-$SCRIPT_DIR}"
 LOG_DIR="$WORKSPACE/service_logs"
 MAIN_LOG="$LOG_DIR/stop_main.log"
 

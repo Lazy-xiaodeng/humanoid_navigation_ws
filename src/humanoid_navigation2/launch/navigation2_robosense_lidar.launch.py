@@ -35,17 +35,18 @@ from launch_ros.actions import Node
 def generate_launch_description():
     pkg_nav2 = get_package_share_directory('humanoid_navigation2')
 
-    # default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params_straight_first.yaml')
     default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params.yaml')
     default_bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_xy_then_yaw.xml')
+    default_through_bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_through_poses_no_backup.xml')
     default_robosense_config_file = (
-        '/home/ubuntu/humanoid_ws/src/robosense_lidar_localization/config/'
+        '/home/ubuntu/software/Todesk/Files/humanoid_ws/src/robosense_lidar_localization/config/'
         'robosense_lidar_localization.yaml'
     )
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     nav2_params_file = LaunchConfiguration('nav2_params_file', default=default_nav2_params_file)
     bt_xml_file = LaunchConfiguration('bt_xml_file', default=default_bt_xml_file)
+    through_bt_xml_file = LaunchConfiguration('through_bt_xml_file', default=default_through_bt_xml_file)
     enable_fastdds_shm = LaunchConfiguration('enable_fastdds_shm', default='true')
     enable_periodic_clearing = LaunchConfiguration('enable_periodic_clearing', default='true')
 
@@ -544,7 +545,7 @@ def generate_launch_description():
                     # 单点导航行为树。
                     'default_nav_to_pose_bt_xml': bt_xml_file,
                     # 多点导航行为树。
-                    'default_nav_through_poses_bt_xml': bt_xml_file,
+                    'default_nav_through_poses_bt_xml': through_bt_xml_file,
                 },
             ],
         ),
@@ -593,7 +594,8 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false', description='是否使用 /clock；实机 false，bag/仿真 true'),
         DeclareLaunchArgument('nav2_params_file', default_value=default_nav2_params_file, description='Nav2 参数文件'),
-        DeclareLaunchArgument('bt_xml_file', default_value=default_bt_xml_file, description='Nav2 行为树 XML'),
+        DeclareLaunchArgument('bt_xml_file', default_value=default_bt_xml_file, description='Nav2 单点行为树 XML'),
+        DeclareLaunchArgument('through_bt_xml_file', default_value=default_through_bt_xml_file, description='Nav2 through poses 行为树 XML'),
         DeclareLaunchArgument('enable_periodic_clearing', default_value='true', description='是否启动周期性清障节点'),
         DeclareLaunchArgument('prior_pose_topic', default_value='/prior_localization/pose', description='兼容 PoseStamped 定位输入'),
         DeclareLaunchArgument('prior_pose_with_covariance_topic', default_value='/prior_localization/pose_with_covariance', description='兼容 PoseWithCovarianceStamped 定位输入'),

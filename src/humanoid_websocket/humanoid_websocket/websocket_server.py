@@ -53,9 +53,7 @@ class CompleteWebSocketServer(Node):
         self.client_sessions = {}               # 客户端会话信息
         self.business_state = {                  # 业务状态存储
             'dynamic_waypoints': {},            # 动态路点数据
-            'navigation_sequences': {},         # 导航序列
             'current_navigation_mode': None,    # 当前导航模式
-            'current_waypoint_sequence': [],    # 当前导航序列
             'current_waypoint_index': 0,        # 当前路点索引
         }
         
@@ -139,12 +137,6 @@ class CompleteWebSocketServer(Node):
             self.waypoints_update_sub = self.create_subscription(
                  String, '/navigation/waypoints_data',  
                  self.business_waypoints_callback, 10
-            )
-            
-            # 3. 导航序列更新
-            self.navigation_sequences_sub = self.create_subscription(
-                String, '/navigation/sequences', 
-                self.business_navigation_sequences_callback, 10
             )
             
             # ==================== 统一数据流订阅器 ====================
@@ -351,7 +343,6 @@ class CompleteWebSocketServer(Node):
                     "robot_pose",          # 机器人定位数据
                     "robot_speed",         # 机器人实时速度               
                     "navigation_path",     # 路径规划数据
-                    "navigation_path_monitor",  # 实时规划/实际轨迹偏差监控
                     "navigation_status",   # 导航状态数据
                     "system_status",       # 系统状态数据
                     "waypoints_data",      # 路点数据
@@ -385,13 +376,6 @@ class CompleteWebSocketServer(Node):
                 waypoints_msg["metadata"]["push_reason"] = "initial_data"
                 await websocket.send(json.dumps(waypoints_msg, ensure_ascii=False))
             
-            # 发送导航序列数据
-            if self.business_state['navigation_sequences']:
-                sequences_msg = self.create_base_message("push", "navigation_sequences", "websocket_server", client_id)
-                sequences_msg["data"] = self.business_state['navigation_sequences']
-                sequences_msg["metadata"]["push_reason"] = "initial_data"
-                await websocket.send(json.dumps(sequences_msg, ensure_ascii=False))
-            
             # 发送动作库数据
             if 'gesture_list' in self.business_state:
                 gesture_msg = self.create_base_message("push", "gesture_list", "websocket_server", client_id)
@@ -413,8 +397,7 @@ class CompleteWebSocketServer(Node):
                 status_msg = self.create_base_message("push", "navigation_status", "websocket_server", client_id)
                 status_msg["data"] = {
                     "navigation_mode": self.business_state['current_navigation_mode'],
-                    "current_waypoint_index": self.business_state['current_waypoint_index'],
-                    "waypoint_sequence": self.business_state['current_waypoint_sequence']
+                    "current_waypoint_index": self.business_state['current_waypoint_index']
                 }
                 status_msg["metadata"]["push_reason"] = "initial_data"
                 await websocket.send(json.dumps(status_msg, ensure_ascii=False))
@@ -733,15 +716,11 @@ class CompleteWebSocketServer(Node):
                     return False
             
                 # 构建扁平化的导航控制消息。
-                # 旧导航仍然依赖 waypoint_id / waypoint_ids / exhibition_ids；
-                # route task 新协议依赖 task_session_id / route_waypoints / jump / broadcast 等字段。
-                # 这里作为 websocket 入口层只负责“原样透传”，不判断路线是否合法，也不计算 transit。
+                # APP 侧导航协议已统一为 route task：开始、暂停、继续、终止、跳点和播报完成
+                # 都通过 command_type 区分。这里作为 websocket 入口层只负责“原样透传”，
+                # 不判断路线是否合法，也不计算 transit。
                 route_msg = {
                     "command_type": inner_command,
-                    # 旧单点、多点、展厅导航字段，保留以兼容现有 APP 与导航逻辑。
-                    "waypoint_id": command_data.get("waypoint_id", ""),
-                    "waypoint_ids": command_data.get("waypoint_ids", []),
-                    "exhibition_ids": command_data.get("exhibition_ids", []),
                     # route task 启动字段：完整路线由 APP 一次性下发，顺序以数组顺序为准。
                     "task_session_id": command_data.get("task_session_id", ""),
                     "route_id": command_data.get("route_id", ""),
@@ -750,7 +729,13 @@ class CompleteWebSocketServer(Node):
                     "target_waypoint_id": command_data.get("target_waypoint_id", ""),
                     "interrupt_broadcast": command_data.get("interrupt_broadcast", True),
                     "broadcast_id": command_data.get("broadcast_id", ""),
-                    "broadcast_result": command_data.get("broadcast_result", ""),
+                    # route task 专属暂停/终止参数，只在 pause_route_task / stop_route_task 中消费。
+                    # 这里显式透传新命令参数，保证 APP 按钮语义和状态机处理路径一致。
+                    "pause_parameters": command_data.get("pause_parameters", {}),
+                    "stop_parameters": command_data.get("stop_parameters", {}),
+                    # APP 省略 broadcast_result 时按 completed 处理；显式传空字符串仍会原样透传，
+                    # 由状态机返回 unsupported_broadcast_result，便于发现坏包。
+                    "broadcast_result": command_data.get("broadcast_result", "completed"),
                     "broadcast_duration_sec": command_data.get("broadcast_duration_sec", 0),
                     "reason": command_data.get("reason", ""),
                     # 用 APP 外层 message_id 对齐后续 navigation_command_result 业务 ack。
@@ -994,7 +979,6 @@ class CompleteWebSocketServer(Node):
                 if update_type == "full_update":
                     waypoints_data = inner_data.get("data", {})
                     self.business_state['dynamic_waypoints'] = waypoints_data.get("waypoints", {})
-                    self.business_state['navigation_sequences'] = waypoints_data.get("sequences", {})
                 
                     self.get_logger().info(f' 路点数据已更新')
         
@@ -1011,28 +995,6 @@ class CompleteWebSocketServer(Node):
         
         except Exception as e:
             self.get_logger().error(f'❌ 处理路点回调错误: {e}')
-    
-    
-    def business_navigation_sequences_callback(self, msg: String):
-        """处理导航序列更新回调"""
-        try:
-            sequences_data = json.loads(msg.data)
-            
-            # 更新服务器状态
-            self.business_state['navigation_sequences'] = sequences_data.get("sequences", {})
-            
-            # 转换为统一消息格式并广播
-            if self.server_loop and self.server_loop.is_running():
-                asyncio.run_coroutine_threadsafe(
-                    self.broadcast_business_update("navigation_sequences", sequences_data),
-                    self.server_loop
-                )
-            
-            self.get_logger().info(f'🛣️ 收到导航序列更新，共 {len(self.business_state["navigation_sequences"])} 个序列')
-            
-        except Exception as e:
-            self.get_logger().error(f'❌ 处理导航序列更新错误: {e}')
-    
     
     async def broadcast_business_update(self, data_type: str, data: Dict):
         """广播业务数据更新给订阅的客户端"""
@@ -1124,7 +1086,6 @@ class CompleteWebSocketServer(Node):
                 event_type = inner_data.get("event_type", "")
                 if event_type == "navigation_started":
                     self.business_state['current_navigation_mode'] = inner_data.get("navigation_mode")
-                    self.business_state['current_waypoint_sequence'] = inner_data.get("waypoint_sequence", [])
                     self.business_state['current_waypoint_index'] = 0
                 elif event_type == "waypoint_reached":
                     # 注意：这里从整合节点取索引，NSM 里发出的索引在 inner_data 的 event_data 中
@@ -1132,7 +1093,6 @@ class CompleteWebSocketServer(Node):
                     self.business_state['current_waypoint_index'] = event_data.get("waypoint_index", 0)
                 elif event_type in ["navigation_completed", "navigation_stopped"]:
                     self.business_state['current_navigation_mode'] = None
-                    self.business_state['current_waypoint_sequence'] = []
                     self.business_state['current_waypoint_index'] = 0
             if data_type == "gesture_list":
                 self.business_state['gesture_list'] = push_data.get("data", {})
@@ -1341,19 +1301,17 @@ class CompleteWebSocketServer(Node):
         try:
             active_clients = len(self.connected_clients)
             waypoint_count = len(self.business_state.get('dynamic_waypoints', {}))
-            sequence_count = len(self.business_state.get('navigation_sequences', {}))
             
             status_report = {
                 "active_clients": active_clients,
                 "dynamic_waypoints": waypoint_count,
-                "navigation_sequences": sequence_count,
                 "current_navigation_mode": self.business_state.get('current_navigation_mode'),
                 "server_uptime": time.time() - self.get_clock().now().seconds_nanoseconds()[0]
             }
             
             self.get_logger().info(
                 f'📊 服务器状态 - 客户端: {active_clients} | '
-                f'路点: {waypoint_count} | 序列: {sequence_count} | '
+                f'路点: {waypoint_count} | '
                 f'导航模式: {self.business_state.get("current_navigation_mode") or "无"}'
             )
             

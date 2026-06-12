@@ -116,7 +116,7 @@ import os
 def main():
     if len(sys.argv) < 2:
         output_path = os.path.expanduser(
-            '~/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd'
+            '/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd'
         )
         print(f"未指定输出路径，使用默认: {output_path}")
     else:

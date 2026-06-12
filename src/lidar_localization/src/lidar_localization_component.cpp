@@ -115,7 +115,7 @@ PCLLocalization::PCLLocalization(const rclcpp::NodeOptions & options)
   
   // ========== 地图参数 ==========
   declare_parameter("use_pcd_map", true);          // 是否启动时加载PCD地图文件
-  declare_parameter("map_path", "/home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd");    // PCD地图文件路径
+  declare_parameter("map_path", "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd");    // PCD地图文件路径
   
   // ========== 初始位姿参数 ==========
   declare_parameter("set_initial_pose", false);     // 是否启动时设置初始位姿

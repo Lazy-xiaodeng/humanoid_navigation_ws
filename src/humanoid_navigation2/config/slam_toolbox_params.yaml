@@ -1,4 +1,4 @@
-# ~/humanoid_ws/src/humanoid_navigation2/config/slam_toolbox_params.yaml
+# /home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/config/slam_toolbox_params.yaml
 slam_toolbox:
   ros__parameters:
 
@@ -60,7 +60,7 @@ slam_toolbox:
     map_start_at_dock: false  # ★ 关闭，由重定位节点提供初始位姿
   
     # ★ 新增：定位模式约束配置，防止重定位失败时地图扩展
-    map_file_name: "/home/ubuntu/humanoid_ws/src/humanoid_navigation2/maps/hall"  # ★ 指定posegraph地图路径
+    map_file_name: "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall"  # ★ 指定posegraph地图路径
     save_map: false  # ★ 定位模式下禁止保存地图
     enable_interactive_mode: false  # ★ 关闭交互模式
 

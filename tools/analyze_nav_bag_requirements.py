@@ -473,7 +473,7 @@ def write_outputs(name, bag, out_dir, data):
         "",
         f"- 输入 bag：`{bag}`",
         f"- 缺失的必须话题：`{missing_required}`",
-        f"- 已生成轨迹图：`/home/ubuntu/humanoid_ws/debug_logs/nav_drift_trajectories/{name}/full_trajectory_on_map.png`",
+        f"- 已生成轨迹图：`/home/ubuntu/software/Todesk/Files/humanoid_ws/debug_logs/nav_drift_trajectories/{name}/full_trajectory_on_map.png`",
         "",
         "## 3. 真实导航状态",
         "",
@@ -586,8 +586,8 @@ def write_outputs(name, bag, out_dir, data):
         f"- `{out_dir / 'analysis_summary.json'}`",
         f"- `{out_dir / 'segment_summary.csv'}`",
         f"- `{out_dir / 'major_map_odom_events.csv'}`",
-        f"- `/home/ubuntu/humanoid_ws/debug_logs/nav_drift_trajectories/{name}/full_trajectory_on_map.png`",
-        f"- `/home/ubuntu/humanoid_ws/debug_logs/nav_drift_trajectories/{name}/map_odom_correction_over_time.png`",
+        f"- `/home/ubuntu/software/Todesk/Files/humanoid_ws/debug_logs/nav_drift_trajectories/{name}/full_trajectory_on_map.png`",
+        f"- `/home/ubuntu/software/Todesk/Files/humanoid_ws/debug_logs/nav_drift_trajectories/{name}/map_odom_correction_over_time.png`",
     ])
     report = out_dir / f"{name}_protection_analysis_cn.md"
     report.write_text("\n".join(md) + "\n", encoding="utf-8")

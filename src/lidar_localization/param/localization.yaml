@@ -117,7 +117,7 @@
       # 地图与初始位姿
       # ==========================================
       use_pcd_map: true         # 是否启动时加载本地 PCD 地图文件
-      map_path: "/home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd"              # PCD 地图路径（在启动命令中通过参数覆盖）
+      map_path: "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd"              # PCD 地图路径（在启动命令中通过参数覆盖）
 
       # 是否启动时自动设置初始位姿（用于重定位）。
       # 如果为 true，机器人启动时会假设自己在 initial_pose_x/y/z 的位置。

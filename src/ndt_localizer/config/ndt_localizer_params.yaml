@@ -2,7 +2,7 @@ ndt_localizer:
   ros__parameters:
     # ========== 地图配置 ==========
     # PCD 地图路径（新路径）
-    pcd_map_path: "/home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd"
+    pcd_map_path: "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd"
     
     # ========== 话题配置 ==========
     # 输入：Fast-LIO 输出的实时点云（在 body/IMU 坐标系）

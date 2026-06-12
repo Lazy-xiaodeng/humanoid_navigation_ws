@@ -9,9 +9,9 @@ echo ""
 
 # 1. 检查地图文件
 echo "【1】检查地图文件..."
-MAP_YAML="/home/ubuntu/humanoid_ws/src/humanoid_navigation2/maps/hall.yaml"
-MAP_PGM="/home/ubuntu/humanoid_ws/src/humanoid_navigation2/maps/hall.pgm"
-PCD_MAP="/home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd"
+MAP_YAML="/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall.yaml"
+MAP_PGM="/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall.pgm"
+PCD_MAP="/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd"
 
 if [ -f "$MAP_YAML" ]; then
     echo "✓ 2D地图 YAML文件存在: $MAP_YAML"

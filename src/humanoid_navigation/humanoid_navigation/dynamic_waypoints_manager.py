@@ -15,8 +15,6 @@ import threading
 from enum import Enum
 from typing import Dict, List, Optional, Any
 import os
-from datetime import datetime
-import uuid
 
 # ========== 枚举定义 ==========
 class WaypointType(Enum):
@@ -27,13 +25,6 @@ class WaypointType(Enum):
     CHARGING_POINT = "charging_point"
     REST_POINT = "rest_point"
     LANDMARK_POINT = "landmark_point"
-
-class NavigationMode(Enum):
-    """导航模式枚举"""
-    SINGLE_POINT = "single_point"
-    MULTI_POINT = "multi_point"
-    EXHIBITION_TOUR = "exhibition_tour"
-    CHARGING_ROUTE = "charging_route"
 
 # ========== 数据类定义 ==========
 class WaypointData:
@@ -65,17 +56,6 @@ class WaypointData:
             "last_modified": self.last_modified
         }
 
-class NavigationSequence:
-    """导航序列类"""
-    def __init__(self, id: str, name: str, waypoint_ids: List[str], 
-                 sequence_type: str, properties: Dict[str, Any] = None):
-        self.id = id
-        self.name = name
-        self.waypoint_ids = waypoint_ids
-        self.sequence_type = sequence_type
-        self.created_time = time.time()
-        self.properties = properties or {}
-
 class DynamicWaypointsManager(Node):
     """
     动态路点管理器节点 - 仅负责路点管理
@@ -88,7 +68,7 @@ class DynamicWaypointsManager(Node):
         # ========== 参数声明 ==========
         self.declare_parameters(namespace='', parameters=[
             ('data_storage.enabled', True),
-            ('data_storage.file_path', '/home/ubuntu/humanoid_ws/data/dynamic_waypoints.json'),
+            ('data_storage.file_path', '/home/ubuntu/software/Todesk/Files/humanoid_ws/data/dynamic_waypoints.json'),
             ('data_storage.auto_save_interval', 300.0),
         ])
         
@@ -96,7 +76,6 @@ class DynamicWaypointsManager(Node):
         self.waypoints: Dict[str, Dict[str, WaypointData]] = {
             wp_type.value: {} for wp_type in WaypointType
         }
-        self.navigation_sequences: Dict[str, NavigationSequence] = {}
         
         # ========== 状态管理器通信 ==========
         self.navigation_request_pub = None
@@ -111,7 +90,7 @@ class DynamicWaypointsManager(Node):
         self.initial_waypoints_publish_count = 0
         self.initial_waypoints_publish_max = 5
         self.initial_waypoints_publish_timer = None
-        if self.get_total_waypoints_count() > 0 or self.navigation_sequences:
+        if self.get_total_waypoints_count() > 0:
             self.initial_waypoints_publish_timer = self.create_timer(
                 1.0, self.publish_initial_waypoints_data
             )
@@ -229,30 +208,7 @@ class DynamicWaypointsManager(Node):
         try:
             command_type = command_data.get("command_type", "")
             
-            if command_type in ["start_single_navigation", "start_multi_point_navigation", "start_exhibition_navigation"]:
-                # 验证必要的参数
-                if command_type == "start_single_navigation":
-                    waypoint_id = command_data.get("waypoint_id")
-                    if not waypoint_id or not self.find_waypoint_by_id(waypoint_id):
-                        self.get_logger().error(f"单点导航验证失败: 点位 '{waypoint_id}' 不存在")
-                        return False
-                elif command_type == "start_multi_point_navigation":  # 新增多点导航验证
-                    waypoint_ids = command_data.get("waypoint_ids", [])
-                    if not waypoint_ids:
-                        self.get_logger().error("多点导航验证失败: 点位列表为空")
-                        return False
-                # 验证所有点位存在
-                    for wp_id in waypoint_ids:
-                        if not self.find_waypoint_by_id(wp_id):
-                           self.get_logger().error(f"多点导航验证失败: 点位 '{wp_id}' 不存在")
-                           return False
-                elif command_type == "start_exhibition_navigation":
-                    exhibition_points = list(self.waypoints[WaypointType.EXHIBITION_POINT.value].keys())
-                    if not exhibition_points:
-                        self.get_logger().error("展台导航验证失败: 没有设置展台点")
-                        return False
-
-            elif command_type == "start_route_task":
+            if command_type == "start_route_task":
                 # route task 的业务 ack 统一由 navigation_state_manager 通过
                 # navigation_command_result 返回。桥接层不再硬拒绝缺字段，
                 # 只记录明显问题并继续转发，让状态机返回 missing_task_session_id、
@@ -272,11 +228,20 @@ class DynamicWaypointsManager(Node):
                 if not command_data.get("task_session_id") or not command_data.get("target_waypoint_id"):
                     self.get_logger().warning("路线任务跳转字段缺失: task_session_id 或 target_waypoint_id，继续转发给状态机返回业务 ack")
 
+            elif command_type in ["pause_route_task", "resume_route_task", "stop_route_task"]:
+                # route task 专属控制命令需要精确匹配当前 task_session_id 和 route_id。
+                # 桥接层只做提示，不硬拒绝；真正的 route_task_not_running /
+                # invalid_task_session / invalid_route_id 由状态机通过 navigation_command_result 返回。
+                if not command_data.get("task_session_id") or not command_data.get("route_id"):
+                    self.get_logger().warning(
+                        f"路线任务控制字段缺失: {command_type} 需要 task_session_id 和 route_id，继续转发给状态机返回业务 ack"
+                    )
+
             elif command_type == "broadcast_finished":
                 # 播报完成回执也交给状态机做严格上下文匹配。
                 # 即使缺少字段，也继续转发，让状态机通过 navigation_command_result
                 # 返回 invalid_task_session 或 broadcast_context_mismatch 等业务错误码。
-                required_fields = ("task_session_id", "waypoint_id", "broadcast_id")
+                required_fields = ("task_session_id", "route_id", "waypoint_id", "broadcast_id")
                 missing_fields = [field for field in required_fields if not command_data.get(field)]
                 if missing_fields:
                     self.get_logger().warning(f"播报完成字段缺失: {missing_fields}，继续转发给状态机返回业务 ack")
@@ -307,10 +272,6 @@ class DynamicWaypointsManager(Node):
             if field in normalized and normalized[field] is not None:
                 normalized[field] = str(normalized[field])
 
-        if "waypoint_ids" in normalized and isinstance(normalized["waypoint_ids"], list):
-            # 兼容旧多点导航，避免旧 waypoint_ids 列表里混入数字 ID。
-            normalized["waypoint_ids"] = [str(waypoint_id) for waypoint_id in normalized["waypoint_ids"]]
-
         route_waypoints = normalized.get("route_waypoints")
         if isinstance(route_waypoints, list):
             normalized_route_waypoints = []
@@ -339,37 +300,9 @@ class DynamicWaypointsManager(Node):
                 "source": "waypoints_manager"
             }
             
-            command_type = command_data.get("command_type")
-            if command_type == "start_single_navigation":
-               waypoint_id = command_data.get("waypoint_id")
-               waypoint = self.find_waypoint_by_id(waypoint_id)
-               if waypoint:
-                request_data["waypoint_data"] = waypoint.to_dict()
-        
-            elif command_type == "start_multi_point_navigation":  
-                waypoint_ids = command_data.get("waypoint_ids", [])
-    
-                # === 新增校验逻辑 ===
-                invalid_ids = [wp_id for wp_id in waypoint_ids if not self.find_waypoint_by_id(wp_id)]
-                if invalid_ids:
-                    self.get_logger().error(f"❌ 拒绝请求：以下点位不存在: {invalid_ids}")
-                    self.send_app_response("error", f"点位不存在: {invalid_ids}")
-                    return
-                # 添加所有点位数据
-                multi_points = {}
-                for wp_id in waypoint_ids: 
-                    waypoint = self.find_waypoint_by_id(wp_id)
-                    if waypoint:
-                       multi_points[wp_id] = waypoint.to_dict()
-                request_data["waypoints_data"] = multi_points
-        
-            elif command_type == "start_exhibition_navigation":
-                # 添加所有展台点数据
-                exhibition_points = {}
-                for wp_id in self.waypoints[WaypointType.EXHIBITION_POINT.value]:
-                    waypoint = self.waypoints[WaypointType.EXHIBITION_POINT.value][wp_id]
-                    exhibition_points[wp_id] = waypoint.to_dict()
-                request_data["waypoints_data"] = exhibition_points
+            # 导航命令对外只保留 route task 新协议。
+            # route_waypoints 已由 APP 后端一次性组好并透传到状态机，
+            # 桥接层不再为旧单点/多点/展台命令补 waypoint_data，避免两套路线上下文并存。
             
             # 发布请求
             request_msg = String()
@@ -381,24 +314,6 @@ class DynamicWaypointsManager(Node):
         except Exception as e:
             self.get_logger().error(f"发送导航请求错误: {e}")
     
-    # 添加多点导航序列创建方法
-    def create_multi_point_sequence(self, name: str, waypoint_ids: List[str]) -> str: 
-        """创建多点导航序列"""
-        try:
-            # 验证点位ID
-            if not self.validate_waypoint_ids(waypoint_ids):
-               raise ValueError("包含无效的点位ID")
-        
-            # 创建序列
-            sequence_id = self.create_navigation_sequence(name, waypoint_ids, "multi_point")
-        
-            self.get_logger().info(f"创建多点导航序列: {name}, 包含 {len(waypoint_ids)} 个点位")
-            return sequence_id
-        
-        except Exception as e:
-            self.get_logger().error(f"创建多点导航序列错误: {e}")
-            raise
-
     def navigation_ack_callback(self, msg: String):
         """处理状态管理器的确认消息"""
         try:
@@ -535,11 +450,6 @@ class DynamicWaypointsManager(Node):
             waypoint_name = self.waypoints[waypoint_type.value][waypoint_id].name
             del self.waypoints[waypoint_type.value][waypoint_id]
             
-            # 从所有导航序列中移除该点位
-            for sequence_id, sequence in self.navigation_sequences.items():
-                if waypoint_id in sequence.waypoint_ids:
-                    sequence.waypoint_ids.remove(waypoint_id)
-            
             # 保存数据
             if self.data_storage_enabled:
                 self.save_waypoints_data()
@@ -586,19 +496,6 @@ class DynamicWaypointsManager(Node):
                     else:
                         response_data[wp_type] = list(waypoints.keys())
         
-            # 添加序列信息
-            if include_details:
-                response_data["sequences"] = {
-                    seq_id: {
-                       "id": seq.id,
-                       "name": seq.name,
-                       "waypoint_ids": seq.waypoint_ids,
-                       "sequence_type": seq.sequence_type,
-                       "properties": seq.properties
-                    }
-                    for seq_id, seq in self.navigation_sequences.items()
-                }
-        
             self.send_app_response("success", "获取点位列表成功", response_data)
         
         except Exception as e:
@@ -616,20 +513,12 @@ class DynamicWaypointsManager(Node):
                 cleared_count = len(self.waypoints[waypoint_type.value])
                 self.waypoints[waypoint_type.value].clear()
                 
-                # 从序列中移除该类型的点位
-                for sequence in self.navigation_sequences.values():
-                    sequence.waypoint_ids = [
-                        wp_id for wp_id in sequence.waypoint_ids
-                        if wp_id not in self.waypoints[waypoint_type.value]
-                    ]
-                
                 self.send_app_response("success", f"清空 {waypoint_type.value} 类型点位成功，共 {cleared_count} 个")
             else:
                 # 清空所有点位
                 total_count = self.get_total_waypoints_count()
                 for waypoints in self.waypoints.values():
                     waypoints.clear()
-                self.navigation_sequences.clear()
                 
                 self.send_app_response("success", f"清空所有点位成功，共 {total_count} 个")
             
@@ -654,21 +543,10 @@ class DynamicWaypointsManager(Node):
                     "waypoints": {
                         wp_type: {wp_id: wp.to_dict() for wp_id, wp in waypoints.items()}
                         for wp_type, waypoints in self.waypoints.items()
-                    },
-                    "sequences": {
-                        seq_id: {
-                            "id": seq.id,
-                            "name": seq.name,
-                            "waypoint_ids": seq.waypoint_ids,
-                            "sequence_type": seq.sequence_type,
-                            "properties": seq.properties
-                        }
-                        for seq_id, seq in self.navigation_sequences.items()
                     }
                 },
                 "metadata": {
-                    "total_count": self.get_total_waypoints_count(),
-                    "sequence_count": len(self.navigation_sequences)
+                    "total_count": self.get_total_waypoints_count()
                 }
             }
         
@@ -787,7 +665,7 @@ class DynamicWaypointsManager(Node):
                 self.get_logger().error(f"设置数据持久化失败: {e}")
                 # 设置默认值以确保功能可用
                 self.data_storage_enabled = True
-                self.storage_file_path = os.path.expanduser('~/humanoid_ws/data/dynamic_waypoints.json')
+                self.storage_file_path = '/home/ubuntu/software/Todesk/Files/humanoid_ws/data/dynamic_waypoints.json'
 
     def save_waypoints_data(self):
         """保存点位数据"""
@@ -796,16 +674,6 @@ class DynamicWaypointsManager(Node):
                "waypoints": {
                   wp_type: {wp_id: wp.to_dict() for wp_id, wp in waypoints.items()}
                   for wp_type, waypoints in self.waypoints.items()
-                },
-                "sequences": {
-                  seq_id: {
-                    "id": seq.id,
-                    "name": seq.name,
-                    "waypoint_ids": seq.waypoint_ids,
-                    "sequence_type": seq.sequence_type,
-                    "properties": seq.properties
-                  }
-                  for seq_id, seq in self.navigation_sequences.items()
                 },
                 "timestamp": time.time()
             }
@@ -844,23 +712,8 @@ class DynamicWaypointsManager(Node):
                     except Exception as e:
                         self.get_logger().warning(f"加载点位失败: {wp_id} - {e}")
             
-            # 加载导航序列
-            sequences_data = data.get("sequences", {})
-            for seq_id, seq_data in sequences_data.items():
-                try:
-                    sequence = NavigationSequence(
-                    id=seq_data["id"],
-                    name=seq_data["name"],
-                    waypoint_ids=seq_data["waypoint_ids"],
-                    sequence_type=seq_data["sequence_type"],
-                    properties=seq_data.get("properties", {})
-                   )
-                    self.navigation_sequences[seq_id] = sequence
-                except Exception as e:
-                    self.get_logger().warning(f"加载导航序列失败: {seq_id} - {e}")
-
             total_count = self.get_total_waypoints_count()    
-            self.get_logger().info(f"从文件加载点位数据完成，共 {total_count} 个点位，{len(self.navigation_sequences)} 个序列")
+            self.get_logger().info(f"从文件加载点位数据完成，共 {total_count} 个点位")
             
         except Exception as e:
             self.get_logger().error(f"加载点位数据错误: {e}")
@@ -876,26 +729,6 @@ class DynamicWaypointsManager(Node):
                return waypoints_dict[waypoint_id]
         return None
     
-    def create_navigation_sequence(self, name: str, waypoint_ids: List[str], 
-                                 sequence_type: str = "custom") -> str:
-        """创建导航序列"""
-        sequence_id = f"seq_{int(time.time())}_{uuid.uuid4().hex[:8]}"
-        sequence = NavigationSequence(
-           id=sequence_id,
-           name=name,
-           waypoint_ids=waypoint_ids,
-           sequence_type=sequence_type
-        )
-        self.navigation_sequences[sequence_id] = sequence
-        return sequence_id
-    
-    def validate_waypoint_ids(self, waypoint_ids: List[str]) -> bool:
-        """验证点位ID列表是否有效"""
-        for wp_id in waypoint_ids:
-            if not self.find_waypoint_by_id(wp_id):
-                return False
-        return True
-
 def main(args=None):
     rclpy.init(args=args)
     node = None

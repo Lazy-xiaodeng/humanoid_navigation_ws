@@ -181,7 +181,7 @@ def start_ndt():
         [
             "ros2", "run", "lidar_localization_ros2", "lidar_localization_node",
             "--ros-args",
-            "--params-file", "/home/ubuntu/humanoid_ws/src/lidar_localization/param/localization.yaml",
+            "--params-file", "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/lidar_localization/param/localization.yaml",
             "-p", "use_sim_time:=true",
             "-p", "set_initial_pose:=false",
             "-p", "initialpose_base_frame_id:=odom",

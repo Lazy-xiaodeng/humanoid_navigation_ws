@@ -82,7 +82,7 @@ tf_max_interpolation_gap_sec: 0.25
 # =========================
 
 # prior map 点云路径。当前先复用 Open3D 已验证的 grounded 地图，不重新建图。
-map_path: /home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall_open3d_grounded.pcd
+map_path: /home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall_open3d_grounded.pcd
 
 # 匹配初始位置，单位 m，对应 map 下的 x/y/z。
 # 如果实机初始点变化很大，先改这里或后续增加服务/话题方式注入初值。

@@ -174,7 +174,7 @@ def main():
     if len(sys.argv) > 1:
         path = sys.argv[1]
     else:
-        path = os.path.expanduser('~/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd')
+        path = '/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd'
     analyze(path)
 
 

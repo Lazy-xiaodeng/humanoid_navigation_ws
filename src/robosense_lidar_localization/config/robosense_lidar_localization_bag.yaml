@@ -22,7 +22,7 @@ debug_print: false
 tf_odom_cache_duration_sec: 5.0
 tf_max_interpolation_gap_sec: 0.25
 
-map_path: /home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall_open3d_grounded.pcd
+map_path: /home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall_open3d_grounded.pcd
 init_position: [0.035185, 0.087588, 0.0]
 init_euler: [0.0, 0.0, -0.130823906]
 

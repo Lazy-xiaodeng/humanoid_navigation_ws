@@ -21,22 +21,18 @@ def generate_launch_description():
     # relocalization_engine 用来选择“一键启动”里的定位链路：
     #   ro / robosense : RoboSense lidar_localization + prior_map_odom_bridge
     #   op / prior     : Open3D prior-map localization + prior_map_odom_bridge
-    #   sc             : 旧 ScanContext/NDT 调试链路，保留为手动回退入口
-    #   hdl            : 旧 HDL/FPFH 调试链路，保留为手动回退入口
     #
-    # 当前默认改成 ro，避免一键启动默认进入原 v2 NDT 组合链路。
+    # 当前入口只保留 ro 与 op 两条仍维护的定位链路，旧 SC/HDL/NDT 分支已下线，
+    # 避免一键启动暴露“看起来能选、实际 launch 文件已删除”的假回退入口。
     reloc_engine = LaunchConfiguration('relocalization_engine', default='ro')
 
-    # 条件表达式: ro / op(prior) / SC / HDL 四类导航栈
+    # 条件表达式: ro 与 op(prior) 两类导航栈
     use_ro = PythonExpression([
         "'", reloc_engine, "' == 'ro' or '", reloc_engine, "' == 'robosense'"
     ])
     use_op = PythonExpression([
         "'", reloc_engine, "' == 'op' or '", reloc_engine, "' == 'prior'"
     ])
-    use_sc = PythonExpression(["'", reloc_engine, "' == 'sc'"])
-    # ro / op / SC 共用 app 层：路点管理、导航状态管理器、websocket、运动控制。
-    use_fusion_sc_app = PythonExpression(["'", reloc_engine, "' != 'hdl'"])
 
     # ================= 第一阶段：基础设施 =================
     launch_description = GroupAction(
@@ -71,56 +67,30 @@ def generate_launch_description():
         condition=IfCondition(use_op)
     )
 
-    # SC 版本 (relocalization_engine:=sc)
-    launch_nav2_sc = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_navigation2, 'launch', 'navigation2_fusion_sc.launch.py')),
-        launch_arguments={'use_sim_time': use_sim_time}.items(),
-        condition=IfCondition(use_sc)
-    )
-
-    # HDL 版本 (relocalization_engine:=hdl)
-    launch_nav2_hdl = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_navigation2, 'launch', 'navigation2_fusion.launch.py')),
-        launch_arguments={'use_sim_time': use_sim_time}.items(),
-        condition=IfCondition(PythonExpression(["'", reloc_engine, "' == 'hdl'"]))
-    )
-
     launch_nav2_stack = TimerAction(
         period=6.0,
-        actions=[launch_nav2_ro, launch_nav2_op, launch_nav2_sc, launch_nav2_hdl]
+        actions=[launch_nav2_ro, launch_nav2_op]
     )
 
     # ================= 第三阶段：应用层（延迟9秒）=================
     # route task 启动链路说明：
     # start_navigation.sh 会启动 robot_real.launch.py；robot_real.launch.py 不直接创建
-    # navigation_state_manager 节点，而是按重定位模式 include APP 层 launch。
-    # navigation_fusion_sc.launch.py / navigation_fusion.launch.py 内部已经统一启动
+    # navigation_state_manager 节点，而是 include APP 层 launch。
+    # navigation_fusion_sc.launch.py 内部已经统一启动
     # executable='navigation_state_manager'，并携带 route_task.* 参数。
     # 因此这里不要再重复启动 navigation_state_manager，避免同名节点和 action client 重复。
-    # v2/SC 版本 APP 层 (共用)
-    launch_app_sc = IncludeLaunchDescription(
+    # ro/op 共用 APP 层：路点管理、导航状态管理器、websocket、运动控制。
+    launch_app_layer_nav = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_navigation, 'launch', 'navigation_fusion_sc.launch.py')),
         launch_arguments={'use_sim_time': use_sim_time}.items(),
-        condition=IfCondition(use_fusion_sc_app)
-    )
-
-    # HDL 版本 APP 层
-    launch_app_hdl = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_navigation, 'launch', 'navigation_fusion.launch.py')),
-        launch_arguments={'use_sim_time': use_sim_time}.items(),
-        condition=IfCondition(PythonExpression(["'", reloc_engine, "' == 'hdl'"]))
     )
 
     launch_app_layer = TimerAction(
         period=9.0,
         actions=[
             GroupAction([
-                launch_app_sc,
-                launch_app_hdl,
+                launch_app_layer_nav,
                 IncludeLaunchDescription(
                     PythonLaunchDescriptionSource(os.path.join(pkg_websocket, 'launch', 'websocket_server.launch.py')),
                     launch_arguments={'use_sim_time': use_sim_time}.items()
@@ -152,7 +122,7 @@ def generate_launch_description():
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('rviz', default_value='true', description='Whether to start RViz'),
         DeclareLaunchArgument('relocalization_engine', default_value='ro',
-                              description='Nav2 stack: ro/robosense (default) | op/prior (Open3D prior-map) | sc (legacy) | hdl (legacy)'),
+                              description='Nav2 stack: ro/robosense (default) | op/prior (Open3D prior-map)'),
 
         # 按顺序启动
         launch_description,
