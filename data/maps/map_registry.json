@@ -1,0 +1,13 @@
+{
+  "default_map_id": "hall",
+  "current_map_id": "hall",
+  "maps": [
+    {
+      "map_id": "hall",
+      "display_name": "默认展厅地图",
+      "enabled": true,
+      "description": "当前默认运行地图；旧点位已迁移到 data/waypoints/hall.json",
+      "waypoints_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/data/waypoints/hall.json"
+    }
+  ]
+}

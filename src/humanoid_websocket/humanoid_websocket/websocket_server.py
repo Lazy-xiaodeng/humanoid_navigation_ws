@@ -99,17 +99,22 @@ class CompleteWebSocketServer(Node):
             self.navigation_command_pub = self.create_publisher(
                 String, '/app/navigation_command', 10
             )
+
+            # 3. 地图管理命令（多地图一期：查询地图列表/当前地图；切图暂不自动执行）
+            self.map_command_pub = self.create_publisher(
+                String, '/app/map_command', 10
+            )
             
-            # 3. 机器人控制命令
+            # 4. 机器人控制命令
             self.robot_control_pub = self.create_publisher(
                 String, '/app/robot_control', 10
             )
             
-            # 4. 系统管理命令
+            # 5. 系统管理命令
             self.system_command_pub = self.create_publisher(
                 String, '/app/system_command', 10
             )
-            # 5. 面部控制指令发布器 ---
+            # 6. 面部控制指令发布器 ---
             self.facial_cmd_pub = self.create_publisher(
                 String, '/robot/facial_raw_cmd', 10
             )
@@ -346,10 +351,12 @@ class CompleteWebSocketServer(Node):
                     "navigation_status",   # 导航状态数据
                     "system_status",       # 系统状态数据
                     "waypoints_data",      # 路点数据
+                    "map_status",          # 当前地图状态
                 ],
                 "supported_commands": [                     # 支持的命令类型列表
                     "waypoint_management",  # 路点管理命令
                     "navigation_control",   # 导航控制命令
+                    "map_management",       # 多地图一期查询命令
                     "robot_control",        # 机器人控制命令
                     "system_command",       # 系统管理命令
                     "initial_pose",         # 初始位姿设置
@@ -653,7 +660,7 @@ class CompleteWebSocketServer(Node):
                 return
             
             # 路由到相应的业务命令处理函数
-            if command_type in ["waypoint_management", "navigation_control"]:
+            if command_type in ["waypoint_management", "navigation_control", "map_management"]:
                 await self.route_to_waypoint_manager(
                     command_type,
                     command_data,
@@ -694,6 +701,10 @@ class CompleteWebSocketServer(Node):
                 # 构建扁平化的消息
                 route_msg = {
                     "command_type": inner_command,
+                    # 多地图一期：所有点位增删改查都必须带 map_id，清空命令还可显式 all_maps。
+                    # websocket 只透传，不在入口层猜默认地图，避免 APP 想操作 hall1 却误写 hall。
+                    "map_id": command_data.get("map_id", ""),
+                    "clear_scope": command_data.get("clear_scope", ""),
                     "waypoint_data": command_data.get("waypoint_data", {}),
                     "waypoint_id": command_data.get("waypoint_id", ""),
                     "waypoint_type": command_data.get("waypoint_type", ""),
@@ -724,6 +735,8 @@ class CompleteWebSocketServer(Node):
                     # route task 启动字段：完整路线由 APP 一次性下发，顺序以数组顺序为准。
                     "task_session_id": command_data.get("task_session_id", ""),
                     "route_id": command_data.get("route_id", ""),
+                    # 多地图一期：路线任务必须明确 map_id，状态管理器按 map_id + waypoint_id 查点。
+                    "map_id": command_data.get("map_id", ""),
                     "route_waypoints": command_data.get("route_waypoints", []),
                     # ID 列表启动字段：APP 可只下发有序 waypoint_id 列表，
                     # 状态管理器会用 waypoints_revision 校验点位库一致后再补全完整点位。
@@ -755,6 +768,26 @@ class CompleteWebSocketServer(Node):
                 msg.data = json.dumps(route_msg, ensure_ascii=False)
                 self.navigation_command_pub.publish(msg)
                 self.get_logger().info(f' 路由导航命令: {inner_command}')
+
+            elif command_type == "map_management":
+                # 多地图一期只做查询和受控拒绝切图。websocket 层透传 request_message_id，
+                # 由 map_context_manager 返回 map_response，APP 用它更新地图状态栏。
+                inner_command = command_data.get("command_type", "")
+                if not inner_command:
+                    self.get_logger().error("地图管理命令缺少 command_type")
+                    return False
+                route_msg = {
+                    "command_type": inner_command,
+                    "target_map_id": command_data.get("target_map_id", ""),
+                    "reason": command_data.get("reason", ""),
+                    "request_message_id": command_data.get("request_message_id") or request_message_id,
+                    "client_id": client_id,
+                    "timestamp": time.time()
+                }
+                msg = String()
+                msg.data = json.dumps(route_msg, ensure_ascii=False)
+                self.map_command_pub.publish(msg)
+                self.get_logger().info(f' 路由地图命令: {inner_command}')
             
             else:
                 self.get_logger().error(f'不支持的命令类型: {command_type}')

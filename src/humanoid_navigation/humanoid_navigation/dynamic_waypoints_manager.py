@@ -31,16 +31,19 @@ class WaypointData:
     """点位数据类"""
     def __init__(self, id: str, name: str, waypoint_type: WaypointType, 
                  position: List[float], orientation: List[float], 
-                 frame_id: str = "map", properties: Dict[str, Any] = None):
-        self.id = id
+                 frame_id: str = "map", properties: Dict[str, Any] = None,
+                 map_id: str = "hall", created_time: float = None,
+                 last_modified: float = None):
+        self.id = str(id)
         self.name = name
         self.waypoint_type = waypoint_type
         self.position = position
         self.orientation = orientation
         self.frame_id = frame_id
+        self.map_id = str(map_id or "hall").strip() or "hall"
         self.properties = properties or {}
-        self.created_time = time.time()
-        self.last_modified = time.time()
+        self.created_time = float(created_time) if created_time is not None else time.time()
+        self.last_modified = float(last_modified) if last_modified is not None else time.time()
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
@@ -48,6 +51,7 @@ class WaypointData:
             "id": self.id,
             "name": self.name,
             "type": self.waypoint_type.value,
+            "map_id": self.map_id,
             "position": self.position,
             "orientation": self.orientation,
             "frame_id": self.frame_id,
@@ -69,10 +73,16 @@ class DynamicWaypointsManager(Node):
         self.declare_parameters(namespace='', parameters=[
             ('data_storage.enabled', True),
             ('data_storage.file_path', '/home/ubuntu/software/Todesk/Files/humanoid_ws/data/dynamic_waypoints.json'),
+            ('data_storage.waypoints_dir', '/home/ubuntu/software/Todesk/Files/humanoid_ws/data/waypoints'),
+            ('data_storage.default_map_id', 'hall'),
             ('data_storage.auto_save_interval', 300.0),
         ])
         
         # ========== 数据存储 ==========
+        self.default_map_id = "hall"
+        self.current_map_id = "hall"
+        self.waypoints_by_map: Dict[str, Dict[str, Dict[str, WaypointData]]] = {}
+        self.waypoints_revisions_by_map: Dict[str, str] = {}
         self.waypoints: Dict[str, Dict[str, WaypointData]] = {
             wp_type.value: {} for wp_type in WaypointType
         }
@@ -125,6 +135,63 @@ class DynamicWaypointsManager(Node):
 
         normalized["speed"] = speed
         return True, "", normalized
+
+    def normalize_map_id(self, map_id: Any) -> str:
+        """归一化地图 ID；旧 APP 没传时回退到默认地图。"""
+        normalized = str(map_id or self.default_map_id or "hall").strip()
+        return normalized or "hall"
+
+    def empty_waypoint_bucket(self) -> Dict[str, Dict[str, WaypointData]]:
+        """创建一张地图自己的点位桶。"""
+        return {wp_type.value: {} for wp_type in WaypointType}
+
+    def ensure_map_cache(self, map_id: Any) -> str:
+        """确保指定地图的内存缓存和 revision 都存在。"""
+        normalized_map_id = self.normalize_map_id(map_id)
+        if normalized_map_id not in self.waypoints_by_map:
+            self.waypoints_by_map[normalized_map_id] = self.empty_waypoint_bucket()
+        if normalized_map_id not in self.waypoints_revisions_by_map:
+            self.waypoints_revisions_by_map[normalized_map_id] = f"{time.time():.3f}"
+        if normalized_map_id == self.current_map_id:
+            self.waypoints = self.waypoints_by_map[normalized_map_id]
+            self.waypoints_revision = self.waypoints_revisions_by_map[normalized_map_id]
+        return normalized_map_id
+
+    def get_map_waypoints(self, map_id: Any) -> Dict[str, Dict[str, WaypointData]]:
+        """获取指定地图的点位缓存。"""
+        normalized_map_id = self.ensure_map_cache(map_id)
+        return self.waypoints_by_map[normalized_map_id]
+
+    def get_map_revision(self, map_id: Any) -> str:
+        """获取指定地图的点位版本号。"""
+        normalized_map_id = self.ensure_map_cache(map_id)
+        return self.waypoints_revisions_by_map.get(normalized_map_id, "")
+
+    def refresh_waypoints_revision(self, map_id: Any = None):
+        """刷新指定地图的点位库版本号。
+
+        多地图后 revision 必须按地图独立维护：
+        APP 保存 hall1 点位时只刷新 hall1，不能让 hall 的路线任务版本失效。
+        """
+        normalized_map_id = self.ensure_map_cache(map_id or self.current_map_id)
+        self.waypoints_revisions_by_map[normalized_map_id] = f"{time.time():.3f}"
+        if normalized_map_id == self.current_map_id:
+            self.waypoints_revision = self.waypoints_revisions_by_map[normalized_map_id]
+
+    def waypoint_file_path(self, map_id: Any) -> str:
+        """返回某张地图对应的独立点位 JSON 文件路径。"""
+        normalized_map_id = self.normalize_map_id(map_id)
+        safe_map_id = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in normalized_map_id)
+        return os.path.join(self.waypoints_storage_dir, f"{safe_map_id}.json")
+
+    def extract_command_map_id(self, command_data: Dict[str, Any], waypoint_data: Dict[str, Any] = None) -> str:
+        """从命令或点位数据里提取 map_id，旧包默认归入 default_map_id。"""
+        waypoint_data = waypoint_data if isinstance(waypoint_data, dict) else {}
+        return self.normalize_map_id(
+            command_data.get("map_id")
+            or waypoint_data.get("map_id")
+            or waypoint_data.get("properties", {}).get("map_id", "")
+        )
     
     def setup_communication(self):
         """设置ROS2通信接口"""
@@ -283,6 +350,7 @@ class DynamicWaypointsManager(Node):
             "target_waypoint_id",
             "task_session_id",
             "route_id",
+            "map_id",
             "broadcast_id",
             "request_message_id",
             "waypoints_revision",
@@ -310,6 +378,8 @@ class DynamicWaypointsManager(Node):
                     normalized_waypoint = dict(waypoint)
                     if normalized_waypoint.get("waypoint_id") is not None:
                         normalized_waypoint["waypoint_id"] = str(normalized_waypoint["waypoint_id"])
+                    if normalized_waypoint.get("map_id") is not None:
+                        normalized_waypoint["map_id"] = self.normalize_map_id(normalized_waypoint["map_id"])
                     normalized_route_waypoints.append(normalized_waypoint)
                 else:
                     normalized_route_waypoints.append(waypoint)
@@ -374,6 +444,7 @@ class DynamicWaypointsManager(Node):
             waypoint_data = command_data.get("waypoint_data", {})
             waypoint_id = waypoint_data.get("id")
             waypoint_type_str = waypoint_data.get("type")
+            map_id = self.extract_command_map_id(command_data, waypoint_data)
             
             if not waypoint_id or not waypoint_type_str:
                 self.send_app_response("error", "缺少必要参数: id 或 type")
@@ -394,22 +465,24 @@ class DynamicWaypointsManager(Node):
                 position=waypoint_data.get("position", [0.0, 0.0, 0.0]),
                 orientation=waypoint_data.get("orientation", [0.0, 0.0, 0.0, 1.0]),
                 frame_id=waypoint_data.get("frame_id", "map"),
-                properties=normalized_properties
+                properties=normalized_properties,
+                map_id=map_id
             )
             
-            self.waypoints[waypoint_type.value][waypoint_id] = waypoint
+            map_waypoints = self.get_map_waypoints(map_id)
+            map_waypoints[waypoint_type.value][str(waypoint_id)] = waypoint
 
             # 点位内容发生真实变更后刷新版本号；保存、推送、响应都使用同一版 revision。
-            self.refresh_waypoints_revision()
+            self.refresh_waypoints_revision(map_id)
             
             # 保存数据
             if self.data_storage_enabled:
-                self.save_waypoints_data()
+                self.save_waypoints_data(map_id)
             
             # 发布点位数据更新
-            self.publish_waypoints_data()
+            self.publish_waypoints_data(map_id=map_id)
             
-            self.send_app_response("success", f"点位 '{waypoint.name}' 设置成功")
+            self.send_app_response("success", f"点位 '{waypoint.name}' 设置成功", {"map_id": map_id})
             
         except Exception as e:
             self.get_logger().error(f"设置点位错误: {e}")
@@ -421,6 +494,7 @@ class DynamicWaypointsManager(Node):
             waypoint_data = command_data.get("waypoint_data", {})
             waypoint_id = waypoint_data.get("id")
             waypoint_type_str = waypoint_data.get("type")
+            map_id = self.extract_command_map_id(command_data, waypoint_data)
             
             if not waypoint_id or not waypoint_type_str:
                 self.send_app_response("error", "缺少必要参数: id 或 type")
@@ -428,8 +502,10 @@ class DynamicWaypointsManager(Node):
             
             # 查找现有点位
             waypoint_type = WaypointType(waypoint_type_str)
-            if waypoint_id not in self.waypoints[waypoint_type.value]:
-                self.send_app_response("error", f"点位不存在: {waypoint_id}")
+            map_waypoints = self.get_map_waypoints(map_id)
+            waypoint_key = str(waypoint_id)
+            if waypoint_key not in map_waypoints[waypoint_type.value]:
+                self.send_app_response("error", f"地图 {map_id} 下点位不存在: {waypoint_id}")
                 return
 
             incoming_properties = waypoint_data.get("properties", {})
@@ -439,25 +515,26 @@ class DynamicWaypointsManager(Node):
                 return
             
             # 更新点位数据
-            waypoint = self.waypoints[waypoint_type.value][waypoint_id]
+            waypoint = map_waypoints[waypoint_type.value][waypoint_key]
             waypoint.name = waypoint_data.get("name", waypoint.name)
             waypoint.position = waypoint_data.get("position", waypoint.position)
             waypoint.orientation = waypoint_data.get("orientation", waypoint.orientation)
             waypoint.frame_id = waypoint_data.get("frame_id", waypoint.frame_id)
+            waypoint.map_id = map_id
             waypoint.properties.update(normalized_properties)
             waypoint.last_modified = time.time()
 
             # 点位内容发生真实变更后刷新版本号，供 APP 后续 ID 列表启动时做一致性校验。
-            self.refresh_waypoints_revision()
+            self.refresh_waypoints_revision(map_id)
             
             # 保存数据
             if self.data_storage_enabled:
-                self.save_waypoints_data()
+                self.save_waypoints_data(map_id)
             
             # 发布点位数据更新
-            self.publish_waypoints_data()
+            self.publish_waypoints_data(map_id=map_id)
             
-            self.send_app_response("success", f"点位 '{waypoint.name}' 更新成功")
+            self.send_app_response("success", f"点位 '{waypoint.name}' 更新成功", {"map_id": map_id})
             
         except Exception as e:
             self.get_logger().error(f"更新点位错误: {e}")
@@ -468,33 +545,36 @@ class DynamicWaypointsManager(Node):
         try:
             waypoint_id = command_data.get("waypoint_id")
             waypoint_type_str = command_data.get("waypoint_type")
+            map_id = self.extract_command_map_id(command_data)
             
             if not waypoint_id or not waypoint_type_str:
                 self.send_app_response("error", "缺少必要参数: waypoint_id 或 waypoint_type")
                 return
             
             waypoint_type = WaypointType(waypoint_type_str)
+            map_waypoints = self.get_map_waypoints(map_id)
+            waypoint_key = str(waypoint_id)
             
             # 检查点位是否存在
-            if waypoint_id not in self.waypoints[waypoint_type.value]:
-                self.send_app_response("error", f"点位不存在: {waypoint_id}")
+            if waypoint_key not in map_waypoints[waypoint_type.value]:
+                self.send_app_response("error", f"地图 {map_id} 下点位不存在: {waypoint_id}")
                 return
             
             # 删除点位
-            waypoint_name = self.waypoints[waypoint_type.value][waypoint_id].name
-            del self.waypoints[waypoint_type.value][waypoint_id]
+            waypoint_name = map_waypoints[waypoint_type.value][waypoint_key].name
+            del map_waypoints[waypoint_type.value][waypoint_key]
 
             # 点位库删除后也要刷新版本号，禁止 APP 用删除前的 ID 列表继续启动。
-            self.refresh_waypoints_revision()
+            self.refresh_waypoints_revision(map_id)
             
             # 保存数据
             if self.data_storage_enabled:
-                self.save_waypoints_data()
+                self.save_waypoints_data(map_id)
             
             # 发布点位数据更新
-            self.publish_waypoints_data()
+            self.publish_waypoints_data(map_id=map_id)
             
-            self.send_app_response("success", f"点位 '{waypoint_name}' 删除成功")
+            self.send_app_response("success", f"点位 '{waypoint_name}' 删除成功", {"map_id": map_id})
             
         except Exception as e:
             self.get_logger().error(f"删除点位错误: {e}")
@@ -505,14 +585,16 @@ class DynamicWaypointsManager(Node):
         try:
             waypoint_type_str = command_data.get("waypoint_type")
             include_details = command_data.get("include_details", True)
+            map_id = self.extract_command_map_id(command_data)
+            map_waypoints = self.get_map_waypoints(map_id)
         
-            response_data = {}
+            response_data = {"map_id": map_id}
         
             if waypoint_type_str and waypoint_type_str != "all":  # ← 修复：允许空值或"all"
                 # 获取特定类型的点位
                 try:
                     waypoint_type = WaypointType(waypoint_type_str)
-                    waypoints = self.waypoints[waypoint_type.value]
+                    waypoints = map_waypoints[waypoint_type.value]
                 
                     if include_details:
                         response_data[waypoint_type.value] = {
@@ -524,8 +606,8 @@ class DynamicWaypointsManager(Node):
                     self.send_app_response("error", f"无效的点位类型: {waypoint_type_str}")
                     return
             else:
-                # 获取所有点位（waypoint_type为空或"all"）
-                for wp_type, waypoints in self.waypoints.items():
+                # 获取指定地图下的所有点位（waypoint_type为空或"all"）
+                for wp_type, waypoints in map_waypoints.items():
                     if include_details:
                         response_data[wp_type] = {
                             wp_id: wp.to_dict() for wp_id, wp in waypoints.items()
@@ -533,9 +615,9 @@ class DynamicWaypointsManager(Node):
                     else:
                         response_data[wp_type] = list(waypoints.keys())
 
-            response_data["waypoints_revision"] = self.waypoints_revision
+            response_data["waypoints_revision"] = self.get_map_revision(map_id)
         
-            self.send_app_response("success", "获取点位列表成功", response_data)
+            self.send_app_response("success", f"获取地图 {map_id} 点位列表成功", response_data, map_id=map_id)
         
         except Exception as e:
             self.get_logger().error(f"获取点位列表错误: {e}")
@@ -545,55 +627,98 @@ class DynamicWaypointsManager(Node):
         """处理清空点位"""
         try:
             waypoint_type_str = command_data.get("waypoint_type")
+            raw_map_id = command_data.get("map_id")
+            clear_scope = str(command_data.get("clear_scope", "") or "").strip()
+            if not raw_map_id and clear_scope != "all_maps":
+                self.send_app_response(
+                    "error",
+                    "多地图模式下 clear_waypoints 必须携带 map_id，避免误删其他地图点位",
+                    {"error_code": "missing_map_id"}
+                )
+                return
+
+            map_id = self.extract_command_map_id(command_data)
             
+            if clear_scope == "all_maps":
+                total_count = self.get_total_waypoints_count()
+                for target_map_id in list(self.waypoints_by_map.keys()):
+                    self.waypoints_by_map[target_map_id] = self.empty_waypoint_bucket()
+                    self.refresh_waypoints_revision(target_map_id)
+                    if self.data_storage_enabled:
+                        self.save_waypoints_data(target_map_id)
+                self.publish_waypoints_data(update_type="clear_all_maps", map_id=map_id)
+                self.send_app_response("success", f"清空所有地图点位成功，共 {total_count} 个", {
+                    "map_id": map_id,
+                    "clear_scope": "all_maps",
+                    "cleared_count": total_count
+                }, map_id=map_id)
+                return
+
+            map_waypoints = self.get_map_waypoints(map_id)
+
             if waypoint_type_str:
                 # 清空特定类型的点位
                 waypoint_type = WaypointType(waypoint_type_str)
-                cleared_count = len(self.waypoints[waypoint_type.value])
-                self.waypoints[waypoint_type.value].clear()
+                cleared_count = len(map_waypoints[waypoint_type.value])
+                map_waypoints[waypoint_type.value].clear()
             else:
-                # 清空所有点位
-                total_count = self.get_total_waypoints_count()
-                for waypoints in self.waypoints.values():
+                # 清空指定地图的所有点位
+                total_count = self.get_total_waypoints_count(map_id)
+                for waypoints in map_waypoints.values():
                     waypoints.clear()
                 
-                message = f"清空所有点位成功，共 {total_count} 个"
+                message = f"清空地图 {map_id} 所有点位成功，共 {total_count} 个"
 
             # 清空动作成功后先刷新版本号，再保存、推送和响应，保证 APP 拿到的是最新版本。
-            self.refresh_waypoints_revision()
+            self.refresh_waypoints_revision(map_id)
             
             # 保存数据
             if self.data_storage_enabled:
-                self.save_waypoints_data()
+                self.save_waypoints_data(map_id)
             
             # 发布点位数据更新
-            self.publish_waypoints_data()
+            self.publish_waypoints_data(map_id=map_id)
 
             if waypoint_type_str:
-                self.send_app_response("success", f"清空 {waypoint_type.value} 类型点位成功，共 {cleared_count} 个")
+                self.send_app_response("success", f"清空地图 {map_id} 的 {waypoint_type.value} 类型点位成功，共 {cleared_count} 个", {
+                    "map_id": map_id,
+                    "cleared_count": cleared_count
+                }, map_id=map_id)
             else:
-                self.send_app_response("success", message)
+                self.send_app_response("success", message, {"map_id": map_id, "cleared_count": total_count}, map_id=map_id)
             
         except Exception as e:
             self.get_logger().error(f"清空点位错误: {e}")
             self.send_app_response("error", f"清空点位失败: {str(e)}")
     
-    def publish_waypoints_data(self, update_type="full_update"):
+    def publish_waypoints_data(self, update_type="full_update", map_id: str = None):
         """发布路点数据到 /navigation/waypoints_data"""
         try:
+            normalized_map_id = self.ensure_map_cache(map_id or self.current_map_id)
+            map_waypoints = self.get_map_waypoints(normalized_map_id)
             waypoints_data = {
                 "update_type": update_type,
                 "timestamp": time.time(),
-                "waypoints_revision": self.waypoints_revision,
+                "map_id": normalized_map_id,
+                "default_map_id": self.default_map_id,
+                "waypoints_revision": self.get_map_revision(normalized_map_id),
+                "waypoints_revisions_by_map": dict(self.waypoints_revisions_by_map),
                 "data": {
                     "waypoints": {
                         wp_type: {wp_id: wp.to_dict() for wp_id, wp in waypoints.items()}
-                        for wp_type, waypoints in self.waypoints.items()
-                    }
+                        for wp_type, waypoints in map_waypoints.items()
+                    },
+                    # 给 navigation_state_manager 用的全量缓存。
+                    # start_route_task(map_id=hall1, route_waypoint_ids=[...]) 必须按地图查点，
+                    # 不能再只靠 waypoint_id 全局查找，否则不同地图的 1 号点会冲突。
+                    "waypoints_by_map": self.serialize_waypoints_by_map()
                 },
                 "metadata": {
-                    "total_count": self.get_total_waypoints_count(),
-                    "waypoints_revision": self.waypoints_revision
+                    "total_count": self.get_total_waypoints_count(normalized_map_id),
+                    "total_count_all_maps": self.get_total_waypoints_count(),
+                    "map_id": normalized_map_id,
+                    "waypoints_revision": self.get_map_revision(normalized_map_id),
+                    "waypoints_revisions_by_map": dict(self.waypoints_revisions_by_map)
                 }
             }
         
@@ -609,7 +734,7 @@ class DynamicWaypointsManager(Node):
             msg.data = json.dumps(unified_msg, ensure_ascii=False)
             self.waypoints_data_pub.publish(msg)
         
-            self.get_logger().info(f' 发布路点数据')
+            self.get_logger().info(f' 发布地图 {normalized_map_id} 路点数据')
         
         except Exception as e:
             self.get_logger().error(f'发布路点数据错误: {e}')
@@ -651,11 +776,14 @@ class DynamicWaypointsManager(Node):
         }
 
 
-    def send_app_response(self, response_type: str, message: str, data: Dict = None):
+    def send_app_response(self, response_type: str, message: str, data: Dict = None, map_id: str = None):
         """发送响应给APP（通过ROS topic发布）"""
         try:
+            normalized_map_id = self.ensure_map_cache(map_id or self.current_map_id)
             result_data = dict(data or {})
-            result_data.setdefault("waypoints_revision", self.waypoints_revision)
+            result_data.setdefault("map_id", normalized_map_id)
+            result_data.setdefault("waypoints_revision", self.get_map_revision(normalized_map_id))
+            result_data.setdefault("waypoints_revisions_by_map", dict(self.waypoints_revisions_by_map))
             response_msg = self.create_unified_message(
                 message_type="response",
                 data_type="waypoint_response",
@@ -664,7 +792,8 @@ class DynamicWaypointsManager(Node):
                 data={
                    "response_type": response_type,
                    "message": message,
-                   "waypoints_revision": self.waypoints_revision,
+                   "map_id": normalized_map_id,
+                   "waypoints_revision": self.get_map_revision(normalized_map_id),
                    "result": result_data
                 }
             )
@@ -684,119 +813,199 @@ class DynamicWaypointsManager(Node):
     
     
     # ========== 数据持久化方法 ==========
-    def refresh_waypoints_revision(self):
-        """刷新点位库版本号。
-
-        第一版用时间戳字符串即可满足一致性校验：
-        APP 保存点位后记录 ROS 返回的 revision，开始路线时把该 revision 带回来；
-        状态管理器发现不一致就拒绝 ID 列表启动，防止坐标/属性版本错配。
-        """
-        self.waypoints_revision = f"{time.time():.3f}"
-
     def setup_data_persistence(self):
         """设置数据持久化"""
         try:
             # 获取参数
             self.data_storage_enabled = self.get_parameter('data_storage.enabled').value
             self.storage_file_path = self.get_parameter('data_storage.file_path').value
+            self.waypoints_storage_dir = self.get_parameter('data_storage.waypoints_dir').value
+            self.default_map_id = self.normalize_map_id(self.get_parameter('data_storage.default_map_id').value)
+            self.current_map_id = self.default_map_id
         
             # 展开用户主目录路径
             if self.storage_file_path.startswith('~/'):
                self.storage_file_path = os.path.expanduser(self.storage_file_path)
+            if self.waypoints_storage_dir.startswith('~/'):
+               self.waypoints_storage_dir = os.path.expanduser(self.waypoints_storage_dir)
         
-            # 创建存储目录
+            # 创建存储目录。多地图后主存储为 data/waypoints/<map_id>.json。
             storage_dir = os.path.dirname(self.storage_file_path)
             if storage_dir:
                os.makedirs(storage_dir, exist_ok=True)
+            os.makedirs(self.waypoints_storage_dir, exist_ok=True)
+            self.ensure_map_cache(self.default_map_id)
         
             if self.data_storage_enabled:
-                self.get_logger().info(f"数据持久化已启用，文件路径: {self.storage_file_path}")
+                self.get_logger().info(
+                    f"数据持久化已启用，多地图点位目录: {self.waypoints_storage_dir}，旧文件: {self.storage_file_path}"
+                )
             
-                # 如果文件存在，加载现有数据
-                if os.path.exists(self.storage_file_path):
-                    self.load_waypoints_data()
+                # 优先加载多地图点位文件；首次升级时再从旧 dynamic_waypoints.json 迁移。
+                if self.load_waypoints_data():
+                    pass
+                elif os.path.exists(self.storage_file_path):
+                    self.get_logger().warning("未发现多地图点位文件，开始从旧 dynamic_waypoints.json 迁移到默认地图")
+                    self.load_legacy_waypoints_data(self.default_map_id)
+                    self.save_waypoints_data(self.default_map_id)
                 else:
                     self.get_logger().info("没有找到现有的路点数据文件，将在首次保存时创建")
-                    self.refresh_waypoints_revision()
+                    self.refresh_waypoints_revision(self.default_map_id)
             else:
                 self.get_logger().info("数据持久化已禁用")
-                self.refresh_waypoints_revision()
+                self.refresh_waypoints_revision(self.default_map_id)
             
         except Exception as e:
                 self.get_logger().error(f"设置数据持久化失败: {e}")
                 # 设置默认值以确保功能可用
                 self.data_storage_enabled = True
                 self.storage_file_path = '/home/ubuntu/software/Todesk/Files/humanoid_ws/data/dynamic_waypoints.json'
+                self.waypoints_storage_dir = '/home/ubuntu/software/Todesk/Files/humanoid_ws/data/waypoints'
+                self.default_map_id = "hall"
+                self.current_map_id = "hall"
+                self.ensure_map_cache(self.default_map_id)
 
-    def save_waypoints_data(self):
+    def serialize_waypoints_by_map(self) -> Dict[str, Dict[str, Dict[str, Dict[str, Any]]]]:
+        """把所有地图点位缓存转换成 JSON 可序列化结构。"""
+        return {
+            map_id: {
+                wp_type: {wp_id: wp.to_dict() for wp_id, wp in waypoints.items()}
+                for wp_type, waypoints in map_waypoints.items()
+            }
+            for map_id, map_waypoints in self.waypoints_by_map.items()
+        }
+
+    def save_waypoints_data(self, map_id: Any = None):
         """保存点位数据"""
         try:
-            if not self.waypoints_revision:
-                self.refresh_waypoints_revision()
+            normalized_map_id = self.ensure_map_cache(map_id or self.current_map_id)
+            if not self.get_map_revision(normalized_map_id):
+                self.refresh_waypoints_revision(normalized_map_id)
+            map_waypoints = self.get_map_waypoints(normalized_map_id)
             data_to_save = {
-               "waypoints_revision": self.waypoints_revision,
+               "map_id": normalized_map_id,
+               "waypoints_revision": self.get_map_revision(normalized_map_id),
                "waypoints": {
                   wp_type: {wp_id: wp.to_dict() for wp_id, wp in waypoints.items()}
-                  for wp_type, waypoints in self.waypoints.items()
+                  for wp_type, waypoints in map_waypoints.items()
                 },
                 "timestamp": time.time()
             }
             
-            with open(self.storage_file_path, 'w', encoding='utf-8') as f:
+            file_path = self.waypoint_file_path(normalized_map_id)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, 'w', encoding='utf-8') as f:
                  json.dump(data_to_save, f, indent=2, ensure_ascii=False)
-            self.get_logger().info("点位数据保存成功")    
+            self.get_logger().info(f"地图 {normalized_map_id} 点位数据保存成功: {file_path}")    
         except Exception as e:
             self.get_logger().error(f"保存点位数据错误: {e}")
     
-    def load_waypoints_data(self):
-        """加载点位数据"""
+    def load_waypoints_data(self) -> bool:
+        """加载多地图点位数据。返回是否成功加载到至少一个地图文件。"""
+        if not os.path.isdir(self.waypoints_storage_dir):
+           return False
+
+        loaded_any = False
+        for file_name in sorted(os.listdir(self.waypoints_storage_dir)):
+            if not file_name.endswith(".json"):
+                continue
+            file_path = os.path.join(self.waypoints_storage_dir, file_name)
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                map_id = self.normalize_map_id(data.get("map_id") or os.path.splitext(file_name)[0])
+                self.load_waypoints_payload_into_map(data, map_id)
+                loaded_any = True
+            except Exception as e:
+                self.get_logger().warning(f"加载地图点位文件失败: {file_path} - {e}")
+
+        self.waypoints = self.get_map_waypoints(self.current_map_id)
+        self.waypoints_revision = self.get_map_revision(self.current_map_id)
+        if loaded_any:
+            self.get_logger().info(
+                f"从多地图点位目录加载完成，共 {len(self.waypoints_by_map)} 张地图，{self.get_total_waypoints_count()} 个点位"
+            )
+        return loaded_any
+
+    def load_legacy_waypoints_data(self, map_id: Any):
+        """从旧 dynamic_waypoints.json 读取点位并归入默认地图。"""
         if not os.path.exists(self.storage_file_path):
            return
         
         try:
             with open(self.storage_file_path, 'r', encoding='utf-8') as f:
                  data = json.load(f)
-
-            # 兼容旧数据文件：旧版本没有 waypoints_revision 时，优先复用文件 timestamp
-            # 作为稳定版本号，避免每次启动都随机变化导致 APP 刚同步完又不匹配。
-            self.waypoints_revision = str(
-                data.get("waypoints_revision") or data.get("timestamp") or f"{time.time():.3f}"
+            data["map_id"] = self.normalize_map_id(map_id)
+            self.load_waypoints_payload_into_map(data, map_id)
+            self.get_logger().info(
+                f"旧点位文件迁移到地图 {self.normalize_map_id(map_id)} 完成，共 {self.get_total_waypoints_count(map_id)} 个点位"
             )
-            
-            # 加载点位数据
-            waypoints_data = data.get("waypoints", {})
-            for wp_type, waypoints_dict in waypoints_data.items():
-                if wp_type in self.waypoints:
-                   for wp_id, wp_data in waypoints_dict.items():
-                    try:
-                        waypoint = WaypointData(
-                            id=wp_data["id"],
-                            name=wp_data["name"],
-                            waypoint_type=WaypointType(wp_data["type"]),
-                            position=wp_data["position"],
-                            orientation=wp_data["orientation"],
-                            frame_id=wp_data.get("frame_id", "map"),
-                            properties=wp_data.get("properties", {})
-                        )
-                        self.waypoints[wp_type][wp_id] = waypoint
-                    except Exception as e:
-                        self.get_logger().warning(f"加载点位失败: {wp_id} - {e}")
-            
-            total_count = self.get_total_waypoints_count()    
-            self.get_logger().info(f"从文件加载点位数据完成，共 {total_count} 个点位")
-            
         except Exception as e:
-            self.get_logger().error(f"加载点位数据错误: {e}")
+            self.get_logger().error(f"加载旧点位数据错误: {e}")
+
+    def load_waypoints_payload_into_map(self, data: Dict[str, Any], map_id: Any):
+        """把一个点位 JSON payload 加载进指定地图缓存。"""
+        normalized_map_id = self.ensure_map_cache(map_id)
+        map_waypoints = self.get_map_waypoints(normalized_map_id)
+        self.waypoints_revisions_by_map[normalized_map_id] = str(
+            data.get("waypoints_revision") or data.get("timestamp") or f"{time.time():.3f}"
+        )
+            
+        waypoints_data = data.get("waypoints", {})
+        for wp_type, waypoints_dict in waypoints_data.items():
+            if wp_type in map_waypoints:
+               for wp_id, wp_data in waypoints_dict.items():
+                try:
+                    point_map_id = self.normalize_map_id(wp_data.get("map_id") or normalized_map_id)
+                    waypoint = WaypointData(
+                        id=wp_data["id"],
+                        name=wp_data["name"],
+                        waypoint_type=WaypointType(wp_data["type"]),
+                        position=wp_data["position"],
+                        orientation=wp_data["orientation"],
+                        frame_id=wp_data.get("frame_id", "map"),
+                        properties=wp_data.get("properties", {}),
+                        map_id=point_map_id,
+                        created_time=wp_data.get("created_time"),
+                        last_modified=wp_data.get("last_modified"),
+                    )
+                    map_waypoints[wp_type][str(wp_id)] = waypoint
+                except Exception as e:
+                    self.get_logger().warning(f"加载地图 {normalized_map_id} 点位失败: {wp_id} - {e}")
     
-    def get_total_waypoints_count(self) -> int:
-        """获取总点位数量"""
-        return sum(len(waypoints) for waypoints in self.waypoints.values())
+    def get_total_waypoints_count(self, map_id: Any = None) -> int:
+        """获取点位数量。
+
+        map_id 为空时统计所有地图；传入 map_id 时只统计该地图。
+        多地图后不能再只看 self.waypoints，否则 APP 查询 hall1 时可能拿到 hall 的数量。
+        """
+        if map_id is not None:
+            map_waypoints = self.get_map_waypoints(map_id)
+            return sum(len(waypoints) for waypoints in map_waypoints.values())
+
+        return sum(
+            len(waypoints)
+            for map_waypoints in self.waypoints_by_map.values()
+            for waypoints in map_waypoints.values()
+        )
     
-    def find_waypoint_by_id(self, waypoint_id: str) -> Optional[WaypointData]:
-        """根据ID查找点位"""
-        for waypoints_dict in self.waypoints.values():
-            if waypoint_id in waypoints_dict:
-               return waypoints_dict[waypoint_id]
+    def find_waypoint_by_id(self, waypoint_id: str, map_id: Any = None) -> Optional[WaypointData]:
+        """根据 ID 查找点位。
+
+        新路线任务必须传 map_id 精确查找，避免不同地图都有 1 号点时串图。
+        不传 map_id 只作为旧内部调试兼容，会在所有地图里顺序查找。
+        """
+        waypoint_key = str(waypoint_id)
+        if map_id is not None:
+            for waypoints_dict in self.get_map_waypoints(map_id).values():
+                if waypoint_key in waypoints_dict:
+                    return waypoints_dict[waypoint_key]
+            return None
+
+        for map_waypoints in self.waypoints_by_map.values():
+            for waypoints_dict in map_waypoints.values():
+                if waypoint_key in waypoints_dict:
+                    return waypoints_dict[waypoint_key]
         return None
     
 def main(args=None):

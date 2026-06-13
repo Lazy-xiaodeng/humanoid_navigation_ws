@@ -286,6 +286,14 @@ class UnifiedDataIntegrationNode(Node):
                 String, '/navigation/acknowledgments', self.navigation_ack_callback, 10
             )
 
+            # 多地图一期：地图管理响应/状态直接转发给 APP。
+            self.map_response_sub = self.create_subscription(
+                String, '/map/response', self.map_message_callback, 10
+            )
+            self.map_status_sub = self.create_subscription(
+                String, '/map/status', self.map_message_callback, 10
+            )
+
             # 订阅动作完成结果，立即推送给 APP。
             self.action_result_sub = self.create_subscription(
                 String, '/robot/action_result', self.action_result_callback, 10
@@ -503,6 +511,30 @@ class UnifiedDataIntegrationNode(Node):
                 # 存储数据
                 self.data_storage['navigation_status'] = enhanced_status
                 self.last_update_times['navigation_status'] = time.time()
+
+                # navigation_state_manager 会把 route task 的 ack、跳点、播报、障碍暂停等离散事件
+                # 也发布到 /navigation/status。这里检测 event_type 后立即转成 APP push，
+                # 避免 APP 只能等周期状态刷新，导致按钮/状态栏慢半拍。
+                if basic_status.get("event_type"):
+                    push_msg = self.create_base_message(
+                        message_type="push",
+                        data_type=basic_status.get("event_type", "navigation_event"),
+                        source="data_integration",
+                        destination="all"
+                    )
+                    push_msg["data"] = basic_status.get("event_data", {})
+                    push_msg["data"].setdefault("event_type", basic_status.get("event_type", ""))
+                    push_msg["data"].setdefault("current_state", basic_status.get("current_state", ""))
+                    push_msg["data"].setdefault("navigation_mode", basic_status.get("navigation_mode", ""))
+                    push_msg["data"].setdefault("timestamp", basic_status.get("timestamp", time.time()))
+                    event_status = push_msg["data"].get("status", "success")
+                    push_msg["metadata"].update({
+                        "push_reason": "navigation_event",
+                        "status": event_status,
+                        "error_code": push_msg["data"].get("error_code", ""),
+                        "error_message": push_msg["data"].get("message", "") if event_status == "error" else "",
+                    })
+                    self.publish_push_message(push_msg)
                 
                 self.get_logger().debug('🎯 导航状态已更新', throttle_duration_sec=2.0)
                 
@@ -604,6 +636,39 @@ class UnifiedDataIntegrationNode(Node):
     
         except Exception as e:
             self.get_logger().error(f'❌ 处理导航确认消息错误: {e}')
+
+    def map_message_callback(self, msg: String):
+        """处理地图管理响应/状态，转成 APP 可消费的统一推送。"""
+        try:
+            payload = json.loads(msg.data)
+            data_type = payload.get("data_type", "map_response")
+            data = payload.get("data", {})
+            if not isinstance(data, dict):
+                data = {"raw_data": data}
+
+            with self.data_lock:
+                self.data_storage[data_type] = data
+                self.last_update_times[data_type] = time.time()
+
+            push_msg = self.create_base_message(
+                message_type=payload.get("message_type", "push"),
+                data_type=data_type,
+                source="data_integration",
+                destination="all"
+            )
+            push_msg["data"] = data
+            metadata = payload.get("metadata", {}) if isinstance(payload.get("metadata", {}), dict) else {}
+            push_msg["metadata"].update({
+                "push_reason": data_type,
+                "status": metadata.get("status", data.get("status", "success")),
+                "error_code": metadata.get("error_code", data.get("error_code", "")),
+                "error_message": metadata.get("error_message", data.get("message", "")),
+                "request_id": metadata.get("request_id", data.get("request_message_id", "")),
+            })
+            self.publish_push_message(push_msg)
+            self.get_logger().info(f"📤 转发地图消息: {data_type}, status={push_msg['metadata'].get('status')}")
+        except Exception as e:
+            self.get_logger().error(f'❌ 处理地图消息错误: {e}')
 
     @staticmethod
     def apply_deadzone(value: float, threshold: float = 0.01) -> float:

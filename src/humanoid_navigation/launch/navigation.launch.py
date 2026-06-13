@@ -37,9 +37,25 @@ def generate_launch_description():
             ]),
             'data_storage.enabled': True,
             'data_storage.file_path': '/home/ubuntu/software/Todesk/Files/humanoid_ws/data/dynamic_waypoints.json',
+            # 多地图一期主存储目录：每张地图一个点位 JSON，例如 data/waypoints/hall.json。
+            'data_storage.waypoints_dir': '/home/ubuntu/software/Todesk/Files/humanoid_ws/data/waypoints',
+            'data_storage.default_map_id': 'hall',
             'navigation.position_tolerance': 0.15,
             'navigation.orientation_tolerance': 0.2,
             'navigation.default_frame_id': 'map'
+        }]
+    )
+
+    # 1.5 地图上下文管理器（多地图一期：只提供地图查询，不做自动切图）
+    map_context_node = Node(
+        package='humanoid_navigation',
+        executable='map_context_manager',
+        name='map_context_manager',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'map_registry_path': '/home/ubuntu/software/Todesk/Files/humanoid_ws/data/maps/map_registry.json',
+            'default_map_id': 'hall',
         }]
     )
     
@@ -89,6 +105,7 @@ def generate_launch_description():
     ld = LaunchDescription()
     ld.add_action(declare_use_sim_time)
     ld.add_action(dynamic_waypoints_node)
+    ld.add_action(map_context_node)
     ld.add_action(navigation_state_node)
     
     return ld

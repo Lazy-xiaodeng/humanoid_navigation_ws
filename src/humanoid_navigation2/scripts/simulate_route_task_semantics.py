@@ -106,14 +106,24 @@ class RouteTaskSemanticSim(Node):
         self.events = []
 
     def command(self, command_data: Dict):
+        # 模拟脚本统一使用 hall 地图；生产链路仍要求 APP 显式传 map_id。
+        # 这样历史场景不用逐条改动，也能覆盖多地图后的 start_route_task 语义。
+        command_payload = dict(command_data)
+        if command_payload.get("command_type") == "start_route_task":
+            command_payload.setdefault("map_id", "hall")
         msg = String()
         msg.data = json.dumps({
             "request_type": "navigation_command",
-            "command_data": command_data,
+            "command_data": command_payload,
         }, ensure_ascii=False)
         self.cmd_pub.publish(msg)
 
-    def publish_waypoints_cache(self, route_waypoints: List[Dict], revision: str = "sim_revision_001"):
+    def publish_waypoints_cache(
+        self,
+        route_waypoints: List[Dict],
+        revision: str = "sim_revision_001",
+        map_id: str = "hall"
+    ):
         """模拟 dynamic_waypoints_manager 发布本地点位库。
 
         ID 列表模式下，navigation_state_manager 不再从 APP 消息里直接拿坐标，
@@ -123,6 +133,7 @@ class RouteTaskSemanticSim(Node):
         for waypoint in route_waypoints:
             waypoint_id = str(waypoint["waypoint_id"])
             properties = {
+                "map_id": map_id,
                 "waypoint_role": waypoint.get("waypoint_role", "task"),
                 "need_broadcast": waypoint.get("need_broadcast", False),
                 "broadcast_id": waypoint.get("broadcast_id", ""),
@@ -134,6 +145,7 @@ class RouteTaskSemanticSim(Node):
                 "id": waypoint_id,
                 "name": f"waypoint_{waypoint_id}",
                 "type": "navigation_target",
+                "map_id": map_id,
                 "frame_id": waypoint.get("frame_id", "map"),
                 "position": waypoint.get("position", [0.0, 0.0, 0.0]),
                 "orientation": waypoint.get("orientation", [0.0, 0.0, 0.0, 1.0]),
@@ -150,20 +162,37 @@ class RouteTaskSemanticSim(Node):
             "data": {
                 "update_type": "semantic_sim",
                 "timestamp": time.time(),
+                "map_id": map_id,
                 "waypoints_revision": revision,
+                "waypoints_revisions_by_map": {
+                    map_id: revision,
+                },
                 "data": {
                     "waypoints": {
                         "navigation_target": stored_waypoints,
+                    },
+                    "waypoints_by_map": {
+                        map_id: {
+                            "navigation_target": stored_waypoints,
+                        }
                     }
                 },
                 "metadata": {
                     "total_count": len(stored_waypoints),
+                    "map_id": map_id,
                     "waypoints_revision": revision,
+                    "waypoints_revisions_by_map": {
+                        map_id: revision,
+                    },
                 },
             },
             "metadata": {
                 "status": "success",
+                "map_id": map_id,
                 "waypoints_revision": revision,
+                "waypoints_revisions_by_map": {
+                    map_id: revision,
+                },
             },
         }, ensure_ascii=False)
         self.waypoints_pub.publish(msg)

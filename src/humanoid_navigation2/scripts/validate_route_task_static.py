@@ -386,10 +386,14 @@ def main() -> int:
     for route_id_mode_needle, route_id_mode_description in (
         ('"route_waypoint_ids": command_data.get("route_waypoint_ids", [])', "websocket 入口透传 route_waypoint_ids"),
         ('"waypoints_revision": command_data.get("waypoints_revision", "")', "websocket 入口透传 waypoints_revision"),
+        ('"map_id": command_data.get("map_id", "")', "websocket 入口透传 map_id"),
         ("route_waypoint_ids = normalized.get(\"route_waypoint_ids\")", "桥接层归一化 route_waypoint_ids"),
         ("\"waypoints_revision\",", "桥接层归一化 waypoints_revision"),
         ("self.current_waypoints_revision = \"\"", "状态管理器缓存点位库 revision"),
+        ("self.waypoints_data_by_map = {}", "状态管理器缓存多地图点位库"),
+        ("self.current_waypoints_revisions_by_map = {}", "状态管理器缓存多地图 revision"),
         ("self.extract_waypoints_revision(message_data, legacy_data)", "点位数据回调提取 waypoints_revision"),
+        ("self.extract_waypoints_revisions_by_map(message_data, legacy_data)", "点位数据回调提取多地图 revision"),
         ("def validate_route_waypoint_source", "状态机新增完整快照/ID 列表来源互斥校验"),
         ("def validate_waypoints_revision_for_id_mode", "状态机新增 ID 模式 revision 校验"),
         ("def build_route_waypoints_from_ids", "状态机新增 ID 列表补全完整点位函数"),
@@ -404,13 +408,15 @@ def main() -> int:
     ):
         require_contains(validate_waypoint_source_body, source_needle, source_description, failures)
     for revision_needle, revision_description in (
+        ("missing_map_id", "ID 模式缺 map_id 必须返回 missing_map_id"),
         ("missing_waypoints_revision", "ID 模式缺 revision 必须返回 missing_waypoints_revision"),
         ("waypoints_cache_not_ready", "点位缓存未就绪必须返回 waypoints_cache_not_ready"),
         ("waypoints_revision_mismatch", "revision 不一致必须返回 waypoints_revision_mismatch"),
+        ("self.current_waypoints_revisions_by_map.get(normalized_map_id", "revision 必须按 map_id 校验"),
     ):
         require_contains(validate_waypoints_revision_body, revision_needle, revision_description, failures)
     for id_build_needle, id_build_description in (
-        ("self.find_waypoint_data_by_id(waypoint_id)", "ID 模式必须从状态机点位缓存查完整点位"),
+        ("self.find_waypoint_data_by_id(waypoint_id, normalized_map_id)", "ID 模式必须按 map_id 从状态机点位缓存查完整点位"),
         ("waypoint_id_not_found", "ID 不存在必须返回 waypoint_id_not_found"),
         ("raw_stored_waypoint", "ID 补全后保留原始点位快照用于排查"),
     ):
@@ -423,8 +429,8 @@ def main() -> int:
     )
     require_contains(
         start_route_task_body,
-        "self.validate_waypoints_revision_for_id_mode(command_data)",
-        "start_route_task 的 ID 模式必须校验 waypoints_revision",
+        "self.validate_waypoints_revision_for_id_mode(command_data, map_id)",
+        "start_route_task 的 ID 模式必须按 map_id 校验 waypoints_revision",
         failures,
     )
     require_contains(
@@ -437,6 +443,12 @@ def main() -> int:
         start_route_task_body,
         '"route_waypoint_source": route_waypoint_source',
         "active_route_task 必须记录路线点来源",
+        failures,
+    )
+    require_contains(
+        start_route_task_body,
+        '"map_id": map_id',
+        "active_route_task 必须记录启动时的 map_id",
         failures,
     )
     require_contains(

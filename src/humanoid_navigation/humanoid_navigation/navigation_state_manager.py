@@ -224,9 +224,14 @@ class NavigationStateManager(Node):
         
         # ========== 从路点管理器接收的数据 ==========
         self.waypoints_data = {}
+        # 多地图点位缓存：key 是 map_id，value 是该地图下按类型分组的点位数据。
+        # route_waypoint_ids 模式必须用 map_id + waypoint_id 精确补全，不能全局查同名点。
+        self.waypoints_data_by_map = {}
         # 当前缓存点位库的版本号。APP 使用 route_waypoint_ids 启动路线时必须携带同一版本，
         # 否则状态管理器会拒绝启动，避免按旧坐标/旧点位属性补全路线。
         self.current_waypoints_revision = ""
+        self.current_waypoints_revisions_by_map = {}
+        self.current_waypoints_map_id = ""
         self.navigation_start_time = 0
         self.current_goal_pose = None
 
@@ -513,11 +518,29 @@ class NavigationStateManager(Node):
             waypoints_data = legacy_data.get("data", {})
             if not isinstance(waypoints_data, dict) or "waypoints" not in waypoints_data:
                 waypoints_data = legacy_data
+            legacy_metadata = legacy_data.get("metadata", {}) if isinstance(legacy_data.get("metadata", {}), dict) else {}
             self.waypoints_data = waypoints_data.get("waypoints", {})
+            self.current_waypoints_map_id = self.route_task_id(
+                legacy_data.get("map_id")
+                or waypoints_data.get("map_id")
+                or legacy_metadata.get("map_id", "")
+            )
+            incoming_by_map = waypoints_data.get("waypoints_by_map", {})
+            if isinstance(incoming_by_map, dict) and incoming_by_map:
+                # 新协议：点位管理器一次推送所有地图缓存，状态机按 map_id 精确查点。
+                self.waypoints_data_by_map = incoming_by_map
+            elif self.current_waypoints_map_id:
+                # 兼容过渡期：如果只收到当前地图点位，也挂到对应 map_id 下。
+                self.waypoints_data_by_map[self.current_waypoints_map_id] = self.waypoints_data
+            elif self.waypoints_data:
+                # 旧格式没有 map_id，只能放到 default bucket；新 APP 不应依赖这条路径。
+                self.waypoints_data_by_map.setdefault("default", self.waypoints_data)
             self.current_waypoints_revision = self.extract_waypoints_revision(message_data, legacy_data)
+            self.current_waypoints_revisions_by_map = self.extract_waypoints_revisions_by_map(message_data, legacy_data)
         
             self.get_logger().info(
-                f'收到路点数据更新，共 {self.count_cached_waypoints()} 个点位，revision={self.current_waypoints_revision or "未提供"}'
+                f'收到路点数据更新，共 {self.count_cached_waypoints()} 个点位，'
+                f'map_id={self.current_waypoints_map_id or "未提供"}，revision={self.current_waypoints_revision or "未提供"}'
             )
         
         except Exception as e:
@@ -547,10 +570,43 @@ class NavigationStateManager(Node):
                 return revision
         return ""
 
+    def extract_waypoints_revisions_by_map(self, message_data: Dict[str, Any], legacy_data: Dict[str, Any]) -> Dict[str, str]:
+        """提取每张地图自己的点位库版本号。"""
+        candidates = [
+            legacy_data.get("waypoints_revisions_by_map"),
+            legacy_data.get("metadata", {}).get("waypoints_revisions_by_map")
+            if isinstance(legacy_data.get("metadata", {}), dict) else {},
+            legacy_data.get("data", {}).get("waypoints_revisions_by_map")
+            if isinstance(legacy_data.get("data", {}), dict) else {},
+            legacy_data.get("data", {}).get("metadata", {}).get("waypoints_revisions_by_map")
+            if isinstance(legacy_data.get("data", {}), dict) and isinstance(legacy_data.get("data", {}).get("metadata", {}), dict) else {},
+            message_data.get("waypoints_revisions_by_map"),
+            message_data.get("metadata", {}).get("waypoints_revisions_by_map")
+            if isinstance(message_data.get("metadata", {}), dict) else {},
+        ]
+        for candidate in candidates:
+            if isinstance(candidate, dict) and candidate:
+                return {
+                    self.route_task_id(map_id): self.route_task_id(revision)
+                    for map_id, revision in candidate.items()
+                    if self.route_task_id(map_id)
+                }
+        return {}
+
     def count_cached_waypoints(self) -> int:
-        """统计缓存中的真实点位数，兼容扁平和按类型嵌套两种结构。"""
+        """统计缓存中的真实点位数，兼容单地图和多地图结构。"""
+        if isinstance(self.waypoints_data_by_map, dict) and self.waypoints_data_by_map:
+            return sum(
+                self.count_waypoints_in_bucket(map_waypoints)
+                for map_waypoints in self.waypoints_data_by_map.values()
+                if isinstance(map_waypoints, dict)
+            )
+        return self.count_waypoints_in_bucket(self.waypoints_data)
+
+    def count_waypoints_in_bucket(self, waypoint_bucket: Dict[str, Any]) -> int:
+        """统计一个地图 bucket 中的真实点位数。"""
         count = 0
-        for key, value in self.waypoints_data.items():
+        for key, value in waypoint_bucket.items():
             if isinstance(value, dict) and value.get("id") == key:
                 count += 1
             elif isinstance(value, dict):
@@ -1386,6 +1442,7 @@ class NavigationStateManager(Node):
         if self.active_route_task:
             payload.setdefault("task_session_id", self.active_route_task.get("task_session_id", ""))
             payload.setdefault("route_id", self.active_route_task.get("route_id", ""))
+            payload.setdefault("map_id", self.active_route_task.get("map_id", ""))
         self.publish_status_update(event_type, payload)
 
     def send_route_task_ack(
@@ -1423,6 +1480,9 @@ class NavigationStateManager(Node):
             "command_type": command_type,
             "task_session_id": self.route_task_id(command_data.get("task_session_id")),
             "route_id": self.route_task_id(command_data.get("route_id")),
+            "map_id": self.route_task_id(command_data.get("map_id")) or (
+                self.active_route_task.get("map_id", "") if self.active_route_task else ""
+            ),
             "status": status,
             "result_reason": result_reason if status == "success" else "",
             "error_code": error_code if status == "error" else "",
@@ -1590,6 +1650,7 @@ class NavigationStateManager(Node):
         return {
             "task_session_id": self.active_route_task.get("task_session_id", ""),
             "route_id": self.active_route_task.get("route_id", ""),
+            "map_id": self.active_route_task.get("map_id", ""),
             "route_waypoint_source": self.active_route_task.get("route_waypoint_source", ""),
             "waypoints_revision": self.active_route_task.get("waypoints_revision", ""),
             "current_anchor_task_id": self.current_anchor_task_id,
@@ -1611,7 +1672,11 @@ class NavigationStateManager(Node):
             )
         }
 
-    def normalize_route_task_waypoints(self, route_waypoints: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], str, str]:
+    def normalize_route_task_waypoints(
+        self,
+        route_waypoints: List[Dict[str, Any]],
+        route_map_id: str = ""
+    ) -> Tuple[List[Dict[str, Any]], str, str]:
         """归一化 APP 下发的完整 route_waypoints。
 
         本函数只做 route task 必需的基础清洗：
@@ -1624,6 +1689,7 @@ class NavigationStateManager(Node):
         normalized_waypoints = []
         task_count = 0
         seen_waypoint_ids = set()
+        normalized_route_map_id = self.route_task_id(route_map_id)
 
         # websocket/桥接层会尽量把 route task 命令转给状态机返回统一业务 ack。
         # 因此这里必须自己兜住 None、字符串、对象等非数组输入，
@@ -1647,6 +1713,16 @@ class NavigationStateManager(Node):
             properties = waypoint.get("properties", {})
             if not isinstance(properties, dict):
                 properties = {}
+
+            waypoint_map_id = self.route_task_id(waypoint.get("map_id") or properties.get("map_id", ""))
+            if normalized_route_map_id:
+                if waypoint_map_id and waypoint_map_id != normalized_route_map_id:
+                    return [], "route_map_mismatch", (
+                        f"waypoint {waypoint_id} map_id mismatch: "
+                        f"route={normalized_route_map_id}, waypoint={waypoint_map_id}"
+                    )
+                waypoint_map_id = normalized_route_map_id
+
             frame_id = self.normalize_route_task_frame_id(waypoint.get("frame_id", properties.get("frame_id", "")))
             position, position_error = self.normalize_route_task_position(waypoint.get("position"))
             if position_error:
@@ -1663,6 +1739,7 @@ class NavigationStateManager(Node):
 
             normalized = dict(waypoint)
             normalized["waypoint_id"] = waypoint_id
+            normalized["map_id"] = waypoint_map_id
             normalized["waypoint_role"] = waypoint_role
             normalized["frame_id"] = frame_id
             normalized["position"] = position
@@ -1725,18 +1802,26 @@ class NavigationStateManager(Node):
             return "", "invalid_route_waypoint_ids", "route_waypoint_ids must not be empty"
         return "", "invalid_route_waypoints", "route_waypoints or route_waypoint_ids is required"
 
-    def validate_waypoints_revision_for_id_mode(self, command_data: Dict[str, Any]) -> Tuple[str, str]:
+    def validate_waypoints_revision_for_id_mode(self, command_data: Dict[str, Any], map_id: str) -> Tuple[str, str]:
         """校验 ID 列表启动使用的点位库版本号。"""
         requested_revision = self.route_task_id(command_data.get("waypoints_revision"))
         command_data["waypoints_revision"] = requested_revision
+        normalized_map_id = self.route_task_id(map_id)
         if not requested_revision:
             return "missing_waypoints_revision", "route_waypoint_ids mode requires waypoints_revision"
-        if not self.current_waypoints_revision:
+        if not normalized_map_id:
+            return "missing_map_id", "route_waypoint_ids mode requires map_id"
+
+        current_revision = self.current_waypoints_revisions_by_map.get(normalized_map_id, "")
+        if not current_revision and normalized_map_id == self.current_waypoints_map_id:
+            # 兼容过渡期：旧点位推送没有 revisions_by_map，但当前地图 revision 还可用。
+            current_revision = self.current_waypoints_revision
+        if not current_revision:
             return "waypoints_cache_not_ready", "waypoints cache revision is not ready"
-        if requested_revision != self.current_waypoints_revision:
+        if requested_revision != current_revision:
             return (
                 "waypoints_revision_mismatch",
-                f"waypoints_revision mismatch: app={requested_revision}, ros={self.current_waypoints_revision}"
+                f"waypoints_revision mismatch: map_id={normalized_map_id}, app={requested_revision}, ros={current_revision}"
             )
         return "", ""
 
@@ -1760,14 +1845,22 @@ class NavigationStateManager(Node):
             return [], "invalid_route_waypoint_ids", "route_waypoint_ids must not be empty"
         return normalized_ids, "", ""
 
-    def build_route_waypoints_from_ids(self, route_waypoint_ids: Any) -> Tuple[List[Dict[str, Any]], str, str]:
+    def build_route_waypoints_from_ids(
+        self,
+        route_waypoint_ids: Any,
+        map_id: str
+    ) -> Tuple[List[Dict[str, Any]], str, str]:
         """根据 route_waypoint_ids 从本地点位缓存补全完整 route_waypoints。
 
         注意：这里严格保留 APP 数组顺序，不按 ID 数字排序。辅助点吸收、正反向跳步、
         后续 source_index 计算都依赖这份路线顺序。
         """
-        if self.count_cached_waypoints() <= 0:
-            return [], "waypoints_cache_not_ready", "waypoints cache is empty"
+        normalized_map_id = self.route_task_id(map_id)
+        if not normalized_map_id:
+            return [], "missing_map_id", "route_waypoint_ids mode requires map_id"
+        map_waypoints = self.waypoints_data_by_map.get(normalized_map_id, {})
+        if not isinstance(map_waypoints, dict) or self.count_waypoints_in_bucket(map_waypoints) <= 0:
+            return [], "waypoints_cache_not_ready", f"waypoints cache is empty for map_id={normalized_map_id}"
 
         normalized_ids, error_code, message = self.normalize_route_waypoint_ids(route_waypoint_ids)
         if error_code:
@@ -1775,9 +1868,11 @@ class NavigationStateManager(Node):
 
         route_waypoints = []
         for index, waypoint_id in enumerate(normalized_ids):
-            waypoint_data = self.find_waypoint_data_by_id(waypoint_id)
+            waypoint_data = self.find_waypoint_data_by_id(waypoint_id, normalized_map_id)
             if not isinstance(waypoint_data, dict):
-                return [], "waypoint_id_not_found", f"route_waypoint_ids[{index}] waypoint_id not found: {waypoint_id}"
+                return [], "waypoint_id_not_found", (
+                    f"route_waypoint_ids[{index}] waypoint_id not found: {waypoint_id} in map_id={normalized_map_id}"
+                )
 
             properties = waypoint_data.get("properties", {})
             if not isinstance(properties, dict):
@@ -1787,6 +1882,7 @@ class NavigationStateManager(Node):
             # 业务属性仍优先放在 properties 中，normalize_route_task_waypoints() 会做最终强校验。
             route_waypoints.append({
                 "waypoint_id": waypoint_id,
+                "map_id": normalized_map_id,
                 "waypoint_name": waypoint_data.get("name", waypoint_id),
                 "waypoint_role": waypoint_data.get("waypoint_role", properties.get("waypoint_role", "")),
                 "frame_id": waypoint_data.get("frame_id", properties.get("frame_id", self.default_frame_id)),
@@ -3027,9 +3123,11 @@ class NavigationStateManager(Node):
         task_session_id = self.route_task_id(command_data.get("task_session_id"))
         route_id = self.route_task_id(command_data.get("route_id"))
         request_message_id = self.route_task_id(command_data.get("request_message_id"))
+        map_id = self.route_task_id(command_data.get("map_id"))
         command_data["task_session_id"] = task_session_id
         command_data["route_id"] = route_id
         command_data["request_message_id"] = request_message_id
+        command_data["map_id"] = map_id
 
         # 状态机层做二次必填保护：即使有其它节点绕过 dynamic_waypoints_manager，
         # 也不能让空 task_session_id / route_id 的 route task 进入运行态。
@@ -3045,6 +3143,12 @@ class NavigationStateManager(Node):
                 command_data, error_code="missing_route_id"
             )
             return
+        if not map_id:
+            self.send_route_task_ack(
+                "start_route_task", "error", "map_id is required",
+                command_data, error_code="missing_map_id"
+            )
+            return
 
         route_waypoint_source, source_error_code, source_message = self.validate_route_waypoint_source(command_data)
         if source_error_code:
@@ -3058,7 +3162,7 @@ class NavigationStateManager(Node):
             return
 
         if route_waypoint_source == "stored_waypoint_ids":
-            revision_error_code, revision_message = self.validate_waypoints_revision_for_id_mode(command_data)
+            revision_error_code, revision_message = self.validate_waypoints_revision_for_id_mode(command_data, map_id)
             if revision_error_code:
                 self.send_route_task_ack(
                     "start_route_task",
@@ -3069,7 +3173,8 @@ class NavigationStateManager(Node):
                 )
                 return
             route_waypoints, id_error_code, id_message = self.build_route_waypoints_from_ids(
-                command_data.get("route_waypoint_ids", [])
+                command_data.get("route_waypoint_ids", []),
+                map_id
             )
             if id_error_code:
                 self.send_route_task_ack(
@@ -3086,7 +3191,7 @@ class NavigationStateManager(Node):
         else:
             route_waypoints = command_data.get("route_waypoints", [])
 
-        normalized_waypoints, error_code, message = self.normalize_route_task_waypoints(route_waypoints)
+        normalized_waypoints, error_code, message = self.normalize_route_task_waypoints(route_waypoints, map_id)
         if error_code:
             self.send_route_task_ack("start_route_task", "error", message, command_data, error_code=error_code)
             return
@@ -3097,6 +3202,7 @@ class NavigationStateManager(Node):
         self.active_route_task = {
             "task_session_id": task_session_id,
             "route_id": route_id,
+            "map_id": map_id,
             "request_message_id": request_message_id,
             "route_waypoints": normalized_waypoints,
             "route_waypoint_source": route_waypoint_source,
@@ -3969,23 +4075,40 @@ class NavigationStateManager(Node):
             self.current_goal_handle = None
             self.get_logger().error(f"处理取消导航响应错误: {e}")
 
-    def find_waypoint_data_by_id(self, waypoint_id: str) -> Optional[Dict[str, Any]]:
-        """根据ID查找点位数据（支持扁平化、嵌套、或字典内部结构）"""
+    def find_waypoint_data_by_id(self, waypoint_id: str, map_id: str = "") -> Optional[Dict[str, Any]]:
+        """根据 ID 查找点位数据。
+
+        多地图路线任务必须传 map_id，只在该地图缓存里找；不传 map_id 的全局查找仅作旧格式兼容。
+        """
         if not waypoint_id:
+            return None
+        waypoint_id = self.route_task_id(waypoint_id)
+        normalized_map_id = self.route_task_id(map_id)
+        if normalized_map_id:
+            return self.find_waypoint_data_in_bucket(
+                self.waypoints_data_by_map.get(normalized_map_id, {}),
+                waypoint_id
+            )
+
+        return self.find_waypoint_data_in_bucket(self.waypoints_data, waypoint_id)
+
+    def find_waypoint_data_in_bucket(self, waypoint_bucket: Dict[str, Any], waypoint_id: str) -> Optional[Dict[str, Any]]:
+        """在一个地图 bucket 内查找点位，兼容按类型分组和旧扁平结构。"""
+        if not isinstance(waypoint_bucket, dict) or not waypoint_id:
             return None
 
         # 方案1: 直接顶层查找
-        if waypoint_id in self.waypoints_data:
-            data = self.waypoints_data[waypoint_id]
+        if waypoint_id in waypoint_bucket:
+            data = waypoint_bucket[waypoint_id]
             return data if isinstance(data, dict) else None
    
         # 方案2: 深入一层
-        for category_dict in self.waypoints_data.values():
+        for category_dict in waypoint_bucket.values():
             if isinstance(category_dict, dict) and waypoint_id in category_dict:
               return category_dict[waypoint_id]
 
          # 方案3: 再深入一层（兼容三级结构）
-        for category_dict in self.waypoints_data.values():
+        for category_dict in waypoint_bucket.values():
             if isinstance(category_dict, dict):
               for sub_dict in category_dict.values():
                 if isinstance(sub_dict, dict) and waypoint_id in sub_dict:
