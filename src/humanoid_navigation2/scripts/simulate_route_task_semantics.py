@@ -48,6 +48,7 @@ class RouteTaskSemanticSim(Node):
         self.odom_pub = self.create_publisher(Odometry, "/odom", 10)
         self.robot_pub = self.create_publisher(String, "/robot_status_raw", 10)
         self.loc_pub = self.create_publisher(String, "/localization/prior_map_odom_bridge_status", 10)
+        self.map_status_pub = self.create_publisher(String, "/map/status", 10)
         self.status_sub = self.create_subscription(String, "/navigation/status", self.on_status, 100)
         # 状态管理器现在会在 through 或近距离快捷路径之后，再发 NavigateToPose 完成最终 yaw 对齐。
         # 模拟器提供一个立即成功的 Nav2 action server，只验证状态机语义，不模拟真实运动控制。
@@ -93,6 +94,20 @@ class RouteTaskSemanticSim(Node):
             "motion_busy": False,
         })))
         self.loc_pub.publish(String(data="ACCEPTED route_task_semantic_sim"))
+        self.map_status_pub.publish(String(data=json.dumps({
+            "protocol_version": "2.0",
+            "message_type": "push",
+            "data_type": "map_status",
+            "source": "route_task_semantic_sim",
+            "destination": "all",
+            "data": {
+                "status": "success",
+                "current_map_id": "hall",
+                "default_map_id": "hall",
+                "map_state": "ready",
+                "localization_state": "stable",
+            },
+        }, ensure_ascii=False)))
 
     def on_status(self, msg: String):
         try:

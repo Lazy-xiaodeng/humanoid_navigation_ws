@@ -199,7 +199,8 @@ error_code = route_waypoint_map_mismatch
 - 当前没有 active route task；
 - 当前没有 Nav2 goal 执行；
 - 上一轮任务已经完成、终止或失败清理完成；
-- 新 `start_route_task` 的目标地图与 `current_map_id` 不一致。
+- APP 在地图选择 UI 点击“切换地图”并下发 `switch_map`；
+- `switch_map` 成功后 `map_state=ready`，才允许开始目标地图的路线任务。
 
 禁止切图：
 
@@ -219,9 +220,28 @@ error_code = map_switch_rejected_route_task_active
 
 ### 4.5 切图后继续逻辑
 
-切图只发生在 `start_route_task` 前。
+切图只发生在 `start_route_task` 前，推荐由 APP 选择地图按钮显式触发。
 
-切图成功后，仍执行原始 `start_route_task`：
+推荐交互顺序：
+
+```text
+APP 选择 hall1
+-> APP 下发 map_management/switch_map(target_map_id=hall1)
+-> ROS 发布 map_state=switching/localization_resetting/waiting_localization
+-> ROS 注入 hall1 的 initial_pose 并等待定位稳定
+-> ROS 发布 map_state=ready,current_map_id=hall1
+-> APP 放开“开始导航”按钮
+-> APP 下发 start_route_task(map_id=hall1)
+-> ROS 再次校验 active_map_id == hall1 且 map_state == ready
+```
+
+如果 APP 未提前切图，直接下发 `start_route_task(map_id=hall1)`，ROS 不会静默按旧地图执行，而是返回：
+
+```text
+error_code = active_map_mismatch 或 map_not_ready
+```
+
+切图成功后，执行原始 `start_route_task` 时：
 
 - task/transit 语义不变；
 - 播报协同不变；
@@ -255,7 +275,7 @@ map_id + waypoint_id
 新增：
 
 ```text
-src/humanoid_navigation2/config/map_registry.json
+data/maps/map_registry.json
 ```
 
 示例：
@@ -269,18 +289,27 @@ src/humanoid_navigation2/config/map_registry.json
       "map_id": "hall",
       "display_name": "展厅 hall",
       "enabled": true,
-      "map_yaml": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall.yaml",
-      "map_image": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall.pgm",
-      "prior_map_pcd": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall_open3d_grounded.pcd",
-      "robosense_config_template": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/robosense_lidar_localization/config/robosense_lidar_localization.yaml",
-      "robosense_runtime_config": "/home/ubuntu/software/Todesk/Files/humanoid_ws/data/runtime_maps/hall/robosense_lidar_localization.yaml",
+      "description": "当前默认运行地图",
+      "waypoints_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/data/waypoints/hall.json",
+      "map_yaml_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall.yaml",
       "initial_pose": {
-        "x": 0.035185,
-        "y": 0.087588,
-        "z": 0.0,
-        "yaw": -0.130823906
-      },
-      "localization_strategy": "preset_initial_pose"
+        "frame_id": "map",
+        "position": [0.0, 0.0, 0.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0]
+      }
+    },
+    {
+      "map_id": "hall1",
+      "display_name": "备用地图 hall1",
+      "enabled": false,
+      "description": "注册示例；当前仓库未包含 hall1 地图文件，正式启用前请补齐地图文件、点位文件和初始位姿后再改为 true",
+      "waypoints_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/data/waypoints/hall1.json",
+      "map_yaml_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall1.yaml",
+      "initial_pose": {
+        "frame_id": "map",
+        "position": [0.0, 0.0, 0.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0]
+      }
     }
   ]
 }
@@ -507,9 +536,9 @@ APP 当前保存点位时会先清空再重新设置。多地图后该命令必�
 }
 ```
 
-#### 运维手动切图
+#### APP 选择地图时切图
 
-一期可支持运维/调试使用，不建议 APP 在导航中随意调用：
+APP 在地图选择 UI 点击目标地图时调用。该命令必须在没有导航任务运行时调用；导航中、暂停中、等待播报中都会被拒绝。
 
 ```json
 {
@@ -523,10 +552,15 @@ APP 当前保存点位时会先清空再重新设置。多地图后该命令必�
   "data": {
     "command_type": "switch_map",
     "target_map_id": "hall1",
-    "reason": "manual_debug_switch"
+    "reason": "user_select_map"
   }
 }
 ```
+
+响应分两类：
+
+1. `navigation_command_result` 风格的即时 `map_response`，表示 ROS 已接收并开始切图。
+2. 周期/事件型 `map_status`，表示当前切图阶段，APP 应以 `map_state=ready` 作为允许开始导航的条件。
 
 ### 7.2 start_route_task 增加地图字段
 
@@ -812,14 +846,31 @@ pcd/hall_open3d_grounded.pcd
   "data": {
     "current_map_id": "hall",
     "target_map_id": "hall1",
-    "switch_status": "switching_map",
-    "event_type": "map_switch_started",
+    "map_state": "switching",
+    "localization_state": "resetting",
+    "switch_target_map_id": "hall1",
+    "navigation_active": false,
     "message": "正在切换地图 hall1"
   }
 }
 ```
 
-### 11.2 定位状态
+`map_state` 枚举：
+
+- `ready`：当前地图可导航；
+- `switching`：已接受切图请求；
+- `localization_resetting`：正在注入目标地图初始位姿；
+- `waiting_localization`：等待定位稳定；
+- `failed`：切图失败，需要 APP 展示错误并禁止开始导航。
+
+`localization_state` 枚举：
+
+- `unknown`：尚未收到定位状态；
+- `resetting`：切图后正在重置定位；
+- `stable`：定位稳定，可导航；
+- `unstable` 或定位节点原始状态小写：定位未稳定。
+
+### 11.2 地图 ready 状态
 
 ```json
 {
@@ -827,21 +878,24 @@ pcd/hall_open3d_grounded.pcd
   "message_id": "localization_status_001",
   "timestamp": 1781334566.203,
   "message_type": "push",
-  "data_type": "localization_status",
+  "data_type": "map_status",
   "source": "map_context_manager",
   "destination": "app",
   "data": {
-    "map_id": "hall1",
-    "status": "waiting_localization",
-    "event_type": "localization_initializing",
-    "message": "已切换 hall1 地图，正在等待定位稳定"
+    "current_map_id": "hall1",
+    "default_map_id": "hall",
+    "map_state": "ready",
+    "localization_state": "stable",
+    "switch_target_map_id": "",
+    "navigation_active": false,
+    "message": "地图 hall1 已就绪，可以开始导航"
   }
 }
 ```
 
 ### 11.3 导航命令结果
 
-如果切图失败，`start_route_task` 返回：
+如果 APP 未先切图或切图未 ready，`start_route_task` 返回：
 
 ```json
 {
@@ -859,8 +913,8 @@ pcd/hall_open3d_grounded.pcd
     "task_session_id": "tour_001",
     "route_id": "route_hall1_001",
     "map_id": "hall1",
-    "error_code": "localization_not_ready_after_map_switch",
-    "message": "切换到 hall1 后定位未在超时时间内稳定，路线任务未启动"
+    "error_code": "active_map_mismatch",
+    "message": "active map mismatch: active=hall, route=hall1"
   }
 }
 ```
@@ -871,14 +925,16 @@ pcd/hall_open3d_grounded.pcd
 
 | error_code | 含义 |
 |---|---|
-| `map_not_found` | 地图注册表中不存在目标地图 |
+| `map_not_registered` | 地图注册表中不存在目标地图 |
 | `map_disabled` | 地图被禁用 |
 | `map_file_missing` | 地图关键文件缺失 |
 | `map_registry_invalid` | 地图注册表格式错误 |
 | `map_switch_rejected_route_task_active` | 当前路线任务未结束，拒绝切图 |
-| `map_switch_timeout` | 切图超时 |
-| `map_switch_partial_failure` | 部分节点切换失败 |
-| `localization_not_ready_after_map_switch` | 切图后定位未就绪 |
+| `map_switch_in_progress` | 已有切图流程正在执行 |
+| `map_switch_localization_timeout` | 切图后等待定位稳定超时 |
+| `active_map_mismatch` | start_route_task 目标地图与当前激活地图不一致 |
+| `map_status_not_ready` | 状态管理器尚未收到地图上下文状态 |
+| `map_not_ready` | 当前地图未处于 ready 状态 |
 | `initial_pose_missing` | 目标地图缺少初始位姿 |
 | `initial_pose_injection_failed` | 初始位姿注入失败 |
 | `waypoint_map_mismatch` | 命令 map_id 与点位 map_id 不一致 |
@@ -938,6 +994,8 @@ transit 点也必须有 `map_id`。
 
 1. 旧点位没有 `map_id`，启动后自动补 `hall`。
 2. 旧 `dynamic_waypoints.json` 可迁移为 `data/waypoints/hall.json`。
+3. 注册表中 `enabled=false` 的地图只作为占位或未部署地图，APP 不应允许用户直接选择启动；ROS 收到 `switch_map` 会返回 `map_disabled`。
+4. 地图启用前必须确认 `map_yaml_file` 真实存在，且 `initial_pose` 是该地图下可用的初始位姿。
 3. APP/调试台只发 `route_waypoint_ids`，路线正常执行。
 3. 辅助点无痕通过正常。
 4. task 点对齐和播报正常。

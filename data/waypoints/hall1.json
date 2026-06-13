@@ -1,0 +1,13 @@
+{
+  "map_id": "hall1",
+  "waypoints_revision": "initial_empty_hall1",
+  "waypoints": {
+    "navigation_target": {},
+    "exhibition_point": {},
+    "obstacle_point": {},
+    "charging_point": {},
+    "rest_point": {},
+    "landmark_point": {}
+  },
+  "timestamp": 1781340000.0
+}

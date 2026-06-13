@@ -91,6 +91,7 @@ class NavigationStateManager(Node):
             ('obstacle_block_near_goal_distance', 0.7),
             ('localization_resume_stable_frames', 3),
             ('localization_health_status_topic', '/localization/prior_map_odom_bridge_status'),
+            ('map_status_topic', '/map/status'),
             ('localization_health_timeout_sec', 3.0),
             ('localization_allow_start_with_last_good_tf', True),
             ('localization_last_good_tf_max_age_sec', 0.0),
@@ -232,6 +233,11 @@ class NavigationStateManager(Node):
         self.current_waypoints_revision = ""
         self.current_waypoints_revisions_by_map = {}
         self.current_waypoints_map_id = ""
+        # 当前激活地图由 map_context_manager 维护；路线启动前必须确认地图 ready 且匹配命令 map_id。
+        self.active_map_id = ""
+        self.map_state = "unknown"
+        self.map_localization_state = "unknown"
+        self.last_map_status_update = 0.0
         self.navigation_start_time = 0
         self.current_goal_pose = None
 
@@ -356,11 +362,35 @@ class NavigationStateManager(Node):
             self._on_localization_status,
             10
         )
+        self.map_status_sub = self.create_subscription(
+            String,
+            self.get_parameter('map_status_topic').value,
+            self.map_status_callback,
+            10
+        )
         self.create_timer(1.0, self._check_localization_status_timeout)
 
     # =========================================================================
     # prior-map 定位健康监听
     # =========================================================================
+
+    def map_status_callback(self, msg: String):
+        """接收地图上下文状态。
+
+        APP 可以先发 switch_map，map_context_manager 完成初始位姿注入和定位稳定等待后，
+        会把 map_state 置为 ready。路线任务启动必须看到这里的 ready 状态。
+        """
+        try:
+            payload = json.loads(msg.data)
+            data = payload.get("data", payload)
+            if not isinstance(data, dict):
+                return
+            self.active_map_id = self.route_task_id(data.get("current_map_id", ""))
+            self.map_state = str(data.get("map_state", "unknown") or "unknown")
+            self.map_localization_state = str(data.get("localization_state", "unknown") or "unknown")
+            self.last_map_status_update = time.time()
+        except Exception as exc:
+            self.get_logger().warning(f"处理地图状态失败: {exc}")
 
     def _on_localization_status(self, msg: String):
         """
@@ -1845,6 +1875,31 @@ class NavigationStateManager(Node):
             return [], "invalid_route_waypoint_ids", "route_waypoint_ids must not be empty"
         return normalized_ids, "", ""
 
+    def validate_active_map_ready(self, route_map_id: str) -> Tuple[str, str]:
+        """校验当前激活地图是否允许启动路线任务。
+
+        多地图一期要求 APP 在点击“切换地图”时先完成 switch_map。
+        start_route_task 这里只做兜底保护：目标地图必须等于 map_context_manager 发布的
+        current_map_id，且 map_state 必须 ready。
+        """
+        normalized_map_id = self.route_task_id(route_map_id)
+        if not normalized_map_id:
+            return "missing_map_id", "map_id is required"
+        if not self.active_map_id:
+            return "map_status_not_ready", "map status is not ready; call switch_map/get_current_map first"
+        if self.active_map_id != normalized_map_id:
+            return (
+                "active_map_mismatch",
+                f"active map mismatch: active={self.active_map_id}, route={normalized_map_id}"
+            )
+        if self.map_state != "ready":
+            return (
+                "map_not_ready",
+                f"map is not ready: map_id={normalized_map_id}, map_state={self.map_state}, "
+                f"localization_state={self.map_localization_state}"
+            )
+        return "", ""
+
     def build_route_waypoints_from_ids(
         self,
         route_waypoint_ids: Any,
@@ -3149,6 +3204,13 @@ class NavigationStateManager(Node):
                 command_data, error_code="missing_map_id"
             )
             return
+        map_error_code, map_message = self.validate_active_map_ready(map_id)
+        if map_error_code:
+            self.send_route_task_ack(
+                "start_route_task", "error", map_message,
+                command_data, error_code=map_error_code
+            )
+            return
 
         route_waypoint_source, source_error_code, source_message = self.validate_route_waypoint_source(command_data)
         if source_error_code:
@@ -4199,6 +4261,13 @@ class NavigationStateManager(Node):
             "localization_health_status": self.last_localization_status_summary,
             "localization_healthy": self._is_localization_healthy,
             "localization_has_last_good_tf": self.localization_has_last_good_tf,
+            "active_map_id": self.active_map_id,
+            "map_state": self.map_state,
+            "map_localization_state": self.map_localization_state,
+            "map_status_age": (
+                time.time() - self.last_map_status_update
+                if self.last_map_status_update > 0.0 else 0.0
+            ),
             "pause_source": self.current_pause_source,
             "pause_reason": self.current_pause_reason,
             "resume_mode": self.current_resume_mode,
