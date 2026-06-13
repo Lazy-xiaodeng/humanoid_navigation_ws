@@ -44,6 +44,7 @@ class RouteTaskSemanticSim(Node):
     def __init__(self):
         super().__init__("route_task_semantic_sim")
         self.cmd_pub = self.create_publisher(String, "/navigation/requests", 10)
+        self.waypoints_pub = self.create_publisher(String, "/navigation/waypoints_data", 10)
         self.odom_pub = self.create_publisher(Odometry, "/odom", 10)
         self.robot_pub = self.create_publisher(String, "/robot_status_raw", 10)
         self.loc_pub = self.create_publisher(String, "/localization/prior_map_odom_bridge_status", 10)
@@ -111,6 +112,61 @@ class RouteTaskSemanticSim(Node):
             "command_data": command_data,
         }, ensure_ascii=False)
         self.cmd_pub.publish(msg)
+
+    def publish_waypoints_cache(self, route_waypoints: List[Dict], revision: str = "sim_revision_001"):
+        """模拟 dynamic_waypoints_manager 发布本地点位库。
+
+        ID 列表模式下，navigation_state_manager 不再从 APP 消息里直接拿坐标，
+        而是根据 route_waypoint_ids 到这份缓存里补全点位，所以测试必须先发布缓存。
+        """
+        stored_waypoints = {}
+        for waypoint in route_waypoints:
+            waypoint_id = str(waypoint["waypoint_id"])
+            properties = {
+                "waypoint_role": waypoint.get("waypoint_role", "task"),
+                "need_broadcast": waypoint.get("need_broadcast", False),
+                "broadcast_id": waypoint.get("broadcast_id", ""),
+                "broadcast_blocking": waypoint.get("broadcast_blocking", True),
+                "stop_and_align": waypoint.get("stop_and_align", waypoint.get("waypoint_role") == "task"),
+                "walk_direction": waypoint.get("walk_direction", "forward"),
+            }
+            stored_waypoints[waypoint_id] = {
+                "id": waypoint_id,
+                "name": f"waypoint_{waypoint_id}",
+                "type": "navigation_target",
+                "frame_id": waypoint.get("frame_id", "map"),
+                "position": waypoint.get("position", [0.0, 0.0, 0.0]),
+                "orientation": waypoint.get("orientation", [0.0, 0.0, 0.0, 1.0]),
+                "properties": properties,
+            }
+
+        msg = String()
+        msg.data = json.dumps({
+            "protocol_version": "2.0",
+            "message_type": "push",
+            "data_type": "waypoints_data",
+            "source": "route_task_semantic_sim",
+            "destination": "all",
+            "data": {
+                "update_type": "semantic_sim",
+                "timestamp": time.time(),
+                "waypoints_revision": revision,
+                "data": {
+                    "waypoints": {
+                        "navigation_target": stored_waypoints,
+                    }
+                },
+                "metadata": {
+                    "total_count": len(stored_waypoints),
+                    "waypoints_revision": revision,
+                },
+            },
+            "metadata": {
+                "status": "success",
+                "waypoints_revision": revision,
+            },
+        }, ensure_ascii=False)
+        self.waypoints_pub.publish(msg)
 
 
 def wp(
@@ -1055,6 +1111,118 @@ def scenario_start_validation(node: RouteTaskSemanticSim) -> Dict:
     }
 
 
+def scenario_id_waypoint_start_revision(node: RouteTaskSemanticSim) -> Dict:
+    """验证 route_waypoint_ids 启动、revision 校验和错误码。"""
+    node.reset_events()
+    revision = f"sim_revision_{int(time.time() * 1000)}"
+    route_id = "id_waypoint_route"
+    route = [
+        wp("1", "task", False),
+        wp("2", "transit", False),
+        wp("3", "task", False),
+    ]
+
+    node.publish_waypoints_cache(route, revision)
+    assert spin_until(node, lambda: False, 0.3) is False
+
+    node.command({
+        "command_type": "start_route_task",
+        "request_message_id": "id_start_success",
+        "task_session_id": "id_start_success_session",
+        "route_id": route_id,
+        "waypoints_revision": revision,
+        "route_waypoint_ids": ["1", "2", "3"],
+    })
+    id_start_success = wait_command_result(node, "id_start_success")
+    assert id_start_success.get("status") == "success", id_start_success
+    assert spin_until(node, lambda: any(e.get("event_type") == "route_task_completed" for e in node.events)), (
+        "ID waypoint route did not complete"
+    )
+    success_summary = [event_data(e) for e in node.events if e.get("event_type") == "route_task_completed"][-1]
+    assert success_summary.get("completed_task_ids") == ["1", "3"], success_summary
+
+    bad_commands = [
+        (
+            "id_start_missing_revision",
+            {
+                "command_type": "start_route_task",
+                "request_message_id": "id_start_missing_revision",
+                "task_session_id": "id_start_missing_revision_session",
+                "route_id": route_id,
+                "route_waypoint_ids": ["1", "2", "3"],
+            },
+            "missing_waypoints_revision",
+        ),
+        (
+            "id_start_revision_mismatch",
+            {
+                "command_type": "start_route_task",
+                "request_message_id": "id_start_revision_mismatch",
+                "task_session_id": "id_start_revision_mismatch_session",
+                "route_id": route_id,
+                "waypoints_revision": "wrong_revision",
+                "route_waypoint_ids": ["1", "2", "3"],
+            },
+            "waypoints_revision_mismatch",
+        ),
+        (
+            "id_start_missing_id",
+            {
+                "command_type": "start_route_task",
+                "request_message_id": "id_start_missing_id",
+                "task_session_id": "id_start_missing_id_session",
+                "route_id": route_id,
+                "waypoints_revision": revision,
+                "route_waypoint_ids": ["1", "404"],
+            },
+            "waypoint_id_not_found",
+        ),
+        (
+            "id_start_empty_ids",
+            {
+                "command_type": "start_route_task",
+                "request_message_id": "id_start_empty_ids",
+                "task_session_id": "id_start_empty_ids_session",
+                "route_id": route_id,
+                "waypoints_revision": revision,
+                "route_waypoint_ids": [],
+            },
+            "invalid_route_waypoint_ids",
+        ),
+        (
+            "id_start_ambiguous_source",
+            {
+                "command_type": "start_route_task",
+                "request_message_id": "id_start_ambiguous_source",
+                "task_session_id": "id_start_ambiguous_source_session",
+                "route_id": route_id,
+                "waypoints_revision": revision,
+                "route_waypoint_ids": ["1", "2", "3"],
+                "route_waypoints": route,
+            },
+            "ambiguous_route_waypoint_source",
+        ),
+    ]
+
+    for request_id, command, expected_error_code in bad_commands:
+        node.command(command)
+        result = wait_command_result(node, request_id)
+        assert result.get("status") == "error", result
+        assert result.get("error_code") == expected_error_code, result
+
+    assert_no_navigation_failed(node)
+    return {
+        "id_start_success": id_start_success,
+        "route_task_completed": success_summary,
+        "command_results": [
+            event_data(e)
+            for e in node.events
+            if e.get("event_type") == "navigation_command_result"
+        ],
+        "event_count": len(node.events),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -1067,6 +1235,7 @@ def main() -> int:
             "route_1_to_25_mixed_segments_and_jumps",
             "protocol_errors",
             "start_validation",
+            "id_waypoint_start_revision",
         ),
         default="all",
     )
@@ -1094,6 +1263,8 @@ def main() -> int:
             scenarios.append(("protocol_errors", scenario_protocol_errors))
         if args.scenario in ("all", "start_validation"):
             scenarios.append(("start_validation", scenario_start_validation))
+        if args.scenario in ("all", "id_waypoint_start_revision"):
+            scenarios.append(("id_waypoint_start_revision", scenario_id_waypoint_start_revision))
 
         results = {}
         for name, scenario in scenarios:

@@ -126,6 +126,9 @@ def main() -> int:
     route_task_status_body = extract_function_body(navigation_state, "build_route_task_status_summary")
     reset_route_task_body = extract_function_body(navigation_state, "reset_route_task_state")
     normalize_route_waypoints_body = extract_function_body(navigation_state, "normalize_route_task_waypoints")
+    validate_waypoint_source_body = extract_function_body(navigation_state, "validate_route_waypoint_source")
+    validate_waypoints_revision_body = extract_function_body(navigation_state, "validate_waypoints_revision_for_id_mode")
+    build_route_waypoints_from_ids_body = extract_function_body(navigation_state, "build_route_waypoints_from_ids")
     normalize_orientation_body = extract_function_body(navigation_state, "normalize_route_task_orientation")
     route_waypoint_pose_body = extract_function_body(navigation_state, "route_waypoint_to_pose_stamped")
     start_active_segment_body = extract_function_body(navigation_state, "start_active_segment_navigation")
@@ -378,6 +381,68 @@ def main() -> int:
         start_route_task_body,
         '"request_message_id": request_message_id',
         "active_route_task 保存归一化后的 request_message_id",
+        failures,
+    )
+    for route_id_mode_needle, route_id_mode_description in (
+        ('"route_waypoint_ids": command_data.get("route_waypoint_ids", [])', "websocket 入口透传 route_waypoint_ids"),
+        ('"waypoints_revision": command_data.get("waypoints_revision", "")', "websocket 入口透传 waypoints_revision"),
+        ("route_waypoint_ids = normalized.get(\"route_waypoint_ids\")", "桥接层归一化 route_waypoint_ids"),
+        ("\"waypoints_revision\",", "桥接层归一化 waypoints_revision"),
+        ("self.current_waypoints_revision = \"\"", "状态管理器缓存点位库 revision"),
+        ("self.extract_waypoints_revision(message_data, legacy_data)", "点位数据回调提取 waypoints_revision"),
+        ("def validate_route_waypoint_source", "状态机新增完整快照/ID 列表来源互斥校验"),
+        ("def validate_waypoints_revision_for_id_mode", "状态机新增 ID 模式 revision 校验"),
+        ("def build_route_waypoints_from_ids", "状态机新增 ID 列表补全完整点位函数"),
+    ):
+        target_text = "\n".join((websocket_server, dynamic_waypoints, navigation_state))
+        require_contains(target_text, route_id_mode_needle, route_id_mode_description, failures)
+    for source_needle, source_description in (
+        ("ambiguous_route_waypoint_source", "同时传完整快照和 ID 列表必须返回 ambiguous_route_waypoint_source"),
+        ("stored_waypoint_ids", "ID 列表模式来源标记 stored_waypoint_ids"),
+        ("inline_route_waypoints", "完整快照模式来源标记 inline_route_waypoints"),
+        ("invalid_route_waypoint_ids", "空 ID 列表必须返回 invalid_route_waypoint_ids"),
+    ):
+        require_contains(validate_waypoint_source_body, source_needle, source_description, failures)
+    for revision_needle, revision_description in (
+        ("missing_waypoints_revision", "ID 模式缺 revision 必须返回 missing_waypoints_revision"),
+        ("waypoints_cache_not_ready", "点位缓存未就绪必须返回 waypoints_cache_not_ready"),
+        ("waypoints_revision_mismatch", "revision 不一致必须返回 waypoints_revision_mismatch"),
+    ):
+        require_contains(validate_waypoints_revision_body, revision_needle, revision_description, failures)
+    for id_build_needle, id_build_description in (
+        ("self.find_waypoint_data_by_id(waypoint_id)", "ID 模式必须从状态机点位缓存查完整点位"),
+        ("waypoint_id_not_found", "ID 不存在必须返回 waypoint_id_not_found"),
+        ("raw_stored_waypoint", "ID 补全后保留原始点位快照用于排查"),
+    ):
+        require_contains(build_route_waypoints_from_ids_body, id_build_needle, id_build_description, failures)
+    require_contains(
+        start_route_task_body,
+        "self.validate_route_waypoint_source(command_data)",
+        "start_route_task 必须先判断完整快照/ID 列表来源",
+        failures,
+    )
+    require_contains(
+        start_route_task_body,
+        "self.validate_waypoints_revision_for_id_mode(command_data)",
+        "start_route_task 的 ID 模式必须校验 waypoints_revision",
+        failures,
+    )
+    require_contains(
+        start_route_task_body,
+        "self.build_route_waypoints_from_ids(",
+        "start_route_task 的 ID 模式必须补全为完整 route_waypoints",
+        failures,
+    )
+    require_contains(
+        start_route_task_body,
+        '"route_waypoint_source": route_waypoint_source',
+        "active_route_task 必须记录路线点来源",
+        failures,
+    )
+    require_contains(
+        start_route_task_body,
+        '"waypoints_revision": self.route_task_id(command_data.get("waypoints_revision"))',
+        "active_route_task 必须记录启动时的 waypoints_revision",
         failures,
     )
     require_contains(
@@ -1152,6 +1217,8 @@ def main() -> int:
     require_contains(data_integration, '"broadcast_requested"', "broadcast_requested 立即推送白名单", failures)
     require_contains(data_integration, '"waypoint_passed"', "waypoint_passed 立即推送白名单", failures)
     require_contains(data_integration, '"jump_updated"', "jump_updated 立即推送白名单", failures)
+    require_contains(data_integration, '"final_align_started"', "final_align_started 立即推送白名单", failures)
+    require_contains(data_integration, '"final_align_completed"', "final_align_completed 立即推送白名单", failures)
     require_contains(data_integration, '"task_waypoint_completed"', "task_waypoint_completed 立即推送白名单", failures)
     require_contains(data_integration, '"route_task_completed"', "route_task_completed 立即推送白名单", failures)
     require_contains(

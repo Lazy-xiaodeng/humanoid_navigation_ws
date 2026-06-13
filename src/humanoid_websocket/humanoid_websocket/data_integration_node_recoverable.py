@@ -820,6 +820,10 @@ class UnifiedDataIntegrationNode(Node):
             "broadcast_requested",
             "waypoint_passed",
             "jump_updated",
+            # 路线任务最终对齐是 task 点停车/播报前的重要 UI 状态。
+            # 这里加入立即推送，避免 APP 状态栏只能等周期状态才知道机器人正在 spin 对齐。
+            "final_align_started",
+            "final_align_completed",
             "task_waypoint_completed",
             "route_task_completed",
         }

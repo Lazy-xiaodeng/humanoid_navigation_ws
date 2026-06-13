@@ -1,0 +1,945 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>路线任务调试台</title>
+  <style>
+    :root {
+      --bg: #0d1614;
+      --panel: rgba(247, 241, 226, 0.94);
+      --ink: #17211d;
+      --muted: #6d756f;
+      --line: rgba(23, 33, 29, 0.14);
+      --brand: #d97735;
+      --green: #2f8f68;
+      --cyan: #1f9eb3;
+      --red: #c84b3f;
+      --yellow: #d9a441;
+      --map-bg: #ebe0c8;
+      --shadow: 0 18px 55px rgba(0, 0, 0, 0.28);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(217, 119, 53, 0.28), transparent 32rem),
+        radial-gradient(circle at bottom right, rgba(31, 158, 179, 0.22), transparent 28rem),
+        linear-gradient(135deg, #0d1614 0%, #1a2a25 58%, #26372f 100%);
+    }
+
+    button, input, select, textarea { font: inherit; }
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 10px 14px;
+      color: #fff7ec;
+      background: var(--brand);
+      cursor: pointer;
+      transition: transform 0.16s ease, opacity 0.16s ease, box-shadow 0.16s ease;
+      box-shadow: 0 8px 20px rgba(217, 119, 53, 0.24);
+    }
+
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: 0.48; cursor: not-allowed; transform: none; }
+    button.secondary { background: #35544b; box-shadow: none; }
+    button.safe { background: var(--green); }
+    button.warn { background: var(--yellow); color: #23190b; }
+    button.danger { background: var(--red); }
+    button.ghost { background: rgba(20, 35, 31, 0.08); color: var(--ink); box-shadow: none; }
+
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px 12px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.72);
+      outline: none;
+    }
+
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 12px;
+    }
+
+    .shell {
+      width: min(1760px, calc(100vw - 28px));
+      margin: 0 auto;
+      padding: 22px 0 34px;
+    }
+
+    .hero {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 16px;
+      color: #fff7ec;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(26px, 3vw, 44px);
+      letter-spacing: -0.04em;
+    }
+
+    .hero p { margin: 6px 0 0; color: rgba(255, 247, 236, 0.72); }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 8px 12px;
+      color: #fff7ec;
+      background: rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(12px);
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--red);
+      box-shadow: 0 0 0 4px rgba(200, 75, 63, 0.18);
+    }
+
+    .dot.ok { background: var(--green); box-shadow: 0 0 0 4px rgba(47, 143, 104, 0.2); }
+    .grid { display: grid; grid-template-columns: minmax(680px, 1.45fr) minmax(440px, 0.9fr); gap: 16px; }
+
+    .panel {
+      border: 1px solid rgba(255, 255, 255, 0.38);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel.pad { padding: 16px; }
+    .panel-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .panel-title h2 { margin: 0; font-size: 18px; letter-spacing: -0.02em; }
+    .map-card { position: relative; min-height: 680px; background: var(--map-bg); }
+    #mapCanvas { display: block; width: 100%; height: 680px; background: #d8cfb9; cursor: crosshair; }
+
+    .map-overlay { position: absolute; left: 14px; top: 14px; display: flex; flex-wrap: wrap; gap: 8px; pointer-events: none; }
+    .map-chip {
+      border-radius: 999px;
+      padding: 7px 10px;
+      color: #12221d;
+      background: rgba(255, 250, 237, 0.88);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      font-size: 12px;
+    }
+
+    .columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .field { display: grid; gap: 6px; margin-bottom: 10px; }
+    .field label { color: var(--muted); font-size: 12px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .row > * { flex: 1 1 auto; }
+    .row.tight > * { flex: 0 0 auto; }
+
+    .stat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.56);
+      min-height: 70px;
+    }
+
+    .stat small { display: block; color: var(--muted); margin-bottom: 5px; }
+    .stat b { display: block; font-size: 18px; word-break: break-word; }
+    .side { display: grid; gap: 16px; align-content: start; }
+
+    .log-list {
+      height: 310px;
+      overflow: auto;
+      border-radius: 16px;
+      background: #101b18;
+      color: #d8eadf;
+      padding: 10px;
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .log-line { border-bottom: 1px solid rgba(255, 255, 255, 0.06); padding: 4px 0; white-space: pre-wrap; word-break: break-all; }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 8px;
+      margin-right: 5px;
+      color: #fff8ec;
+      background: #35544b;
+      font-size: 11px;
+    }
+
+    .tag.in { background: var(--cyan); }
+    .tag.out { background: var(--brand); }
+    .tag.err { background: var(--red); }
+    .tag.local { background: #526b60; }
+    .table { max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 16px; background: rgba(255, 255, 255, 0.54); }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { padding: 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+    th { position: sticky; top: 0; background: #efe5cf; z-index: 1; }
+    .muted { color: var(--muted); }
+    .mono { font-family: "Cascadia Code", "Consolas", monospace; }
+
+    @media (max-width: 1180px) {
+      .grid { grid-template-columns: 1fr; }
+      .map-card { min-height: 560px; }
+      #mapCanvas { height: 560px; }
+    }
+
+    @media (max-width: 680px) {
+      .hero { align-items: flex-start; flex-direction: column; }
+      .columns, .stat-grid { grid-template-columns: 1fr; }
+      .shell { width: min(100vw - 18px, 1760px); padding-top: 12px; }
+      .map-card { min-height: 430px; }
+      #mapCanvas { height: 430px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <h1>路线任务调试台</h1>
+        <p>模拟 APP 控制链路，观察 ROS 推送状态，一键录制 bag 和调试日志。</p>
+      </div>
+      <div class="pill"><span id="wsDot" class="dot"></span><span id="wsLabel">未连接 WebSocket</span></div>
+    </section>
+
+    <section class="grid">
+      <div class="panel map-card">
+        <canvas id="mapCanvas"></canvas>
+        <div class="map-overlay">
+          <span class="map-chip" id="workspaceChip">工作区加载中</span>
+          <span class="map-chip" id="poseChip">机器人位姿: --</span>
+          <span class="map-chip" id="targetChip">目标点: --</span>
+          <span class="map-chip" id="bagChip">Bag: 未录制</span>
+        </div>
+      </div>
+
+      <aside class="side">
+        <section class="panel pad">
+          <div class="panel-title">
+            <h2>连接与总览</h2>
+            <button class="ghost" id="reloadBtn">刷新配置</button>
+          </div>
+          <div class="field">
+            <label>ROS WebSocket 地址</label>
+            <div class="row">
+              <input id="wsUrl" placeholder="ws://127.0.0.1:8765" />
+              <button id="connectBtn">连接</button>
+              <button class="secondary" id="disconnectBtn">断开</button>
+            </div>
+          </div>
+          <div class="stat-grid">
+            <div class="stat"><small>导航状态</small><b id="navState">--</b></div>
+            <div class="stat"><small>暂停原因</small><b id="pauseReason">--</b></div>
+            <div class="stat"><small>点位版本</small><b id="revisionText">--</b></div>
+            <div class="stat"><small>实时速度</small><b id="speedText">--</b></div>
+            <div class="stat"><small>电量</small><b id="batteryText">--</b></div>
+            <div class="stat"><small>最近事件</small><b id="eventText">--</b></div>
+          </div>
+          <div class="muted mono" id="lastMessageText">最近消息: --</div>
+        </section>
+
+        <section class="panel pad">
+          <div class="panel-title"><h2>导航控制</h2><span class="muted">新协议 2.0</span></div>
+          <div class="columns">
+            <div class="field">
+              <label>任务会话 ID</label>
+              <input id="taskSessionId" />
+            </div>
+            <div class="field">
+              <label>路线 ID</label>
+              <input id="routeId" value="debug_route_1" />
+            </div>
+          </div>
+          <div class="field">
+            <label>路线点位 ID 列表，默认读取当前 dynamic_waypoints.json</label>
+            <textarea id="routeIdsText"></textarea>
+          </div>
+          <div class="row">
+            <button class="safe" id="startRouteBtn">开始路线</button>
+            <button class="warn" id="pauseBtn">暂停</button>
+            <button class="safe" id="resumeBtn">继续</button>
+            <button class="danger" id="stopBtn">终止</button>
+          </div>
+          <div class="columns" style="margin-top:12px;">
+            <div class="field">
+              <label>跳步目标任务点</label>
+              <select id="jumpTarget"></select>
+            </div>
+            <div class="field">
+              <label>跳步原因</label>
+              <input id="jumpReason" value="dashboard_manual_jump" />
+            </div>
+          </div>
+          <div class="row">
+            <button id="jumpBtn">跳到选中点</button>
+            <button class="secondary" id="broadcastFinishedBtn">播报完成</button>
+          </div>
+          <p class="muted">暂停、继续、终止不受点位类型限制；跳步默认只允许选任务点，辅助点仍由 ROS 根据区间自动吸收。</p>
+        </section>
+
+        <section class="panel pad">
+          <div class="panel-title">
+            <h2>Bag 录制</h2>
+            <span class="muted" id="bagStatusText">未录制</span>
+          </div>
+          <div class="field">
+            <label>bag 名称</label>
+            <input id="bagName" />
+          </div>
+          <div class="field">
+            <label>录制 Topic，每行一个</label>
+            <textarea id="bagTopics"></textarea>
+          </div>
+          <div class="row">
+            <button class="safe" id="startBagBtn">开始录制</button>
+            <button class="danger" id="stopBagBtn">停止录制</button>
+            <button class="ghost" id="refreshBagBtn">刷新状态</button>
+          </div>
+          <p class="muted mono" id="bagOutputText">输出目录: --</p>
+        </section>
+
+        <section class="panel pad">
+          <div class="panel-title">
+            <h2>点位列表</h2>
+            <span id="waypointCount" class="muted">--</span>
+          </div>
+          <div class="table">
+            <table>
+              <thead><tr><th>ID</th><th>类型</th><th>方向</th><th>播报</th><th>X</th><th>Y</th></tr></thead>
+              <tbody id="waypointTable"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel pad">
+          <div class="panel-title">
+            <h2>消息与日志</h2>
+            <div class="row tight">
+              <button class="ghost" id="clearLogBtn">清空</button>
+              <button class="ghost" id="downloadLogBtn">下载</button>
+            </div>
+          </div>
+          <div id="logList" class="log-list"></div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const state = {
+      config: null,
+      map: null,
+      mapImage: null,
+      waypoints: [],
+      waypointMap: new Map(),
+      ws: null,
+      connected: false,
+      logs: [],
+      robotPose: null,
+      robotSpeed: null,
+      battery: null,
+      navStatus: {},
+      currentTargetId: "",
+      waitingBroadcast: null,
+      completedIds: new Set(),
+      passedTransitIds: new Set(),
+      canvasScale: 1,
+      canvasOffsetX: 0,
+      canvasOffsetY: 0,
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const nowSec = () => Date.now() / 1000;
+    const msgId = (prefix) => `${prefix}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    const formatTime = () => new Date().toLocaleTimeString("zh-CN", { hour12: false });
+
+    function yawFromQuat(q) {
+      if (!Array.isArray(q) || q.length < 4) return 0;
+      const [x, y, z, w] = q.map(Number);
+      return Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z));
+    }
+
+    const yawDeg = (rad) => `${(rad * 180 / Math.PI).toFixed(1)}°`;
+    const numberText = (value, digits = 2) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : "--";
+    const safeString = (value, fallback = "--") => value === undefined || value === null || value === "" ? fallback : String(value);
+
+    function escapeHtml(text) {
+      return String(text).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[ch]));
+    }
+
+    function addLog(kind, direction, title, payload) {
+      const entry = { time: formatTime(), kind, direction, title, payload };
+      state.logs.push(entry);
+      if (state.logs.length > 1000) state.logs.shift();
+      renderLogs();
+      postLog(entry);
+    }
+
+    async function postLog(entry) {
+      try {
+        await fetch("/api/log", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(entry),
+        });
+      } catch (_) {
+        // 日志写盘失败不影响调试台控制链路。
+      }
+    }
+
+    function renderLogs() {
+      const box = $("logList");
+      const rows = state.logs.slice(-220).reverse().map((item) => {
+        const cls = item.direction === "in" ? "in" : item.direction === "out" ? "out" : item.direction === "error" ? "err" : "local";
+        const text = JSON.stringify(item.payload, null, 0);
+        return `<div class="log-line"><span class="tag ${cls}">${item.direction}</span><b>${item.time}</b> ${escapeHtml(item.title)}<br>${escapeHtml(text)}</div>`;
+      });
+      box.innerHTML = rows.join("");
+    }
+
+    async function loadAll() {
+      const [config, map, waypoints] = await Promise.all([
+        fetch("/api/config").then((r) => r.json()),
+        fetch("/api/map").then((r) => r.json()),
+        fetch("/api/waypoints").then((r) => r.json()),
+      ]);
+      state.config = config;
+      state.map = map;
+      state.waypoints = waypoints.waypoints || [];
+      state.waypointMap = new Map(state.waypoints.map((wp) => [String(wp.id), wp]));
+
+      $("workspaceChip").textContent = `工作区: ${config.workspace}`;
+      $("wsUrl").value = $("wsUrl").value || config.websocket_url || "ws://127.0.0.1:8765";
+      $("revisionText").textContent = waypoints.waypoints_revision || "--";
+      $("routeIdsText").value = (waypoints.route_waypoint_ids || []).join(",");
+      $("bagTopics").value = (config.default_bag_topics || []).join("\n");
+      $("taskSessionId").value = $("taskSessionId").value || `dashboard_${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
+      $("bagName").value = $("bagName").value || `route_task_${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
+
+      await loadMapImage();
+      renderWaypointTable();
+      renderJumpTargets();
+      renderBagStatus(config.bag_status || {});
+      drawMap();
+      addLog("config", "local", "配置加载完成", { waypoint_count: state.waypoints.length, revision: waypoints.waypoints_revision });
+    }
+
+    async function loadMapImage() {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => { state.mapImage = img; resolve(); };
+        img.onerror = reject;
+        img.src = state.map.image_data_url;
+      });
+    }
+
+    function renderWaypointTable() {
+      $("waypointCount").textContent = `${state.waypoints.length} 个点位`;
+      $("waypointTable").innerHTML = state.waypoints.map((wp) => {
+        const pos = wp.position || [];
+        const role = wp.waypoint_role === "transit" ? "辅助" : "任务";
+        const broadcast = wp.need_broadcast ? "是" : "否";
+        return `<tr><td>${escapeHtml(wp.id)}</td><td>${role}</td><td>${escapeHtml(wp.walk_direction || "forward")}</td><td>${broadcast}</td><td>${numberText(pos[0])}</td><td>${numberText(pos[1])}</td></tr>`;
+      }).join("");
+    }
+
+    function renderJumpTargets() {
+      const tasks = state.waypoints.filter((wp) => wp.waypoint_role !== "transit");
+      $("jumpTarget").innerHTML = tasks.map((wp) => `<option value="${escapeHtml(wp.id)}">${escapeHtml(wp.id)} - ${escapeHtml(wp.name || "")}</option>`).join("");
+    }
+
+    function connectWs() {
+      const url = $("wsUrl").value.trim();
+      if (!url) return;
+      if (state.ws) state.ws.close();
+      const ws = new WebSocket(url);
+      state.ws = ws;
+      setWsState(false, "正在连接...");
+
+      ws.onopen = () => {
+        state.connected = true;
+        setWsState(true, "已连接 WebSocket");
+        addLog("ws", "local", "WebSocket 已连接", { url });
+        sendSubscription();
+      };
+
+      ws.onmessage = (event) => {
+        let payload = event.data;
+        try { payload = JSON.parse(event.data); } catch (_) {}
+        addLog("message", "in", getMessageTitle(payload), payload);
+        handleIncoming(payload);
+      };
+
+      ws.onerror = (event) => {
+        setWsState(false, "WebSocket 错误");
+        addLog("ws", "error", "WebSocket 错误", { type: event.type });
+      };
+
+      ws.onclose = () => {
+        state.connected = false;
+        setWsState(false, "WebSocket 已断开");
+        addLog("ws", "local", "WebSocket 已断开", { url });
+      };
+    }
+
+    function disconnectWs() {
+      if (state.ws) state.ws.close();
+      state.ws = null;
+      state.connected = false;
+      setWsState(false, "未连接 WebSocket");
+    }
+
+    function setWsState(ok, text) {
+      $("wsDot").className = ok ? "dot ok" : "dot";
+      $("wsLabel").textContent = text;
+      $("connectBtn").disabled = ok;
+      $("disconnectBtn").disabled = !ok;
+    }
+
+    function sendSubscription() {
+      sendRaw({
+        protocol_version: "2.0",
+        message_id: msgId("sub"),
+        timestamp: nowSec(),
+        message_type: "subscription",
+        data_type: "subscription_manage",
+        source: "route_task_dashboard",
+        destination: "ros",
+        data: {
+          action: "subscribe",
+          data_types: [
+            "robot_pose",
+            "robot_speed",
+            "robot_status",
+            "system_status",
+            "navigation_status",
+            "waypoints_data",
+            "system_exception"
+          ],
+          push_frequency: 5
+        }
+      }, "订阅 ROS 状态");
+    }
+
+    function sendRaw(payload, title = "发送消息") {
+      if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+        addLog("message", "error", "发送失败：WebSocket 未连接", payload);
+        alert("WebSocket 未连接，先点连接。");
+        return false;
+      }
+      state.ws.send(JSON.stringify(payload));
+      addLog("message", "out", title, payload);
+      return true;
+    }
+
+    function navCommand(command, extra = {}) {
+      return {
+        protocol_version: "2.0",
+        message_id: msgId(command),
+        timestamp: nowSec(),
+        message_type: "command",
+        data_type: "navigation_control",
+        source: "route_task_dashboard",
+        destination: "ros",
+        data: {
+          // websocket_server.py 入口层识别的是 command_type，
+          // 不能写成 command，否则命令不会被转发到 /app/navigation_command。
+          command_type: command,
+          task_session_id: $("taskSessionId").value.trim(),
+          route_id: $("routeId").value.trim() || "debug_route_1",
+          operator: "route_task_dashboard",
+          ...extra
+        }
+      };
+    }
+
+    function parseRouteIds() {
+      return $("routeIdsText").value
+        .split(/[,\n\r\t ]+/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    function startRoute() {
+      const ids = parseRouteIds();
+      sendRaw(navCommand("start_route_task", {
+        route_name: "调试台路线任务",
+        route_waypoint_ids: ids,
+        waypoints_revision: state.config?.waypoints_revision || $("revisionText").textContent,
+        start_policy: {
+          allow_id_reference: true,
+          reject_if_revision_mismatch: false,
+          allow_resume_from_current_pose: true
+        }
+      }), "开始路线任务");
+    }
+
+    function pauseRoute() {
+      sendRaw(navCommand("pause_route_task", {
+        reason: "manual_pause",
+        pause_parameters: { pause_reason: "manual_pause", source: "route_task_dashboard" }
+      }), "手动暂停路线任务");
+    }
+
+    function resumeRoute() {
+      sendRaw(navCommand("resume_route_task", { reason: "manual_resume" }), "继续路线任务");
+    }
+
+    function stopRoute() {
+      sendRaw(navCommand("stop_route_task", {
+        reason: "manual_stop",
+        stop_parameters: { stop_reason: "manual_stop", source: "route_task_dashboard" }
+      }), "终止路线任务");
+    }
+
+    function jumpRoute() {
+      const target = $("jumpTarget").value;
+      if (!target) return;
+      sendRaw(navCommand("jump_to_waypoint", {
+        target_waypoint_id: target,
+        reason: $("jumpReason").value.trim() || "dashboard_manual_jump",
+        interrupt_broadcast: true
+      }), `跳步到 ${target}`);
+    }
+
+    function broadcastFinished() {
+      const ctx = state.waitingBroadcast || {};
+      const waypointId = ctx.waypoint_id || state.currentTargetId || $("jumpTarget").value;
+      sendRaw(navCommand("broadcast_finished", {
+        waypoint_id: String(waypointId || ""),
+        broadcast_id: ctx.broadcast_id || `broadcast_${waypointId || "unknown"}`,
+        broadcast_result: "completed",
+        reason: "dashboard_manual_confirm"
+      }), "播报完成");
+    }
+
+    function getMessageTitle(payload) {
+      if (!payload || typeof payload !== "object") return "文本消息";
+      const type = payload.data_type || payload.type || payload.message_type || "message";
+      const data = payload.data || {};
+      const event = data.event || data.status || data.command || data.result || "";
+      return event ? `${type}: ${event}` : String(type);
+    }
+
+    function handleIncoming(payload) {
+      if (!payload || typeof payload !== "object") return;
+      const data = payload.data || payload;
+      const dataType = payload.data_type || data.data_type || "";
+      $("lastMessageText").textContent = `最近消息: ${getMessageTitle(payload)}`;
+
+      const pose = extractPose(payload);
+      if (pose) state.robotPose = pose;
+
+      const speed = extractSpeed(payload);
+      if (speed) state.robotSpeed = speed;
+
+      const battery = extractBattery(payload);
+      if (battery !== null) state.battery = battery;
+
+      if (dataType.includes("navigation") || data.event || data.status || data.route_state) {
+        updateNavigationState(data);
+      }
+
+      if (dataType === "waypoints_data" && Array.isArray(data.waypoints)) {
+        addLog("waypoints", "local", "收到 ROS 点位推送", { count: data.waypoints.length });
+      }
+
+      renderStatus();
+      drawMap();
+    }
+
+    function updateNavigationState(data) {
+      state.navStatus = { ...state.navStatus, ...data };
+      const event = data.event || data.status || data.route_state || "";
+      if (data.current_waypoint_id || data.target_waypoint_id) {
+        state.currentTargetId = String(data.current_waypoint_id || data.target_waypoint_id);
+      }
+      if (Array.isArray(data.completed_waypoint_ids)) {
+        state.completedIds = new Set(data.completed_waypoint_ids.map(String));
+      }
+      if (Array.isArray(data.passed_transit_waypoint_ids)) {
+        state.passedTransitIds = new Set(data.passed_transit_waypoint_ids.map(String));
+      }
+      if (event === "broadcast_requested" || data.broadcast_id) {
+        state.waitingBroadcast = {
+          waypoint_id: data.waypoint_id || data.current_waypoint_id || data.target_waypoint_id,
+          broadcast_id: data.broadcast_id
+        };
+      }
+      if (event === "broadcast_finished" || event === "route_task_resumed") {
+        state.waitingBroadcast = null;
+      }
+    }
+
+    function renderStatus() {
+      const nav = state.navStatus || {};
+      const stateText = nav.route_state || nav.navigation_state || nav.status || nav.event || "--";
+      const reason = nav.pause_reason || nav.reason || nav.obstacle_pause_reason || "--";
+      $("navState").textContent = safeString(stateText);
+      $("pauseReason").textContent = safeString(reason);
+      $("eventText").textContent = safeString(nav.event || nav.last_event || "--");
+      $("targetChip").textContent = `目标点: ${safeString(state.currentTargetId)}`;
+      $("batteryText").textContent = state.battery === null ? "--" : `${numberText(state.battery, 1)}%`;
+
+      if (state.robotSpeed) {
+        $("speedText").textContent = `v ${numberText(state.robotSpeed.linear, 2)} / w ${numberText(state.robotSpeed.angular, 2)}`;
+      }
+
+      if (state.robotPose) {
+        $("poseChip").textContent = `机器人位姿: x=${numberText(state.robotPose.x)} y=${numberText(state.robotPose.y)} yaw=${yawDeg(state.robotPose.yaw)}`;
+      }
+    }
+
+    function extractPose(payload) {
+      const candidates = [payload?.data?.pose, payload?.data?.robot_pose, payload?.data?.current_pose, payload?.data, payload?.pose];
+      for (const item of candidates) {
+        const pose = normalizePose(item);
+        if (pose) return pose;
+      }
+      return findPoseDeep(payload, 0);
+    }
+
+    function normalizePose(item) {
+      if (!item || typeof item !== "object") return null;
+      const p = item.position || item.translation || item;
+      const x = p.x ?? item.x;
+      const y = p.y ?? item.y;
+      if (x === undefined || y === undefined) return null;
+      let yaw = item.yaw ?? item.theta ?? item.heading;
+      if (yaw === undefined) {
+        const q = item.orientation || item.rotation || item.quaternion;
+        if (Array.isArray(q)) yaw = yawFromQuat(q);
+        else if (q && typeof q === "object") yaw = yawFromQuat([q.x, q.y, q.z, q.w]);
+        else yaw = 0;
+      }
+      return { x: Number(x), y: Number(y), yaw: Number(yaw) || 0 };
+    }
+
+    function findPoseDeep(obj, depth) {
+      if (!obj || typeof obj !== "object" || depth > 4) return null;
+      const direct = normalizePose(obj);
+      if (direct) return direct;
+      for (const value of Object.values(obj)) {
+        const found = findPoseDeep(value, depth + 1);
+        if (found) return found;
+      }
+      return null;
+    }
+
+    function extractSpeed(payload) {
+      const data = payload?.data || payload;
+      const candidates = [data?.speed, data?.velocity, data?.cmd_vel, data?.current_velocity, data];
+      for (const item of candidates) {
+        if (!item || typeof item !== "object") continue;
+        const linear = item.linear_x ?? item.vx ?? item.linear?.x ?? item.linear ?? item.speed;
+        const angular = item.angular_z ?? item.wz ?? item.angular?.z ?? item.angular;
+        if (linear !== undefined || angular !== undefined) {
+          return { linear: Number(linear || 0), angular: Number(angular || 0) };
+        }
+      }
+      return null;
+    }
+
+    function extractBattery(payload) {
+      const data = payload?.data || payload;
+      const candidates = [data?.battery, data?.battery_level, data?.power?.battery, data?.robot_status?.battery];
+      for (const value of candidates) {
+        if (value === undefined || value === null) continue;
+        if (typeof value === "object") {
+          const n = value.percentage ?? value.percent ?? value.level;
+          if (n !== undefined) return Number(n);
+        }
+        const n = Number(value);
+        if (Number.isFinite(n)) return n <= 1 ? n * 100 : n;
+      }
+      return null;
+    }
+
+    function mapToPixel(x, y) {
+      if (!state.map) return { x: 0, y: 0 };
+      const origin = state.map.origin || [0, 0, 0];
+      return {
+        x: (x - origin[0]) / state.map.resolution,
+        y: state.map.height - ((y - origin[1]) / state.map.resolution)
+      };
+    }
+
+    function drawMap() {
+      const canvas = $("mapCanvas");
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      ctx.fillStyle = "#d8cfb9";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+
+      if (!state.map || !state.mapImage) {
+        ctx.fillStyle = "#17211d";
+        ctx.fillText("地图加载中...", 24, 32);
+        return;
+      }
+
+      const scale = Math.min(rect.width / state.map.width, rect.height / state.map.height);
+      const offsetX = (rect.width - state.map.width * scale) / 2;
+      const offsetY = (rect.height - state.map.height * scale) / 2;
+      state.canvasScale = scale;
+      state.canvasOffsetX = offsetX;
+      state.canvasOffsetY = offsetY;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(state.mapImage, offsetX, offsetY, state.map.width * scale, state.map.height * scale);
+      drawWaypoints(ctx, scale, offsetX, offsetY);
+      drawRobot(ctx, scale, offsetX, offsetY);
+    }
+
+    function drawWaypoints(ctx, scale, offsetX, offsetY) {
+      for (const wp of state.waypoints) {
+        const pos = wp.position || [0, 0, 0];
+        const p = mapToPixel(Number(pos[0]), Number(pos[1]));
+        const x = offsetX + p.x * scale;
+        const y = offsetY + p.y * scale;
+        const isTransit = wp.waypoint_role === "transit";
+        const isTarget = String(wp.id) === String(state.currentTargetId);
+        const completed = state.completedIds.has(String(wp.id)) || state.passedTransitIds.has(String(wp.id));
+        const radius = isTarget ? 8 : isTransit ? 5 : 6;
+
+        ctx.beginPath();
+        ctx.fillStyle = completed ? "#2f8f68" : isTransit ? "#1f9eb3" : "#d97735";
+        ctx.strokeStyle = isTarget ? "#111" : "rgba(255,255,255,0.92)";
+        ctx.lineWidth = isTarget ? 3 : 2;
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        const yaw = yawFromQuat(wp.orientation || [0, 0, 0, 1]);
+        ctx.strokeStyle = isTransit ? "#0d5f6b" : "#7c3b11";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.cos(yaw) * 18, y - Math.sin(yaw) * 18);
+        ctx.stroke();
+
+        ctx.fillStyle = "#101b18";
+        ctx.font = "12px sans-serif";
+        ctx.fillText(String(wp.id), x + 8, y - 8);
+      }
+    }
+
+    function drawRobot(ctx, scale, offsetX, offsetY) {
+      if (!state.robotPose) return;
+      const p = mapToPixel(state.robotPose.x, state.robotPose.y);
+      const x = offsetX + p.x * scale;
+      const y = offsetY + p.y * scale;
+      const yaw = state.robotPose.yaw;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-yaw);
+      ctx.fillStyle = "#17211d";
+      ctx.strokeStyle = "#fff7ec";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(16, 0);
+      ctx.lineTo(-12, -10);
+      ctx.lineTo(-8, 0);
+      ctx.lineTo(-12, 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    async function refreshBagStatus() {
+      const payload = await fetch("/api/bag/status").then((r) => r.json());
+      renderBagStatus(payload.status || {});
+    }
+
+    function renderBagStatus(status) {
+      const running = Boolean(status.running);
+      $("bagChip").textContent = running ? `Bag: 录制中 ${status.duration_sec || 0}s` : "Bag: 未录制";
+      $("bagStatusText").textContent = running ? `录制中 PID ${status.pid}` : "未录制";
+      $("bagOutputText").textContent = `输出目录: ${status.output_dir || "--"}`;
+      $("startBagBtn").disabled = running;
+      $("stopBagBtn").disabled = !running;
+    }
+
+    async function startBag() {
+      const payload = {
+        name: $("bagName").value.trim(),
+        topics: $("bagTopics").value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
+      };
+      const result = await fetch("/api/bag/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).then((r) => r.json());
+      addLog("bag", result.ok ? "local" : "error", "开始录制 bag", result);
+      renderBagStatus(result.status || {});
+      if (!result.ok) alert(`开始录制失败: ${result.error || "unknown"}`);
+    }
+
+    async function stopBag() {
+      const result = await fetch("/api/bag/stop", { method: "POST" }).then((r) => r.json());
+      addLog("bag", result.ok ? "local" : "error", "停止录制 bag", result);
+      renderBagStatus(result.status || {});
+      if (!result.ok) alert(`停止录制失败: ${result.error || "unknown"}`);
+    }
+
+    function downloadLog() {
+      const text = state.logs.map((item) => JSON.stringify(item)).join("\n");
+      const blob = new Blob([text], { type: "application/jsonl;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `route_task_dashboard_${Date.now()}.jsonl`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function bindEvents() {
+      $("reloadBtn").onclick = loadAll;
+      $("connectBtn").onclick = connectWs;
+      $("disconnectBtn").onclick = disconnectWs;
+      $("startRouteBtn").onclick = startRoute;
+      $("pauseBtn").onclick = pauseRoute;
+      $("resumeBtn").onclick = resumeRoute;
+      $("stopBtn").onclick = stopRoute;
+      $("jumpBtn").onclick = jumpRoute;
+      $("broadcastFinishedBtn").onclick = broadcastFinished;
+      $("startBagBtn").onclick = startBag;
+      $("stopBagBtn").onclick = stopBag;
+      $("refreshBagBtn").onclick = refreshBagStatus;
+      $("clearLogBtn").onclick = () => { state.logs = []; renderLogs(); };
+      $("downloadLogBtn").onclick = downloadLog;
+      window.addEventListener("resize", drawMap);
+      setInterval(refreshBagStatus, 3000);
+    }
+
+    bindEvents();
+    setWsState(false, "未连接 WebSocket");
+    loadAll().catch((err) => {
+      addLog("init", "error", "调试台初始化失败", { error: String(err) });
+      alert(`调试台初始化失败: ${err}`);
+    });
+  </script>
+</body>
+</html>

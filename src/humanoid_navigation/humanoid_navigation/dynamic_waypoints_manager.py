@@ -76,6 +76,10 @@ class DynamicWaypointsManager(Node):
         self.waypoints: Dict[str, Dict[str, WaypointData]] = {
             wp_type.value: {} for wp_type in WaypointType
         }
+        # 点位库版本号：APP 使用“只下发 waypoint_id 列表”启动路线时，
+        # 需要携带该版本号，状态管理器会校验 APP 和 ROS 使用的是同一份点位库。
+        # 这样可以避免 APP 只发 ID，而 ROS 本地点位还是旧坐标时机器人按旧路线执行。
+        self.waypoints_revision = ""
         
         # ========== 状态管理器通信 ==========
         self.navigation_request_pub = None
@@ -219,8 +223,21 @@ class DynamicWaypointsManager(Node):
                 if not command_data.get("route_id"):
                     self.get_logger().warning("路线任务启动字段缺失: route_id，继续转发给状态机返回业务 ack")
                 route_waypoints = command_data.get("route_waypoints", [])
-                if not isinstance(route_waypoints, list) or not route_waypoints:
-                    self.get_logger().warning("路线任务启动字段异常: route_waypoints 为空或不是数组，继续转发给状态机返回业务 ack")
+                route_waypoint_ids = command_data.get("route_waypoint_ids", [])
+                has_route_waypoints = isinstance(route_waypoints, list) and len(route_waypoints) > 0
+                has_route_waypoint_ids = isinstance(route_waypoint_ids, list) and len(route_waypoint_ids) > 0
+                if not has_route_waypoints and not has_route_waypoint_ids:
+                    self.get_logger().warning(
+                        "路线任务启动字段异常: route_waypoints/route_waypoint_ids 均为空或不是数组，继续转发给状态机返回业务 ack"
+                    )
+                if has_route_waypoints and has_route_waypoint_ids:
+                    self.get_logger().warning(
+                        "路线任务启动字段异常: route_waypoints 和 route_waypoint_ids 同时存在，继续转发给状态机返回业务 ack"
+                    )
+                if has_route_waypoint_ids and not command_data.get("waypoints_revision"):
+                    self.get_logger().warning(
+                        "路线任务 ID 列表模式缺少 waypoints_revision，继续转发给状态机返回 missing_waypoints_revision"
+                    )
 
             elif command_type == "jump_to_waypoint":
                 # jump 的会话、目标点、是否允许跳到该点，都由状态机统一返回业务 ack。
@@ -268,9 +285,20 @@ class DynamicWaypointsManager(Node):
             "route_id",
             "broadcast_id",
             "request_message_id",
+            "waypoints_revision",
         ):
             if field in normalized and normalized[field] is not None:
                 normalized[field] = str(normalized[field])
+
+        route_waypoint_ids = normalized.get("route_waypoint_ids")
+        if isinstance(route_waypoint_ids, list):
+            # ID 列表模式只做字符串化，不改顺序、不查点位；真正校验和补全由状态机完成。
+            # None/空字符串也保留下来交给状态机返回 invalid_route_waypoint_ids，
+            # 不能在桥接层静默删除，否则 APP 传错数组时路线顺序会被悄悄改写。
+            normalized["route_waypoint_ids"] = [
+                str(item).strip() if item is not None else ""
+                for item in route_waypoint_ids
+            ]
 
         route_waypoints = normalized.get("route_waypoints")
         if isinstance(route_waypoints, list):
@@ -370,6 +398,9 @@ class DynamicWaypointsManager(Node):
             )
             
             self.waypoints[waypoint_type.value][waypoint_id] = waypoint
+
+            # 点位内容发生真实变更后刷新版本号；保存、推送、响应都使用同一版 revision。
+            self.refresh_waypoints_revision()
             
             # 保存数据
             if self.data_storage_enabled:
@@ -415,6 +446,9 @@ class DynamicWaypointsManager(Node):
             waypoint.frame_id = waypoint_data.get("frame_id", waypoint.frame_id)
             waypoint.properties.update(normalized_properties)
             waypoint.last_modified = time.time()
+
+            # 点位内容发生真实变更后刷新版本号，供 APP 后续 ID 列表启动时做一致性校验。
+            self.refresh_waypoints_revision()
             
             # 保存数据
             if self.data_storage_enabled:
@@ -449,6 +483,9 @@ class DynamicWaypointsManager(Node):
             # 删除点位
             waypoint_name = self.waypoints[waypoint_type.value][waypoint_id].name
             del self.waypoints[waypoint_type.value][waypoint_id]
+
+            # 点位库删除后也要刷新版本号，禁止 APP 用删除前的 ID 列表继续启动。
+            self.refresh_waypoints_revision()
             
             # 保存数据
             if self.data_storage_enabled:
@@ -495,6 +532,8 @@ class DynamicWaypointsManager(Node):
                         }
                     else:
                         response_data[wp_type] = list(waypoints.keys())
+
+            response_data["waypoints_revision"] = self.waypoints_revision
         
             self.send_app_response("success", "获取点位列表成功", response_data)
         
@@ -512,15 +551,16 @@ class DynamicWaypointsManager(Node):
                 waypoint_type = WaypointType(waypoint_type_str)
                 cleared_count = len(self.waypoints[waypoint_type.value])
                 self.waypoints[waypoint_type.value].clear()
-                
-                self.send_app_response("success", f"清空 {waypoint_type.value} 类型点位成功，共 {cleared_count} 个")
             else:
                 # 清空所有点位
                 total_count = self.get_total_waypoints_count()
                 for waypoints in self.waypoints.values():
                     waypoints.clear()
                 
-                self.send_app_response("success", f"清空所有点位成功，共 {total_count} 个")
+                message = f"清空所有点位成功，共 {total_count} 个"
+
+            # 清空动作成功后先刷新版本号，再保存、推送和响应，保证 APP 拿到的是最新版本。
+            self.refresh_waypoints_revision()
             
             # 保存数据
             if self.data_storage_enabled:
@@ -528,6 +568,11 @@ class DynamicWaypointsManager(Node):
             
             # 发布点位数据更新
             self.publish_waypoints_data()
+
+            if waypoint_type_str:
+                self.send_app_response("success", f"清空 {waypoint_type.value} 类型点位成功，共 {cleared_count} 个")
+            else:
+                self.send_app_response("success", message)
             
         except Exception as e:
             self.get_logger().error(f"清空点位错误: {e}")
@@ -539,6 +584,7 @@ class DynamicWaypointsManager(Node):
             waypoints_data = {
                 "update_type": update_type,
                 "timestamp": time.time(),
+                "waypoints_revision": self.waypoints_revision,
                 "data": {
                     "waypoints": {
                         wp_type: {wp_id: wp.to_dict() for wp_id, wp in waypoints.items()}
@@ -546,7 +592,8 @@ class DynamicWaypointsManager(Node):
                     }
                 },
                 "metadata": {
-                    "total_count": self.get_total_waypoints_count()
+                    "total_count": self.get_total_waypoints_count(),
+                    "waypoints_revision": self.waypoints_revision
                 }
             }
         
@@ -607,6 +654,8 @@ class DynamicWaypointsManager(Node):
     def send_app_response(self, response_type: str, message: str, data: Dict = None):
         """发送响应给APP（通过ROS topic发布）"""
         try:
+            result_data = dict(data or {})
+            result_data.setdefault("waypoints_revision", self.waypoints_revision)
             response_msg = self.create_unified_message(
                 message_type="response",
                 data_type="waypoint_response",
@@ -615,7 +664,8 @@ class DynamicWaypointsManager(Node):
                 data={
                    "response_type": response_type,
                    "message": message,
-                   "result": data or {}
+                   "waypoints_revision": self.waypoints_revision,
+                   "result": result_data
                 }
             )
         
@@ -634,6 +684,15 @@ class DynamicWaypointsManager(Node):
     
     
     # ========== 数据持久化方法 ==========
+    def refresh_waypoints_revision(self):
+        """刷新点位库版本号。
+
+        第一版用时间戳字符串即可满足一致性校验：
+        APP 保存点位后记录 ROS 返回的 revision，开始路线时把该 revision 带回来；
+        状态管理器发现不一致就拒绝 ID 列表启动，防止坐标/属性版本错配。
+        """
+        self.waypoints_revision = f"{time.time():.3f}"
+
     def setup_data_persistence(self):
         """设置数据持久化"""
         try:
@@ -658,8 +717,10 @@ class DynamicWaypointsManager(Node):
                     self.load_waypoints_data()
                 else:
                     self.get_logger().info("没有找到现有的路点数据文件，将在首次保存时创建")
+                    self.refresh_waypoints_revision()
             else:
                 self.get_logger().info("数据持久化已禁用")
+                self.refresh_waypoints_revision()
             
         except Exception as e:
                 self.get_logger().error(f"设置数据持久化失败: {e}")
@@ -670,7 +731,10 @@ class DynamicWaypointsManager(Node):
     def save_waypoints_data(self):
         """保存点位数据"""
         try:
+            if not self.waypoints_revision:
+                self.refresh_waypoints_revision()
             data_to_save = {
+               "waypoints_revision": self.waypoints_revision,
                "waypoints": {
                   wp_type: {wp_id: wp.to_dict() for wp_id, wp in waypoints.items()}
                   for wp_type, waypoints in self.waypoints.items()
@@ -692,6 +756,12 @@ class DynamicWaypointsManager(Node):
         try:
             with open(self.storage_file_path, 'r', encoding='utf-8') as f:
                  data = json.load(f)
+
+            # 兼容旧数据文件：旧版本没有 waypoints_revision 时，优先复用文件 timestamp
+            # 作为稳定版本号，避免每次启动都随机变化导致 APP 刚同步完又不匹配。
+            self.waypoints_revision = str(
+                data.get("waypoints_revision") or data.get("timestamp") or f"{time.time():.3f}"
+            )
             
             # 加载点位数据
             waypoints_data = data.get("waypoints", {})

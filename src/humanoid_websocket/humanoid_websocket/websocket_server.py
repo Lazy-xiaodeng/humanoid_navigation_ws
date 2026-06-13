@@ -725,6 +725,10 @@ class CompleteWebSocketServer(Node):
                     "task_session_id": command_data.get("task_session_id", ""),
                     "route_id": command_data.get("route_id", ""),
                     "route_waypoints": command_data.get("route_waypoints", []),
+                    # ID 列表启动字段：APP 可只下发有序 waypoint_id 列表，
+                    # 状态管理器会用 waypoints_revision 校验点位库一致后再补全完整点位。
+                    "route_waypoint_ids": command_data.get("route_waypoint_ids", []),
+                    "waypoints_revision": command_data.get("waypoints_revision", ""),
                     # route task 跳转与播报闭环字段，仅透传给后续状态机处理。
                     "target_waypoint_id": command_data.get("target_waypoint_id", ""),
                     "interrupt_broadcast": command_data.get("interrupt_broadcast", True),
