@@ -32,3 +32,9 @@ debug_output*.txt
 frames_*.gv
 frames_*.pdf
 rviz_*.png
+
+# 多地图导航层运行时生成文件
+.active_navigation_map.env
+.navigation_stack.pid
+.ros_control_plane.pid
+data/runtime_maps/

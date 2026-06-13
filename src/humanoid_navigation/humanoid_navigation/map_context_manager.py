@@ -3,13 +3,15 @@
 """
 地图上下文管理器 - 多地图一期基础能力。
 
-一期支持“导航前显式切图”：APP 选择地图时先发 switch_map，ROS 在空闲状态下
-切换 current_map_id、发布目标地图初始位姿，并等待定位状态稳定后进入 ready。
-导航执行过程中仍禁止切图，真正重启底层 Nav2/定位进程的热切留到后续阶段增强。
+一期支持“导航前显式切图”：APP 选择地图时下发 switch_map，ROS 在空闲状态下
+触发导航栈重启脚本。重启后的导航栈会按目标 map_id 同时加载 2D 栅格地图和
+3D prior 定位地图，避免只切 2D、不切 3D 造成定位错配。
+导航执行过程中仍禁止切图。
 """
 
 import json
 import os
+import subprocess
 import time
 from pathlib import Path
 from typing import Any, Dict, List
@@ -35,6 +37,7 @@ class MapContextManager(Node):
             ("initialpose_repeat_count", 3),
             ("initialpose_repeat_interval_sec", 0.5),
             ("navigation_status_topic", "/navigation/status"),
+            ("map_switch_script", "/home/ubuntu/software/Todesk/Files/humanoid_ws/switch_navigation_map.sh"),
         ])
 
         self.map_registry_path = self.expand_path(self.get_parameter("map_registry_path").value)
@@ -46,6 +49,7 @@ class MapContextManager(Node):
         self.initialpose_repeat_count = max(1, int(self.get_parameter("initialpose_repeat_count").value))
         self.initialpose_repeat_interval_sec = max(0.1, float(self.get_parameter("initialpose_repeat_interval_sec").value))
         self.navigation_status_topic = str(self.get_parameter("navigation_status_topic").value)
+        self.map_switch_script = self.expand_path(self.get_parameter("map_switch_script").value)
         self.current_map_id = self.default_map_id
         self.maps = self.load_map_registry()
         self.map_state = "ready"
@@ -204,8 +208,8 @@ class MapContextManager(Node):
     def handle_switch_map(self, command: Dict[str, Any], request_message_id: str):
         """执行导航前地图切换。
 
-        一期切图不在导航过程中重启 Nav2；它的职责是把业务 active map 切到目标地图，
-        注入该地图初始位姿，并等待 prior-map 定位健康后向 APP 宣告 ready。
+        切图只能在导航空闲时执行。跨地图切换会调用脚本重启导航定位层，
+        但本节点和 websocket 所在控制层保持在线，负责持续向 APP 推送切图进度。
         """
         target_map_id = self.normalize_map_id(command.get("target_map_id", ""))
         target_map = self.find_map(target_map_id)
@@ -248,6 +252,17 @@ class MapContextManager(Node):
                 "map_yaml_file": map_yaml_file,
             })
             return
+        prior_map_file = str(target_map.get("open3d_prior_map_file", "") or "")
+        if prior_map_file and not Path(prior_map_file).exists():
+            self.send_map_response("switch_map", request_message_id, {
+                "status": "error",
+                "error_code": "prior_map_file_missing",
+                "message": f"3D 定位地图不存在: {prior_map_file}",
+                "current_map_id": self.current_map_id,
+                "target_map_id": target_map_id,
+                "open3d_prior_map_file": prior_map_file,
+            })
+            return
         if self.map_state in ("switching", "localization_resetting", "waiting_localization"):
             self.send_map_response("switch_map", request_message_id, {
                 "status": "error",
@@ -256,6 +271,76 @@ class MapContextManager(Node):
                 "current_map_id": self.current_map_id,
                 "target_map_id": self.switch_context.get("target_map_id", "") if self.switch_context else target_map_id,
             })
+            return
+        if target_map_id != self.current_map_id:
+            if not Path(self.map_switch_script).exists():
+                self.send_map_response("switch_map", request_message_id, {
+                    "status": "error",
+                    "error_code": "map_switch_script_missing",
+                    "message": f"切图重启脚本不存在: {self.map_switch_script}",
+                    "current_map_id": self.current_map_id,
+                    "target_map_id": target_map_id,
+                    "map_switch_script": self.map_switch_script,
+                })
+                return
+
+            self.map_state = "switching"
+            self.localization_state = "restarting_navigation_stack"
+            self.localization_stable_count = 0
+            old_map_id = self.current_map_id
+            self.current_map_id = target_map_id
+            self.persist_current_map_id(target_map_id)
+
+            try:
+                env = os.environ.copy()
+                workspace = str(Path(self.map_switch_script).resolve().parent)
+                env["WORKSPACE"] = workspace
+                env["MAP_ID"] = target_map_id
+                # 切图脚本只允许重启导航定位层，不能停止本 map_context_manager 所在的控制层。
+                # 这样 APP websocket 连接不断，切图过程中的 map_status/map_response 能持续回传。
+                switch_process = subprocess.Popen(
+                    ["/bin/bash", self.map_switch_script, target_map_id],
+                    cwd=workspace,
+                    env=env,
+                    start_new_session=True,
+                )
+            except Exception as exc:
+                self.current_map_id = old_map_id
+                self.persist_current_map_id(old_map_id)
+                self.map_state = "failed"
+                self.localization_state = "restart_failed"
+                self.send_map_response("switch_map", request_message_id, {
+                    "status": "error",
+                    "error_code": "map_switch_restart_failed",
+                    "message": f"启动切图重启脚本失败: {exc}",
+                    "current_map_id": self.current_map_id,
+                    "target_map_id": target_map_id,
+                    "map_switch_script": self.map_switch_script,
+                })
+                self.publish_map_status()
+                return
+
+            self.switch_context = {
+                "request_message_id": request_message_id,
+                "target_map_id": target_map_id,
+                "target_map": target_map,
+                "started_at": time.time(),
+                "initialpose_sent": 0,
+                "last_initialpose_time": 0.0,
+                "switch_process": switch_process,
+            }
+            self.send_map_response("switch_map", request_message_id, {
+                "status": "success",
+                "result_reason": "map_switch_restart_started",
+                "message": "切图已开始：控制层保持在线，导航定位层将按目标地图重启",
+                "previous_map_id": old_map_id,
+                "current_map_id": self.current_map_id,
+                "target_map_id": target_map_id,
+                "map_yaml_file": map_yaml_file,
+                "open3d_prior_map_file": prior_map_file,
+                "map_switch_script": self.map_switch_script,
+            })
+            self.publish_map_status()
             return
         if target_map_id == self.current_map_id and self.map_state == "ready":
             self.send_map_response("switch_map", request_message_id, {
@@ -350,6 +435,27 @@ class MapContextManager(Node):
         now = time.time()
         target_map_id = self.switch_context["target_map_id"]
         request_message_id = self.switch_context["request_message_id"]
+
+        switch_process = self.switch_context.get("switch_process")
+        if switch_process is not None:
+            return_code = switch_process.poll()
+            if return_code not in (None, 0):
+                self.map_state = "failed"
+                self.localization_state = "navigation_stack_restart_failed"
+                self.send_map_response("switch_map", request_message_id, {
+                    "status": "error",
+                    "error_code": "map_switch_restart_failed",
+                    "message": f"导航定位层重启脚本异常退出: {return_code}",
+                    "current_map_id": self.current_map_id,
+                    "target_map_id": target_map_id,
+                    "map_state": self.map_state,
+                    "localization_state": self.localization_state,
+                })
+                self.switch_context = None
+                self.publish_map_status()
+                return
+            if return_code == 0 and self.localization_state == "restarting_navigation_stack":
+                self.localization_state = "waiting_localization"
 
         if now - self.switch_context["started_at"] > self.switch_localization_timeout_sec:
             self.map_state = "failed"

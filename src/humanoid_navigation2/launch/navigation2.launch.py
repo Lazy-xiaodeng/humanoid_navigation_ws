@@ -58,8 +58,11 @@ def generate_launch_description():
     prior_odom_topic = LaunchConfiguration('prior_odom_topic', default='/prior_localization/odom')
     prior_localized_frame = LaunchConfiguration('prior_localized_frame', default='prior_open3d_base')
     prior_map_path = LaunchConfiguration('prior_map_path', default=default_prior_map_path)
+    map_yaml_file = LaunchConfiguration(
+        'map_yaml_file',
+        default=os.path.join(pkg_nav2, 'maps', 'hall.yaml'),
+    )
 
-    map_yaml_file = os.path.join(pkg_nav2, 'maps', 'hall.yaml')
     fastdds_config_file = PathJoinSubstitution([
         os.path.expanduser('~'),
         '.config',
@@ -683,6 +686,7 @@ def generate_launch_description():
         DeclareLaunchArgument('prior_pose_with_covariance_topic', default_value='/prior_localization/pose_with_covariance', description='兼容 PoseWithCovarianceStamped 定位输入'),
         DeclareLaunchArgument('prior_odom_topic', default_value='/prior_localization/odom', description='Open3D 全局定位 Odometry 输入'),
         DeclareLaunchArgument('prior_localized_frame', default_value='prior_open3d_base', description='Open3D 定位 pose 的子坐标系'),
+        DeclareLaunchArgument('map_yaml_file', default_value=os.path.join(pkg_nav2, 'maps', 'hall.yaml'), description='Nav2 map_server 加载的 2D 栅格地图 YAML'),
         DeclareLaunchArgument('enable_prior_map_localization', default_value='true', description='是否启动 Open3D 定位节点'),
         DeclareLaunchArgument('prior_map_path', default_value=default_prior_map_path, description='Open3D 标准轴 grounded PCD 地图路径'),
         DeclareLaunchArgument('enable_fastdds_shm', default_value='true', description='是否设置 FastDDS 共享内存环境变量'),

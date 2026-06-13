@@ -8,6 +8,8 @@ START_TIME="$(date +%Y%m%d_%H%M%S)"
 
 MAP_DIR="$WORKSPACE/src/humanoid_navigation2/maps"
 PCD_DIR="$WORKSPACE/src/humanoid_navigation2/pcd"
+MAP_REGISTRY_FILE="$WORKSPACE/data/maps/map_registry.json"
+WAYPOINTS_DIR="$WORKSPACE/data/waypoints"
 BAG_ROOT="${BAG_ROOT:-/home/ubuntu/fast-lio-bags}"
 LOG_DIR="$WORKSPACE/debug_logs"
 ROS_LOG_DIR="$LOG_DIR/ros_mapping_${START_TIME}"
@@ -17,7 +19,7 @@ COMMAND_FILE="$WORKSPACE/.start_mapping.command"
 MAP_PREFIX="$MAP_DIR/$MAP_NAME"
 PCD_FILE="$PCD_DIR/$MAP_NAME.pcd"
 PCD_STANDARD_FILE="$PCD_DIR/${MAP_NAME}_standard.pcd"
-PCD_LOCALIZATION_FILE="$PCD_DIR/${MAP_NAME}_localization_grounded.pcd"
+PCD_OPEN3D_FILE="$PCD_DIR/${MAP_NAME}_open3d_grounded.pcd"
 SC_DB_FILE="$MAP_DIR/${MAP_NAME}_sc.bin"
 BAG_DIR="$BAG_ROOT/${MAP_NAME}_mapping_${START_TIME}"
 
@@ -28,7 +30,7 @@ FINISHING=0
 INPUT_FD=0
 MAPPING_STARTED=0
 
-mkdir -p "$MAP_DIR" "$PCD_DIR" "$BAG_ROOT" "$LOG_DIR" "$ROS_LOG_DIR"
+mkdir -p "$MAP_DIR" "$PCD_DIR" "$WAYPOINTS_DIR" "$BAG_ROOT" "$LOG_DIR" "$ROS_LOG_DIR"
 export ROS_LOG_DIR
 rm -f "$COMMAND_FILE"
 
@@ -142,6 +144,121 @@ check_required_file() {
   return 1
 }
 
+register_completed_map() {
+  # 建图成功后自动注册地图，让客户后续在 APP 上直接选择/切换这张图。
+  # 这里不自动把 current_map_id 改成新地图，避免建图机重启后误以为已经切到新场景；
+  # APP 仍通过 switch_map 显式切图，但不再需要人工维护 map_registry.json。
+  log "Registering completed map into registry: $MAP_REGISTRY_FILE"
+  MAP_NAME_ENV="$MAP_NAME" \
+  WORKSPACE_ENV="$WORKSPACE" \
+  MAP_REGISTRY_FILE_ENV="$MAP_REGISTRY_FILE" \
+  WAYPOINTS_FILE_ENV="$WAYPOINTS_DIR/${MAP_NAME}.json" \
+  MAP_YAML_FILE_ENV="${MAP_PREFIX}.yaml" \
+  MAP_PGM_FILE_ENV="${MAP_PREFIX}.pgm" \
+  MAP_POSEGRAPH_FILE_ENV="${MAP_PREFIX}.posegraph" \
+  MAP_DATA_FILE_ENV="${MAP_PREFIX}.data" \
+  RAW_PCD_FILE_ENV="$PCD_FILE" \
+  STANDARD_PCD_FILE_ENV="$PCD_STANDARD_FILE" \
+  OPEN3D_PCD_FILE_ENV="$PCD_OPEN3D_FILE" \
+  SC_DB_FILE_ENV="$SC_DB_FILE" \
+  BAG_DIR_ENV="$BAG_DIR" \
+  START_TIME_ENV="$START_TIME" \
+  python3 - <<'PY'
+import json
+import os
+import time
+from pathlib import Path
+
+map_id = os.environ["MAP_NAME_ENV"].strip()
+registry_path = Path(os.environ["MAP_REGISTRY_FILE_ENV"])
+waypoints_file = Path(os.environ["WAYPOINTS_FILE_ENV"])
+
+registry_path.parent.mkdir(parents=True, exist_ok=True)
+waypoints_file.parent.mkdir(parents=True, exist_ok=True)
+
+if registry_path.exists():
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    except Exception:
+        registry = {}
+else:
+    registry = {}
+
+maps = registry.get("maps")
+if not isinstance(maps, list):
+    maps = []
+
+now = time.time()
+new_entry = {
+    "map_id": map_id,
+    "display_name": map_id,
+    "enabled": True,
+    "description": f"建图脚本自动注册地图，建图时间 {os.environ['START_TIME_ENV']}",
+    "waypoints_file": str(waypoints_file),
+    "map_yaml_file": os.environ["MAP_YAML_FILE_ENV"],
+    "map_pgm_file": os.environ["MAP_PGM_FILE_ENV"],
+    "map_posegraph_file": os.environ["MAP_POSEGRAPH_FILE_ENV"],
+    "map_data_file": os.environ["MAP_DATA_FILE_ENV"],
+    "raw_pcd_file": os.environ["RAW_PCD_FILE_ENV"],
+    "standard_pcd_file": os.environ["STANDARD_PCD_FILE_ENV"],
+    "open3d_prior_map_file": os.environ["OPEN3D_PCD_FILE_ENV"],
+    "scancontext_database_file": os.environ["SC_DB_FILE_ENV"],
+    "bag_dir": os.environ["BAG_DIR_ENV"],
+    "initial_pose": {
+        "frame_id": "map",
+        "position": [0.0, 0.0, 0.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0],
+    },
+    "created_time": now,
+    "last_modified": now,
+}
+
+updated = False
+for index, item in enumerate(maps):
+    if str(item.get("map_id", "")).strip() == map_id:
+        # 保留客户可能手动改过的 display_name/initial_pose，同时刷新文件路径和启用状态。
+        merged = dict(item)
+        merged.update(new_entry)
+        if item.get("display_name"):
+            merged["display_name"] = item.get("display_name")
+        if isinstance(item.get("initial_pose"), dict):
+            merged["initial_pose"] = item["initial_pose"]
+        if item.get("created_time"):
+            merged["created_time"] = item["created_time"]
+        maps[index] = merged
+        updated = True
+        break
+
+if not updated:
+    maps.append(new_entry)
+
+registry.setdefault("default_map_id", "hall")
+registry.setdefault("current_map_id", registry.get("default_map_id", "hall"))
+registry["maps"] = maps
+registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+if not waypoints_file.exists():
+    empty_waypoints = {
+        "map_id": map_id,
+        "waypoints_revision": f"initial_empty_{map_id}_{int(now * 1000)}",
+        "waypoints": {
+            "navigation_target": {},
+            "exhibition_point": {},
+            "obstacle_point": {},
+            "charging_point": {},
+            "rest_point": {},
+            "landmark_point": {},
+        },
+        "timestamp": now,
+    }
+    waypoints_file.write_text(json.dumps(empty_waypoints, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+print(f"registered map_id={map_id}")
+print(f"registry={registry_path}")
+print(f"waypoints={waypoints_file}")
+PY
+}
+
 finish_mapping() {
   if [ "$FINISHING" -eq 1 ]; then
     return 0
@@ -152,13 +269,13 @@ finish_mapping() {
 
   log "Finish requested. Finishing mapping and saving outputs..."
 
-  log "[1/8] Stopping recorders and flushing bag/PCD data..."
+  log "[1/9] Stopping recorders and flushing bag/PCD data..."
 
   # Stop data recorders first so bag and PCD are flushed to disk.
   stop_process_int "rosbag recorder" "$BAG_PID" 90
   stop_process_int "PCD saver" "$PCD_PID" 120
 
-  log "[2/8] Saving Fast-LIO map through /map_save when available..."
+  log "[2/9] Saving Fast-LIO map through /map_save when available..."
   if wait_for_service "/map_save" 5; then
     run_step "Fast-LIO /map_save" run_ros "ros2 service call /map_save std_srvs/srv/Trigger '{}'" || \
       log "WARN: /map_save call failed; continuing with PCD saver output."
@@ -166,7 +283,7 @@ finish_mapping() {
     log "WARN: /map_save service unavailable; continuing with PCD saver output."
   fi
 
-  log "[3/8] Saving 2D occupancy grid map: ${MAP_PREFIX}.yaml/.pgm"
+  log "[3/9] Saving 2D occupancy grid map: ${MAP_PREFIX}.yaml/.pgm"
   if wait_for_service "/slam_toolbox/save_map" 20; then
     run_step "2D occupancy grid map save" run_ros "ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap \"{name: {data: '$MAP_PREFIX'}}\""
   else
@@ -174,37 +291,40 @@ finish_mapping() {
     run_step "2D occupancy grid map save via map_saver_cli" run_ros "ros2 run nav2_map_server map_saver_cli -f '$MAP_PREFIX'" || true
   fi
 
-  log "[4/8] Saving slam_toolbox posegraph: ${MAP_PREFIX}.posegraph/.data"
+  log "[4/9] Saving slam_toolbox posegraph: ${MAP_PREFIX}.posegraph/.data"
   if wait_for_service "/slam_toolbox/serialize_map" 20; then
     run_step "slam_toolbox posegraph save" run_ros "ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph \"{filename: '$MAP_PREFIX'}\""
   else
     log "WARN: /slam_toolbox/serialize_map unavailable; posegraph will not be saved."
   fi
 
-  log "[5/8] Building Scan Context database: $SC_DB_FILE"
+  log "[5/9] Building Scan Context database: $SC_DB_FILE"
   if [ -d "$BAG_DIR" ]; then
     run_step "Scan Context database build" run_ros "ros2 run humanoid_relocalization build_sc_database.py --bag '$BAG_DIR' --output '$SC_DB_FILE' --cloud-topic /fast_lio/cloud_registered --odom-topic /odom --interval 2.0"
   else
     log "ERROR: bag directory not found, skip Scan Context database: $BAG_DIR"
   fi
 
-  log "[6/8] Generating derived PCD files..."
+  log "[6/9] Generating derived PCD files..."
   if [ -s "$PCD_FILE" ]; then
     log "Generating standard-frame PCD: $PCD_STANDARD_FILE"
     run_step "standard-frame PCD generation" run_ros "python3 '$WORKSPACE/src/humanoid_navigation2/humanoid_navigation2/pcd_converter.py' '$PCD_FILE' '$PCD_STANDARD_FILE'" || \
       log "WARN: standard PCD conversion failed."
 
-    log "Generating localization PCD: $PCD_LOCALIZATION_FILE"
-    run_step "localization PCD generation" run_ros "python3 '$WORKSPACE/src/humanoid_navigation2/scripts/make_localization_pcd.py' '$PCD_FILE' '$PCD_LOCALIZATION_FILE' --min-z 0.0 --max-z 2.30 --voxel-size 0.10" || \
-      log "WARN: localization PCD generation failed."
+    log "Generating Open3D/RoboSense prior-map PCD: $PCD_OPEN3D_FILE"
+    # 当前 OP(Open3D) 和 RO(RoboSense) 定位链路使用 *_open3d_grounded.pcd，
+    # 它保留天花板/墙面等高处结构，只去掉地面以下点，并使用 0.05m voxel，
+    # 匹配历史 hall_open3d_grounded.pcd 的生成口径。
+    run_step "Open3D prior-map PCD generation" run_ros "python3 '$WORKSPACE/src/humanoid_navigation2/scripts/make_localization_pcd.py' '$PCD_FILE' '$PCD_OPEN3D_FILE' --min-z 0.0 --voxel-size 0.05 --keep-ceiling" || \
+      log "WARN: Open3D prior-map PCD generation failed."
   else
     log "ERROR: base PCD is missing; skip PCD conversions: $PCD_FILE"
   fi
 
-  log "[7/8] Stopping mapping launch..."
+  log "[7/9] Stopping mapping launch..."
   stop_process_int "mapping launch" "$MAPPING_PID" 30
 
-  log "[8/8] Checking output files..."
+  log "[8/9] Checking output files..."
   local failed=0
   check_required_file "${MAP_PREFIX}.yaml" || failed=1
   check_required_file "${MAP_PREFIX}.pgm" || failed=1
@@ -213,7 +333,7 @@ finish_mapping() {
   check_required_file "$SC_DB_FILE" || failed=1
   check_required_file "$PCD_FILE" || failed=1
   check_required_file "$PCD_STANDARD_FILE" || failed=1
-  check_required_file "$PCD_LOCALIZATION_FILE" || failed=1
+  check_required_file "$PCD_OPEN3D_FILE" || failed=1
 
   if [ -d "$BAG_DIR" ] && run_ros "ros2 bag info '$BAG_DIR'" > /dev/null 2>&1; then
     log "OK: rosbag recorded: $BAG_DIR"
@@ -226,6 +346,8 @@ finish_mapping() {
   log "ROS log dir: $ROS_LOG_DIR"
 
   if [ "$failed" -eq 0 ]; then
+    log "[9/9] Registering map for APP map switching..."
+    register_completed_map
     log "Mapping completed successfully."
     exit 0
   fi
@@ -314,7 +436,9 @@ log "Starting Humanoid Mapping"
 log "Map name: $MAP_NAME"
 log "2D map prefix: $MAP_PREFIX"
 log "PCD map: $PCD_FILE"
+log "Open3D prior-map alias: $PCD_OPEN3D_FILE"
 log "Scan Context database: $SC_DB_FILE"
+log "Map registry: $MAP_REGISTRY_FILE"
 log "Bag directory: $BAG_DIR"
 log "Run log: $RUN_LOG"
 

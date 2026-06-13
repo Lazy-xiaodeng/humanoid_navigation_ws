@@ -61,8 +61,11 @@ def generate_launch_description():
         'robosense_config_file',
         default=default_robosense_config_file,
     )
+    map_yaml_file = LaunchConfiguration(
+        'map_yaml_file',
+        default=os.path.join(pkg_nav2, 'maps', 'hall.yaml'),
+    )
 
-    map_yaml_file = os.path.join(pkg_nav2, 'maps', 'hall.yaml')
     fastdds_config_file = PathJoinSubstitution([
         os.path.expanduser('~'),
         '.config',
@@ -601,6 +604,7 @@ def generate_launch_description():
         DeclareLaunchArgument('prior_pose_with_covariance_topic', default_value='/prior_localization/pose_with_covariance', description='兼容 PoseWithCovarianceStamped 定位输入'),
         DeclareLaunchArgument('prior_odom_topic', default_value='/prior_localization/robosense_odom', description='ro 全局定位 Odometry 输入'),
         DeclareLaunchArgument('prior_localized_frame', default_value='base_footprint', description='ro 定位 pose 的子坐标系'),
+        DeclareLaunchArgument('map_yaml_file', default_value=os.path.join(pkg_nav2, 'maps', 'hall.yaml'), description='Nav2 map_server 加载的 2D 栅格地图 YAML'),
         DeclareLaunchArgument('robosense_config_file', default_value=default_robosense_config_file, description='RoboSense 定位配置 YAML'),
         DeclareLaunchArgument('enable_fastdds_shm', default_value='true', description='是否设置 FastDDS 共享内存环境变量'),
         *fastdds_env_setup,

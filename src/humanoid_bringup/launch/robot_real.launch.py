@@ -1,132 +1,66 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import GroupAction, IncludeLaunchDescription, DeclareLaunchArgument,TimerAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch_ros.actions import Node
-from launch.substitutions import LaunchConfiguration, PythonExpression
-from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration
+
 
 def generate_launch_description():
-    # 1. 获取各个功能包的路径
-    pkg_description = get_package_share_directory('humanoid_description')
-    pkg_navigation2 = get_package_share_directory('humanoid_navigation2')
-    pkg_navigation = get_package_share_directory('humanoid_navigation')
-    pkg_websocket = get_package_share_directory('humanoid_websocket')
-    pkg_locomotion = get_package_share_directory('humanoid_locomotion')
+    """兼容旧入口的一键 launch。
 
-    # 2. 声明参数
+    新多地图架构已经拆成：
+      1. robot_control_plane.launch.py：APP/ROS 常驻控制层，切图时不能停。
+      2. robot_navigation_stack.launch.py：绑定当前地图的导航定位层，切图时可重启。
+
+    直接 ros2 launch robot_real.launch.py 时仍会同时启动两层，保证旧启动命令可用；
+    运行期切图则由脚本只重启 robot_navigation_stack.launch.py。
+    """
+    pkg_bringup = get_package_share_directory('humanoid_bringup')
+
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     use_rviz = LaunchConfiguration('rviz', default='false')
-    # relocalization_engine 用来选择“一键启动”里的定位链路：
-    #   ro / robosense : RoboSense lidar_localization + prior_map_odom_bridge
-    #   op / prior     : Open3D prior-map localization + prior_map_odom_bridge
-    #
-    # 当前入口只保留 ro 与 op 两条仍维护的定位链路，旧 SC/HDL/NDT 分支已下线，
-    # 避免一键启动暴露“看起来能选、实际 launch 文件已删除”的假回退入口。
+    map_id = LaunchConfiguration('map_id', default='hall')
+    map_yaml_file = LaunchConfiguration(
+        'map_yaml_file',
+        default='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall.yaml',
+    )
+    prior_map_path = LaunchConfiguration(
+        'prior_map_path',
+        default='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall_open3d_grounded.pcd',
+    )
+    robosense_config_file = LaunchConfiguration(
+        'robosense_config_file',
+        default='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/robosense_lidar_localization/config/robosense_lidar_localization.yaml',
+    )
     reloc_engine = LaunchConfiguration('relocalization_engine', default='ro')
 
-    # 条件表达式: ro 与 op(prior) 两类导航栈
-    use_ro = PythonExpression([
-        "'", reloc_engine, "' == 'ro' or '", reloc_engine, "' == 'robosense'"
-    ])
-    use_op = PythonExpression([
-        "'", reloc_engine, "' == 'op' or '", reloc_engine, "' == 'prior'"
-    ])
-
-    # ================= 第一阶段：基础设施 =================
-    launch_description = GroupAction(
-        [
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(os.path.join(pkg_description, 'launch', 'display.launch.py')),
-                launch_arguments={
-                    'use_sim_time': use_sim_time,
-                    'rviz': 'false'
-                }.items()
-            )
-        ],
-        scoped=True,
-    )
-
-    # ================= 第二阶段：导航栈（延迟6秒）=================
-    # ro 版本 (默认) — RoboSense lidar_localization 输出 map->base_footprint 候选位姿，
-    # prior_map_odom_bridge 独占发布 map->odom，并沿用现有 Nav2/状态管理链路。
-    launch_nav2_ro = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_navigation2, 'launch', 'navigation2_robosense_lidar.launch.py')),
-        launch_arguments={'use_sim_time': use_sim_time}.items(),
-        condition=IfCondition(use_ro)
-    )
-
-    # op/prior 版本 — Open3D prior-map 定位 + bridge 独占 map->odom。
-    # 这个入口用于和 ro 做 A/B 对比；原有 navigation2.launch.py 不在本次改动里修改。
-    launch_nav2_op = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_navigation2, 'launch', 'navigation2.launch.py')),
-        launch_arguments={'use_sim_time': use_sim_time}.items(),
-        condition=IfCondition(use_op)
-    )
-
-    launch_nav2_stack = TimerAction(
-        period=6.0,
-        actions=[launch_nav2_ro, launch_nav2_op]
-    )
-
-    # ================= 第三阶段：应用层（延迟9秒）=================
-    # route task 启动链路说明：
-    # start_navigation.sh 会启动 robot_real.launch.py；robot_real.launch.py 不直接创建
-    # navigation_state_manager 节点，而是 include APP 层 launch。
-    # navigation_fusion_sc.launch.py 内部已经统一启动
-    # executable='navigation_state_manager'，并携带 route_task.* 参数。
-    # 因此这里不要再重复启动 navigation_state_manager，避免同名节点和 action client 重复。
-    # ro/op 共用 APP 层：路点管理、导航状态管理器、websocket、运动控制。
-    launch_app_layer_nav = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_navigation, 'launch', 'navigation_fusion_sc.launch.py')),
+    control_plane = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(pkg_bringup, 'launch', 'robot_control_plane.launch.py')),
         launch_arguments={'use_sim_time': use_sim_time}.items(),
     )
 
-    launch_app_layer = TimerAction(
-        period=9.0,
-        actions=[
-            GroupAction([
-                launch_app_layer_nav,
-                IncludeLaunchDescription(
-                    PythonLaunchDescriptionSource(os.path.join(pkg_websocket, 'launch', 'websocket_server.launch.py')),
-                    launch_arguments={'use_sim_time': use_sim_time}.items()
-                ),
-                IncludeLaunchDescription(
-                    PythonLaunchDescriptionSource(os.path.join(pkg_locomotion, 'launch', 'locomotion.launch.py')),
-                    launch_arguments={'use_sim_time': use_sim_time}.items()
-                )
-            ])
-        ]
-    )
-
-    # ================= 第四阶段：可视化（延迟10秒）=================
-    rviz_config_path = os.path.join(pkg_navigation2, 'rviz', 'navigation.rviz')
-    rviz_node = TimerAction(
-        period=10.0,
-        actions=[
-            Node(
-                package='rviz2',
-                executable='rviz2',
-                name='rviz2',
-                arguments=['-d', rviz_config_path, '--ros-args', '--log-level', 'ERROR'],
-                condition=IfCondition(use_rviz),
-            )
-        ]
+    navigation_stack = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(pkg_bringup, 'launch', 'robot_navigation_stack.launch.py')),
+        launch_arguments={
+            'use_sim_time': use_sim_time,
+            'rviz': use_rviz,
+            'map_id': map_id,
+            'map_yaml_file': map_yaml_file,
+            'prior_map_path': prior_map_path,
+            'robosense_config_file': robosense_config_file,
+            'relocalization_engine': reloc_engine,
+        }.items(),
     )
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('rviz', default_value='true', description='Whether to start RViz'),
-        DeclareLaunchArgument('relocalization_engine', default_value='ro',
-                              description='Nav2 stack: ro/robosense (default) | op/prior (Open3D prior-map)'),
-
-        # 按顺序启动
-        launch_description,
-        launch_nav2_stack,
-        launch_app_layer,
-        rviz_node,
+        DeclareLaunchArgument('map_id', default_value='hall', description='当前启动的地图 ID'),
+        DeclareLaunchArgument('map_yaml_file', default_value='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall.yaml'),
+        DeclareLaunchArgument('prior_map_path', default_value='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall_open3d_grounded.pcd'),
+        DeclareLaunchArgument('robosense_config_file', default_value='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/robosense_lidar_localization/config/robosense_lidar_localization.yaml'),
+        DeclareLaunchArgument('relocalization_engine', default_value='ro'),
+        control_plane,
+        navigation_stack,
     ])

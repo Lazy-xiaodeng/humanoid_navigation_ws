@@ -98,14 +98,19 @@ def main() -> int:
     navigation_setup = read_text("src/humanoid_navigation/setup.py")
     navigation_package_xml = read_text("src/humanoid_navigation/package.xml")
     robot_real_launch = read_text("src/humanoid_bringup/launch/robot_real.launch.py")
+    robot_control_plane_launch = read_text("src/humanoid_bringup/launch/robot_control_plane.launch.py")
+    robot_navigation_stack_launch = read_text("src/humanoid_bringup/launch/robot_navigation_stack.launch.py")
     navigation_launch = read_text("src/humanoid_navigation/launch/navigation.launch.py")
     fusion_sc_launch = read_text("src/humanoid_navigation/launch/navigation_fusion_sc.launch.py")
+    navigation_control_plane_launch = read_text("src/humanoid_navigation/launch/navigation_control_plane.launch.py")
+    navigation_route_runtime_launch = read_text("src/humanoid_navigation/launch/navigation_route_runtime.launch.py")
     nav2_param_files = sorted((WORKSPACE_ROOT / "src/humanoid_navigation2/config").glob("nav2_params*.yaml"))
     nav2_param_texts = {str(path.relative_to(WORKSPACE_ROOT)): path.read_text(encoding="utf-8") for path in nav2_param_files}
     navigation2_launch = read_text("src/humanoid_navigation2/launch/navigation2.launch.py")
     navigation2_robosense_launch = read_text("src/humanoid_navigation2/launch/navigation2_robosense_lidar.launch.py")
     through_bt_xml = read_text("src/humanoid_navigation2/config/behavior_tree/navigate_through_poses_no_backup.xml")
     implementation_checklist = read_text("src/humanoid_navigation2/docs/路线任务改造函数级实施清单.md")
+    multi_map_switch_plan = read_text("src/humanoid_navigation2/docs/多地图切换_控制层常驻导航层重启详细方案.md")
     data_integration_doc_section = extract_between(
         implementation_checklist,
         "### 6.9 `data_integration_node_recoverable.py`",
@@ -162,7 +167,11 @@ def main() -> int:
         "src/humanoid_websocket/humanoid_websocket/data_integration_node_recoverable.py": data_integration,
         "src/humanoid_navigation/launch/navigation.launch.py": navigation_launch,
         "src/humanoid_navigation/launch/navigation_fusion_sc.launch.py": fusion_sc_launch,
+        "src/humanoid_navigation/launch/navigation_control_plane.launch.py": navigation_control_plane_launch,
+        "src/humanoid_navigation/launch/navigation_route_runtime.launch.py": navigation_route_runtime_launch,
         "src/humanoid_bringup/launch/robot_real.launch.py": robot_real_launch,
+        "src/humanoid_bringup/launch/robot_control_plane.launch.py": robot_control_plane_launch,
+        "src/humanoid_bringup/launch/robot_navigation_stack.launch.py": robot_navigation_stack_launch,
     }
     runtime_path_texts.update(nav2_param_texts)
     for runtime_path, runtime_text in runtime_path_texts.items():
@@ -1496,18 +1505,24 @@ def main() -> int:
         failures,
     )
 
-    # robot_real 是整机 bringup 间接入口：它不直接创建状态机，而是 include APP 层 launch。
-    # 这样既能保证 start_navigation.sh 主链路进入新状态机，也避免同名 navigation_state_manager 重复启动。
-    require_contains(robot_real_launch, "navigation_fusion_sc.launch.py", "robot_real include SC APP 层 launch", failures)
-    require_contains(robot_real_launch, "navigation2_robosense_lidar.launch.py", "robot_real include ro 定位链路", failures)
-    require_contains(robot_real_launch, "navigation2.launch.py", "robot_real include Open3D prior 定位链路", failures)
+    # 多地图一期后，整机 bringup 拆成“控制层常驻 + 导航层按地图重启”。
+    # robot_real 作为兼容入口只组合两层；运行期切图只重启 robot_navigation_stack。
+    require_contains(robot_real_launch, "robot_control_plane.launch.py", "robot_real include 常驻控制层", failures)
+    require_contains(robot_real_launch, "robot_navigation_stack.launch.py", "robot_real include 地图绑定导航层", failures)
+    require_contains(robot_control_plane_launch, "navigation_control_plane.launch.py", "控制层 include 点位/地图上下文 launch", failures)
+    require_contains(robot_control_plane_launch, "websocket_server.launch.py", "控制层 include websocket launch", failures)
+    require_contains(robot_navigation_stack_launch, "navigation_route_runtime.launch.py", "导航层 include route runtime launch", failures)
+    require_contains(robot_navigation_stack_launch, "navigation2_robosense_lidar.launch.py", "导航层 include ro 定位链路", failures)
+    require_contains(robot_navigation_stack_launch, "navigation2.launch.py", "导航层 include Open3D prior 定位链路", failures)
+    require_contains(navigation_control_plane_launch, "map_context_manager", "控制层启动 map_context_manager", failures)
+    require_contains(navigation_control_plane_launch, "dynamic_waypoints_manager", "控制层启动 dynamic_waypoints_manager", failures)
+    require_contains(navigation_route_runtime_launch, "executable='navigation_state_manager'", "路线运行层启动 navigation_state_manager", failures)
     require_not_contains(robot_real_launch, "navigation_fusion.launch.py", "robot_real 不再暴露 HDL APP 旧入口", failures)
     require_not_contains(robot_real_launch, "navigation2_fusion", "robot_real 不再暴露 SC/HDL 旧导航栈入口", failures)
-    require_contains(robot_real_launch, "route task 启动链路说明", "robot_real 说明 route task 间接入口", failures)
     require_contains(
-        implementation_checklist,
-        "`robot_real.launch.py` 是整机 bringup 入口，不直接创建 `navigation_state_manager`",
-        "清单说明 robot_real 是间接入口",
+        multi_map_switch_plan,
+        "控制层常驻",
+        "多地图方案说明控制层常驻",
         failures,
     )
     # 文档注释标准：路线任务跨 APP、桥接层、状态机和 Nav2，文档里的代码片段也必须解释业务意图。

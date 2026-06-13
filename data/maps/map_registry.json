@@ -9,23 +9,54 @@
       "description": "当前默认运行地图；旧点位已迁移到 data/waypoints/hall.json",
       "waypoints_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/data/waypoints/hall.json",
       "map_yaml_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall.yaml",
+      "map_pgm_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall.pgm",
+      "map_posegraph_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall.posegraph",
+      "map_data_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall.data",
+      "raw_pcd_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall.pcd",
+      "open3d_prior_map_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall_open3d_grounded.pcd",
+      "scancontext_database_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall_sc_fastlio_registered.bin",
       "initial_pose": {
         "frame_id": "map",
-        "position": [0.0, 0.0, 0.0],
-        "orientation": [0.0, 0.0, 0.0, 1.0]
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "orientation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
       }
     },
     {
       "map_id": "hall1",
       "display_name": "备用地图 hall1",
-      "enabled": false,
-      "description": "多地图一期注册示例；当前仓库未包含 hall1 地图文件，正式启用前请补齐地图文件、点位文件和初始位姿后再改为 true",
+      "enabled": true,
+      "description": "多地图一期已注册可选地图；当前未保留测试克隆地图文件，正式切换前请通过建图流程生成真实地图文件、点位文件和初始位姿。",
       "waypoints_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/data/waypoints/hall1.json",
       "map_yaml_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall1.yaml",
+      "map_pgm_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall1.pgm",
+      "map_posegraph_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall1.posegraph",
+      "map_data_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall1.data",
+      "raw_pcd_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall1.pcd",
+      "standard_pcd_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall1_standard.pcd",
+      "open3d_prior_map_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall1_open3d_grounded.pcd",
+      "scancontext_database_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall1_sc.bin",
       "initial_pose": {
         "frame_id": "map",
-        "position": [0.0, 0.0, 0.0],
-        "orientation": [0.0, 0.0, 0.0, 1.0]
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "orientation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
       }
     }
   ]

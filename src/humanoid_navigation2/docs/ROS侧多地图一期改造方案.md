@@ -194,15 +194,20 @@ error_code = route_waypoint_map_mismatch
 
 ### 4.4 切图时机
 
-允许切图：
+一期支持的安全切图方式：
 
 - 当前没有 active route task；
 - 当前没有 Nav2 goal 执行；
 - 上一轮任务已经完成、终止或失败清理完成；
-- APP 在地图选择 UI 点击“切换地图”并下发 `switch_map`；
-- `switch_map` 成功后 `map_state=ready`，才允许开始目标地图的路线任务。
+- APP 在地图选择 UI 点击“切换地图”；
+- 后端/运维层按目标 `map_id` 重启导航栈，例如 `MAP_ID=hall2 ./start_navigation.sh`；
+- 启动脚本从 `map_registry.json` 同时解析并加载：
+  - 2D 栅格 `map_yaml_file`；
+  - 3D 定位 `open3d_prior_map_file`；
+  - RO 链路 runtime `robosense_lidar_localization.yaml`；
+- 新导航栈启动完成并发布 `map_state=ready` 后，APP 才允许开始目标地图的路线任务。
 
-禁止切图：
+禁止运行中跨地图热切：
 
 - 正在导航；
 - 暂停中；
@@ -218,17 +223,26 @@ error_code = route_waypoint_map_mismatch
 error_code = map_switch_rejected_route_task_active
 ```
 
+如果旧导航栈仍在运行，APP 直接向 ROS 下发跨地图 `switch_map(target_map_id != current_map_id)`，ROS 必须拒绝并返回：
+
+```text
+error_code = map_switch_requires_navigation_stack_restart
+```
+
+原因：当前 Nav2 map_server、OP(Open3D) 定位、RO(RoboSense) 定位都是启动时加载地图文件。只改业务层 `current_map_id` 会造成“新 2D 地图 + 旧 3D 定位地图”或“业务地图与底层地图不一致”的危险状态。
+
 ### 4.5 切图后继续逻辑
 
-切图只发生在 `start_route_task` 前，推荐由 APP 选择地图按钮显式触发。
+切图只发生在 `start_route_task` 前，推荐由 APP 选择地图按钮触发后端重启导航栈。
 
 推荐交互顺序：
 
 ```text
 APP 选择 hall1
--> APP 下发 map_management/switch_map(target_map_id=hall1)
--> ROS 发布 map_state=switching/localization_resetting/waiting_localization
--> ROS 注入 hall1 的 initial_pose 并等待定位稳定
+-> 后端/运维层执行 MAP_ID=hall1 ./start_navigation.sh
+-> 启动脚本校验 hall1.yaml 和 hall1_open3d_grounded.pcd 都存在
+-> 启动脚本生成 hall1 的 RoboSense runtime config
+-> ROS 导航栈启动时同时加载 hall1 2D 栅格和 hall1 3D prior map
 -> ROS 发布 map_state=ready,current_map_id=hall1
 -> APP 放开“开始导航”按钮
 -> APP 下发 start_route_task(map_id=hall1)
@@ -301,8 +315,8 @@ data/maps/map_registry.json
     {
       "map_id": "hall1",
       "display_name": "备用地图 hall1",
-      "enabled": false,
-      "description": "注册示例；当前仓库未包含 hall1 地图文件，正式启用前请补齐地图文件、点位文件和初始位姿后再改为 true",
+      "enabled": true,
+      "description": "多地图一期已注册可选地图；正式切换前请确认地图文件、点位文件和初始位姿与现场一致",
       "waypoints_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/data/waypoints/hall1.json",
       "map_yaml_file": "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall1.yaml",
       "initial_pose": {
@@ -538,7 +552,11 @@ APP 当前保存点位时会先清空再重新设置。多地图后该命令必�
 
 #### APP 选择地图时切图
 
-APP 在地图选择 UI 点击目标地图时调用。该命令必须在没有导航任务运行时调用；导航中、暂停中、等待播报中都会被拒绝。
+APP 在地图选择 UI 点击目标地图时可以调用该命令查询/校验目标地图，但一期不把它作为底层热切入口。
+
+如果目标地图就是当前启动栈已加载地图，ROS 可返回 `already_active`。
+
+如果目标地图不同于当前已加载地图，ROS 返回 `map_switch_requires_navigation_stack_restart`，后端应按目标 `map_id` 重启导航栈。
 
 ```json
 {
@@ -559,8 +577,8 @@ APP 在地图选择 UI 点击目标地图时调用。该命令必须在没有导
 
 响应分两类：
 
-1. `navigation_command_result` 风格的即时 `map_response`，表示 ROS 已接收并开始切图。
-2. 周期/事件型 `map_status`，表示当前切图阶段，APP 应以 `map_state=ready` 作为允许开始导航的条件。
+1. `map_response`：表示目标地图是否已加载、是否缺文件、是否需要重启导航栈。
+2. 周期/事件型 `map_status`：表示当前已启动导航栈实际加载的地图，APP 应以 `current_map_id` 和 `map_state=ready` 作为允许开始导航的条件。
 
 ### 7.2 start_route_task 增加地图字段
 
@@ -928,8 +946,10 @@ pcd/hall_open3d_grounded.pcd
 | `map_not_registered` | 地图注册表中不存在目标地图 |
 | `map_disabled` | 地图被禁用 |
 | `map_file_missing` | 地图关键文件缺失 |
+| `prior_map_file_missing` | 3D 定位地图缺失 |
 | `map_registry_invalid` | 地图注册表格式错误 |
 | `map_switch_rejected_route_task_active` | 当前路线任务未结束，拒绝切图 |
+| `map_switch_requires_navigation_stack_restart` | 目标地图不同于当前已加载地图，需要重启导航栈同时加载 2D/3D 地图 |
 | `map_switch_in_progress` | 已有切图流程正在执行 |
 | `map_switch_localization_timeout` | 切图后等待定位稳定超时 |
 | `active_map_mismatch` | start_route_task 目标地图与当前激活地图不一致 |
@@ -994,8 +1014,9 @@ transit 点也必须有 `map_id`。
 
 1. 旧点位没有 `map_id`，启动后自动补 `hall`。
 2. 旧 `dynamic_waypoints.json` 可迁移为 `data/waypoints/hall.json`。
-3. 注册表中 `enabled=false` 的地图只作为占位或未部署地图，APP 不应允许用户直接选择启动；ROS 收到 `switch_map` 会返回 `map_disabled`。
-4. 地图启用前必须确认 `map_yaml_file` 真实存在，且 `initial_pose` 是该地图下可用的初始位姿。
+3. 注册表中 `enabled=true` 的地图会出现在 APP 可选地图列表中。
+4. 即使地图已启用，启动脚本和 `switch_map` 仍会校验 `map_yaml_file`、`open3d_prior_map_file` 是否真实存在；文件缺失时不会误报切图成功。
+5. 地图启用前必须确认 `initial_pose` 是该地图下可用的初始位姿，否则重启到目标地图后定位可能一直无法稳定。
 3. APP/调试台只发 `route_waypoint_ids`，路线正常执行。
 3. 辅助点无痕通过正常。
 4. task 点对齐和播报正常。
@@ -1087,11 +1108,12 @@ transit 点也必须有 `map_id`。
 ### 阶段 5：建图脚本入库
 
 1. `start_mapping.sh` 支持地图名。
-2. 默认拒绝重名覆盖。
-3. 校验地图产物。
-4. 生成 `<map_id>_open3d_grounded.pcd`。
-5. 自动写入 `map_registry.json`。
-6. 记录初始位姿。
+2. 建图完成 `finish` 后校验地图产物：`yaml/pgm/posegraph/data/sc.bin/raw pcd/standard.pcd/open3d_grounded.pcd/rosbag`。
+3. 生成 `<map_id>_open3d_grounded.pcd`，这是当前 OP(Open3D) 和 RO(RoboSense) 定位链路实际使用的 3D 地图。
+4. 自动写入 `data/maps/map_registry.json`，注册 `map_yaml_file`、`open3d_prior_map_file`、`scancontext_database_file` 等 2D/3D/数据库路径。
+5. 自动创建 `data/waypoints/<map_id>.json` 空点位库，APP 后续设置点位时直接写入对应地图。
+6. 同名地图重复建图时刷新文件路径和启用状态，但保留客户可能手动调整过的 `display_name` 和 `initial_pose`。
+7. 初始位姿默认写 `[0,0,0]`，现场如果地图原点/开机位姿不同，需要 APP 或调试工具后续提供“设置地图初始位姿”能力。
 
 ## 16. 工期评估
 
@@ -1166,3 +1188,83 @@ transit 点也必须有 `map_id`。
 ```text
 start_route_task 前自动切图 + 定位重置 + 定位 ready 后启动路线
 ```
+
+## 19. 当前落地状态：控制层常驻 + 导航层按地图重启
+
+本轮已经把一期切图方案从“只改 `current_map_id`”收口为真正可切换 2D/3D 地图的结构。
+
+### 19.1 启动分层
+
+当前一键启动仍从：
+
+```text
+start_all_services.sh
+  -> start_navigation.sh
+```
+
+进入 ROS 导航系统。
+
+`start_navigation.sh` 现在负责：
+
+```text
+构建 Todesk 工作区
+启动控制层 start_ros_control_plane.sh
+启动当前地图导航层 start_navigation_stack.sh
+```
+
+控制层常驻，不随运行期切图停止：
+
+```text
+robot_control_plane.launch.py
+  -> navigation_control_plane.launch.py
+  -> websocket_server.launch.py
+  -> locomotion.launch.py
+```
+
+导航层绑定当前地图，运行期切图允许重启：
+
+```text
+robot_navigation_stack.launch.py
+  -> display.launch.py
+  -> navigation2_robosense_lidar.launch.py 或 navigation2.launch.py
+  -> navigation_route_runtime.launch.py
+```
+
+### 19.2 APP 点击切换地图后的 ROS 行为
+
+APP 后端发送：
+
+```text
+/app/map_command: switch_map target_map_id=hall1
+```
+
+ROS 行为：
+
+```text
+map_context_manager 校验 hall1 已注册/启用
+map_context_manager 校验 hall1 的 2D yaml 和 3D open3d prior map 存在
+map_context_manager 确认当前没有导航任务运行
+map_context_manager 调用 switch_navigation_map.sh hall1
+switch_navigation_map.sh 先 validate-only 校验目标地图
+switch_navigation_map.sh 停止旧导航层 stop_navigation_stack.sh
+switch_navigation_map.sh 启动新导航层 start_navigation_stack.sh hall1
+map_context_manager 保持在线并继续发布 map_status
+map_context_manager 等待定位健康状态稳定
+map_context_manager 推送 map_ready，APP 才允许开始导航
+```
+
+### 19.3 和之前方案的差异
+
+1. 切图不再停止整个 `start_navigation.sh` 管理的系统。
+2. 切图不再停止 websocket，因此 APP 不会因为切图失联。
+3. `navigation_state_manager` 被划入导航层，切图时重启，避免旧 Nav2 action client 或旧地图状态残留。
+4. `dynamic_waypoints_manager` 和 `map_context_manager` 被划入控制层，切图时常驻。
+5. `switch_navigation_map.sh` 会在停止旧导航层之前先校验目标地图，避免目标地图缺文件时把当前可用导航层停掉。
+
+### 19.4 当前限制
+
+1. 当前仓库只有 `hall` 地图产物完整，`hall1` 注册项已启用但文件还不存在，因此切 `hall1` 会返回明确缺文件错误。
+2. 真正实机切图需要先通过建图脚本生成并注册 `hall1.yaml`、`hall1.pgm`、`hall1_open3d_grounded.pcd` 等产物。
+3. 当前实现是“导航前切图”，不是导航过程中跨地图切图。
+4. 切图 ready 依赖 `/localization/prior_map_odom_bridge_status`，实机需要确认 RO/OP 链路在新地图启动后能发布健康状态。
+
