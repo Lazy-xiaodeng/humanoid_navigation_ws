@@ -194,6 +194,9 @@ class MessageBridge(Node):
             vals = data.get("values", {})
             health = data.get("health", {})
             latency = data.get("latency", 0)
+            # 保留 websocket_client 动态学习到的机器人身份，继续往 system_status 链路透传。
+            robot_accid = str(data.get("accid") or vals.get("robot_accid") or "").strip()
+            robot_sn = str(data.get("sn") or vals.get("robot_sn") or "").strip()
 
 
             # --- 核心算法：将延迟映射为信号质量 ---
@@ -235,6 +238,12 @@ class MessageBridge(Node):
                 "signal_quality": signal_pct,       # 👈 APP 显示进度条 (0-100)
                 "signal_status": signal_desc,        # 👈 APP 显示文字 (良好)
                 "network_latency": f"{int(latency)}ms", # 👈 诊断用
+                "robot_accid": robot_accid,
+                "robot_sn": robot_sn,
+                "robot_identity": {
+                    "accid": robot_accid,
+                    "sn": robot_sn
+                },
                 "robot_state": robot_state,
                 "power_info": {
                     "total_voltage": vals.get("bat_vol", 0.0),

@@ -294,6 +294,11 @@ class UnifiedDataIntegrationNode(Node):
                 String, '/navigation/acknowledgments', self.navigation_ack_callback, 10
             )
 
+            # 订阅定位恢复/重定位状态，转换为 APP 异常弹窗事件。
+            self.localization_recovery_status_sub = self.create_subscription(
+                String, '/localization/recovery_status', self.localization_recovery_status_callback, 10
+            )
+
             # 订阅动作完成结果，立即推送给 APP。
             self.action_result_sub = self.create_subscription(
                 String, '/robot/action_result', self.action_result_callback, 10
@@ -602,6 +607,67 @@ class UnifiedDataIntegrationNode(Node):
         except Exception as e:
             self.get_logger().error(f'❌ 推送系统异常失败: {e}')
 
+    def localization_recovery_status_callback(self, msg: String):
+        """将定位恢复状态转换为 APP 可展示的定位异常/恢复事件。"""
+        try:
+            status = json.loads(msg.data)
+            event_type = status.get("event_type", "")
+            reason = status.get("reason", "")
+            result_code = status.get("result_code", "")
+
+            title = ""
+            severity = "info"
+            popup = True
+            code = result_code or event_type or "localization_event"
+            message = reason or event_type
+
+            if event_type == "localization_recovery_started":
+                title = "定位异常，正在重定位"
+                severity = "warning"
+            elif event_type == "localization_relocalize_requested":
+                title = "定位重定位请求已发出"
+                severity = "info"
+                popup = False
+            elif event_type == "localization_relocalize_attempt_deferred":
+                title = "定位重定位暂未接受"
+                severity = "warning" if result_code not in {
+                    "globalmap_not_ready",
+                    "no_scan",
+                    "not_enough_accumulated_scans",
+                    "held_for_consistency",
+                } else "info"
+            elif event_type == "localization_relocalize_accepted":
+                title = "定位重定位结果已接受"
+                severity = "info"
+            elif event_type == "localization_initialpose_published":
+                title = "定位初始位姿已更新"
+                severity = "info"
+            elif event_type == "localization_relocalize_failed":
+                title = "定位重定位失败"
+                severity = "error"
+            elif event_type == "localization_recovered":
+                title = "定位已恢复"
+                severity = "info"
+            elif event_type == "localization_manual_initialpose_override":
+                title = "定位已手动校正"
+                severity = "info"
+            else:
+                return
+
+            self.publish_system_exception(
+                category="localization",
+                severity=severity,
+                title=title,
+                message=message,
+                code=code,
+                source_event=event_type,
+                details=status,
+                popup=popup,
+                dedupe_sec=2.0 if event_type == "localization_relocalize_attempt_deferred" else 0.5,
+            )
+        except Exception as e:
+            self.get_logger().error(f'❌ 处理定位恢复状态错误: {e}')
+
     def action_result_callback(self, msg: String):
         """处理动作完成结果，转成统一 push 消息发给 APP。"""
         try:
@@ -654,50 +720,33 @@ class UnifiedDataIntegrationNode(Node):
             status = ack_data.get("status", "")
             message = ack_data.get("message", "")
     
-            # navigation_command_result 是导航状态事件，不再作为顶层 data_type。
-            # 这样 APP 可以统一从 navigation_status 数据流里消费所有导航事件。
+            # 使用统一消息格式
             push_msg = self.create_base_message(
                message_type="push",
-               data_type="navigation_status",
+               data_type="navigation_command_result",
                source="data_integration",
                destination="all"
             )
         
-            # 兼容旧 /navigation/acknowledgments 话题：
-            # 旧状态机会把 ack_type/status/message 等字段直接发出来；
-            # 这里不丢弃旧字段，而是整体放进 event_data，并补齐新协议需要的追踪字段。
-            event_data = dict(ack_data)
-            event_data.setdefault("event_id", f"nav_ack_{int(time.time() * 1000)}")
-            event_data.setdefault("request_message_id", ack_data.get("request_message_id", ""))
-            event_data.setdefault("ack_type", ack_type)
-            event_data.setdefault("command_type", ack_data.get("command_type", ack_type))
-            event_data.setdefault("status", status)
-            event_data.setdefault("result_reason", ack_data.get("result_reason", ""))
-            event_data.setdefault("error_code", ack_data.get("error_code", ""))
-            event_data.setdefault("message", message)
-            event_data.setdefault("timestamp", time.time())
-            # 业务错误码优先使用状态机透传的 error_code。
-            # 如果仍然用固定 nav_error 或 ack_type，APP 的弹窗/埋点就无法区分
-            # route_task_active、navigation_busy、invalid_target_waypoint 等具体原因。
-            business_error_code = event_data.get("error_code") or ack_type or "nav_error"
-            # 新协议统一要求业务 ack 的识别方式为：
-            # data_type=navigation_status + data.event_type=navigation_command_result。
-            push_msg["data"] = {
-                "event_type": "navigation_command_result",
-                "event_data": event_data
-            }
+            # 填充业务数据。保留 navigation_state_manager_recoverable.py
+            # 附加的 recoverable / failed_waypoint / available_actions 等字段。
+            push_msg["data"] = dict(ack_data)
+            push_msg["data"].setdefault("ack_type", ack_type)
+            push_msg["data"].setdefault("status", status)
+            push_msg["data"].setdefault("message", message)
+            push_msg["data"].setdefault("timestamp", time.time())
         
             # 填充元数据
             push_msg["metadata"]["status"] = status
             if status == "error":
-                push_msg["metadata"]["error_code"] = business_error_code
+                push_msg["metadata"]["error_code"] = "nav_error"
                 push_msg["metadata"]["error_message"] = message
                 self.publish_system_exception(
                     category="navigation",
                     severity="error",
                     title="导航异常",
                     message=message or "导航命令执行失败",
-                    code=business_error_code,
+                    code=ack_type or "nav_error",
                     source_event="navigation_ack",
                     details=ack_data,
                 )
@@ -707,7 +756,7 @@ class UnifiedDataIntegrationNode(Node):
             push_str.data = json.dumps(push_msg, ensure_ascii=False)
             self.push_message_pub.publish(push_str)
     
-            self.get_logger().info(f"转发导航确认: {ack_type} - {status}")
+            self.get_logger().info(f"������ 转发导航确认: {ack_type} - {status}")
     
         except Exception as e:
             self.get_logger().error(f'❌ 处理导航确认消息错误: {e}')
@@ -746,49 +795,28 @@ class UnifiedDataIntegrationNode(Node):
         }:
             return
 
-        # /navigation/status 的离散事件一般是 {"event_type": ..., "event_data": {...}}。
-        # 旧事件也可能把 reason/error_code 等字段直接放在顶层。这里先统一出 event_payload：
-        # route task 的 failure_code、route_id、current_target_task_id 都在 event_data 里，
-        # 如果继续只读顶层，系统异常会把路线任务失败误判成普通导航失败。
-        event_data = status_data.get("event_data", {})
-        event_payload = event_data if isinstance(event_data, dict) else status_data
         message = (
-            event_payload.get("message")
-            or event_payload.get("reason")
-            or event_payload.get("error_message")
-            or status_data.get("message")
+            status_data.get("message")
             or status_data.get("reason")
             or status_data.get("error_message")
             or event_type
         )
         title = "导航异常"
         category = "navigation"
-        route_task_failure_code = event_payload.get("failure_code") or event_type
         if "localization" in event_type:
             title = "定位恢复异常"
             category = "localization"
         elif event_type == "navigation_obstacle_blocked":
             title = "导航受阻"
-        elif event_type == "navigation_failed" and event_payload.get("route_task"):
-            # route task 失败仍沿用 navigation_failed 事件，但 APP 展示要能看出这是路线任务失败。
-            # 目标 task 和路线 ID 放进文案，现场人员不用展开 details 也能快速判断失败位置。
-            # failure_code 是状态机给 APP/日志系统的机器可读分类，用作异常 code 便于前端分流展示。
-            title = "路线任务导航失败"
-            route_id = event_payload.get("route_id", "")
-            target_task_id = event_payload.get("current_target_task_id", "")
-            if target_task_id:
-                message = f"路线任务在目标点 {target_task_id} 导航失败：{message}"
-            if route_id:
-                message = f"{message}（路线 {route_id}）"
 
         self.publish_system_exception(
             category=category,
             severity="error" if event_type != "navigation_obstacle_blocked" else "warning",
             title=title,
             message=message,
-            code=route_task_failure_code if event_payload.get("route_task") else event_type,
+            code=event_type,
             source_event=event_type,
-            details=event_payload if event_payload.get("route_task") else status_data,
+            details=status_data,
         )
 
     @staticmethod
@@ -815,17 +843,7 @@ class UnifiedDataIntegrationNode(Node):
             "navigation_localization_manual_override",
             "navigation_localization_recovered",
             "navigation_localization_resume_waiting",
-            "navigation_localization_resume_failed",
-            "navigation_command_result",
-            "broadcast_requested",
-            "waypoint_passed",
-            "jump_updated",
-            # 路线任务最终对齐是 task 点停车/播报前的重要 UI 状态。
-            # 这里加入立即推送，避免 APP 状态栏只能等周期状态才知道机器人正在 spin 对齐。
-            "final_align_started",
-            "final_align_completed",
-            "task_waypoint_completed",
-            "route_task_completed",
+            "navigation_localization_resume_failed"
         }
 
     @staticmethod
@@ -1162,6 +1180,13 @@ class UnifiedDataIntegrationNode(Node):
                     "signal_quality": robot_status.get("signal_quality", 0),  
                     "signal_status": robot_status.get("signal_status", "N/A"), 
                     "network_latency": robot_status.get("network_latency", "0ms"), 
+                    # APP 订阅 system_status 时即可直接拿到机器人身份，不必再单独查其它流。
+                    "robot_accid": robot_status.get("robot_accid", ""),
+                    "robot_sn": robot_status.get("robot_sn", ""),
+                    "robot_identity": robot_status.get("robot_identity", {
+                        "accid": robot_status.get("robot_accid", ""),
+                        "sn": robot_status.get("robot_sn", "")
+                    }),
                     "robot_status": robot_status.get("robot_state", "Unknown"),
                     
                     # 评估健康和运行状态

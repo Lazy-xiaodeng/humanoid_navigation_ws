@@ -43,11 +43,16 @@ class HumanoidWebSocketClient(Node):
         self.declare_parameter('default_motion_timeout', 25.0)
         self.declare_parameter('motion_timeout_buffer', 8.0)
         self.declare_parameter('max_motion_timeout', 90.0)
+        # 首条 notify_robot_info 到来前，先允许使用兜底 accid，避免老链路被直接打断。
+        self.declare_parameter('fallback_accid', 'HU_D04_01_289')
+        self.declare_parameter('fallback_sn', '')
         self.robot_ws_server = self.get_parameter('robot_ws_server').value
         self.reconnect_interval = self.get_parameter('reconnect_interval').value
         self.default_motion_timeout = float(self.get_parameter('default_motion_timeout').value)
         self.motion_timeout_buffer = float(self.get_parameter('motion_timeout_buffer').value)
         self.max_motion_timeout = float(self.get_parameter('max_motion_timeout').value)
+        self.fallback_accid = str(self.get_parameter('fallback_accid').value or '').strip()
+        self.fallback_sn = str(self.get_parameter('fallback_sn').value or '').strip()
         
         # 机器人状态管理
         self.robot_state = RobotState.UNKNOWN  # 初始状态
@@ -60,7 +65,11 @@ class HumanoidWebSocketClient(Node):
         self.motion_completion_events = {}  # 用于等待动作完成通知
         self.motion_expected_durations = {}
         self.gestures_yaml_path = self._get_gestures_yaml_path()
-        self.accid = "HU_D04_01_289"  # 机器人序列号，需根据实际修改
+        # 发送到底层的 accid 默认走配置，连上机器人后会被实时消息自动刷新。
+        self.accid = self.fallback_accid
+        # sn 主要供系统状态透传给 APP 做机器人身份识别。
+        self.robot_sn = self.fallback_sn
+        self.identity_source = "fallback_config" if (self.accid or self.robot_sn) else "unknown"
         self._load_motion_expected_durations()
 
         # 设置数据发布器 - 将不同数据发布到不同话题
@@ -147,6 +156,9 @@ class HumanoidWebSocketClient(Node):
         返回：响应数据或None
         """
         try:
+            if not self.accid:
+                self.get_logger().error(f'尚未获取到机器人 accid，无法发送命令: {title}')
+                return None
             guid = self.generate_guid()
             message = {
                 "accid": self.accid,
@@ -190,6 +202,89 @@ class HumanoidWebSocketClient(Node):
         import uuid
         return str(uuid.uuid4())
 
+    def _normalize_identity_value(self, value):
+        """统一清洗 accid / sn 这类身份字段，避免 None、空串污染状态。"""
+        if value is None:
+            return ""
+        text = str(value).strip()
+        return text if text and text.lower() != "none" else ""
+
+    def _extract_identity_from_payload(self, payload):
+        """从机器人 websocket 消息的 data 区域里补提取 accid / sn。"""
+        runtime_accid = ""
+        runtime_sn = ""
+
+        if not isinstance(payload, dict):
+            return runtime_accid, runtime_sn
+
+        runtime_accid = self._normalize_identity_value(
+            payload.get("accid") or payload.get("robot_accid")
+        )
+        runtime_sn = self._normalize_identity_value(
+            payload.get("sn") or payload.get("robot_sn") or payload.get("serial_number")
+        )
+
+        results = payload.get("result", [])
+        if isinstance(results, list):
+            for component in results:
+                if not isinstance(component, dict):
+                    continue
+                for item in component.get("values", []):
+                    if not isinstance(item, dict):
+                        continue
+                    key = str(item.get("key", "")).strip().lower()
+                    value = self._normalize_identity_value(item.get("value"))
+                    if not value:
+                        continue
+                    if not runtime_accid and key in {"accid", "robot_accid"}:
+                        runtime_accid = value
+                    if not runtime_sn and key in {"sn", "robot_sn", "serial_number", "serial_no"}:
+                        runtime_sn = value
+                if runtime_accid and runtime_sn:
+                    break
+
+        return runtime_accid, runtime_sn
+
+    def _update_robot_identity(self, runtime_accid="", runtime_sn="", source="runtime_message"):
+        """将机器人实时上报的身份信息写入本地状态，供控制命令和 APP 推送复用。"""
+        runtime_accid = self._normalize_identity_value(runtime_accid)
+        runtime_sn = self._normalize_identity_value(runtime_sn)
+
+        accid_changed = bool(runtime_accid) and runtime_accid != self.accid
+        sn_changed = bool(runtime_sn) and runtime_sn != self.robot_sn
+
+        if accid_changed:
+            old_accid = self.accid or "<empty>"
+            self.accid = runtime_accid
+            self.get_logger().info(
+                f"🔐 已从{source}动态更新机器人 accid: {old_accid} -> {self.accid}"
+            )
+
+        if sn_changed:
+            old_sn = self.robot_sn or "<empty>"
+            self.robot_sn = runtime_sn
+            self.get_logger().info(
+                f"🆔 已从{source}动态更新机器人 sn: {old_sn} -> {self.robot_sn}"
+            )
+
+        if accid_changed or sn_changed:
+            self.identity_source = source
+
+    def _refresh_identity_from_robot_message(self, message_dict):
+        """优先从机器人原始消息包动态学习身份，避免每次换机器人都手改代码。"""
+        if not isinstance(message_dict, dict):
+            return
+
+        runtime_accid = self._normalize_identity_value(message_dict.get("accid"))
+        runtime_sn = self._normalize_identity_value(message_dict.get("sn"))
+        payload_accid, payload_sn = self._extract_identity_from_payload(message_dict.get("data", {}))
+
+        self._update_robot_identity(
+            runtime_accid=runtime_accid or payload_accid,
+            runtime_sn=runtime_sn or payload_sn,
+            source=message_dict.get("title", "runtime_message")
+        )
+
     async def send_command_no_response(self, title, data):
         """
         发送不承诺成功响应的命令。
@@ -198,6 +293,9 @@ class HumanoidWebSocketClient(Node):
         response_set_walk_vel_sync，因此这里不能注册 response_events 等待成功回包。
         """
         try:
+            if not self.accid:
+                self.get_logger().error(f'尚未获取到机器人 accid，无法发送命令: {title}')
+                return False
             message = {
                 "accid": self.accid,
                 "title": title,
@@ -297,6 +395,7 @@ class HumanoidWebSocketClient(Node):
                     if self.robot_state != RobotState.WALK:
                         self.get_logger().warn( f"⚠️ 拦截指令: 当前处于 {self.robot_state.value} 状态，无法行走！请先用遥控器切入 Walk 模式。",
                             throttle_duration_sec=2.0)  # 限制每2秒最多打印一次，防止刷屏
+                        continue   
                     else:
                         # 投递到 ws_loop 执行，而不是新建 loop
                         future = asyncio.run_coroutine_threadsafe(
@@ -840,6 +939,8 @@ class HumanoidWebSocketClient(Node):
         """处理从机器人接收到的原始数据消息"""
         try:
             data = json.loads(message)
+            # 每次收到机器人原始包，都先尝试刷新一次实时 accid / sn。
+            self._refresh_identity_from_robot_message(data)
             # self.get_logger().info(f"收到原始数据: {data}")
             data_type = data.get("title", "")
             message_data = data.get("data", {})
@@ -1032,8 +1133,13 @@ class HumanoidWebSocketClient(Node):
             all_parsed_values["control_ready_for_navigation"] = (
                 self.robot_state == RobotState.WALK and not self.is_executing_motion
             )
+            all_parsed_values["robot_accid"] = self.accid or ""
+            all_parsed_values["robot_sn"] = self.robot_sn or ""
 
             payload = {
+                "accid": self.accid or "",
+                "sn": self.robot_sn or "",
+                "identity_source": self.identity_source,
                 "values": all_parsed_values,
                 "health": component_status,
                 "latency": round(latency, 1),

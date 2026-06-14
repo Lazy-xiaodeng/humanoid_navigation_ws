@@ -19,6 +19,8 @@
 12. ROS 主动事件也都走 `data_type="navigation_status"`，真正事件类型看 `data.event_type`。
 13. `route_waypoints` 和 `route_waypoint_ids` 只能二选一，不能同时传；同时传会返回 `ambiguous_route_waypoint_source`。
 14. ID 列表模式必须携带最新 `waypoints_revision`，否则 ROS 会拒绝启动，避免 APP 和 ROS 点位库不同步。
+15. ROS 与机器人本体建立连接后，会从机器人高频 `notify_robot_info` 原始消息中动态学习 `robot_accid`，不再要求每次换机器人都手改客户端代码。
+16. APP 如果订阅 `system_status`，现在会额外收到 `robot_accid`、`robot_sn`、`robot_identity`，可据此识别当前连接的是哪一台机器人。
 
 ## 2. APP前端改造
 
@@ -1158,6 +1160,79 @@ APP 处理：清除暂停/障碍 UI；如果 `awaiting_broadcast=true`，继续�
 ```
 
 APP 处理：结束当前路线 UI，清理所有等待中的播报、跳步、暂停状态。
+
+## 6.15 系统状态中的机器人身份字段 system_status
+
+ROS 现在会把机器人身份信息沿着下面这条链路透传给 APP：
+
+1. `websocket_client` 连接机器人本体后，从高频 `notify_robot_info` 原始消息中优先提取顶层 `accid`。
+2. 如底层消息里还带 `sn` / `robot_sn` / `serial_number`，ROS 也会一并记录。
+3. `message_bridge` 会把这些字段补进 `/robot_status_processed`。
+4. `data_integration_node_recoverable` 会把这些字段合并到 `system_status` 顶层。
+5. APP 订阅 `system_status` 后即可直接识别当前机器人，无需再额外查询其它链路。
+
+字段说明：
+
+1. `robot_accid`：机器人控制身份 ID。APP 建议优先用它识别当前机器人。
+2. `robot_sn`：机器人序列号。如果底层未上报，可能为空字符串。
+3. `robot_identity`：身份对象，结构固定为 `{ "accid": "...", "sn": "..." }`，便于前后端统一解析。
+
+```jsonc
+{
+  "protocol_version": "2.0",                  // 固定协议版本
+  "message_id": "push_system_status_0001",    // ROS 推送消息 ID
+  "timestamp": 1781281200.223,                  // WebSocket 推送时间戳
+  "message_type": "push",                     // push 表示 ROS 主动推送
+  "data_type": "system_status",               // 系统状态数据类型
+  "source": "data_integration",               // 推送来源
+  "destination": "all",                       // 推送给所有已连接客户端
+  "data": {
+    "battery_level": 74,                        // 电量百分比
+    "signal_quality": 85,                       // 信号质量百分比
+    "signal_status": "Good",                  // 信号质量等级
+    "network_latency": "124ms",               // 网络延迟估计
+    "robot_accid": "HU_D04_01_289",           // 机器人 accid，APP 建议优先用它识别设备
+    "robot_sn": "XR102-SN-0001",              // 机器人序列号；若底层未上报可能为空串
+    "robot_identity": {                         // 机器人身份对象，便于前后端统一解析
+      "accid": "HU_D04_01_289",               // 与 robot_accid 相同
+      "sn": "XR102-SN-0001"                   // 与 robot_sn 相同
+    },
+    "robot_status": "Walk",                   // 当前机器人底层状态
+    "system_health": "normal",                // 系统综合健康状态
+    "operational_status": "navigating",       // 当前业务运行模式
+    "timestamp": 1781281200.123,                // 数据打包时间戳
+    "details": {                                // 其它详细系统信息
+      "power_info": {
+        "total_voltage": 47.58,
+        "total_current": 5.10,
+        "bat_temperature": 44.0
+      },
+      "motion_busy": false,
+      "current_motion": "",
+      "control_ready_for_navigation": true,
+      "health_check": {
+        "peripheral": "OK",
+        "system_info": "system info"
+      }
+    }
+  },
+  "metadata": {
+    "status": "success",                      // 推送状态
+    "error_code": "",                         // 错误码，成功时为空
+    "error_message": "",                      // 错误信息，成功时为空
+    "request_id": "",                         // 主动推送通常为空
+    "data_freshness": 0.05,                     // 数据新鲜度，单位秒
+    "qos_level": "standard"                   // 系统状态通常是标准实时性
+  }
+}
+```
+
+APP 处理建议：
+
+1. 设备识别优先读取 `data.robot_accid`。
+2. 如果需要同时展示序列号，再读取 `data.robot_sn`。
+3. 若 `robot_sn` 为空，不应判定为异常；底层可能只上报 `accid`。
+4. 如果 APP 有“当前机器人信息”栏，建议显示 `robot_accid + robot_sn` 组合信息。
 
 ## 7. WebSocket即时ACK示例
 
