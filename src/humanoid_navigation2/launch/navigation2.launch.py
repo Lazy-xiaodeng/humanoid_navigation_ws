@@ -489,7 +489,7 @@ def generate_launch_description():
             # 连续帧 yaw 一致性容差，单位 rad。
             'consistency_yaw_tolerance': 0.10,
             # 新大跳保护模式；monitor 只记录 WOULD_*，不冻结 TF。
-            'jump_protection_mode': 'monitor',
+            'jump_protection_mode': 'off',
             # 导航中等平移修正阈值，单位 m。
             'nav_medium_correction_translation': 0.50,
             # 导航中等 yaw 修正阈值，单位 rad。

@@ -1,8 +1,8 @@
 {
   "waypoints": {
     "navigation_target": {
-      "1380": {
-        "id": "1380",
+      "1430": {
+        "id": "1430",
         "name": "点位1",
         "type": "navigation_target",
         "position": [
@@ -28,11 +28,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579778.982213,
-        "last_modified": 1781579778.982213
+        "created_time": 1781593293.6884756,
+        "last_modified": 1781593293.6884763
       },
-      "1381": {
-        "id": "1381",
+      "1431": {
+        "id": "1431",
         "name": "点位2",
         "type": "navigation_target",
         "position": [
@@ -58,16 +58,16 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579778.9893045,
-        "last_modified": 1781579778.9893045
+        "created_time": 1781593293.6982024,
+        "last_modified": 1781593293.6982026
       },
-      "1382": {
-        "id": "1382",
+      "1432": {
+        "id": "1432",
         "name": "点位3",
         "type": "navigation_target",
         "position": [
-          -1.801,
-          -10.6,
+          -1.276,
+          -11.15,
           0
         ],
         "orientation": [
@@ -88,11 +88,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579778.9941242,
-        "last_modified": 1781579778.9941242
+        "created_time": 1781593293.7043226,
+        "last_modified": 1781593293.7043226
       },
-      "1383": {
-        "id": "1383",
+      "1433": {
+        "id": "1433",
         "name": "点位4",
         "type": "navigation_target",
         "position": [
@@ -103,8 +103,8 @@
         "orientation": [
           0.0,
           0.0,
-          0.342,
-          0.9397
+          0.454,
+          0.891
         ],
         "frame_id": "map",
         "properties": {
@@ -118,11 +118,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579778.9986117,
-        "last_modified": 1781579778.9986117
+        "created_time": 1781593293.709205,
+        "last_modified": 1781593293.7092054
       },
-      "1384": {
-        "id": "1384",
+      "1434": {
+        "id": "1434",
         "name": "点位5",
         "type": "navigation_target",
         "position": [
@@ -133,8 +133,8 @@
         "orientation": [
           0.0,
           0.0,
-          -0.1478,
-          0.989
+          0.0175,
+          0.9998
         ],
         "frame_id": "map",
         "properties": {
@@ -148,11 +148,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.0035338,
-        "last_modified": 1781579779.0035338
+        "created_time": 1781593293.7186184,
+        "last_modified": 1781593293.7186193
       },
-      "1385": {
-        "id": "1385",
+      "1435": {
+        "id": "1435",
         "name": "点位6",
         "type": "navigation_target",
         "position": [
@@ -178,16 +178,16 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.0097053,
-        "last_modified": 1781579779.0097055
+        "created_time": 1781593293.7257507,
+        "last_modified": 1781593293.725751
       },
-      "1386": {
-        "id": "1386",
+      "1436": {
+        "id": "1436",
         "name": "点位7",
         "type": "navigation_target",
         "position": [
-          -3.971,
-          -1.611,
+          -4.396,
+          -1.586,
           0
         ],
         "orientation": [
@@ -208,11 +208,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.0180984,
-        "last_modified": 1781579779.0180984
+        "created_time": 1781593293.736671,
+        "last_modified": 1781593293.736671
       },
-      "1387": {
-        "id": "1387",
+      "1437": {
+        "id": "1437",
         "name": "点位8",
         "type": "navigation_target",
         "position": [
@@ -238,23 +238,23 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.023831,
-        "last_modified": 1781579779.0238311
+        "created_time": 1781593293.744922,
+        "last_modified": 1781593293.7449222
       },
-      "1388": {
-        "id": "1388",
+      "1438": {
+        "id": "1438",
         "name": "点位9",
         "type": "navigation_target",
         "position": [
-          -1.359,
-          11.643,
+          -1.934,
+          11.568,
           0
         ],
         "orientation": [
           0.0,
           0.0,
-          -0.6494,
-          0.7604
+          -0.5736,
+          0.8192
         ],
         "frame_id": "map",
         "properties": {
@@ -268,11 +268,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.0289955,
-        "last_modified": 1781579779.0289955
+        "created_time": 1781593293.7507946,
+        "last_modified": 1781593293.7507951
       },
-      "1389": {
-        "id": "1389",
+      "1439": {
+        "id": "1439",
         "name": "点位10",
         "type": "navigation_target",
         "position": [
@@ -283,8 +283,8 @@
         "orientation": [
           0.0,
           0.0,
-          -0.0262,
-          0.9997
+          -0.7193,
+          0.6947
         ],
         "frame_id": "map",
         "properties": {
@@ -298,11 +298,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.0338864,
-        "last_modified": 1781579779.0338879
+        "created_time": 1781593293.7564993,
+        "last_modified": 1781593293.7564993
       },
-      "1390": {
-        "id": "1390",
+      "1440": {
+        "id": "1440",
         "name": "点位11",
         "type": "navigation_target",
         "position": [
@@ -328,11 +328,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.0408654,
-        "last_modified": 1781579779.0408661
+        "created_time": 1781593293.7612455,
+        "last_modified": 1781593293.7612457
       },
-      "1391": {
-        "id": "1391",
+      "1441": {
+        "id": "1441",
         "name": "点位12",
         "type": "navigation_target",
         "position": [
@@ -358,11 +358,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.0484586,
-        "last_modified": 1781579779.0484588
+        "created_time": 1781593293.7665365,
+        "last_modified": 1781593293.7665367
       },
-      "1392": {
-        "id": "1392",
+      "1442": {
+        "id": "1442",
         "name": "点位13",
         "type": "navigation_target",
         "position": [
@@ -388,11 +388,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.0561564,
-        "last_modified": 1781579779.0561566
+        "created_time": 1781593293.7730048,
+        "last_modified": 1781593293.773005
       },
-      "1393": {
-        "id": "1393",
+      "1443": {
+        "id": "1443",
         "name": "点位14",
         "type": "navigation_target",
         "position": [
@@ -403,8 +403,8 @@
         "orientation": [
           0.0,
           0.0,
-          -0.8141,
-          0.5807
+          -0.7547,
+          0.6561
         ],
         "frame_id": "map",
         "properties": {
@@ -418,11 +418,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.0625596,
-        "last_modified": 1781579779.0625598
+        "created_time": 1781593293.7851017,
+        "last_modified": 1781593293.7851024
       },
-      "1394": {
-        "id": "1394",
+      "1444": {
+        "id": "1444",
         "name": "点位15",
         "type": "navigation_target",
         "position": [
@@ -433,8 +433,8 @@
         "orientation": [
           0.0,
           0.0,
-          -0.8387,
-          0.5446
+          -0.7604,
+          0.6494
         ],
         "frame_id": "map",
         "properties": {
@@ -448,11 +448,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.074384,
-        "last_modified": 1781579779.0743842
+        "created_time": 1781593293.7937906,
+        "last_modified": 1781593293.7937908
       },
-      "1395": {
-        "id": "1395",
+      "1445": {
+        "id": "1445",
         "name": "点位16",
         "type": "navigation_target",
         "position": [
@@ -463,8 +463,8 @@
         "orientation": [
           0.0,
           0.0,
-          -0.8039,
-          0.5948
+          -0.749,
+          0.6626
         ],
         "frame_id": "map",
         "properties": {
@@ -478,11 +478,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.0800912,
-        "last_modified": 1781579779.0800915
+        "created_time": 1781593293.798989,
+        "last_modified": 1781593293.7989893
       },
-      "1396": {
-        "id": "1396",
+      "1446": {
+        "id": "1446",
         "name": "点位17",
         "type": "navigation_target",
         "position": [
@@ -508,11 +508,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.0891118,
-        "last_modified": 1781579779.0891123
+        "created_time": 1781593293.8028553,
+        "last_modified": 1781593293.8028553
       },
-      "1397": {
-        "id": "1397",
+      "1447": {
+        "id": "1447",
         "name": "点位18",
         "type": "navigation_target",
         "position": [
@@ -538,11 +538,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.093847,
-        "last_modified": 1781579779.093847
+        "created_time": 1781593293.8073647,
+        "last_modified": 1781593293.8073647
       },
-      "1398": {
-        "id": "1398",
+      "1448": {
+        "id": "1448",
         "name": "点位19",
         "type": "navigation_target",
         "position": [
@@ -568,11 +568,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.0993273,
-        "last_modified": 1781579779.0993276
+        "created_time": 1781593293.8111432,
+        "last_modified": 1781593293.8111432
       },
-      "1399": {
-        "id": "1399",
+      "1449": {
+        "id": "1449",
         "name": "点位20",
         "type": "navigation_target",
         "position": [
@@ -598,11 +598,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.1038597,
-        "last_modified": 1781579779.10386
+        "created_time": 1781593293.816152,
+        "last_modified": 1781593293.8161523
       },
-      "1400": {
-        "id": "1400",
+      "1450": {
+        "id": "1450",
         "name": "点位21",
         "type": "navigation_target",
         "position": [
@@ -628,11 +628,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.1108303,
-        "last_modified": 1781579779.1108305
+        "created_time": 1781593293.8226504,
+        "last_modified": 1781593293.8226507
       },
-      "1401": {
-        "id": "1401",
+      "1451": {
+        "id": "1451",
         "name": "点位22",
         "type": "navigation_target",
         "position": [
@@ -658,11 +658,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.1163023,
-        "last_modified": 1781579779.1163023
+        "created_time": 1781593293.829078,
+        "last_modified": 1781593293.829078
       },
-      "1402": {
-        "id": "1402",
+      "1452": {
+        "id": "1452",
         "name": "点位23",
         "type": "navigation_target",
         "position": [
@@ -688,11 +688,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.1206765,
-        "last_modified": 1781579779.1206768
+        "created_time": 1781593293.8349776,
+        "last_modified": 1781593293.8349776
       },
-      "1403": {
-        "id": "1403",
+      "1453": {
+        "id": "1453",
         "name": "点位24",
         "type": "navigation_target",
         "position": [
@@ -718,11 +718,11 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.125334,
-        "last_modified": 1781579779.1253343
+        "created_time": 1781593293.8415406,
+        "last_modified": 1781593293.8415406
       },
-      "1404": {
-        "id": "1404",
+      "1454": {
+        "id": "1454",
         "name": "点位25",
         "type": "navigation_target",
         "position": [
@@ -748,8 +748,8 @@
           "stay_time": 30.0,
           "walk_direction": "forward"
         },
-        "created_time": 1781579779.1325426,
-        "last_modified": 1781579779.1325426
+        "created_time": 1781593293.8467095,
+        "last_modified": 1781593293.8467095
       }
     },
     "exhibition_point": {},
@@ -759,5 +759,5 @@
     "landmark_point": {}
   },
   "sequences": {},
-  "timestamp": 1781579779.132571
+  "timestamp": 1781593293.8467278
 }

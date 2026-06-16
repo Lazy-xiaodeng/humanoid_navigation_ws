@@ -35,8 +35,17 @@ prior_map_odom_bridge.py
 
 import json
 import math
+import os
 from collections import deque
 from typing import Optional, Tuple
+
+# Small 4x4 rigid-body math does not benefit from multithreaded BLAS here.
+# Leaving OpenBLAS/OpenMP unconstrained can fan out tiny matrix ops into
+# multiple worker threads and waste CPU in this Python bridge node.
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 
 import numpy as np
 import rclpy
