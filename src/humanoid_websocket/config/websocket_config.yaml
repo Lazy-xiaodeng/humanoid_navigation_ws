@@ -1,4 +1,11 @@
 # websocket_config.yaml 
+websocket_client:
+  ros__parameters:
+    robot_ws_server: "ws://10.192.1.2:5000"
+    reconnect_interval: 5.0
+    fallback_accid: "HU_D04_01_289"
+    fallback_sn: ""
+
 websocket_server:
   ros__parameters:
     # 连接管理

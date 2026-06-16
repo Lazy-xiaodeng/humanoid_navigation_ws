@@ -149,7 +149,7 @@ point_cloud_filter_node:
     # 对于台阶环境建议开启，但阈值要调大
     # ⚠️ 注意：C++ 代码里默认值是 false，yaml 里设true会覆盖
 
-    enable_density: true
+    enable_density: false
     # 是否启用密度检查
     # 计算量较大，如果 CPU 紧张可以关闭
     # ⚠️ 注意：C++ 代码里默认值是 false，yaml 里设 true 会覆盖
@@ -159,11 +159,11 @@ point_cloud_filter_node:
     # 建议开启，让机器人运动时自动加强滤波
 
     # ===== 性能监控 =====
-    enable_performance_log: false
+    enable_performance_log: true
     # 是否打印性能统计日志
     # 调试时开启，正式部署可以关闭节省日志开销
 
-    performance_log_interval: 100
+    performance_log_interval: 20
     # 每隔多少帧打印一次性能统计
     # 调整方向：减小（如 50）可以更频繁地监控性能
 

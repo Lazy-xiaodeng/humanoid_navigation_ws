@@ -1180,6 +1180,13 @@ class UnifiedDataIntegrationNode(Node):
                     "signal_quality": robot_status.get("signal_quality", 0),  
                     "signal_status": robot_status.get("signal_status", "N/A"), 
                     "network_latency": robot_status.get("network_latency", "0ms"), 
+                    # APP 订阅 system_status 时即可直接拿到机器人身份，不必再单独查其它流。
+                    "robot_accid": robot_status.get("robot_accid", ""),
+                    "robot_sn": robot_status.get("robot_sn", ""),
+                    "robot_identity": robot_status.get("robot_identity", {
+                        "accid": robot_status.get("robot_accid", ""),
+                        "sn": robot_status.get("robot_sn", "")
+                    }),
                     "robot_status": robot_status.get("robot_state", "Unknown"),
                     
                     # 评估健康和运行状态

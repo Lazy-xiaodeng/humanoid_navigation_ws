@@ -62,14 +62,19 @@
 
         <Fallback name="ReverseWaitOrNewGoal">
           <GoalUpdated/>
-          <Wait wait_duration="10.0"/>
+          <!--
+            倒走点行为树也收口到同一策略：BT 只做极短等待，真正的障碍等待、
+            周期提示和自动恢复统一交给 navigation_state_manager.py 处理。
+          -->
+          <Wait wait_duration="0.2"/>
         </Fallback>
 
       </RecoveryNode>
 
       <Fallback name="ReverseStuckHandler">
         <GoalUpdated/>
-        <Wait wait_duration="10.0"/>
+        <!-- 外层兜底只留极短等待，避免与 ROS 侧障碍等待状态机重复。 -->
+        <Wait wait_duration="0.2"/>
       </Fallback>
 
     </RecoveryNode>

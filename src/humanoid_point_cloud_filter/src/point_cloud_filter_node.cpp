@@ -26,6 +26,31 @@
 namespace humanoid_point_cloud_filter
 {
 
+namespace
+{
+
+void pushTimingSample(std::deque<double> & samples, double value, size_t max_size = 100)
+{
+  samples.push_back(value);
+  if (samples.size() > max_size) {
+    samples.pop_front();
+  }
+}
+
+double averageTiming(const std::deque<double> & samples)
+{
+  if (samples.empty()) {
+    return 0.0;
+  }
+  double sum = 0.0;
+  for (double value : samples) {
+    sum += value;
+  }
+  return sum / samples.size();
+}
+
+}  // namespace
+
 /**
  * @brief 构造函数 - 初始化节点、参数、订阅和发布
  */
@@ -194,8 +219,12 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
   auto t_total_start = std::chrono::high_resolution_clock::now();
   
   // ===== 第 1 步：ROS 消息转 PCL 点云 =====
+  auto t_ros_to_pcl_start = std::chrono::high_resolution_clock::now();
   pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_input(new pcl::PointCloud<pcl::PointXYZI>);
   pcl::fromROSMsg(*msg, *cloud_input);
+  auto t_ros_to_pcl_end = std::chrono::high_resolution_clock::now();
+  const double ros_to_pcl_ms =
+    std::chrono::duration<double, std::milli>(t_ros_to_pcl_end - t_ros_to_pcl_start).count();
   
   if (cloud_input->empty()) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
@@ -207,12 +236,17 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
   // ===== 第 2 步：坐标变换到 body =====
   geometry_msgs::msg::TransformStamped transform_to_body;
   try {
+    auto t_tf_lookup_body_start = std::chrono::high_resolution_clock::now();
     transform_to_body = tf_buffer_->lookupTransform(
       "body",
       msg->header.frame_id,
       cloud_stamp,
       rclcpp::Duration::from_seconds(0.1)
     );
+    auto t_tf_lookup_body_end = std::chrono::high_resolution_clock::now();
+    pushTimingSample(
+      timing_tf_lookup_body_,
+      std::chrono::duration<double, std::milli>(t_tf_lookup_body_end - t_tf_lookup_body_start).count());
   } catch (const tf2::TransformException & ex) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
       "TF 查询失败 (%s -> body): %s", msg->header.frame_id.c_str(), ex.what());
@@ -223,10 +257,15 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
   Eigen::Isometry3d T_to_body = tf2::transformToEigen(transform_to_body);
   
   // 应用变换
+  auto t_transform_body_start = std::chrono::high_resolution_clock::now();
   pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_body(new pcl::PointCloud<pcl::PointXYZI>);
   pcl::transformPointCloud(*cloud_input, *cloud_body, T_to_body.matrix().cast<float>());
+  auto t_transform_body_end = std::chrono::high_resolution_clock::now();
+  const double transform_body_ms =
+    std::chrono::duration<double, std::milli>(t_transform_body_end - t_transform_body_start).count();
   
   // ===== 第 3 步：距离过滤 =====
+  auto t_range_filter_start = std::chrono::high_resolution_clock::now();
   pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_range_filtered(new pcl::PointCloud<pcl::PointXYZI>);
   cloud_range_filtered->reserve(cloud_body->size());
   
@@ -236,6 +275,9 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
       cloud_range_filtered->push_back(point);
     }
   }
+  auto t_range_filter_end = std::chrono::high_resolution_clock::now();
+  const double range_filter_ms =
+    std::chrono::duration<double, std::milli>(t_range_filter_end - t_range_filter_start).count();
   
   if (cloud_range_filtered->empty()) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
@@ -257,12 +299,17 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
   // ===== 第 5 步：坐标变换到 base_footprint =====
   geometry_msgs::msg::TransformStamped transform_to_bf;
   try {
+    auto t_tf_lookup_bf_start = std::chrono::high_resolution_clock::now();
     transform_to_bf = tf_buffer_->lookupTransform(
       "base_footprint",
       "body",
       cloud_stamp,
       rclcpp::Duration::from_seconds(0.1)
     );
+    auto t_tf_lookup_bf_end = std::chrono::high_resolution_clock::now();
+    pushTimingSample(
+      timing_tf_lookup_bf_,
+      std::chrono::duration<double, std::milli>(t_tf_lookup_bf_end - t_tf_lookup_bf_start).count());
   } catch (const tf2::TransformException & ex) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
       "TF 查询失败 (body -> base_footprint): %s", ex.what());
@@ -272,10 +319,15 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
   Eigen::Isometry3d T_to_bf = tf2::transformToEigen(transform_to_bf);
   
   // 应用变换（用于高度判断）
+  auto t_transform_bf_start = std::chrono::high_resolution_clock::now();
   pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_bf(new pcl::PointCloud<pcl::PointXYZI>);
   pcl::transformPointCloud(*cloud_filtered, *cloud_bf, T_to_bf.matrix().cast<float>());
+  auto t_transform_bf_end = std::chrono::high_resolution_clock::now();
+  const double transform_bf_ms =
+    std::chrono::duration<double, std::milli>(t_transform_bf_end - t_transform_bf_start).count();
   
   // ===== 第 6 步：根据高度分离点云 =====
+  auto t_split_clouds_start = std::chrono::high_resolution_clock::now();
   pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_elevation(new pcl::PointCloud<pcl::PointXYZI>);
   pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_nav(new pcl::PointCloud<pcl::PointXYZI>);
   
@@ -336,6 +388,9 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
         cloud_nav->push_back(cloud_bf->points[i]);
     }
   }
+  auto t_split_clouds_end = std::chrono::high_resolution_clock::now();
+  const double split_clouds_ms =
+    std::chrono::duration<double, std::milli>(t_split_clouds_end - t_split_clouds_start).count();
   
   // ===== 第 7 步：发布点云 =====
   std_msgs::msg::Header header;
@@ -345,18 +400,32 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
   header.frame_id = "base_footprint";
   
   if (!cloud_elevation->empty()) {
+    auto t_publish_elevation_start = std::chrono::high_resolution_clock::now();
     sensor_msgs::msg::PointCloud2 msg_elevation;
     pcl::toROSMsg(*cloud_elevation, msg_elevation);
     msg_elevation.header = header;
     pub_elevation_->publish(msg_elevation);
+    auto t_publish_elevation_end = std::chrono::high_resolution_clock::now();
+    pushTimingSample(
+      timing_publish_elevation_,
+      std::chrono::duration<double, std::milli>(
+        t_publish_elevation_end - t_publish_elevation_start).count());
+  } else {
+    pushTimingSample(timing_publish_elevation_, 0.0);
   }
   
   if (!cloud_nav->empty()) {
+    auto t_publish_nav_start = std::chrono::high_resolution_clock::now();
     sensor_msgs::msg::PointCloud2 msg_nav;
     pcl::toROSMsg(*cloud_nav, msg_nav);
     msg_nav.header = header;
     pub_nav_->publish(msg_nav);
+    auto t_publish_nav_end = std::chrono::high_resolution_clock::now();
+    pushTimingSample(
+      timing_publish_nav_,
+      std::chrono::duration<double, std::milli>(t_publish_nav_end - t_publish_nav_start).count());
   } else {
+    pushTimingSample(timing_publish_nav_, 0.0);
     RCLCPP_WARN_THROTTLE(
       this->get_logger(), *this->get_clock(), 2000,
       "导航点云为空，未发布 %s: input=%zu range=%zu filtered=%zu elevation=%zu "
@@ -380,10 +449,17 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
   auto t_total_end = std::chrono::high_resolution_clock::now();
   double total_ms = std::chrono::duration<double, std::milli>(t_total_end - t_total_start).count();
   
-  timing_total_.push_back(total_ms);
-  if (timing_total_.size() > 100) {
-    timing_total_.pop_front();
-  }
+  pushTimingSample(timing_total_, total_ms);
+  pushTimingSample(timing_ros_to_pcl_, ros_to_pcl_ms);
+  pushTimingSample(timing_transform_body_, transform_body_ms);
+  pushTimingSample(timing_range_filter_, range_filter_ms);
+  pushTimingSample(timing_transform_bf_, transform_bf_ms);
+  pushTimingSample(timing_split_clouds_, split_clouds_ms);
+  pushTimingSample(timing_motion_detect_, timings.motion_ms);
+  pushTimingSample(timing_sor_, timings.sor_ms);
+  pushTimingSample(timing_height_, timings.height_ms);
+  pushTimingSample(timing_density_, timings.density_ms);
+  pushTimingSample(timing_voxel_, timings.voxel_ms);
   
   frame_count_++;
   
@@ -412,22 +488,59 @@ void PointCloudFilterNode::logPerformanceStats()
     return;
   }
   
-  // 计算平均耗时
-  double avg_total = 0.0;
-  for (double t : timing_total_) {
-    avg_total += t;
-  }
-  avg_total /= timing_total_.size();
+  const double avg_total = averageTiming(timing_total_);
+  const double avg_ros_to_pcl = averageTiming(timing_ros_to_pcl_);
+  const double avg_tf_lookup_body = averageTiming(timing_tf_lookup_body_);
+  const double avg_transform_body = averageTiming(timing_transform_body_);
+  const double avg_range_filter = averageTiming(timing_range_filter_);
+  const double avg_tf_lookup_bf = averageTiming(timing_tf_lookup_bf_);
+  const double avg_transform_bf = averageTiming(timing_transform_bf_);
+  const double avg_split_clouds = averageTiming(timing_split_clouds_);
+  const double avg_motion_detect = averageTiming(timing_motion_detect_);
+  const double avg_sor = averageTiming(timing_sor_);
+  const double avg_height = averageTiming(timing_height_);
+  const double avg_density = averageTiming(timing_density_);
+  const double avg_voxel = averageTiming(timing_voxel_);
+  const double avg_publish_elevation = averageTiming(timing_publish_elevation_);
+  const double avg_publish_nav = averageTiming(timing_publish_nav_);
   
   RCLCPP_INFO(this->get_logger(),
     "\n========================================\n"
     "性能统计 (第 %d 帧)\n"
     "========================================\n"
     "平均总耗时: %.2f ms\n"
+    "ROS->PCL: %.2f ms\n"
+    "TF lookup to body: %.2f ms\n"
+    "Transform to body: %.2f ms\n"
+    "Range filter: %.2f ms\n"
+    "Motion detect: %.2f ms\n"
+    "SOR: %.2f ms\n"
+    "Height continuity: %.2f ms\n"
+    "Density: %.2f ms\n"
+    "Voxel downsample: %.2f ms\n"
+    "TF lookup to base_footprint: %.2f ms\n"
+    "Transform to base_footprint: %.2f ms\n"
+    "Split elevation/nav: %.2f ms\n"
+    "Publish elevation: %.2f ms\n"
+    "Publish nav: %.2f ms\n"
     "运动状态: %s\n"
     "========================================",
     frame_count_,
     avg_total,
+    avg_ros_to_pcl,
+    avg_tf_lookup_body,
+    avg_transform_body,
+    avg_range_filter,
+    avg_motion_detect,
+    avg_sor,
+    avg_height,
+    avg_density,
+    avg_voxel,
+    avg_tf_lookup_bf,
+    avg_transform_bf,
+    avg_split_clouds,
+    avg_publish_elevation,
+    avg_publish_nav,
     filter_core_->isMoving() ? "运动中" : "静止"
   );
 }

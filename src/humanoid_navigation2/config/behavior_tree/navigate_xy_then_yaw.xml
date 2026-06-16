@@ -64,7 +64,12 @@
 
         <Fallback name="WaitOrNewGoal">
           <GoalUpdated/>
-          <Wait wait_duration="10.0"/>
+          <!--
+            这里只保留一个很短的让步等待，避免 Nav2 BT 自己长时间卡在 Wait 里。
+            真正“暂停导航并等待障碍消失后自动恢复”的主逻辑，统一交给
+            navigation_state_manager.py 里的障碍等待状态机处理。
+          -->
+          <Wait wait_duration="0.2"/>
         </Fallback>
 
       </RecoveryNode>
@@ -72,7 +77,10 @@
       <Fallback name="StuckHandler">
         <GoalUpdated/>
 
-        <Wait wait_duration="10.0"/>
+        <!--
+          外层兜底同样只保留一个极短等待，避免与外部状态机的障碍等待策略重复。
+        -->
+        <Wait wait_duration="0.2"/>
       </Fallback>
 
     </RecoveryNode>

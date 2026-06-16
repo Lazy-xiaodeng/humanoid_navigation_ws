@@ -12,7 +12,7 @@ from rclpy.duration import Duration
 from rclpy.time import Time
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
-from nav_msgs.msg import Odometry, Path
+from nav_msgs.msg import Odometry, Path, OccupancyGrid
 from nav2_msgs.action import NavigateToPose
 from action_msgs.msg import GoalStatus
 from action_msgs.srv import CancelGoal
@@ -75,11 +75,20 @@ class NavigationStateManager(Node):
             ('waypoint_timeout', 300.0),
             ('status_publish_rate', 2.0),
             ('default_frame_id', 'map'),
-            ('obstacle_block_timeout', 5.0),  # 障碍物阻塞超时时间（秒）
+            ('obstacle_block_timeout', 2.0),  # 障碍物阻塞超时时间（秒）：停稳约2秒后进入动态障碍暂停等待
             ('velocity_threshold', 0.10),  # 判断机器人是否停滞的速度阈值（m/s）
             ('blockage_pose_delta_deadzone', 0.12),  # 抑制定位/机身晃动带来的低速假恢复
             ('blockage_recovery_velocity_threshold', 0.20),  # 解除阻塞需要更明确的持续运动
             ('blockage_recovery_confirm_sec', 1.0),
+            ('obstacle_wait_enable', True),
+            ('obstacle_wait_push_interval_sec', 4.0),
+            ('obstacle_clear_required_frames', 5),
+            ('obstacle_clear_check_rate_hz', 5.0),
+            ('obstacle_clear_cost_threshold', 253),
+            ('obstacle_clear_front_min_x_m', 0.15),
+            ('obstacle_clear_front_max_x_m', 1.20),
+            ('obstacle_clear_half_width_m', 0.45),
+            ('local_costmap_topic', '/local_costmap/costmap'),
             ('require_walk_mode_for_navigation', True),
             ('robot_status_timeout', 2.0),
             ('pending_navigation_timeout', 90.0),
@@ -129,6 +138,22 @@ class NavigationStateManager(Node):
             self.get_parameter('blockage_recovery_velocity_threshold').value)
         self.blockage_recovery_confirm_sec = float(
             self.get_parameter('blockage_recovery_confirm_sec').value)
+        self.obstacle_wait_enable = bool(self.get_parameter('obstacle_wait_enable').value)
+        self.obstacle_wait_push_interval_sec = float(
+            self.get_parameter('obstacle_wait_push_interval_sec').value)
+        self.obstacle_clear_required_frames = max(
+            1, int(self.get_parameter('obstacle_clear_required_frames').value))
+        self.obstacle_clear_check_rate_hz = max(
+            1.0, float(self.get_parameter('obstacle_clear_check_rate_hz').value))
+        self.obstacle_clear_cost_threshold = int(
+            self.get_parameter('obstacle_clear_cost_threshold').value)
+        self.obstacle_clear_front_min_x_m = float(
+            self.get_parameter('obstacle_clear_front_min_x_m').value)
+        self.obstacle_clear_front_max_x_m = float(
+            self.get_parameter('obstacle_clear_front_max_x_m').value)
+        self.obstacle_clear_half_width_m = float(
+            self.get_parameter('obstacle_clear_half_width_m').value)
+        self.local_costmap_topic = str(self.get_parameter('local_costmap_topic').value)
         self.require_walk_mode_for_navigation = self.get_parameter('require_walk_mode_for_navigation').value
         self.robot_status_timeout = float(self.get_parameter('robot_status_timeout').value)
         self.pending_navigation_timeout = float(self.get_parameter('pending_navigation_timeout').value)
@@ -197,6 +222,9 @@ class NavigationStateManager(Node):
         self.waypoint_arrived_by_position = False
         self.pause_time = 0
         self.pause_duration_limit = 0
+        self.current_pause_source = ""
+        self.current_pause_reason = ""
+        self.current_resume_mode = ""
         
         # ========== 机器人状态 ==========
         self.current_pose = None
@@ -224,6 +252,16 @@ class NavigationStateManager(Node):
         self.block_reported = False  # 防止重复上报
         self.block_recovery_candidate_start_time = None
         self.block_recovery_candidate_source = ""
+
+        # ========== 动态障碍物等待恢复状态 ==========
+        # 这里单独维护“因障碍暂停”的内部状态，让它和“用户手动暂停”彻底区分。
+        self.obstacle_wait_active = False
+        self.obstacle_wait_started_at = 0.0
+        self.obstacle_wait_last_push_time = 0.0
+        self.obstacle_clear_confirm_count = 0
+        self.latest_front_obstacle_blocked = False
+        self.latest_front_obstacle_stats = {}
+        self.latest_local_costmap_stamp = 0.0
         
         # ========== 从路点管理器接收的数据 ==========
         self.waypoints_data = {}
@@ -307,6 +345,11 @@ class NavigationStateManager(Node):
         # 订阅里程计数据
         self.odom_sub = self.create_subscription(
             Odometry, '/odom', self.odom_callback, 10
+        )
+
+        # 订阅 local costmap，用前方窗口做“障碍已清除”的连续多帧确认。
+        self.local_costmap_sub = self.create_subscription(
+            OccupancyGrid, self.local_costmap_topic, self.local_costmap_callback, 10
         )
 
         self.robot_status_sub = self.create_subscription(
@@ -426,6 +469,10 @@ class NavigationStateManager(Node):
         self.current_detailed_state = "LOCALIZATION_RECOVERY"
         self.pause_time = time.time()
         self.pause_duration_limit = 0
+        self.current_pause_source = "prior_map_degraded"
+        self.current_pause_reason = self.localization_recovery_reason
+        self.current_resume_mode = "auto"
+        self.clear_obstacle_wait_state()
         self.reset_block_detection()
         self.begin_localization_stop_hold()
 
@@ -551,6 +598,11 @@ class NavigationStateManager(Node):
         # 定位恢复期间持续压零速度，避免异步 cancel 期间沿旧 cmd_vel 继续走
         # P1-1: 提高到 30Hz 压制 Nav2 controller (20Hz), 防止竞态导致 robot 继续移动
         self.create_timer(0.033, self.enforce_localization_stop)
+
+        # 动态障碍物等待恢复定时器：
+        # 1. 每 4s 持续给 APP 推等待文案
+        # 2. 使用 costmap clear 多帧确认后自动恢复导航
+        self.create_timer(1.0 / self.obstacle_clear_check_rate_hz, self.process_obstacle_wait_state)
     
     def navigation_request_callback(self, msg: String):
         """处理路点管理器的导航请求"""
@@ -762,6 +814,112 @@ class NavigationStateManager(Node):
             )
         except Exception as e:
             self.get_logger().error(f'❌ 处理里程计数据错误: {e}')
+
+    def local_costmap_callback(self, msg: OccupancyGrid):
+        """处理 local costmap。
+
+        这里不做 Nav2 那套完整碰撞检查，只做一个稳定、可调的“机器人前方窗口”
+        是否仍有高代价障碍物判断，用来支撑“障碍消失后自动恢复导航”。
+        """
+        try:
+            self.latest_local_costmap_stamp = time.time()
+            blocked, stats = self.analyze_front_obstacle_window(msg)
+            self.latest_front_obstacle_blocked = blocked
+            self.latest_front_obstacle_stats = stats
+        except Exception as e:
+            self.get_logger().error(f'❌ 处理 local costmap 错误: {e}')
+
+    def lookup_robot_pose_in_frame(self, target_frame: str):
+        """读取 base_footprint 在指定 frame 下的实时位姿。"""
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                target_frame,
+                self.base_frame,
+                Time(),
+                timeout=Duration(seconds=self.pose_tf_timeout_sec),
+            )
+        except TransformException as exc:
+            self.get_logger().debug(
+                f'等待 TF {target_frame}->{self.base_frame}: {exc}',
+                throttle_duration_sec=1.0,
+            )
+            return None
+
+        pose_stamped = PoseStamped()
+        pose_stamped.header = transform.header
+        pose_stamped.pose.position.x = transform.transform.translation.x
+        pose_stamped.pose.position.y = transform.transform.translation.y
+        pose_stamped.pose.position.z = transform.transform.translation.z
+        pose_stamped.pose.orientation = transform.transform.rotation
+        return pose_stamped.pose
+
+    def analyze_front_obstacle_window(self, msg: OccupancyGrid) -> Tuple[bool, Dict[str, Any]]:
+        """分析机器人前方矩形窗口是否仍被障碍物占据。"""
+        robot_pose = self.lookup_robot_pose_in_frame(msg.header.frame_id)
+        if robot_pose is None:
+            return True, {
+                "available": False,
+                "reason": f"missing_tf:{msg.header.frame_id}->{self.base_frame}",
+            }
+
+        resolution = float(msg.info.resolution)
+        width = int(msg.info.width)
+        height = int(msg.info.height)
+        origin_x = float(msg.info.origin.position.x)
+        origin_y = float(msg.info.origin.position.y)
+        robot_x = float(robot_pose.position.x)
+        robot_y = float(robot_pose.position.y)
+        robot_yaw = yaw_from_pose(robot_pose)
+
+        occupied_cells = 0
+        max_cost = 0
+        sample_cells = 0
+
+        cos_yaw = math.cos(robot_yaw)
+        sin_yaw = math.sin(robot_yaw)
+        for cell_y in range(height):
+            world_y = origin_y + (cell_y + 0.5) * resolution
+            for cell_x in range(width):
+                world_x = origin_x + (cell_x + 0.5) * resolution
+
+                dx = world_x - robot_x
+                dy = world_y - robot_y
+
+                # 把 costmap 中的世界坐标转到“机器人前向坐标系”。
+                forward_x = cos_yaw * dx + sin_yaw * dy
+                lateral_y = -sin_yaw * dx + cos_yaw * dy
+
+                if forward_x < self.obstacle_clear_front_min_x_m:
+                    continue
+                if forward_x > self.obstacle_clear_front_max_x_m:
+                    continue
+                if abs(lateral_y) > self.obstacle_clear_half_width_m:
+                    continue
+
+                sample_cells += 1
+                idx = cell_y * width + cell_x
+                if idx < 0 or idx >= len(msg.data):
+                    continue
+
+                cost = int(msg.data[idx])
+                if cost > max_cost:
+                    max_cost = cost
+                if cost >= self.obstacle_clear_cost_threshold:
+                    occupied_cells += 1
+
+        blocked = occupied_cells > 0
+        stats = {
+            "available": True,
+            "frame_id": msg.header.frame_id,
+            "window_front_min_x_m": round(self.obstacle_clear_front_min_x_m, 3),
+            "window_front_max_x_m": round(self.obstacle_clear_front_max_x_m, 3),
+            "window_half_width_m": round(self.obstacle_clear_half_width_m, 3),
+            "sample_cells": sample_cells,
+            "occupied_cells": occupied_cells,
+            "max_cost": max_cost,
+            "blocked": blocked,
+        }
+        return blocked, stats
 
     def robot_status_callback(self, msg: String):
         """跟踪机器人底层控制状态，导航启动前必须确认已回到 Walk。"""
@@ -1065,6 +1223,46 @@ class NavigationStateManager(Node):
         # RecoveryNode / Wait 只是行为树控制节点，不能屏蔽前方障碍物长时间阻塞上报。
         return node_name in {"SpinToPose", "Spin", "BackUp"}
 
+    def clear_obstacle_wait_state(self):
+        """清理“因障碍等待恢复”的内部状态。"""
+        self.obstacle_wait_active = False
+        self.obstacle_wait_started_at = 0.0
+        self.obstacle_wait_last_push_time = 0.0
+        self.obstacle_clear_confirm_count = 0
+
+    def build_pause_event_data(
+        self,
+        pause_source: str,
+        reason: str,
+        resume_mode: str,
+        extra_data: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """统一构造暂停事件字段，确保 APP 能稳定区分暂停来源。"""
+        pause_location = None
+        if self.current_pose:
+            pause_location = {
+                "x": self.current_pose.position.x,
+                "y": self.current_pose.position.y,
+                "z": self.current_pose.position.z,
+            }
+
+        event_data = {
+            "pause_source": pause_source,
+            "reason": reason,
+            "resume_mode": resume_mode,
+            "waiting_for_obstacle_clear": pause_source == "obstacle_wait",
+            "pause_location": pause_location,
+            "pause_time": self.pause_time,
+            "pause_duration": self.pause_duration_limit,
+            "current_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
+            "current_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
+            "waypoint_index": self.current_waypoint_index,
+            "total_waypoints": self.total_waypoints,
+        }
+        if extra_data:
+            event_data.update(extra_data)
+        return event_data
+
     def reset_block_detection(self):
         """重置阻塞检测状态"""
         self.is_blocked_by_obstacle = False
@@ -1074,37 +1272,89 @@ class NavigationStateManager(Node):
         if self.current_detailed_state == "BLOCKED_BY_OBSTACLE":
             self.current_detailed_state = "EXECUTING"
 
-    def handle_obstacle_block_timeout(self, block_duration: float):
-        """处理障碍物阻塞超时，上报异常给APP"""
-        if self.block_reported:
-            return  # 防止重复上报
-
-        self.block_reported = True
-        self.current_detailed_state = "BLOCKED_BY_OBSTACLE"
-
-        self.get_logger().error(
-            f"🚨 障碍物阻塞超时 ({block_duration:.1f}秒)，上报导航异常"
-        )
-
-        # 上报阻塞异常
+    def publish_obstacle_blocked_event(self, block_duration: float, send_ack: bool = False):
+        """向 APP 推送“障碍仍在等待中”的事件。"""
         error_reason = "检测到障碍物，前方路径被挡住"
-        self.publish_status_update("navigation_obstacle_blocked", {
+        event_data = {
             "reason": error_reason,
             "block_duration": round(block_duration, 1),
             "blocked_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
             "blocked_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
             "blocked_waypoint_index": self.current_waypoint_index,
             "total_waypoints": self.total_waypoints,
-            "position": self.current_waypoint.get("position", []) if self.current_waypoint else []
-        })
+            "position": self.current_waypoint.get("position", []) if self.current_waypoint else [],
+            "waiting_for_obstacle_clear": True,
+            "clear_confirmed_frames": self.obstacle_clear_confirm_count,
+            "clear_required_frames": self.obstacle_clear_required_frames,
+            "pause_source": "obstacle_wait",
+        }
+        if self.latest_front_obstacle_stats:
+            event_data["front_obstacle_stats"] = self.latest_front_obstacle_stats
 
-        # 发送错误确认消息
-        self.send_acknowledgment("navigation_obstacle_blocked", "error", error_reason)
+        self.publish_status_update("navigation_obstacle_blocked", event_data)
+        if send_ack:
+            # 首次进入障碍等待时保留一次兼容确认；周期提醒只走 navigation_status，
+            # 避免 APP 每 4 秒同时收到“命令结果”和“状态事件”两类提示。
+            self.send_acknowledgment("navigation_obstacle_blocked", "error", error_reason)
 
-        # 注意：这里不取消导航，机器人继续尝试，但APP已收到异常通知
-        # 如果需要取消导航，可以取消注释下面的代码
-        # if self.current_goal_handle:
-        #     self.cancel_navigation()
+    def enter_obstacle_wait_state(self, block_duration: float):
+        """进入“动态障碍物等待恢复”流程。
+
+        这里不再让 Nav2 自己 Wait 10s 后盲重试，而是：
+        1. 复用现有暂停导航流程取消当前 goal；
+        2. 对 APP 明确标记 pause_source=obstacle_wait；
+        3. 持续监听 costmap，直到前方 clear 多帧后再自动恢复。
+        """
+        if self.obstacle_wait_active:
+            return
+
+        self.block_reported = True
+        self.current_state = NavigationState.PAUSED
+        self.current_detailed_state = "OBSTACLE_WAITING"
+        self.pause_time = time.time()
+        self.pause_duration_limit = 0
+        self.current_pause_source = "obstacle_wait"
+        self.current_pause_reason = "检测到障碍物，前方路径被挡住"
+        self.current_resume_mode = "auto"
+        self.obstacle_wait_active = True
+        self.obstacle_wait_started_at = self.pause_time
+        self.obstacle_wait_last_push_time = 0.0
+        self.obstacle_clear_confirm_count = 0
+
+        # 进入等待态后重置普通阻塞计时，避免重复触发“刚暂停又马上超时”。
+        self.reset_block_detection()
+
+        if self.current_goal_handle:
+            self.cancel_navigation()
+        self.publish_zero_cmd_vel()
+
+        pause_event = self.build_pause_event_data(
+            pause_source="obstacle_wait",
+            reason=self.current_pause_reason,
+            resume_mode="auto",
+            extra_data={
+                "block_duration": round(block_duration, 1),
+                "waiting_for_obstacle_clear": True,
+                "clear_confirmed_frames": self.obstacle_clear_confirm_count,
+                "clear_required_frames": self.obstacle_clear_required_frames,
+            },
+        )
+        self.publish_status_update("navigation_paused", pause_event)
+        self.send_acknowledgment("navigation_paused", "success", "导航已因障碍物暂停", pause_event)
+
+        # 进入等待态时立即推一次障碍提示，后续再由定时器按 4s 周期重复推送。
+        self.publish_obstacle_blocked_event(block_duration, send_ack=True)
+        self.obstacle_wait_last_push_time = time.time()
+
+        self.get_logger().warning(
+            f"🚧 检测到前方障碍持续阻塞 {block_duration:.1f}s，已暂停导航，等待障碍物消失后自动恢复"
+        )
+
+    def handle_obstacle_block_timeout(self, block_duration: float):
+        """处理障碍物阻塞超时：改为进入“暂停等待障碍消失”的恢复流程。"""
+        if self.block_reported or not self.obstacle_wait_enable:
+            return
+        self.enter_obstacle_wait_state(block_duration)
     def nav2_goal_response_callback(self, future):
         """处理Nav2目标响应"""
         try:
@@ -1464,36 +1714,31 @@ class NavigationStateManager(Node):
         
             # 暂停导航
             self.current_state = NavigationState.PAUSED
+            self.current_detailed_state = "PAUSED"
             self.pause_time = time.time()
             self.pause_duration_limit = pause_duration
+            self.current_pause_source = "user_request"
+            self.current_pause_reason = "用户手动暂停导航"
+            self.current_resume_mode = "manual"
+            self.clear_obstacle_wait_state()
             self.reset_block_detection()
         
             # 物理打断底盘：取消当前 Nav2 目标
             if self.current_goal_handle:
                 self.cancel_navigation()
         
-            # 记录暂停位置
-            pause_location = None
-            if self.current_pose:
-                pause_location = {
-                "x": self.current_pose.position.x,
-                "y": self.current_pose.position.y,
-                "z": self.current_pose.position.z
-                }
-        
             # 发送确认消息
             self.send_acknowledgment("pause_navigation", "success", "导航已暂停")
         
             # 发布状态更新
-            self.publish_status_update("navigation_paused", {
-            "pause_location": pause_location,
-            "pause_time": self.pause_time,
-            "pause_duration": pause_duration,
-            "current_waypoint_id": self.current_waypoint.get("id", "") if self.current_waypoint else "",
-            "current_waypoint_name": self.current_waypoint.get("name", "") if self.current_waypoint else "",
-            "waypoint_index": self.current_waypoint_index,
-            "total_waypoints": self.total_waypoints
-             })
+            self.publish_status_update(
+                "navigation_paused",
+                self.build_pause_event_data(
+                    pause_source="user_request",
+                    reason=self.current_pause_reason,
+                    resume_mode="manual",
+                ),
+            )
         
             self.get_logger().info(f"导航已暂停 (暂停时长限制: {'无限期' if pause_duration == 0 else f'{pause_duration}秒'})")
         
@@ -1535,20 +1780,31 @@ class NavigationStateManager(Node):
             # 计算暂停了多久
             pause_elapsed = time.time() - self.pause_time if hasattr(self, 'pause_time') else 0
 
+            resume_source = self.current_pause_source or "user_request"
+            if self.obstacle_wait_active:
+                # 允许现场人员在障碍等待暂停期间点“继续”手动恢复；
+                # 这时直接退出等待态，重新发当前 waypoint。
+                self.clear_obstacle_wait_state()
+
             # 恢复导航
             self.current_state = NavigationState.EXECUTING
+            self.current_detailed_state = "EXECUTING"
+            self.current_pause_source = ""
+            self.current_pause_reason = ""
+            self.current_resume_mode = ""
             
             # 发送确认消息
             self.send_acknowledgment("navigation_resumed", "success", "导航已恢复")
             
             # 发布状态更新
             self.publish_status_update("navigation_resumed", {
-            "resumed_waypoint_id": self.current_waypoint.get("id", ""),
-            "resumed_waypoint_name": self.current_waypoint.get("name", ""),
-            "waypoint_index": self.current_waypoint_index,
-            "total_waypoints": self.total_waypoints,
-            "pause_duration_actual": round(pause_elapsed, 1),
-            "resume_reason": resume_reason
+                "resumed_waypoint_id": self.current_waypoint.get("id", ""),
+                "resumed_waypoint_name": self.current_waypoint.get("name", ""),
+                "waypoint_index": self.current_waypoint_index,
+                "total_waypoints": self.total_waypoints,
+                "pause_duration_actual": round(pause_elapsed, 1),
+                "resume_reason": resume_reason,
+                "resume_source": resume_source,
             })
             
             # 重新导航到当前路点
@@ -1993,6 +2249,8 @@ class NavigationStateManager(Node):
         return {
             "pause_source": "localization_recovery",
             "reason": status.get("reason", "定位异常，正在重定位"),
+            "resume_mode": "auto",
+            "waiting_for_obstacle_clear": False,
             "pause_location": pause_location,
             "pause_time": self.pause_time,
             "pause_duration": 0,
@@ -2262,6 +2520,77 @@ class NavigationStateManager(Node):
         # 记录距离，用于 APP 端的 UI 进度条显示
         if self.current_pose and self.current_waypoint:
             self.last_known_distance = self.calculate_distance_to_waypoint()
+
+    def process_obstacle_wait_state(self):
+        """处理“因动态障碍物暂停等待”的周期逻辑。"""
+        if not self.obstacle_wait_active:
+            return
+        if self.current_state != NavigationState.PAUSED:
+            return
+
+        now = time.time()
+        block_duration = now - self.obstacle_wait_started_at if self.obstacle_wait_started_at > 0.0 else 0.0
+
+        # 每 4 秒持续给 APP 推送一次等待文案，保证 UI 和播报都能维持“仍在受阻”。
+        if (
+            self.obstacle_wait_push_interval_sec > 0.0 and
+            now - self.obstacle_wait_last_push_time >= self.obstacle_wait_push_interval_sec
+        ):
+            self.publish_obstacle_blocked_event(block_duration, send_ack=False)
+            self.obstacle_wait_last_push_time = now
+
+        # costmap 太久没更新时，不做 clear 判定，避免用陈旧数据误恢复导航。
+        max_costmap_age = max(1.0, 2.0 / self.obstacle_clear_check_rate_hz)
+        if now - self.latest_local_costmap_stamp > max_costmap_age:
+            self.obstacle_clear_confirm_count = 0
+            return
+
+        if self.latest_front_obstacle_blocked:
+            self.obstacle_clear_confirm_count = 0
+            return
+
+        self.obstacle_clear_confirm_count += 1
+        if self.obstacle_clear_confirm_count < self.obstacle_clear_required_frames:
+            return
+
+        self.resume_navigation_from_obstacle_wait()
+
+    def resume_navigation_from_obstacle_wait(self):
+        """障碍物消失后自动恢复到当前 waypoint。"""
+        if not self.obstacle_wait_active:
+            return
+        if self.current_state != NavigationState.PAUSED:
+            return
+        if not self.current_waypoint:
+            self.get_logger().warning("障碍物已清除，但当前 waypoint 丢失，无法自动恢复导航")
+            self.clear_obstacle_wait_state()
+            self.reset_navigation_state()
+            return
+
+        pause_elapsed = time.time() - self.pause_time if self.pause_time else 0.0
+        self.clear_obstacle_wait_state()
+        self.current_state = NavigationState.EXECUTING
+        self.current_detailed_state = "EXECUTING"
+        self.current_pause_source = ""
+        self.current_pause_reason = ""
+        self.current_resume_mode = ""
+
+        event_data = {
+            "resumed_waypoint_id": self.current_waypoint.get("id", ""),
+            "resumed_waypoint_name": self.current_waypoint.get("name", ""),
+            "waypoint_index": self.current_waypoint_index,
+            "total_waypoints": self.total_waypoints,
+            "pause_duration_actual": round(pause_elapsed, 1),
+            "resume_reason": "obstacle_cleared_auto_resume",
+            "resume_source": "obstacle_wait",
+        }
+        if self.latest_front_obstacle_stats:
+            event_data["front_obstacle_stats"] = self.latest_front_obstacle_stats
+
+        self.send_acknowledgment("navigation_resumed", "success", "障碍物已消失，导航自动恢复", event_data)
+        self.publish_status_update("navigation_resumed", event_data)
+        self.navigate_to_waypoint(self.current_waypoint)
+        self.get_logger().info("前方障碍物已连续 clear 多帧，自动恢复当前导航目标")
     
     def check_timeout(self):
         """检查导航超时"""
@@ -2347,6 +2676,8 @@ class NavigationStateManager(Node):
         if self.current_state == NavigationState.PAUSED:
             if self.localization_auto_paused:
                 self.get_logger().info("Nav2 取消是由定位恢复自动暂停触发，忽略重置操作")
+            elif self.obstacle_wait_active:
+                self.get_logger().info("Nav2 取消是由障碍等待暂停触发，忽略重置操作")
             else:
                 self.get_logger().info("Nav2 取消是由用户暂停触发，忽略重置操作")
             return
@@ -2734,6 +3065,8 @@ class NavigationStateManager(Node):
         if self.current_state == NavigationState.PAUSED:
             if self.localization_auto_paused:
                 self.get_logger().info("检测到导航由定位恢复自动暂停，保留数据以备恢复...")
+            elif self.obstacle_wait_active:
+                self.get_logger().info("检测到导航由障碍等待自动暂停，保留数据以备障碍物消失后恢复...")
             else:
                 self.get_logger().info("检测到导航由用户主动暂停，保留数据以备恢复...")
             return
@@ -2971,7 +3304,20 @@ class NavigationStateManager(Node):
             "localization_auto_paused": self.localization_auto_paused,
             "localization_resume_pending": self.localization_resume_pending,
             "localization_recovery_reason": self.localization_recovery_reason,
-            "localization_recovery_status": self.localization_recovery_last_status
+            "localization_recovery_status": self.localization_recovery_last_status,
+            "pause_source": self.current_pause_source,
+            "pause_reason": self.current_pause_reason,
+            "resume_mode": self.current_resume_mode,
+            "waiting_for_obstacle_clear": self.obstacle_wait_active,
+            "obstacle_wait_active": self.obstacle_wait_active,
+            "obstacle_wait_duration": (
+                time.time() - self.obstacle_wait_started_at
+                if self.obstacle_wait_active and self.obstacle_wait_started_at > 0.0 else 0.0
+            ),
+            "obstacle_clear_confirm_count": self.obstacle_clear_confirm_count,
+            "obstacle_clear_required_frames": self.obstacle_clear_required_frames,
+            "front_obstacle_blocked": self.latest_front_obstacle_blocked,
+            "front_obstacle_stats": self.latest_front_obstacle_stats,
         }
         
         # 添加当前位置信息
@@ -3078,6 +3424,10 @@ class NavigationStateManager(Node):
         self.localization_recovery_reason = ""
         self.localization_recovery_started_at = 0.0
         self.localization_recovery_last_status = {}
+        self.current_pause_source = ""
+        self.current_pause_reason = ""
+        self.current_resume_mode = ""
+        self.clear_obstacle_wait_state()
         
         # 重置阻塞检测状态
         self.reset_block_detection()
@@ -3104,16 +3454,23 @@ class NavigationStateManager(Node):
 def main(args=None):
     """prior-map 定位版本入口。"""
     rclpy.init(args=args)
+    node = None
 
     try:
         node = NavigationStateManager()
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info("收到键盘中断信号")
+        if node is not None:
+            node.get_logger().info("收到键盘中断信号")
     except Exception as e:
-        node.get_logger().error(f"导航状态管理器运行错误: {e}")
+        if node is not None:
+            node.get_logger().error(f"导航状态管理器运行错误: {e}")
+        else:
+            print(f"导航状态管理器启动失败: {e}")
     finally:
-        node.destroy_node()
+        # 节点可能在 ROS participant 创建阶段就失败，此时不能再访问未创建的 node。
+        if node is not None:
+            node.destroy_node()
         rclpy.shutdown()
 
 if __name__ == '__main__':
