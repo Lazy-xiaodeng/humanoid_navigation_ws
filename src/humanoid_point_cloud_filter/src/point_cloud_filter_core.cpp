@@ -61,12 +61,24 @@ pcl::PointCloud<pcl::PointXYZI>::Ptr PointCloudFilterCore::filter(
   FilterTimings & timings)
 {
   auto t_total_start = std::chrono::high_resolution_clock::now();
+  timings.motion_ms = 0.0;
+  timings.sor_ms = 0.0;
+  timings.height_ms = 0.0;
+  timings.density_ms = 0.0;
+  timings.voxel_ms = 0.0;
+  timings.total_ms = 0.0;
   
   pcl::PointCloud<pcl::PointXYZI>::Ptr cloud = input;
   
   // ===== 运动检测 =====
   if (config_.enable_motion_detection) {
+    auto t_motion_start = std::chrono::high_resolution_clock::now();
     is_moving_ = detectMotion(cloud);
+    auto t_motion_end = std::chrono::high_resolution_clock::now();
+    timings.motion_ms =
+      std::chrono::duration<double, std::milli>(t_motion_end - t_motion_start).count();
+  } else {
+    timings.motion_ms = 0.0;
   }
   
   // 根据运动状态选择滤波参数

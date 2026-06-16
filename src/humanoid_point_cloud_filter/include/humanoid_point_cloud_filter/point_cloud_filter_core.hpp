@@ -45,6 +45,7 @@ struct FilterConfig
 
 struct FilterTimings
 {
+  double motion_ms;
   double sor_ms;
   double height_ms;
   double density_ms;

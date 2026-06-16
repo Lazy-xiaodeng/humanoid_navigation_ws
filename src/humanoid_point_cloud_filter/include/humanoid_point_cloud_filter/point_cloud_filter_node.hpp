@@ -60,6 +60,20 @@ private:
   int performance_log_interval_;
   int frame_count_;
   std::deque<double> timing_total_;
+  std::deque<double> timing_ros_to_pcl_;
+  std::deque<double> timing_tf_lookup_body_;
+  std::deque<double> timing_transform_body_;
+  std::deque<double> timing_range_filter_;
+  std::deque<double> timing_tf_lookup_bf_;
+  std::deque<double> timing_transform_bf_;
+  std::deque<double> timing_split_clouds_;
+  std::deque<double> timing_motion_detect_;
+  std::deque<double> timing_sor_;
+  std::deque<double> timing_height_;
+  std::deque<double> timing_density_;
+  std::deque<double> timing_voxel_;
+  std::deque<double> timing_publish_elevation_;
+  std::deque<double> timing_publish_nav_;
 };
 
 }  // namespace humanoid_point_cloud_filter  
