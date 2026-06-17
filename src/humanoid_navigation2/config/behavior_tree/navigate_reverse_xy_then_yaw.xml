@@ -6,78 +6,57 @@
       倒走点导航：
         1. SpinToPose(mode=goal_position_reverse)：先转到背对目标点的方向。
         2. 生成背对目标点方向的 approach_goal。
-        3. ComputePathToPose + FollowPathReverse：倒走到目标 XY。
+        3. ComputePathToPose + FollowPathReverse：失败直接返回状态机。
         4. SpinToPose(mode=goal_yaw)：到达 XY 后再对齐最终目标朝向。
+
+      倒走点同样取消 BT 恢复/等待重试，障碍暂停和恢复统一交给状态机。
     -->
 
-    <RecoveryNode number_of_retries="1" name="ReverseNavigationRecovery">
+    <Sequence name="ReverseFollowXYThenFaceFinalYaw">
 
-      <RecoveryNode number_of_retries="1" name="ReverseDynamicObstacleRecovery">
+      <SpinToPose goal="{goal}"
+                  mode="goal_position_reverse"
+                  robot_base_frame="base_footprint"
+                  yaw_tolerance="0.25"
+                  position_tolerance="0.80"
+                  transform_tolerance="0.8"
+                  time_allowance="20.0"
+                  max_attempts="3"
+                  server_name="spin"
+                  error_code_id="{initial_spin_error_code}"/>
 
-        <Sequence name="ReverseFollowXYThenFaceFinalYaw">
+      <MakePoseTowardGoal goal="{goal}"
+                          output_goal="{approach_goal}"
+                          robot_base_frame="base_footprint"
+                          heading_mode="away"
+                          min_heading_distance="0.20"
+                          transform_tolerance="0.8"/>
 
-          <SpinToPose goal="{goal}"
-                      mode="goal_position_reverse"
-                      robot_base_frame="base_footprint"
-                      yaw_tolerance="0.25"
-                      position_tolerance="0.80"
-                      transform_tolerance="0.8"
-                      time_allowance="20.0"
-                      max_attempts="3"
-                      server_name="spin"
-                      error_code_id="{initial_spin_error_code}"/>
+      <PipelineSequence name="PlanAndReverseFollowXYOnly">
+        <RateController hz="0.4">
+          <ComputePathToPose goal="{approach_goal}"
+                             path="{path}"
+                             planner_id="GridBased"
+                             error_code_id="{compute_path_error_code}"/>
+        </RateController>
+        <FollowPath path="{path}"
+                    controller_id="FollowPathReverse"
+                    goal_checker_id="xy_goal_checker"
+                    error_code_id="{follow_path_error_code}"/>
+      </PipelineSequence>
 
-          <MakePoseTowardGoal goal="{goal}"
-                              output_goal="{approach_goal}"
-                              robot_base_frame="base_footprint"
-                              heading_mode="away"
-                              min_heading_distance="0.20"
-                              transform_tolerance="0.8"/>
+      <SpinToPose goal="{goal}"
+                  mode="goal_yaw"
+                  robot_base_frame="base_footprint"
+                  yaw_tolerance="0.18"
+                  position_tolerance="0.0"
+                  transform_tolerance="0.8"
+                  time_allowance="20.0"
+                  max_attempts="4"
+                  server_name="spin"
+                  error_code_id="{final_spin_error_code}"/>
 
-          <PipelineSequence name="PlanAndReverseFollowXYOnly">
-            <RateController hz="0.4">
-              <ComputePathToPose goal="{approach_goal}"
-                                 path="{path}"
-                                 planner_id="GridBased"
-                                 error_code_id="{compute_path_error_code}"/>
-            </RateController>
-            <FollowPath path="{path}"
-                        controller_id="FollowPathReverse"
-                        goal_checker_id="xy_goal_checker"
-                        error_code_id="{follow_path_error_code}"/>
-          </PipelineSequence>
-
-          <SpinToPose goal="{goal}"
-                      mode="goal_yaw"
-                      robot_base_frame="base_footprint"
-                      yaw_tolerance="0.18"
-                      position_tolerance="0.0"
-                      transform_tolerance="0.8"
-                      time_allowance="20.0"
-                      max_attempts="4"
-                      server_name="spin"
-                      error_code_id="{final_spin_error_code}"/>
-
-        </Sequence>
-
-        <Fallback name="ReverseWaitOrNewGoal">
-          <GoalUpdated/>
-          <!--
-            倒走点行为树也收口到同一策略：BT 只做极短等待，真正的障碍等待、
-            周期提示和自动恢复统一交给 navigation_state_manager.py 处理。
-          -->
-          <Wait wait_duration="0.2"/>
-        </Fallback>
-
-      </RecoveryNode>
-
-      <Fallback name="ReverseStuckHandler">
-        <GoalUpdated/>
-        <!-- 外层兜底只留极短等待，避免与 ROS 侧障碍等待状态机重复。 -->
-        <Wait wait_duration="0.2"/>
-      </Fallback>
-
-    </RecoveryNode>
+    </Sequence>
 
   </BehaviorTree>
 
