@@ -6,62 +6,33 @@
       路线任务 through 专用行为树。
 
       这个文件专门给 NavigateThroughPoses 使用，必须读取 {goals}，不能复用
-      单点导航行为树。route task 的 transit 点
-      需要通过 RemovePassedGoals + ComputePathThroughPoses 连续跟随，避免到每个
-      transit 都停车、对齐、播报。
+      单点导航行为树。route task 的 transit 点需要通过 RemovePassedGoals +
+      ComputePathThroughPoses 连续跟随，避免到每个 transit 都停车、对齐、播报。
 
-      恢复动作不包含 BackUp，避免后方无传感器时自动倒退带来风险；遇到动态
-      障碍优先等待、清 costmap、必要时原地旋转后重试。
+      这里取消 BT 自己的 RecoveryNode / Wait / Spin / ClearCostmap 恢复动作。
+      FollowPath 或规划失败时直接把失败返回给 navigation_state_manager.py，
+      由状态机统一进入动态障碍等待、APP 周期提示和自动恢复。
     -->
 
-    <RecoveryNode number_of_retries="3" name="NavigateThroughRecovery">
-      <PipelineSequence name="NavigateThroughWithReplanning">
-        <ControllerSelector selected_controller="{selected_controller}" default_controller="FollowPath" topic_name="controller_selector"/>
-        <PlannerSelector selected_planner="{selected_planner}" default_planner="GridBased" topic_name="planner_selector"/>
+    <PipelineSequence name="NavigateThroughWithReplanning">
+      <ControllerSelector selected_controller="{selected_controller}" default_controller="FollowPath" topic_name="controller_selector"/>
+      <PlannerSelector selected_planner="{selected_planner}" default_planner="GridBased" topic_name="planner_selector"/>
 
-        <RateController hz="0.333">
-          <RecoveryNode number_of_retries="1" name="ComputePathThroughPoses">
-            <ReactiveSequence>
-              <RemovePassedGoals input_goals="{goals}" output_goals="{goals}" radius="0.7"/>
-              <ComputePathThroughPoses goals="{goals}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
-            </ReactiveSequence>
-            <Sequence>
-              <WouldAPlannerRecoveryHelp error_code="{compute_path_error_code}"/>
-              <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
-            </Sequence>
-          </RecoveryNode>
-        </RateController>
+      <RateController hz="0.333">
+        <ReactiveSequence>
+          <RemovePassedGoals input_goals="{goals}" output_goals="{goals}" radius="0.7"/>
+          <ComputePathThroughPoses goals="{goals}"
+                                   path="{path}"
+                                   planner_id="{selected_planner}"
+                                   error_code_id="{compute_path_error_code}"/>
+        </ReactiveSequence>
+      </RateController>
 
-        <RecoveryNode number_of_retries="1" name="FollowPath">
-          <FollowPath path="{path}"
-                      controller_id="{selected_controller}"
-                      goal_checker_id="xy_goal_checker"
-                      error_code_id="{follow_path_error_code}"/>
-          <Sequence>
-            <WouldAControllerRecoveryHelp error_code="{follow_path_error_code}"/>
-            <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
-          </Sequence>
-        </RecoveryNode>
-      </PipelineSequence>
+      <FollowPath path="{path}"
+                  controller_id="{selected_controller}"
+                  goal_checker_id="xy_goal_checker"
+                  error_code_id="{follow_path_error_code}"/>
+    </PipelineSequence>
 
-      <Sequence>
-        <Fallback>
-          <WouldAControllerRecoveryHelp error_code="{follow_path_error_code}"/>
-          <WouldAPlannerRecoveryHelp error_code="{compute_path_error_code}"/>
-        </Fallback>
-        <ReactiveFallback name="RecoveryFallback">
-          <GoalUpdated/>
-          <RoundRobin name="RecoveryActions">
-            <Sequence name="ClearingActions">
-              <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
-              <ClearEntireCostmap name="ClearGlobalCostmap-Subtree" service_name="global_costmap/clear_entirely_global_costmap"/>
-            </Sequence>
-            <Wait wait_duration="5.0"/>
-            <Spin spin_dist="1.57" error_code_id="{spin_error_code}"/>
-            <Wait wait_duration="5.0"/>
-          </RoundRobin>
-        </ReactiveFallback>
-      </Sequence>
-    </RecoveryNode>
   </BehaviorTree>
 </root>

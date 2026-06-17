@@ -5,85 +5,57 @@
     <!--
       分阶段导航：
         1. SpinToPose(mode=goal_position)：先转向目标点 XY 方向。
-        2. MakePoseTowardGoal：生成只用于 XY 导航的 approach_goal，终点 yaw 指向目标点方向。
-        3. ComputePathToPose + FollowPath：使用 2D planner 规划，FollowPath 只用 xy_goal_checker 判定到点。
-        4. SpinToPose(mode=goal_yaw)：到达 XY 后再对齐最终目标朝向；此阶段忽略 XY 漂移。
+        2. MakePoseTowardGoal：生成只用于 XY 导航的 approach_goal。
+        3. ComputePathToPose + FollowPath：失败直接返回状态机，由状态机进入障碍等待。
+        4. SpinToPose(mode=goal_yaw)：到达 XY 后再对齐最终目标朝向。
 
-      SpinToPose 不直接发布 /cmd_vel，而是调用 behavior_server 的 Spin action，
-      因此仍使用 behavior_server 中的 min/max rotational velocity 与碰撞预测。
+      这里不再保留 BT 恢复/等待重试，避免 Nav2 与外部状态机同时处理障碍。
     -->
 
-    <RecoveryNode number_of_retries="1" name="StagedNavigationRecovery">
+    <Sequence name="FaceGoalFollowXYThenFaceFinalYaw">
 
-      <RecoveryNode number_of_retries="1" name="DynamicObstacleRecovery">
+      <SpinToPose goal="{goal}"
+                  mode="goal_position"
+                  robot_base_frame="base_footprint"
+                  yaw_tolerance="0.25"
+                  position_tolerance="0.80"
+                  transform_tolerance="0.8"
+                  time_allowance="20.0"
+                  max_attempts="3"
+                  server_name="spin"
+                  error_code_id="{initial_spin_error_code}"/>
 
-        <Sequence name="FaceGoalFollowXYThenFaceFinalYaw">
+      <MakePoseTowardGoal goal="{goal}"
+                          output_goal="{approach_goal}"
+                          robot_base_frame="base_footprint"
+                          min_heading_distance="0.20"
+                          transform_tolerance="0.8"/>
 
-          <SpinToPose goal="{goal}"
-                      mode="goal_position"
-                      robot_base_frame="base_footprint"
-                      yaw_tolerance="0.25"
-                      position_tolerance="0.80"
-                      transform_tolerance="0.8"
-                      time_allowance="20.0"
-                      max_attempts="3"
-                      server_name="spin"
-                      error_code_id="{initial_spin_error_code}"/>
+      <PipelineSequence name="PlanAndFollowXYOnly">
+        <RateController hz="0.4">
+          <ComputePathToPose goal="{approach_goal}"
+                             path="{path}"
+                             planner_id="GridBased"
+                             error_code_id="{compute_path_error_code}"/>
+        </RateController>
+        <FollowPath path="{path}"
+                    controller_id="FollowPath"
+                    goal_checker_id="xy_goal_checker"
+                    error_code_id="{follow_path_error_code}"/>
+      </PipelineSequence>
 
-          <MakePoseTowardGoal goal="{goal}"
-                              output_goal="{approach_goal}"
-                              robot_base_frame="base_footprint"
-                              min_heading_distance="0.20"
-                              transform_tolerance="0.8"/>
+      <SpinToPose goal="{goal}"
+                  mode="goal_yaw"
+                  robot_base_frame="base_footprint"
+                  yaw_tolerance="0.18"
+                  position_tolerance="0.0"
+                  transform_tolerance="0.8"
+                  time_allowance="20.0"
+                  max_attempts="4"
+                  server_name="spin"
+                  error_code_id="{final_spin_error_code}"/>
 
-          <PipelineSequence name="PlanAndFollowXYOnly">
-            <RateController hz="0.4">
-              <ComputePathToPose goal="{approach_goal}"
-                                 path="{path}"
-                                 planner_id="GridBased"
-                                 error_code_id="{compute_path_error_code}"/>
-            </RateController>
-            <FollowPath path="{path}"
-                        controller_id="FollowPath"
-                        goal_checker_id="xy_goal_checker"
-                        error_code_id="{follow_path_error_code}"/>
-          </PipelineSequence>
-
-          <SpinToPose goal="{goal}"
-                      mode="goal_yaw"
-                      robot_base_frame="base_footprint"
-                      yaw_tolerance="0.18"
-                      position_tolerance="0.0"
-                      transform_tolerance="0.8"
-                      time_allowance="20.0"
-                      max_attempts="4"
-                      server_name="spin"
-                      error_code_id="{final_spin_error_code}"/>
-
-        </Sequence>
-
-        <Fallback name="WaitOrNewGoal">
-          <GoalUpdated/>
-          <!--
-            这里只保留一个很短的让步等待，避免 Nav2 BT 自己长时间卡在 Wait 里。
-            真正“暂停导航并等待障碍消失后自动恢复”的主逻辑，统一交给
-            navigation_state_manager.py 里的障碍等待状态机处理。
-          -->
-          <Wait wait_duration="0.2"/>
-        </Fallback>
-
-      </RecoveryNode>
-
-      <Fallback name="StuckHandler">
-        <GoalUpdated/>
-
-        <!--
-          外层兜底同样只保留一个极短等待，避免与外部状态机的障碍等待策略重复。
-        -->
-        <Wait wait_duration="0.2"/>
-      </Fallback>
-
-    </RecoveryNode>
+    </Sequence>
 
   </BehaviorTree>
 

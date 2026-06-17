@@ -71,19 +71,19 @@ class NavigationStateManager(Node):
             ('orientation_tolerance', 0.3),
             ('status_publish_rate', 2.0),
             ('default_frame_id', 'map'),
-            ('obstacle_block_timeout', 2.0),  # 障碍物阻塞超时时间（秒）：停稳约2秒后进入动态障碍暂停等待
+            ('obstacle_block_timeout', 4.0),  # 障碍物兜底阻塞超时时间（秒）：主判断交给 Nav2/RPP 失败接管
             ('velocity_threshold', 0.10),  # 判断机器人是否停滞的速度阈值（m/s）
-            ('blockage_pose_delta_deadzone', 0.12),  # 抑制定位/机身晃动带来的低速假恢复
-            ('blockage_recovery_velocity_threshold', 0.20),  # 解除阻塞需要更明确的持续运动
+            ('blockage_pose_delta_deadzone', 0.10),  # 速度停滞兜底阈值，降低误把短暂停顿当障碍的概率
+            ('blockage_recovery_velocity_threshold', 0.15),  # 解除阻塞需要更明确的持续运动
             ('blockage_recovery_confirm_sec', 1.0),
             ('obstacle_wait_enable', True),
             ('obstacle_wait_push_interval_sec', 4.0),
             ('obstacle_clear_required_frames', 5),
             ('obstacle_clear_check_rate_hz', 5.0),
-            ('obstacle_clear_cost_threshold', 253),
+            ('obstacle_clear_cost_threshold', 100),  # /local_costmap/costmap 是 OccupancyGrid，致命障碍通常为 100。
             ('obstacle_clear_front_min_x_m', 0.15),
-            ('obstacle_clear_front_max_x_m', 1.20),
-            ('obstacle_clear_half_width_m', 0.45),
+            ('obstacle_clear_front_max_x_m', 0.80),  # 障碍恢复只看机器人近前方，降低墙/玻璃门误判。
+            ('obstacle_clear_half_width_m', 0.30),  # 左右各 0.30m；这是状态机 clear 窗口，不是 RPP 碰撞参数。
             ('local_costmap_topic', '/local_costmap/costmap'),
             ('require_walk_mode_for_navigation', True),
             ('robot_status_timeout', 2.0),
@@ -2393,6 +2393,8 @@ class NavigationStateManager(Node):
                     failure_code="final_pose_goal_canceled"
                 )
             else:
+                if self.try_enter_obstacle_wait_from_nav_failure("NavigateToPose goal failed"):
+                    return
                 self.handle_route_task_navigation_failed(
                     "NavigateToPose goal failed",
                     failure_code="final_pose_goal_failed"
@@ -2884,6 +2886,8 @@ class NavigationStateManager(Node):
                     failure_code="goal_canceled"
                 )
             else:
+                if self.try_enter_obstacle_wait_from_nav_failure("NavigateThroughPoses goal failed"):
+                    return
                 self.handle_route_task_navigation_failed(
                     "NavigateThroughPoses goal failed",
                     failure_code="goal_failed"
@@ -3964,11 +3968,20 @@ class NavigationStateManager(Node):
             return
         if self.current_state != NavigationState.PAUSED:
             return
-        if not self.current_waypoint:
-            self.get_logger().warning("障碍物已清除，但当前 waypoint 丢失，无法自动恢复导航")
-            self.clear_obstacle_wait_state()
-            self.reset_navigation_state()
-            return
+        if self.active_route_task and self.active_segment:
+            # route task 的 through 段不一定维护普通 current_waypoint，
+            # 自动恢复时以 active_segment 为准，避免障碍清除后误判“当前点丢失”。
+            resumed_waypoint_id = str(self.active_segment.get("segment_target_task_id", ""))
+            resumed_waypoint = self.find_route_waypoint_by_id(resumed_waypoint_id)
+            resumed_waypoint_name = resumed_waypoint.get("name", "") if resumed_waypoint else resumed_waypoint_id
+        else:
+            if not self.current_waypoint:
+                self.get_logger().warning("障碍物已清除，但当前 waypoint 丢失，无法自动恢复导航")
+                self.clear_obstacle_wait_state()
+                self.reset_navigation_state()
+                return
+            resumed_waypoint_id = self.current_waypoint.get("id", "")
+            resumed_waypoint_name = self.current_waypoint.get("name", "")
 
         pause_elapsed = time.time() - self.pause_time if self.pause_time else 0.0
         self.clear_obstacle_wait_state()
@@ -3979,14 +3992,16 @@ class NavigationStateManager(Node):
         self.current_resume_mode = ""
 
         event_data = {
-            "resumed_waypoint_id": self.current_waypoint.get("id", ""),
-            "resumed_waypoint_name": self.current_waypoint.get("name", ""),
+            "resumed_waypoint_id": resumed_waypoint_id,
+            "resumed_waypoint_name": resumed_waypoint_name,
             "waypoint_index": self.current_waypoint_index,
             "total_waypoints": self.total_waypoints,
             "pause_duration_actual": round(pause_elapsed, 1),
             "resume_reason": "obstacle_cleared_auto_resume",
             "resume_source": "obstacle_wait",
         }
+        if self.active_segment:
+            event_data["segment_id"] = self.active_segment.get("segment_id", "")
         if self.latest_front_obstacle_stats:
             event_data["front_obstacle_stats"] = self.latest_front_obstacle_stats
 
@@ -4080,6 +4095,28 @@ class NavigationStateManager(Node):
         self.publish_status_update("navigation_failed", failure_context)
 
         self.get_logger().error(f"导航失败: {reason}")
+
+    def try_enter_obstacle_wait_from_nav_failure(self, reason: str) -> bool:
+        """Nav2/RPP 执行阶段失败时，优先交给动态障碍等待状态机接管。"""
+        if not self.obstacle_wait_enable or self.obstacle_wait_active:
+            return False
+        if self.current_state not in (NavigationState.EXECUTING, NavigationState.PLANNING):
+            return False
+        if not self.active_route_task or not self.active_segment:
+            return False
+
+        suppression_reason = self.get_obstacle_blockage_suppression_reason()
+        if suppression_reason:
+            self.get_logger().info(
+                f"Nav2失败但当前处于{suppression_reason}，不进入障碍等待: {reason}"
+            )
+            return False
+
+        self.get_logger().warning(
+            f"Nav2/RPP 执行失败，按前方障碍阻塞接管并暂停等待: {reason}"
+        )
+        self.enter_obstacle_wait_state(0.0)
+        return True
     
     def nav2_log_callback(self, msg):
         """解析 Nav2 行为树日志，识别当前正在进行的具体动作"""
