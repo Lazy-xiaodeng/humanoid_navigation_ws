@@ -10,7 +10,7 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from rclpy.time import Time
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Odometry, OccupancyGrid
 from nav2_msgs.action import NavigateThroughPoses, NavigateToPose
@@ -84,6 +84,14 @@ class NavigationStateManager(Node):
             ('obstacle_clear_front_min_x_m', 0.15),
             ('obstacle_clear_front_max_x_m', 0.80),  # 障碍恢复只看机器人近前方，降低墙/玻璃门误判。
             ('obstacle_clear_half_width_m', 0.30),  # 左右各 0.30m；这是状态机 clear 窗口，不是 RPP 碰撞参数。
+            ('obstacle_min_wait_before_resume_sec', 2.0),  # 避免刚暂停 1 秒左右就因单帧 clear 误恢复。
+            ('obstacle_clear_required_duration_sec', 2.5),  # 恢复前要求前方连续 clear 的时长。
+            ('obstacle_clear_required_duration_after_false_resume_sec', 4.0),  # 误恢复后下一次恢复更保守。
+            ('obstacle_false_resume_window_sec', 3.0),  # 恢复后很快再次阻塞，视为一次“误恢复”。
+            ('obstacle_resume_use_roi', True),
+            ('obstacle_roi_has_obstacle_topic', '/front_obstacle/has_obstacle'),
+            ('obstacle_roi_timeout_sec', 1.0),
+            ('obstacle_roi_required_clear_frames', 3),
             ('local_costmap_topic', '/local_costmap/costmap'),
             ('require_walk_mode_for_navigation', True),
             ('robot_status_timeout', 2.0),
@@ -138,6 +146,22 @@ class NavigationStateManager(Node):
             self.get_parameter('obstacle_clear_front_max_x_m').value)
         self.obstacle_clear_half_width_m = float(
             self.get_parameter('obstacle_clear_half_width_m').value)
+        self.obstacle_min_wait_before_resume_sec = float(
+            self.get_parameter('obstacle_min_wait_before_resume_sec').value)
+        self.obstacle_clear_required_duration_sec = float(
+            self.get_parameter('obstacle_clear_required_duration_sec').value)
+        self.obstacle_clear_required_duration_after_false_resume_sec = float(
+            self.get_parameter('obstacle_clear_required_duration_after_false_resume_sec').value)
+        self.obstacle_false_resume_window_sec = float(
+            self.get_parameter('obstacle_false_resume_window_sec').value)
+        self.obstacle_resume_use_roi = bool(
+            self.get_parameter('obstacle_resume_use_roi').value)
+        self.obstacle_roi_has_obstacle_topic = str(
+            self.get_parameter('obstacle_roi_has_obstacle_topic').value)
+        self.obstacle_roi_timeout_sec = float(
+            self.get_parameter('obstacle_roi_timeout_sec').value)
+        self.obstacle_roi_required_clear_frames = max(
+            1, int(self.get_parameter('obstacle_roi_required_clear_frames').value))
         self.local_costmap_topic = str(self.get_parameter('local_costmap_topic').value)
         self.require_walk_mode_for_navigation = self.get_parameter('require_walk_mode_for_navigation').value
         self.robot_status_timeout = float(self.get_parameter('robot_status_timeout').value)
@@ -219,9 +243,16 @@ class NavigationStateManager(Node):
         self.obstacle_wait_started_at = 0.0
         self.obstacle_wait_last_push_time = 0.0
         self.obstacle_clear_confirm_count = 0
+        self.obstacle_clear_started_at = 0.0
+        self.last_obstacle_resume_time = 0.0
+        self.obstacle_recent_false_resume_count = 0
         self.latest_front_obstacle_blocked = False
         self.latest_front_obstacle_stats = {}
+        self.latest_local_costmap = None
         self.latest_local_costmap_stamp = 0.0
+        self.latest_roi_obstacle_has_obstacle: Optional[bool] = None
+        self.latest_roi_obstacle_stamp = 0.0
+        self.roi_obstacle_clear_confirm_count = 0
         
         # ========== 从路点管理器接收的数据 ==========
         self.waypoints_data = {}
@@ -342,6 +373,12 @@ class NavigationStateManager(Node):
         # 订阅 local costmap，用前方窗口做“障碍已清除”的连续多帧确认。
         self.local_costmap_sub = self.create_subscription(
             OccupancyGrid, self.local_costmap_topic, self.local_costmap_callback, 10
+        )
+
+        # 订阅直接点云 ROI 障碍检测结果。ROI 用来确认真实前方点云里是否还有障碍；
+        # costmap 仍作为 Nav2 视角兜底，两者都 clear 才自动恢复。
+        self.roi_obstacle_sub = self.create_subscription(
+            Bool, self.obstacle_roi_has_obstacle_topic, self.roi_obstacle_callback, 10
         )
 
         self.robot_status_sub = self.create_subscription(
@@ -808,11 +845,21 @@ class NavigationStateManager(Node):
         """
         try:
             self.latest_local_costmap_stamp = time.time()
+            self.latest_local_costmap = msg
             blocked, stats = self.analyze_front_obstacle_window(msg)
             self.latest_front_obstacle_blocked = blocked
             self.latest_front_obstacle_stats = stats
         except Exception as e:
             self.get_logger().error(f'❌ 处理 local costmap 错误: {e}')
+
+    def roi_obstacle_callback(self, msg: Bool):
+        """处理前方 ROI 点云障碍检测结果。"""
+        self.latest_roi_obstacle_has_obstacle = bool(msg.data)
+        self.latest_roi_obstacle_stamp = time.time()
+        if self.latest_roi_obstacle_has_obstacle:
+            self.roi_obstacle_clear_confirm_count = 0
+        else:
+            self.roi_obstacle_clear_confirm_count += 1
 
     def lookup_robot_pose_in_frame(self, target_frame: str):
         """读取 base_footprint 在指定 frame 下的实时位姿。"""
@@ -847,14 +894,15 @@ class NavigationStateManager(Node):
                 "reason": f"missing_tf:{msg.header.frame_id}->{self.base_frame}",
             }
 
+        robot_x = float(robot_pose.position.x)
+        robot_y = float(robot_pose.position.y)
+        robot_yaw = yaw_from_pose(robot_pose)
+
         resolution = float(msg.info.resolution)
         width = int(msg.info.width)
         height = int(msg.info.height)
         origin_x = float(msg.info.origin.position.x)
         origin_y = float(msg.info.origin.position.y)
-        robot_x = float(robot_pose.position.x)
-        robot_y = float(robot_pose.position.y)
-        robot_yaw = yaw_from_pose(robot_pose)
 
         occupied_cells = 0
         max_cost = 0
@@ -1269,10 +1317,19 @@ class NavigationStateManager(Node):
             "waiting_for_obstacle_clear": True,
             "clear_confirmed_frames": self.obstacle_clear_confirm_count,
             "clear_required_frames": self.obstacle_clear_required_frames,
+            "clear_duration_sec": round(
+                time.time() - self.obstacle_clear_started_at
+                if self.obstacle_clear_started_at > 0.0 else 0.0,
+                1,
+            ),
+            "clear_required_duration_sec": self.get_current_obstacle_clear_required_duration(),
+            "min_wait_before_resume_sec": self.obstacle_min_wait_before_resume_sec,
+            "false_resume_count": self.obstacle_recent_false_resume_count,
             "pause_source": "obstacle_wait",
         }
         if self.latest_front_obstacle_stats:
             event_data["front_obstacle_stats"] = self.latest_front_obstacle_stats
+        event_data["roi_obstacle_stats"] = self.build_roi_obstacle_stats()
 
         self.publish_status_update("navigation_obstacle_blocked", event_data)
         if send_ack:
@@ -1303,6 +1360,23 @@ class NavigationStateManager(Node):
         self.obstacle_wait_started_at = self.pause_time
         self.obstacle_wait_last_push_time = 0.0
         self.obstacle_clear_confirm_count = 0
+        self.obstacle_clear_started_at = 0.0
+        self.roi_obstacle_clear_confirm_count = 0
+        self.roi_obstacle_clear_confirm_count = 0
+
+        # 如果刚刚自动恢复后很快又被 RPP/Nav2 判定不可通行，说明上一轮恢复偏乐观；
+        # 下一轮会自动拉长连续 clear 要求，避免“恢复-碰撞-暂停”来回抖动。
+        if (
+            self.last_obstacle_resume_time > 0.0 and
+            self.pause_time - self.last_obstacle_resume_time <= self.obstacle_false_resume_window_sec
+        ):
+            self.obstacle_recent_false_resume_count += 1
+            self.get_logger().warning(
+                f"障碍等待刚恢复 {self.pause_time - self.last_obstacle_resume_time:.1f}s 后再次触发，"
+                f"本轮采用更保守恢复条件 false_resume_count={self.obstacle_recent_false_resume_count}"
+            )
+        else:
+            self.obstacle_recent_false_resume_count = 0
 
         # 进入等待态后重置普通阻塞计时，避免重复触发“刚暂停又马上超时”。
         self.reset_block_detection()
@@ -1326,6 +1400,8 @@ class NavigationStateManager(Node):
                 "waiting_for_obstacle_clear": True,
                 "clear_confirmed_frames": self.obstacle_clear_confirm_count,
                 "clear_required_frames": self.obstacle_clear_required_frames,
+                "clear_required_duration_sec": self.get_current_obstacle_clear_required_duration(),
+                "false_resume_count": self.obstacle_recent_false_resume_count,
             },
         )
         self.publish_status_update("navigation_paused", pause_event)
@@ -1344,6 +1420,57 @@ class NavigationStateManager(Node):
         if self.block_reported or not self.obstacle_wait_enable:
             return
         self.enter_obstacle_wait_state(block_duration)
+
+    def get_current_obstacle_clear_required_duration(self) -> float:
+        """误恢复后自动拉长 clear 确认时间，普通场景保持较快恢复。"""
+        if self.obstacle_recent_false_resume_count > 0:
+            return max(
+                self.obstacle_clear_required_duration_sec,
+                self.obstacle_clear_required_duration_after_false_resume_sec,
+            )
+        return self.obstacle_clear_required_duration_sec
+
+    def build_roi_obstacle_stats(self, now: Optional[float] = None) -> Dict[str, Any]:
+        """构造 ROI 障碍检测状态，方便日志和 APP 调试。"""
+        now = time.time() if now is None else now
+        age = now - self.latest_roi_obstacle_stamp if self.latest_roi_obstacle_stamp > 0.0 else None
+        return {
+            "enabled": self.obstacle_resume_use_roi,
+            "topic": self.obstacle_roi_has_obstacle_topic,
+            "has_obstacle": self.latest_roi_obstacle_has_obstacle,
+            "age_sec": round(age, 3) if age is not None else None,
+            "fresh": age is not None and age <= self.obstacle_roi_timeout_sec,
+            "clear_confirmed_frames": self.roi_obstacle_clear_confirm_count,
+            "clear_required_frames": self.obstacle_roi_required_clear_frames,
+        }
+
+    def is_roi_obstacle_clear_for_resume(self, now: float) -> Tuple[bool, Dict[str, Any]]:
+        """恢复前确认 ROI 点云检测已 clear；ROI 不在线时降级回 costmap，避免现场卡死。"""
+        stats = self.build_roi_obstacle_stats(now)
+        if not self.obstacle_resume_use_roi:
+            stats["decision"] = "disabled"
+            return True, stats
+
+        if not stats["fresh"]:
+            # ROI 节点没有启动或话题超时时，不让机器人永远等死，降级由 costmap 决定。
+            stats["decision"] = "stale_fallback_to_costmap"
+            self.get_logger().warning(
+                f"ROI 障碍检测超时或未收到，恢复判断降级为 costmap: {stats}",
+                throttle_duration_sec=2.0,
+            )
+            return True, stats
+
+        if self.latest_roi_obstacle_has_obstacle:
+            stats["decision"] = "roi_blocked"
+            return False, stats
+
+        if self.roi_obstacle_clear_confirm_count < self.obstacle_roi_required_clear_frames:
+            stats["decision"] = "roi_clear_frames_not_enough"
+            return False, stats
+
+        stats["decision"] = "roi_clear"
+        return True, stats
+
 
     # 优化进度百分比计算逻辑
     def calculate_progress_percentage(self) -> float:
@@ -3934,26 +4061,62 @@ class NavigationStateManager(Node):
         now = time.time()
         block_duration = now - self.obstacle_wait_started_at if self.obstacle_wait_started_at > 0.0 else 0.0
 
-        # 每 4 秒持续给 APP 推送一次等待文案，保证 UI 和播报都能维持“仍在受阻”。
-        if (
-            self.obstacle_wait_push_interval_sec > 0.0 and
-            now - self.obstacle_wait_last_push_time >= self.obstacle_wait_push_interval_sec
-        ):
-            self.publish_obstacle_blocked_event(block_duration, send_ack=False)
-            self.obstacle_wait_last_push_time = now
+        # 障碍阻塞事件只在首次进入 obstacle_wait 时推一次。
+        # APP 当前会把带播报词的 navigation_obstacle_blocked 直接播出来，
+        # 如果这里周期重复推送，就会造成“同一次受阻重复播报”。
+        #
+        # 等待中的持续状态改由周期 navigation_status 承担：
+        # obstacle_wait_active / obstacle_wait_duration / pause_source
+        # 会持续反映“仍在等待障碍清除”，但不再重复触发提示音。
 
         # costmap 太久没更新时，不做 clear 判定，避免用陈旧数据误恢复导航。
         max_costmap_age = max(1.0, 2.0 / self.obstacle_clear_check_rate_hz)
         if now - self.latest_local_costmap_stamp > max_costmap_age:
             self.obstacle_clear_confirm_count = 0
+            self.obstacle_clear_started_at = 0.0
             return
 
         if self.latest_front_obstacle_blocked:
             self.obstacle_clear_confirm_count = 0
+            self.obstacle_clear_started_at = 0.0
+            return
+
+        roi_clear, roi_stats = self.is_roi_obstacle_clear_for_resume(now)
+        if not roi_clear:
+            # ROI 直接来自点云，优先用它确认“人/障碍物确实离开了正前方”。
+            # ROI 还没 clear 时，不累计 costmap clear 时间，避免两套检测窗口不同步导致误恢复。
+            self.obstacle_clear_confirm_count = 0
+            self.obstacle_clear_started_at = 0.0
+            self.get_logger().info(
+                f"ROI 障碍检测尚未 clear，继续暂停等待: {roi_stats}",
+                throttle_duration_sec=1.0,
+            )
             return
 
         self.obstacle_clear_confirm_count += 1
         if self.obstacle_clear_confirm_count < self.obstacle_clear_required_frames:
+            return
+
+        if block_duration < self.obstacle_min_wait_before_resume_sec:
+            self.get_logger().info(
+                f"障碍等待已 clear，但暂停时间 {block_duration:.1f}s "
+                f"< 最短等待 {self.obstacle_min_wait_before_resume_sec:.1f}s，继续观察",
+                throttle_duration_sec=1.0,
+            )
+            return
+
+        if self.obstacle_clear_started_at <= 0.0:
+            self.obstacle_clear_started_at = now
+            return
+
+        clear_duration = now - self.obstacle_clear_started_at
+        required_clear_duration = self.get_current_obstacle_clear_required_duration()
+        if clear_duration < required_clear_duration:
+            self.get_logger().info(
+                f"障碍 clear 持续 {clear_duration:.1f}s "
+                f"< 要求 {required_clear_duration:.1f}s，继续等待",
+                throttle_duration_sec=1.0,
+            )
             return
 
         self.resume_from_obstacle_wait()
@@ -4004,9 +4167,11 @@ class NavigationStateManager(Node):
             event_data["segment_id"] = self.active_segment.get("segment_id", "")
         if self.latest_front_obstacle_stats:
             event_data["front_obstacle_stats"] = self.latest_front_obstacle_stats
+        event_data["roi_obstacle_stats"] = self.build_roi_obstacle_stats()
 
         self.send_acknowledgment("navigation_resumed", "success", "障碍物已消失，导航自动恢复", event_data)
         self.publish_status_update("navigation_resumed", event_data)
+        self.last_obstacle_resume_time = time.time()
         if self.active_route_task and self.active_segment:
             # 障碍恢复时必须重启当前 active_segment，并继续走 route task 策略选择器；
             # 不能退回旧 navigate_to_waypoint 命令链路，否则会破坏 task/transit/播报语义。
@@ -4027,7 +4192,7 @@ class NavigationStateManager(Node):
             self.get_logger().error("障碍恢复失败：当前没有 route task active_segment")
             self.handle_navigation_failed("missing route task active segment on obstacle resume")
             return
-        self.get_logger().info("前方障碍物已连续 clear 多帧，自动恢复当前导航目标")
+        self.get_logger().info("前方 ROI 与 costmap 已连续 clear，自动恢复当前导航目标")
     
     def calculate_distance_to_waypoint(self) -> float:
         """计算到当前路点的距离"""
