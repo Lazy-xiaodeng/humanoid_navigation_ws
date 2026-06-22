@@ -173,6 +173,9 @@ class UnifiedDataIntegrationNode(Node):
             'navigation_path': 30.0,     # 路径数据30秒过期
             'system_status': 60.0,       # 系统状态60秒过期
             'action_result': 30.0,       # 动作完成结果30秒过期
+            'map_status': 15.0,          # 地图状态由 map_context_manager 5秒周期发布
+            'map_response': 60.0,        # 地图命令响应用于 APP/Gateway 回填地图列表
+            'waypoints_data': 600.0,     # 路点全量数据低频变化，缓存供后连客户端读取
             'system_exception': 120.0,   # 异常事件2分钟过期
             'sensor_data': 2.0           # 传感器数据2秒过期
         }
@@ -211,6 +214,21 @@ class UnifiedDataIntegrationNode(Node):
             },
             'facial_gesture_list': {    
                 'frequency': 0.1,       # 0.1Hz推送频率
+                'last_push_time': 0,
+                'qos_levels': ['standard']
+            },
+            'map_status': {
+                'frequency': 1.0,
+                'last_push_time': 0,
+                'qos_levels': ['standard']
+            },
+            'map_response': {
+                'frequency': 0.1,
+                'last_push_time': 0,
+                'qos_levels': ['standard']
+            },
+            'waypoints_data': {
+                'frequency': 0.2,
                 'last_push_time': 0,
                 'qos_levels': ['standard']
             },
@@ -292,6 +310,19 @@ class UnifiedDataIntegrationNode(Node):
             # 订阅导航命令确认消息
             self.navigation_ack_sub = self.create_subscription(
                 String, '/navigation/acknowledgments', self.navigation_ack_callback, 10
+            )
+
+            # 多地图/路点数据统一桥接到 WebSocket 客户端。
+            # websocket_server 只能转发连接期间收到的路点帧；整合节点负责缓存，
+            # 让 Gateway 后连接时也能通过订阅/请求拿到当前地图和路点快照。
+            self.map_response_sub = self.create_subscription(
+                String, '/map/response', self.map_message_callback, 10
+            )
+            self.map_status_sub = self.create_subscription(
+                String, '/map/status', self.map_message_callback, 10
+            )
+            self.waypoints_data_sub = self.create_subscription(
+                String, '/navigation/waypoints_data', self.waypoints_data_callback, 10
             )
 
             # 订阅定位恢复/重定位状态，转换为 APP 异常弹窗事件。
@@ -719,27 +750,35 @@ class UnifiedDataIntegrationNode(Node):
             ack_type = ack_data.get("ack_type", "")
             status = ack_data.get("status", "")
             message = ack_data.get("message", "")
+            event_data = dict(ack_data)
+            event_data.setdefault("event_type", "navigation_command_result")
+            event_data.setdefault("ack_type", ack_type)
+            event_data.setdefault("command_type", ack_type)
+            event_data.setdefault("status", status)
+            event_data.setdefault("message", message)
+            event_data.setdefault("timestamp", time.time())
     
             # 使用统一消息格式
             push_msg = self.create_base_message(
                message_type="push",
-               data_type="navigation_command_result",
+               data_type="navigation_status",
                source="data_integration",
                destination="all"
             )
         
-            # 填充业务数据。保留 navigation_state_manager_recoverable.py
-            # 附加的 recoverable / failed_waypoint / available_actions 等字段。
-            push_msg["data"] = dict(ack_data)
-            push_msg["data"].setdefault("ack_type", ack_type)
-            push_msg["data"].setdefault("status", status)
-            push_msg["data"].setdefault("message", message)
-            push_msg["data"].setdefault("timestamp", time.time())
+            # 填充业务数据。APP/Gateway 以 navigation_status.event_type
+            # 识别 navigation_command_result，同时保留上游附加字段。
+            push_msg["data"] = {
+               "event_type": "navigation_command_result",
+               "event_data": event_data,
+               **event_data,
+            }
         
             # 填充元数据
             push_msg["metadata"]["status"] = status
+            business_error_code = event_data.get("error_code")
             if status == "error":
-                push_msg["metadata"]["error_code"] = "nav_error"
+                push_msg["metadata"]["error_code"] = business_error_code or ack_type or "nav_error"
                 push_msg["metadata"]["error_message"] = message
                 self.publish_system_exception(
                     category="navigation",
@@ -756,10 +795,88 @@ class UnifiedDataIntegrationNode(Node):
             push_str.data = json.dumps(push_msg, ensure_ascii=False)
             self.push_message_pub.publish(push_str)
     
-            self.get_logger().info(f"������ 转发导航确认: {ack_type} - {status}")
+            self.get_logger().info(f"转发导航确认: {ack_type} - {status}")
     
         except Exception as e:
             self.get_logger().error(f'❌ 处理导航确认消息错误: {e}')
+
+    def map_message_callback(self, msg: String):
+        """处理地图管理响应/状态，转成 APP 可消费的统一推送。"""
+        try:
+            payload = json.loads(msg.data)
+            data_type = payload.get("data_type", "map_response")
+            data = payload.get("data", {})
+            if not isinstance(data, dict):
+                data = {"raw_data": data}
+
+            now = time.time()
+            with self.data_lock:
+                self.data_storage[data_type] = data
+                self.last_update_times[data_type] = now
+
+            push_msg = self.create_base_message(
+                message_type=payload.get("message_type", "push"),
+                data_type=data_type,
+                source="data_integration",
+                destination="all"
+            )
+            push_msg["data"] = data
+            metadata = payload.get("metadata", {}) if isinstance(payload.get("metadata", {}), dict) else {}
+            push_msg["metadata"].update({
+                "push_reason": data_type,
+                "status": metadata.get("status", data.get("status", "success")),
+                "error_code": metadata.get("error_code", data.get("error_code", "")),
+                "error_message": metadata.get("error_message", data.get("message", "")),
+                "request_id": metadata.get("request_id", data.get("request_message_id", "")),
+                "data_freshness": 0.0,
+            })
+            self.publish_push_message(push_msg)
+            self.get_logger().info(
+                f"📤 转发地图消息: {data_type}, status={push_msg['metadata'].get('status')}"
+            )
+        except Exception as e:
+            self.get_logger().error(f'❌ 处理地图消息错误: {e}')
+
+    def waypoints_data_callback(self, msg: String):
+        """缓存并转发动态路点全量数据，避免 Gateway 后连时错过初始路点帧。"""
+        try:
+            payload = json.loads(msg.data)
+            data_type = payload.get("data_type", "waypoints_data")
+            data = payload.get("data", {})
+            if not isinstance(data, dict):
+                data = {"raw_data": data}
+
+            now = time.time()
+            with self.data_lock:
+                self.data_storage[data_type] = data
+                self.last_update_times[data_type] = now
+
+            metadata = payload.get("metadata", {}) if isinstance(payload.get("metadata", {}), dict) else {}
+            inner_metadata = data.get("metadata", {}) if isinstance(data.get("metadata", {}), dict) else {}
+            push_msg = self.create_base_message(
+                message_type=payload.get("message_type", "push"),
+                data_type=data_type,
+                source="data_integration",
+                destination="all"
+            )
+            push_msg["data"] = data
+            push_msg["metadata"].update({
+                "push_reason": data_type,
+                "status": metadata.get("status", "success"),
+                "map_id": metadata.get("map_id", inner_metadata.get("map_id", data.get("map_id", ""))),
+                "waypoints_revision": metadata.get(
+                    "waypoints_revision",
+                    inner_metadata.get("waypoints_revision", data.get("waypoints_revision", 0))
+                ),
+                "data_freshness": 0.0,
+            })
+            self.publish_push_message(push_msg)
+            self.get_logger().info(
+                f"📤 转发路点数据: map={push_msg['metadata'].get('map_id')}, "
+                f"revision={push_msg['metadata'].get('waypoints_revision')}"
+            )
+        except Exception as e:
+            self.get_logger().error(f'❌ 处理路点数据错误: {e}')
 
     def publish_navigation_status_event(self, status_data: Dict[str, Any]):
         """事件型导航状态立即推送，避免到达/完成这类瞬时状态被周期推送跳过。"""
@@ -795,8 +912,14 @@ class UnifiedDataIntegrationNode(Node):
         }:
             return
 
+        event_data = status_data.get("event_data", {})
+        event_payload = event_data if isinstance(event_data, dict) else status_data
+
         message = (
-            status_data.get("message")
+            event_payload.get("message")
+            or event_payload.get("reason")
+            or event_payload.get("error_message")
+            or status_data.get("message")
             or status_data.get("reason")
             or status_data.get("error_message")
             or event_type
@@ -809,14 +932,20 @@ class UnifiedDataIntegrationNode(Node):
         elif event_type == "navigation_obstacle_blocked":
             title = "导航受阻"
 
+        if event_type == "navigation_failed" and event_payload.get("route_task"):
+            target_task_id = event_payload.get("current_target_task_id", "")
+            title = "路线任务导航失败"
+            if target_task_id:
+                message = f"{message}，current_target_task_id={target_task_id}"
+
         self.publish_system_exception(
             category=category,
             severity="error" if event_type != "navigation_obstacle_blocked" else "warning",
             title=title,
             message=message,
-            code=event_type,
+            code=event_payload.get("failure_code") or event_type,
             source_event=event_type,
-            details=status_data,
+            details=event_payload,
         )
 
     @staticmethod
@@ -843,7 +972,15 @@ class UnifiedDataIntegrationNode(Node):
             "navigation_localization_manual_override",
             "navigation_localization_recovered",
             "navigation_localization_resume_waiting",
-            "navigation_localization_resume_failed"
+            "navigation_localization_resume_failed",
+            "navigation_command_result",
+            "broadcast_requested",
+            "waypoint_passed",
+            "jump_updated",
+            "final_align_started",
+            "final_align_completed",
+            "task_waypoint_completed",
+            "route_task_completed"
         }
 
     @staticmethod

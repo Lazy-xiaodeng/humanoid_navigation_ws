@@ -32,8 +32,9 @@ find_package(ament_index_cpp REQUIRED)
 
 # SYCL / OpenMP 二选一。默认使用 CPU/OpenMP，避免部署机缺少 libsycl.so 时节点无法启动。
 if(ENABLE_SYCL)
-  list(APPEND CMAKE_PREFIX_PATH "/opt/intel/oneapi/compiler/2025.3/lib/cmake")
-  list(APPEND CMAKE_MODULE_PATH "/opt/intel/oneapi/compiler/2025.3/lib/cmake/IntelSYCL")
+  set(ONEAPI_COMPILER_CMAKE_DIR "/opt/intel/oneapi/compiler/latest/lib/cmake")
+  list(APPEND CMAKE_PREFIX_PATH "${ONEAPI_COMPILER_CMAKE_DIR}")
+  list(APPEND CMAKE_MODULE_PATH "${ONEAPI_COMPILER_CMAKE_DIR}/IntelSYCL")
   find_package(IntelSYCL REQUIRED)
   message(STATUS "ENABLE_SYCL=ON, build with Intel SYCL acceleration")
   set(USE_SYCL ON)

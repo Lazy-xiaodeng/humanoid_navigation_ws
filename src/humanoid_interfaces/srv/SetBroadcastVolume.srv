@@ -1,0 +1,7 @@
+int32 volume_percent
+---
+bool success
+string message
+int32 applied_volume_percent
+string selected_device
+string backend

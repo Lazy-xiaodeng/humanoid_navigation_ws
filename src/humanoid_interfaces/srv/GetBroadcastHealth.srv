@@ -1,0 +1,6 @@
+---
+bool ready
+string selected_device
+string backend
+string message
+int32 current_volume_percent

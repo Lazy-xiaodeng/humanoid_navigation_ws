@@ -14,6 +14,9 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TerrainInfo.msg"
   "msg/GaitStatus.msg"
+  "srv/PlayBroadcast.srv"
+  "srv/SetBroadcastVolume.srv"
+  "srv/GetBroadcastHealth.srv"
   DEPENDENCIES std_msgs
 )
 

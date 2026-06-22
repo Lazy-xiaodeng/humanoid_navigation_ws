@@ -13,6 +13,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from humanoid_interfaces.srv import SetBroadcastVolume
 import time
 import uuid
 import threading
@@ -98,6 +99,12 @@ class CompleteWebSocketServer(Node):
             # 2. 导航控制命令
             self.navigation_command_pub = self.create_publisher(
                 String, '/app/navigation_command', 10
+            )
+            self.navigation_ack_pub = self.create_publisher(
+                String, '/navigation/acknowledgments', 10
+            )
+            self.broadcast_volume_client = self.create_client(
+                SetBroadcastVolume, '/xiaorui_broadcast/set_volume'
             )
 
             # 3. 地图管理命令（多地图一期：查询地图列表/当前地图；切图暂不自动执行）
@@ -725,6 +732,12 @@ class CompleteWebSocketServer(Node):
                 if not inner_command:
                     self.get_logger().error("导航控制命令缺少 command_type")
                     return False
+
+                if inner_command == "set_broadcast_volume":
+                    return await self.handle_set_broadcast_volume_command(
+                        command_data,
+                        command_data.get("request_message_id") or request_message_id
+                    )
             
                 # 构建扁平化的导航控制消息。
                 # APP 侧导航协议已统一为 route task：开始、暂停、继续、终止、跳点和播报完成
@@ -798,6 +811,79 @@ class CompleteWebSocketServer(Node):
         except Exception as e:
             self.get_logger().error(f'路由命令错误: {e}')
             return False
+
+    async def handle_set_broadcast_volume_command(
+        self,
+        command_data: Dict,
+        request_message_id: str = ""
+    ) -> bool:
+        """处理播报音量命令。
+
+        该命令属于播报服务，不进入 route task 导航状态机；否则状态机会返回
+        unknown_navigation_command，导致 Gateway 在等待 ACK 时误判失败。
+        """
+        volume = command_data.get("broadcast_volume", command_data.get("volume_percent", 72))
+        try:
+            volume = max(0, min(100, int(volume)))
+        except Exception:
+            volume = 72
+
+        ack = {
+            "ack_type": "navigation_command_result",
+            "command_type": "set_broadcast_volume",
+            "request_message_id": request_message_id,
+            "status": "error",
+            "message": "",
+            "error_code": "",
+            "timestamp": time.time(),
+        }
+
+        try:
+            if not self.broadcast_volume_client.wait_for_service(timeout_sec=0.1):
+                ack["message"] = "播报服务未启动，无法设置 ROS 音量"
+                ack["error_code"] = "broadcast_service_unavailable"
+                self.publish_navigation_ack(ack)
+                return False
+
+            request = SetBroadcastVolume.Request()
+            request.volume_percent = volume
+            future = self.broadcast_volume_client.call_async(request)
+            started_at = time.time()
+            while not future.done():
+                if time.time() - started_at > 3.0:
+                    ack["message"] = "等待播报服务音量回执超时"
+                    ack["error_code"] = "broadcast_volume_timeout"
+                    self.publish_navigation_ack(ack)
+                    return False
+                await asyncio.sleep(0.02)
+
+            response = future.result()
+            if response.success:
+                ack["status"] = "success"
+                ack["message"] = response.message or "播报音量已设置"
+                ack["result_reason"] = "broadcast_volume_applied"
+                ack["applied_volume_percent"] = response.applied_volume_percent
+                ack["selected_device"] = response.selected_device
+                ack["backend"] = response.backend
+                ack.pop("error_code", None)
+            else:
+                ack["message"] = response.message or "播报音量设置失败"
+                ack["error_code"] = "broadcast_volume_failed"
+            self.publish_navigation_ack(ack)
+            return response.success
+        except Exception as exc:
+            ack["message"] = f"播报音量设置异常: {exc}"
+            ack["error_code"] = "broadcast_volume_exception"
+            self.publish_navigation_ack(ack)
+            return False
+
+    def publish_navigation_ack(self, ack: Dict):
+        msg = String()
+        msg.data = json.dumps(ack, ensure_ascii=False)
+        self.navigation_ack_pub.publish(msg)
+        self.get_logger().info(
+            f"播报音量命令回执: status={ack.get('status')}, request={ack.get('request_message_id')}"
+        )
         
 
     async def handle_robot_control(self, websocket, command_data: Dict, client_id: str):

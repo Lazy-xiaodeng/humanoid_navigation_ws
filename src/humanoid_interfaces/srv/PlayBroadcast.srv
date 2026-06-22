@@ -1,0 +1,11 @@
+string text
+string broadcast_id
+string waypoint_id
+int32 volume_percent
+bool use_request_volume
+---
+bool success
+string message
+float64 duration_sec
+string selected_device
+string backend

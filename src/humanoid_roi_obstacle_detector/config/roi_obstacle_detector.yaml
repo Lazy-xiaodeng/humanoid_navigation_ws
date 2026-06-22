@@ -76,10 +76,10 @@ roi_obstacle_detector:
     ground_z_offset: 0.0
 
     # Front ROI in target_frame: x forward, y left, z up.
-    roi_min_x: 0.45
-    roi_max_x: 2.0
-    roi_min_y: -0.35
-    roi_max_y: 0.35
+    roi_min_x: 0.30
+    roi_max_x: 0.80
+    roi_min_y: -0.30
+    roi_max_y: 0.30
     roi_min_z: 0.28
     roi_max_z: 1.2
 
@@ -92,7 +92,7 @@ roi_obstacle_detector:
 
     # Hysteresis against gait and sparse-point flicker.
     trigger_frames: 3
-    clear_frames: 5
+    clear_frames: 3
 
     # Outputs.
     has_obstacle_topic: "/front_obstacle/has_obstacle"
