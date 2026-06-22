@@ -63,7 +63,7 @@ def generate_launch_description():
     )
 
     # op/prior 版本 — Open3D prior-map 定位 + bridge 独占 map->odom。
-    # 这个入口用于和 ro 做 A/B 对比；原有 navigation2.launch.py 不在本次改动里修改。
+    # 这个入口用于和 ro 做 A/B 对比；op 链路同样会启动 ROI 障碍检测。
     launch_nav2_op = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_navigation2, 'launch', 'navigation2.launch.py')),

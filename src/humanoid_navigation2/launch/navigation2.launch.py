@@ -36,11 +36,13 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     pkg_nav2 = get_package_share_directory('humanoid_navigation2')
+    pkg_roi_obstacle = get_package_share_directory('humanoid_roi_obstacle_detector')
 
     #default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params_xy_yaw.yaml')
     default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params.yaml')
     default_bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_xy_then_yaw.xml')
     default_prior_map_path = os.path.join(pkg_nav2, 'pcd', 'hall_open3d_grounded.pcd')
+    default_roi_obstacle_params_file = os.path.join(pkg_roi_obstacle, 'config', 'roi_obstacle_detector.yaml')
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     nav2_params_file = LaunchConfiguration('nav2_params_file', default=default_nav2_params_file)
@@ -48,6 +50,11 @@ def generate_launch_description():
     enable_fastdds_shm = LaunchConfiguration('enable_fastdds_shm', default='true')
     enable_periodic_clearing = LaunchConfiguration('enable_periodic_clearing', default='true')
     enable_prior_map_localization = LaunchConfiguration('enable_prior_map_localization', default='true')
+    enable_roi_obstacle_detector = LaunchConfiguration('enable_roi_obstacle_detector', default='true')
+    roi_obstacle_params_file = LaunchConfiguration(
+        'roi_obstacle_params_file',
+        default=default_roi_obstacle_params_file,
+    )
 
     prior_pose_topic = LaunchConfiguration('prior_pose_topic', default='/prior_localization/pose')
     prior_pose_with_covariance_topic = LaunchConfiguration(
@@ -246,6 +253,21 @@ def generate_launch_description():
                 'point_cloud_filter.launch.py',
             )
         )
+    )
+
+    roi_obstacle_detector_node = Node(
+        package='humanoid_roi_obstacle_detector',
+        executable='roi_obstacle_detector',
+        name='roi_obstacle_detector',
+        output='screen',
+        condition=IfCondition(enable_roi_obstacle_detector),
+        parameters=[
+            roi_obstacle_params_file,
+            {
+                # 跟随导航系统时间源；实机 false，bag/仿真 true。
+                'use_sim_time': use_sim_time,
+            },
+        ],
     )
 
     map_server_node = TimerAction(
@@ -677,6 +699,8 @@ def generate_launch_description():
         DeclareLaunchArgument('nav2_params_file', default_value=default_nav2_params_file, description='Nav2 参数文件'),
         DeclareLaunchArgument('bt_xml_file', default_value=default_bt_xml_file, description='Nav2 行为树 XML'),
         DeclareLaunchArgument('enable_periodic_clearing', default_value='true', description='是否启动周期性清障节点'),
+        DeclareLaunchArgument('enable_roi_obstacle_detector', default_value='true', description='是否启动前方 ROI 点云障碍检测节点'),
+        DeclareLaunchArgument('roi_obstacle_params_file', default_value=default_roi_obstacle_params_file, description='ROI 障碍检测参数文件'),
         DeclareLaunchArgument('prior_pose_topic', default_value='/prior_localization/pose', description='兼容 PoseStamped 定位输入'),
         DeclareLaunchArgument('prior_pose_with_covariance_topic', default_value='/prior_localization/pose_with_covariance', description='兼容 PoseWithCovarianceStamped 定位输入'),
         DeclareLaunchArgument('prior_odom_topic', default_value='/prior_localization/odom', description='Open3D 全局定位 Odometry 输入'),
@@ -693,6 +717,7 @@ def generate_launch_description():
         tf_bridge_base,
         tf_bridge_clearing_lidar,
         point_cloud_filter_launch,
+        roi_obstacle_detector_node,
         map_server_node,
         map_server_lifecycle,
         TimerAction(period=3.5, actions=[fastlio_open3d_axis_adapter_node]),

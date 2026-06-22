@@ -49,6 +49,7 @@
 
   <!-- ===== 你拆分出的独立功能包 ===== -->
   <depend>humanoid_point_cloud_filter</depend>
+  <depend>humanoid_roi_obstacle_detector</depend>
   <depend>humanoid_nav2_bt_nodes</depend>
   <depend>elevation_mapping_opencl</depend>
   <depend>humanoid_terrain_analyzer</depend>
