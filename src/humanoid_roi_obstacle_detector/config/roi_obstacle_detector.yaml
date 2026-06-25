@@ -1,7 +1,7 @@
 roi_obstacle_detector:
   ros__parameters:
-    # Direct LiDAR point cloud. Override to /fast_lio/cloud_registered only for bag smoke tests.
-    input_topic: "/airy_points"
+    # 使用点云滤波节点输出给 Nav2 的点云，点数更少、坐标已在 base_footprint 下，可明显降低 ROI CPU。
+    input_topic: "/airy_points_filtered"
 
     # Preferred output frame for ROI. This node does not need odom or Fast-LIO pose.
     target_frame: "base_footprint"
@@ -12,7 +12,8 @@ roi_obstacle_detector:
     #   manual - use manual_translation_xyz/manual_rotation_rpy as source->target
     #   imu    - no TF/odom; level source cloud from IMU, then apply manual transform
     #   none   - do not transform; ROI is interpreted in the incoming point cloud frame
-    transform_mode: "imu"
+    # /airy_points_filtered 已经完成坐标变换，这里不再二次转换，避免坐标被重复处理。
+    transform_mode: "none"
     fallback_to_manual: false
     tf_timeout_sec: 0.05
 
@@ -62,7 +63,8 @@ roi_obstacle_detector:
     # After roll/pitch leveling, estimate the floor height from the point cloud
     # and shift z so the floor stays near z=0. This compensates LiDAR vertical
     # body bounce without integrating IMU acceleration.
-    enable_ground_z_compensation: true
+    # 滤波后点云已在 base_footprint 坐标系下，恢复判断直接使用固定 z 窗口即可。
+    enable_ground_z_compensation: false
     ground_roi_min_x: 0.25
     ground_roi_max_x: 3.0
     ground_roi_min_y: -1.2
@@ -98,7 +100,8 @@ roi_obstacle_detector:
     has_obstacle_topic: "/front_obstacle/has_obstacle"
     debug_topic: "/front_obstacle/debug"
     roi_cloud_topic: "/front_obstacle/roi_cloud"
-    publish_roi_cloud: true
+    # 实机默认关闭 ROI 调试点云发布，避免每帧额外序列化点云造成 CPU/带宽压力。
+    publish_roi_cloud: false
     publish_debug: true
     debug_publish_period_sec: 0.5
     log_input_stats: true

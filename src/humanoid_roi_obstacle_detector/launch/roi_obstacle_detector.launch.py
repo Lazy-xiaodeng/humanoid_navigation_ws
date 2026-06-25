@@ -27,7 +27,7 @@ def generate_launch_description():
             description='Path to roi_obstacle_detector.yaml.'),
         DeclareLaunchArgument(
             'input_topic',
-            default_value='/airy_points',
+            default_value='/airy_points_filtered',
             description='Input sensor_msgs/msg/PointCloud2 topic.'),
         DeclareLaunchArgument(
             'target_frame',

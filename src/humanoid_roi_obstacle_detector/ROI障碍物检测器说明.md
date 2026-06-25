@@ -94,19 +94,22 @@ RViz 建议显示：
 | --- | --- |
 | `tf` | 使用 TF 查询点云 frame 到 `target_frame` |
 | `manual` | 只使用配置里的静态外参 |
-| `imu` | 使用 IMU 补 roll/pitch，再套静态外参。当前推荐 |
+| `imu` | 使用 IMU 补 roll/pitch，再套静态外参。适合直接处理原始雷达点云 |
 | `none` | 不变换，ROI 直接解释在输入点云 frame 下 |
 
 当前配置默认：
 
 ```yaml
-transform_mode: "imu"
-input_topic: "/airy_points"
+transform_mode: "none"
+input_topic: "/airy_points_filtered"
 target_frame: "base_footprint"
 imu_topic: "/airy_imu"
 imu_filter_mode: "complementary"
-enable_ground_z_compensation: true
+enable_ground_z_compensation: false
 ```
+
+当前实机默认订阅已经由点云滤波节点转换到 `base_footprint` 的
+`/airy_points_filtered`，因此 ROI 内部不再做二次坐标变换。
 
 静态外参来自 Airy RoboSense/Fast-LIO 外参和记录到的
 `body -> base_footprint` 静态 TF。换机器人或换雷达安装位置时，
