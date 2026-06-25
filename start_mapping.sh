@@ -17,7 +17,7 @@ COMMAND_FILE="$WORKSPACE/.start_mapping.command"
 MAP_PREFIX="$MAP_DIR/$MAP_NAME"
 PCD_FILE="$PCD_DIR/$MAP_NAME.pcd"
 PCD_STANDARD_FILE="$PCD_DIR/${MAP_NAME}_standard.pcd"
-PCD_LOCALIZATION_FILE="$PCD_DIR/${MAP_NAME}_localization_grounded.pcd"
+PCD_OPEN3D_FILE="$PCD_DIR/${MAP_NAME}_open3d_grounded.pcd"
 SC_DB_FILE="$MAP_DIR/${MAP_NAME}_sc.bin"
 BAG_DIR="$BAG_ROOT/${MAP_NAME}_mapping_${START_TIME}"
 
@@ -194,9 +194,11 @@ finish_mapping() {
     run_step "standard-frame PCD generation" run_ros "python3 '$WORKSPACE/src/humanoid_navigation2/humanoid_navigation2/pcd_converter.py' '$PCD_FILE' '$PCD_STANDARD_FILE'" || \
       log "WARN: standard PCD conversion failed."
 
-    log "Generating localization PCD: $PCD_LOCALIZATION_FILE"
-    run_step "localization PCD generation" run_ros "python3 '$WORKSPACE/src/humanoid_navigation2/scripts/make_localization_pcd.py' '$PCD_FILE' '$PCD_LOCALIZATION_FILE' --min-z 0.0 --max-z 2.30 --voxel-size 0.10" || \
-      log "WARN: localization PCD generation failed."
+    log "Generating Open3D/RoboSense prior-map PCD: $PCD_OPEN3D_FILE"
+    # 当前正式导航的 RoboSense/Open3D 定位链路使用 *_open3d_grounded.pcd。
+    # 该口径只去掉地面以下点，保留墙面/天花板等高处结构，并使用 0.05m voxel。
+    run_step "Open3D prior-map PCD generation" run_ros "python3 '$WORKSPACE/src/humanoid_navigation2/scripts/make_localization_pcd.py' '$PCD_FILE' '$PCD_OPEN3D_FILE' --min-z 0.0 --voxel-size 0.05 --keep-ceiling" || \
+      log "WARN: Open3D prior-map PCD generation failed."
   else
     log "ERROR: base PCD is missing; skip PCD conversions: $PCD_FILE"
   fi
@@ -213,7 +215,7 @@ finish_mapping() {
   check_required_file "$SC_DB_FILE" || failed=1
   check_required_file "$PCD_FILE" || failed=1
   check_required_file "$PCD_STANDARD_FILE" || failed=1
-  check_required_file "$PCD_LOCALIZATION_FILE" || failed=1
+  check_required_file "$PCD_OPEN3D_FILE" || failed=1
 
   if [ -d "$BAG_DIR" ] && run_ros "ros2 bag info '$BAG_DIR'" > /dev/null 2>&1; then
     log "OK: rosbag recorded: $BAG_DIR"
@@ -314,6 +316,7 @@ log "Starting Humanoid Mapping"
 log "Map name: $MAP_NAME"
 log "2D map prefix: $MAP_PREFIX"
 log "PCD map: $PCD_FILE"
+log "Open3D/RoboSense prior-map PCD: $PCD_OPEN3D_FILE"
 log "Scan Context database: $SC_DB_FILE"
 log "Bag directory: $BAG_DIR"
 log "Run log: $RUN_LOG"
