@@ -28,7 +28,7 @@ from launch.actions import (
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 
 
@@ -51,6 +51,8 @@ def generate_launch_description():
     enable_fastdds_shm = LaunchConfiguration('enable_fastdds_shm', default='true')
     enable_periodic_clearing = LaunchConfiguration('enable_periodic_clearing', default='true')
     enable_roi_obstacle_detector = LaunchConfiguration('enable_roi_obstacle_detector', default='true')
+    use_cpp_roi_obstacle_detector = LaunchConfiguration('use_cpp_roi_obstacle_detector', default='true')
+    use_cpp_prior_map_odom_bridge = LaunchConfiguration('use_cpp_prior_map_odom_bridge', default='true')
     roi_obstacle_params_file = LaunchConfiguration(
         'roi_obstacle_params_file',
         default=default_roi_obstacle_params_file,
@@ -93,7 +95,7 @@ def generate_launch_description():
         ),
     ]
 
-    def nav2_python_node(executable, node_name, extra_parameters=None):
+    def nav2_python_node(executable, node_name, extra_parameters=None, condition=None):
         parameters = [
             # 是否使用仿真时间；实机 false，bag 回放 true。
             {'use_sim_time': use_sim_time},
@@ -105,6 +107,23 @@ def generate_launch_description():
             executable=executable,
             name=node_name,
             output='screen',
+            condition=condition,
+            parameters=parameters,
+        )
+
+    def nav2_cpp_node(executable, node_name, extra_parameters=None, condition=None):
+        parameters = [
+            # 是否使用仿真时间；实机 false，bag 回放 true。
+            {'use_sim_time': use_sim_time},
+        ]
+        if extra_parameters:
+            parameters.append(extra_parameters)
+        return Node(
+            package='humanoid_navigation2_cpp_nodes',
+            executable=executable,
+            name=node_name,
+            output='screen',
+            condition=condition,
             parameters=parameters,
         )
 
@@ -165,7 +184,7 @@ def generate_launch_description():
     )
 
     tf_map_to_ground = Node(
-        package='humanoid_navigation2',
+        package='humanoid_navigation2_cpp_nodes',
         executable='dynamic_odom_ground_publisher',
         name='dynamic_map_ground_publisher',
         output='screen',
@@ -188,7 +207,7 @@ def generate_launch_description():
     )
 
     tf_odom_to_ground = Node(
-        package='humanoid_navigation2',
+        package='humanoid_navigation2_cpp_nodes',
         executable='dynamic_odom_ground_publisher',
         name='dynamic_odom_ground_publisher',
         output='screen',
@@ -256,12 +275,33 @@ def generate_launch_description():
         )
     )
 
-    roi_obstacle_detector_node = Node(
+    roi_obstacle_detector_cpp_node = Node(
+        package='humanoid_navigation2_cpp_nodes',
+        executable='roi_obstacle_detector_cpp',
+        name='roi_obstacle_detector',
+        output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", enable_roi_obstacle_detector, "' == 'true' and '",
+            use_cpp_roi_obstacle_detector, "' == 'true'",
+        ])),
+        parameters=[
+            roi_obstacle_params_file,
+            {
+                # 跟随导航系统时间源；实机 false，bag/仿真 true。
+                'use_sim_time': use_sim_time,
+            },
+        ],
+    )
+
+    roi_obstacle_detector_py_node = Node(
         package='humanoid_roi_obstacle_detector',
         executable='roi_obstacle_detector',
         name='roi_obstacle_detector',
         output='screen',
-        condition=IfCondition(enable_roi_obstacle_detector),
+        condition=IfCondition(PythonExpression([
+            "'", enable_roi_obstacle_detector, "' == 'true' and '",
+            use_cpp_roi_obstacle_detector, "' != 'true'",
+        ])),
         parameters=[
             roi_obstacle_params_file,
             {
@@ -321,7 +361,7 @@ def generate_launch_description():
         ],
     )
 
-    robot_realpose_publisher = nav2_python_node(
+    robot_realpose_publisher = nav2_cpp_node(
         'robot_realpose_publisher',
         'robot_realpose_publisher',
         {
@@ -347,10 +387,7 @@ def generate_launch_description():
         ],
     )
 
-    prior_map_odom_bridge_node = nav2_python_node(
-        'prior_map_odom_bridge',
-        'prior_map_odom_bridge',
-        {
+    prior_map_odom_bridge_params = {
             # 全局地图坐标系。
             'map_frame': 'map',
             # Fast-LIO 局部里程计坐标系。
@@ -449,10 +486,23 @@ def generate_launch_description():
             'force_2d': True,
             # force_2d 时固定 z 值。
             'force_z': 0.0,
-        },
+        }
+
+    prior_map_odom_bridge_cpp_node = nav2_cpp_node(
+        'prior_map_odom_bridge_cpp',
+        'prior_map_odom_bridge',
+        prior_map_odom_bridge_params,
+        condition=IfCondition(PythonExpression(["'", use_cpp_prior_map_odom_bridge, "' == 'true'"])),
     )
 
-    rviz_initialpose_adapter_node = nav2_python_node(
+    prior_map_odom_bridge_py_node = nav2_python_node(
+        'prior_map_odom_bridge',
+        'prior_map_odom_bridge',
+        prior_map_odom_bridge_params,
+        condition=IfCondition(PythonExpression(["'", use_cpp_prior_map_odom_bridge, "' != 'true'"])),
+    )
+
+    rviz_initialpose_adapter_node = nav2_cpp_node(
         'rviz_initialpose_adapter',
         'rviz_initialpose_adapter',
         {
@@ -475,7 +525,7 @@ def generate_launch_description():
         period=2.0,
         actions=[
             Node(
-                package='humanoid_navigation2',
+                package='humanoid_navigation2_cpp_nodes',
                 executable='periodic_clearing_3d_publisher',
                 name='periodic_clearing_3d_publisher',
                 condition=IfCondition(enable_periodic_clearing),
@@ -618,6 +668,8 @@ def generate_launch_description():
         DeclareLaunchArgument('bt_xml_file', default_value=default_bt_xml_file, description='Nav2 行为树 XML'),
         DeclareLaunchArgument('enable_periodic_clearing', default_value='true', description='是否启动周期性清障节点'),
         DeclareLaunchArgument('enable_roi_obstacle_detector', default_value='true', description='是否启动前方 ROI 点云障碍检测节点'),
+        DeclareLaunchArgument('use_cpp_roi_obstacle_detector', default_value='true', description='是否使用 C++ ROI 障碍检测节点；false 回退 Python'),
+        DeclareLaunchArgument('use_cpp_prior_map_odom_bridge', default_value='true', description='是否使用 C++ prior_map_odom_bridge；false 回退 Python'),
         DeclareLaunchArgument('roi_obstacle_params_file', default_value=default_roi_obstacle_params_file, description='ROI 障碍检测参数文件'),
         DeclareLaunchArgument('prior_pose_topic', default_value='/prior_localization/pose', description='兼容 PoseStamped 定位输入'),
         DeclareLaunchArgument('prior_pose_with_covariance_topic', default_value='/prior_localization/pose_with_covariance', description='兼容 PoseWithCovarianceStamped 定位输入'),
@@ -634,11 +686,12 @@ def generate_launch_description():
         tf_bridge_base,
         tf_bridge_clearing_lidar,
         point_cloud_filter_launch,
-        roi_obstacle_detector_node,
+        roi_obstacle_detector_cpp_node,
+        roi_obstacle_detector_py_node,
         map_server_node,
         map_server_lifecycle,
         TimerAction(period=4.5, actions=[robosense_lidar_localization_node]),
-        TimerAction(period=5.5, actions=[prior_map_odom_bridge_node]),
+        TimerAction(period=5.5, actions=[prior_map_odom_bridge_cpp_node, prior_map_odom_bridge_py_node]),
         TimerAction(period=5.8, actions=[rviz_initialpose_adapter_node]),
         TimerAction(period=7.5, actions=[robot_realpose_publisher]),
         periodic_clearing_3d_node,
