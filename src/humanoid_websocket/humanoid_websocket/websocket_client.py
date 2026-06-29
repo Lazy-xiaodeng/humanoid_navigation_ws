@@ -43,8 +43,9 @@ class HumanoidWebSocketClient(Node):
         self.declare_parameter('default_motion_timeout', 25.0)
         self.declare_parameter('motion_timeout_buffer', 8.0)
         self.declare_parameter('max_motion_timeout', 90.0)
-        # 首条 notify_robot_info 到来前，先允许使用兜底 accid，避免老链路被直接打断。
-        self.declare_parameter('fallback_accid', 'HU_D04_01_289')
+        # 默认不写死 accid，连接机器人后从 notify/response 消息中动态学习。
+        # 如果某台机器人固件不会回传 accid，可通过 YAML 临时配置 fallback_accid。
+        self.declare_parameter('fallback_accid', '')
         self.declare_parameter('fallback_sn', '')
         self.robot_ws_server = self.get_parameter('robot_ws_server').value
         self.reconnect_interval = self.get_parameter('reconnect_interval').value
@@ -65,7 +66,8 @@ class HumanoidWebSocketClient(Node):
         self.motion_completion_events = {}  # 用于等待动作完成通知
         self.motion_expected_durations = {}
         self.gestures_yaml_path = self._get_gestures_yaml_path()
-        # 发送到底层的 accid 默认走配置，连上机器人后会被实时消息自动刷新。
+        # 发送到底层的 accid 默认留空，连上机器人后会被实时消息自动刷新。
+        # 未学习到 accid 前 send_command 会安全拒绝，避免把速度/动作发给错误身份。
         self.accid = self.fallback_accid
         # sn 主要供系统状态透传给 APP 做机器人身份识别。
         self.robot_sn = self.fallback_sn

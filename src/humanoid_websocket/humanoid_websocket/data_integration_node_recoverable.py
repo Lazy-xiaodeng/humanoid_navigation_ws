@@ -348,10 +348,10 @@ class UnifiedDataIntegrationNode(Node):
                 self.real_pose_callback, qos_profile
             )
             
-            # 机器人状态数据订阅
+            # 机器人原始状态数据订阅：直接接入 websocket_client 输出，生成 APP 系统状态。
             self.create_subscription(
-                String, '/robot_status_processed', 
-                self.robot_status_callback, qos_profile
+                String, '/robot_status_raw',
+                self.robot_status_raw_callback, qos_profile
             )
             
             # IMU数据订阅（可选，用于内部处理）
@@ -1305,42 +1305,114 @@ class UnifiedDataIntegrationNode(Node):
         except Exception as e:
             self.get_logger().error(f'❌ 处理NDT定位数据错误: {e}')
     
-    def robot_status_callback(self, msg: String):
-        """处理机器人状态数据回调"""
+    def robot_status_raw_callback(self, msg: String):
+        """处理机器人原始状态数据回调，生成系统状态所需的统一字段。"""
         try:
-            with self.data_lock:
-                robot_status = json.loads(msg.data)
-                
-                # 增强系统状态信息
-                system_status = {
-                    "battery_level": robot_status.get("battery_level", 0),
-                    "signal_quality": robot_status.get("signal_quality", 0),  
-                    "signal_status": robot_status.get("signal_status", "N/A"), 
-                    "network_latency": robot_status.get("network_latency", "0ms"), 
-                    # APP 订阅 system_status 时即可直接拿到机器人身份，不必再单独查其它流。
-                    "robot_accid": robot_status.get("robot_accid", ""),
-                    "robot_sn": robot_status.get("robot_sn", ""),
-                    "robot_identity": robot_status.get("robot_identity", {
-                        "accid": robot_status.get("robot_accid", ""),
-                        "sn": robot_status.get("robot_sn", "")
-                    }),
-                    "robot_status": robot_status.get("robot_state", "Unknown"),
-                    
-                    # 评估健康和运行状态
-                    "system_health": self.assess_system_health(robot_status),
-                    "operational_status": self.determine_operational_status(robot_status),
-                    
-                    # 将包含电压、电流、温控的详细信息放在 details 里
-                    "details": robot_status, 
-                    "timestamp": time.time()
-                }
-                
-                # 存储数据
-                self.data_storage['system_status'] = system_status
-                self.last_update_times['system_status'] = time.time()
-                
+            raw_status = json.loads(msg.data)
+            processed_status = self.convert_raw_robot_status(raw_status)
+            self.update_system_status(processed_status)
         except Exception as e:
-            self.get_logger().error(f'❌ 处理机器人状态错误: {e}')
+            self.get_logger().error(f'❌ 处理机器人原始状态错误: {e}')
+
+    def convert_raw_robot_status(self, raw_status: Dict) -> Dict:
+        """将 websocket_client 的原始机器人状态转换为系统状态使用的字段结构。"""
+        vals = raw_status.get("values", {}) if isinstance(raw_status, dict) else {}
+        health = raw_status.get("health", {}) if isinstance(raw_status, dict) else {}
+
+        latency = raw_status.get("latency", 0) if isinstance(raw_status, dict) else 0
+        try:
+            latency = float(latency)
+        except (TypeError, ValueError):
+            latency = 0.0
+        if latency < 0:
+            latency = 5.0
+
+        if latency < 50:
+            signal_pct = 100
+            signal_desc = "Excellent"
+        elif latency < 150:
+            signal_pct = 85
+            signal_desc = "Good"
+        elif latency < 500:
+            signal_pct = 50
+            signal_desc = "Fair"
+        elif latency < 2000:
+            signal_pct = 20
+            signal_desc = "Poor"
+        else:
+            signal_pct = 5
+            signal_desc = "Unstable"
+
+        robot_accid = str(raw_status.get("accid") or vals.get("robot_accid") or "").strip()
+        robot_sn = str(raw_status.get("sn") or vals.get("robot_sn") or "").strip()
+        battery_pct = vals.get("battery", 0)
+        try:
+            battery_pct = int(battery_pct)
+        except (TypeError, ValueError):
+            battery_pct = 0
+
+        robot_state = vals.get("robot_status", "Unknown")
+        motion_busy = bool(vals.get("motion_busy", False))
+        current_motion = vals.get("current_motion", "") or ""
+        control_ready_for_navigation = bool(
+            vals.get("control_ready_for_navigation", robot_state == "Walk" and not motion_busy)
+        )
+        is_estop = vals.get("estop", "OFF") == "ON"
+
+        return {
+            "battery_level": battery_pct,
+            "signal_quality": signal_pct,
+            "signal_status": signal_desc,
+            "network_latency": f"{int(latency)}ms",
+            "robot_accid": robot_accid,
+            "robot_sn": robot_sn,
+            "robot_identity": {
+                "accid": robot_accid,
+                "sn": robot_sn
+            },
+            "robot_state": robot_state,
+            "power_info": {
+                "total_voltage": vals.get("bat_vol", 0.0),
+                "total_current": vals.get("bat_cur", 0.0),
+                "bat_temperature": vals.get("bat_temp0", 0.0)
+            },
+            "system_mode": vals.get("mode", "Unknown"),
+            "motion_busy": motion_busy,
+            "current_motion": current_motion,
+            "control_ready_for_navigation": control_ready_for_navigation,
+            "estop_active": is_estop,
+            "health_check": health,
+            "timestamp": time.time()
+        }
+
+    def update_system_status(self, robot_status: Dict):
+        """把处理后的机器人状态写入统一数据缓存，供 APP 请求和订阅推送使用。"""
+        with self.data_lock:
+            system_status = {
+                "battery_level": robot_status.get("battery_level", 0),
+                "signal_quality": robot_status.get("signal_quality", 0),
+                "signal_status": robot_status.get("signal_status", "N/A"),
+                "network_latency": robot_status.get("network_latency", "0ms"),
+                # APP 订阅 system_status 时即可直接拿到机器人身份，不必再单独查其它流。
+                "robot_accid": robot_status.get("robot_accid", ""),
+                "robot_sn": robot_status.get("robot_sn", ""),
+                "robot_identity": robot_status.get("robot_identity", {
+                    "accid": robot_status.get("robot_accid", ""),
+                    "sn": robot_status.get("robot_sn", "")
+                }),
+                "robot_status": robot_status.get("robot_state", "Unknown"),
+
+                # 评估健康和运行状态
+                "system_health": self.assess_system_health(robot_status),
+                "operational_status": self.determine_operational_status(robot_status),
+
+                # 将包含电压、电流、温控的详细信息放在 details 里
+                "details": robot_status,
+                "timestamp": time.time()
+            }
+
+            self.data_storage['system_status'] = system_status
+            self.last_update_times['system_status'] = time.time()
     
     def imu_callback(self, msg: Imu):
         """处理IMU数据回调（内部使用，不发送给APP）"""

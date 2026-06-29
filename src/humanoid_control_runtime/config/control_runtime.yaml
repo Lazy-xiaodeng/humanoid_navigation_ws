@@ -1,0 +1,90 @@
+# humanoid_control_runtime 控制层运行参数。
+# 这个参数文件用于集中管理 APP 命令接入、点位库持久化、地图上下文和切图状态机。
+# 现场调试时优先修改本文件，不要把临时测试值硬编码到源码里。
+# 注意：点位库、地图注册表和切图脚本都带有副作用，修改路径前要确认当前运行工作区。
+
+dynamic_waypoints_manager_cpp:
+  ros__parameters:
+    # 是否启用点位数据持久化；true 表示点位变更会写入 JSON 文件。
+    data_storage.enabled: true
+
+    # 兼容单文件点位库路径；当前多地图主逻辑优先使用 data_storage.waypoints_dir。
+    # 当多地图目录为空且该文件存在时，节点会把这里的点位导入默认地图文件。
+    data_storage.file_path: "/home/ubuntu/software/Todesk/Files/humanoid_ws/data/dynamic_waypoints.json"
+
+    # 多地图点位库目录；每张地图一个 JSON 文件，例如 hall.json。
+    data_storage.waypoints_dir: "/home/ubuntu/software/Todesk/Files/humanoid_ws/data/waypoints"
+
+    # APP 或旧数据没有携带 map_id 时使用的默认地图 ID。
+    data_storage.default_map_id: "hall"
+
+    # 自动保存间隔，单位秒；用于周期性落盘兜底，避免异常退出丢点位。
+    data_storage.auto_save_interval: 300.0
+
+    # APP 点位管理命令输入话题，必须与 websocket/data_integration 侧保持一致。
+    app_waypoint_command_topic: "/app/waypoint_command"
+
+    # APP 导航任务命令输入话题，路线任务 start/pause/resume/stop/jump 会从这里进入。
+    app_navigation_command_topic: "/app/navigation_command"
+
+    # 发往路线运行层的请求话题，必须保持 JSON 协议兼容。
+    navigation_requests_topic: "/navigation/requests"
+
+    # 点位库同步话题，路线运行层通过它获取 waypoint_id 对应坐标和 revision。
+    navigation_waypoints_data_topic: "/navigation/waypoints_data"
+
+    # 路线运行层兼容 ack 话题；部分旧 APP/桥接逻辑仍依赖这个确认链路。
+    navigation_acknowledgments_topic: "/navigation/acknowledgments"
+
+    # 启动后重复发布点位库的次数，用于让后启动的 navigation_state_manager 拿到初始点位。
+    initial_waypoints_publish_max: 5
+
+    # 启动后重复发布点位库的间隔，单位秒。
+    initial_waypoints_publish_interval_sec: 1.0
+
+map_context_manager_cpp:
+  ros__parameters:
+    # 地图注册表路径，记录当前地图、默认地图以及每张地图的 2D/3D 文件路径。
+    map_registry_path: "/home/ubuntu/software/Todesk/Files/humanoid_ws/data/maps/map_registry.json"
+
+    # 地图命令缺少 map_id 时使用的默认地图 ID。
+    default_map_id: "hall"
+
+    # prior-map 定位健康状态话题；切图后通过它判断新地图定位是否稳定。
+    localization_health_status_topic: "/localization/prior_map_odom_bridge_status"
+
+    # 初始位姿发布话题；APP 设置或地图 registry 回显初始位姿时使用。
+    initialpose_topic: "/initialpose"
+
+    # 地图切换允许等待定位恢复的最长时间，单位秒。
+    switch_localization_timeout_sec: 45.0
+
+    # 切图后需要连续多少帧定位健康才认为地图切换完成。
+    switch_localization_stable_frames: 2
+
+    # 发布初始位姿时的重复次数，避免单帧消息被定位节点错过。
+    initialpose_repeat_count: 3
+
+    # 重复发布初始位姿的间隔，单位秒。
+    initialpose_repeat_interval_sec: 0.5
+
+    # 导航状态话题；地图上下文节点用它判断导航中是否允许切图。
+    navigation_status_topic: "/navigation/status"
+
+    # 地图切换脚本路径；脚本会重启导航定位层，修改前必须确认不会停止控制层本身。
+    map_switch_script: "/home/ubuntu/software/Todesk/Files/humanoid_ws/switch_navigation_map.sh"
+
+    # APP 地图命令输入话题。
+    app_map_command_topic: "/app/map_command"
+
+    # APP 地图命令响应输出话题。
+    map_response_topic: "/map/response"
+
+    # 当前地图状态周期推送话题。
+    map_status_topic: "/map/status"
+
+    # 周期发布地图状态的间隔，单位秒。
+    map_status_publish_interval_sec: 5.0
+
+    # 切图 watchdog 检查间隔，单位秒。
+    switch_watchdog_interval_sec: 0.5

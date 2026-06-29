@@ -1,0 +1,47 @@
+# humanoid_localization_runtime
+
+`humanoid_localization_runtime` 是机器人导航中的定位、TF 和真实位姿运行层 C++ 功能包。它把原先集中在综合包中的定位相关节点独立出来，方便后续维护、参数调试和资源评估。
+
+## 包作用
+
+- 维护 `map -> odom` 定位桥接 TF。
+- 动态发布 `map_ground` 和 `odom_ground` 地面坐标系。
+- 根据 TF 输出 `/robot_realpose`。
+- 将 RViz `/initialpose` 转换给定位桥和 RoboSense 定位初始化链路。
+
+## 文件说明
+
+- `src/prior_map_odom_bridge_cpp.cpp`：定位桥主节点，融合外部定位和 odom，发布 `map -> odom` 与 `/localization/prior_map_odom_bridge_status`。
+- `src/dynamic_odom_ground_publisher.cpp`：动态地面 TF 发布节点，根据机器人当前高度发布 `map_ground` 或 `odom_ground`。
+- `src/robot_realpose_publisher.cpp`：机器人真实位姿发布节点，从 TF 查询全局位姿并发布 `/robot_realpose`。
+- `src/rviz_initialpose_adapter.cpp`：RViz 初始位姿适配节点，把 `/initialpose` 同步给定位桥和 RoboSense。
+- `config/localization_runtime.yaml`：定位运行层参考参数，带中文注释，当前主启动链路仍以内联 launch 参数为准。
+- `launch/localization_runtime.launch.py`：独立调试 launch，便于单独启动定位辅助节点。
+
+## 上下游链路
+
+上游：
+
+- `fast_lio_node`：提供 `/odom` 和底盘相关 TF。
+- `robosense_lidar_localization_node`：提供 `/prior_localization/odom` 等全局定位输入。
+- RViz 或 APP：通过 `/initialpose` 设置初始位姿。
+
+下游：
+
+- Nav2：使用 `map_ground`、`odom_ground` 和 `map -> odom`。
+- 路线运行层：订阅 `/localization/prior_map_odom_bridge_status` 判断定位健康。
+- APP/数据整合层：订阅 `/robot_realpose` 展示机器人实时位置。
+
+## 使用说明
+
+正式导航通常由 `humanoid_navigation2` 的 launch 统一启动。单独调试时可使用：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source install/local_setup.bash
+ros2 launch humanoid_localization_runtime localization_runtime.launch.py
+```
+
+## 回退策略
+
+旧综合包 `humanoid_navigation2_cpp_nodes` 暂时保留。若新包启动异常，可以把 launch 中对应 package 临时改回旧包名回退。

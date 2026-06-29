@@ -37,7 +37,7 @@ class SyntheticDataPublisher(Node):
         
         # 3. 模拟业务状态 (JSON String)
         self.nav_status_pub = self.create_publisher(String, '/navigation/status', 10)
-        self.sys_status_pub = self.create_publisher(String, '/robot_status_processed', 10)
+        self.sys_status_pub = self.create_publisher(String, '/robot_status_raw', 10)
         
         # 4. 模拟 IMU
         self.imu_pub = self.create_publisher(Imu, '/imu', 10)
@@ -152,19 +152,31 @@ class SyntheticDataPublisher(Node):
         }
         self.nav_status_pub.publish(String(data=json.dumps(nav_status)))
 
-        # ================= 发布 /robot_status_processed (系统Json) =================
+        # ================= 发布 /robot_status_raw (模拟机器人原始状态Json) =================
         # 模拟耗电
         self.battery_level = max(0.0, self.battery_level - 0.005)
         if self.battery_level <= 0: self.battery_level = 100.0
         
         sys_status = {
-            "battery_level": float(f"{self.battery_level:.1f}"),
-            "battery_status": "discharging",
-            "wifi_signal": -60 + random.randint(-5, 5), # 模拟信号波动
-            "cpu_usage": 15.2,
-            "robot_mode": "autonomous",
-            "error_count": 0,
-            "emergency_stop": False
+            "accid": "SIM_ROBOT",
+            "sn": "SIM_ROBOT",
+            "latency": random.randint(20, 120),
+            "values": {
+                "battery": float(f"{self.battery_level:.1f}"),
+                "robot_status": "Walk",
+                "estop": "OFF",
+                "motion_busy": False,
+                "current_motion": "",
+                "control_ready_for_navigation": True,
+                "bat_vol": 51.0,
+                "bat_cur": 2.0,
+                "bat_temp0": 32.0,
+                "mode": "autonomous"
+            },
+            "health": {
+                "wifi_signal": -60 + random.randint(-5, 5),
+                "error_count": 0
+            }
         }
         self.sys_status_pub.publish(String(data=json.dumps(sys_status)))
         

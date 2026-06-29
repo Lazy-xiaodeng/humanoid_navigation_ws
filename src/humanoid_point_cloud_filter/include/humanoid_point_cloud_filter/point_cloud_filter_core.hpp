@@ -6,6 +6,7 @@
 #include <pcl/point_types.h>
 #include <vector>
 #include <memory>
+#include <string>
 
 namespace humanoid_point_cloud_filter  
 {
@@ -14,6 +15,10 @@ struct FilterConfig
 {
   // 体素下采样
   double voxel_leaf_size;
+  bool enable_pre_voxel_for_filter;
+  double pre_voxel_leaf_size;
+  bool voxel_before_filters;
+  std::string filter_mode;
 
   // SOR 参数
   int sor_k;
@@ -38,6 +43,7 @@ struct FilterConfig
   bool enable_height_continuity;
   bool enable_density;
   bool enable_motion_detection;
+  bool combine_sor_height_kdtree;
 
   // 多线程配置
   int num_threads;  // 0表示使用OpenMP默认线程数
@@ -49,6 +55,7 @@ struct FilterTimings
   double sor_ms;
   double height_ms;
   double density_ms;
+  double pre_voxel_ms;
   double voxel_ms;
   double total_ms;
 };
@@ -79,9 +86,23 @@ private:
     const pcl::PointCloud<pcl::PointXYZI>::Ptr & input,
     double radius, int min_points, double & time_ms);
 
+  pcl::PointCloud<pcl::PointXYZI>::Ptr voxelDensityOutlierFilter(
+    const pcl::PointCloud<pcl::PointXYZI>::Ptr & input,
+    double leaf_size,
+    int min_neighbor_voxels,
+    double & time_ms);
+
   pcl::PointCloud<pcl::PointXYZI>::Ptr voxelDownsample(
     const pcl::PointCloud<pcl::PointXYZI>::Ptr & input,
     double leaf_size, double & time_ms);
+
+  pcl::PointCloud<pcl::PointXYZI>::Ptr combinedSorHeightFilter(
+    const pcl::PointCloud<pcl::PointXYZI>::Ptr & input,
+    int k,
+    double std_ratio,
+    double height_threshold,
+    double & sor_time_ms,
+    double & height_time_ms);
 
   FilterConfig config_;
 

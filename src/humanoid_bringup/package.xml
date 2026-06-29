@@ -20,6 +20,8 @@
   <exec_depend>humanoid_navigation2</exec_depend>
   <exec_depend>humanoid_navigation</exec_depend>
   <exec_depend>humanoid_websocket</exec_depend>
+  <exec_depend>humanoid_app_gateway_runtime</exec_depend>
+  <exec_depend>humanoid_robot_gateway_runtime</exec_depend>
   <exec_depend>humanoid_elevation_mapping</exec_depend>
   <exec_depend>fast_lio_robosense</exec_depend>
 

@@ -52,6 +52,14 @@ class ImuProcess
     {
         odom_pub_ = pub;
     }
+  void set_high_frequency_odom_enabled(bool enabled)
+    {
+        publish_high_frequency_odom_ = enabled;
+    }
+  void set_log_imu_process_enabled(bool enabled)
+    {
+        log_imu_process_ = enabled;
+    }
   void PublishOdometry(const state_ikfom &imu_state, double timestamp);
 
   ofstream fout_imu;
@@ -84,6 +92,8 @@ class ImuProcess
   int    init_iter_num = 1;
   bool   b_first_frame_ = true;
   bool   imu_need_init_ = true;
+  bool   publish_high_frequency_odom_ = false;
+  bool   log_imu_process_ = false;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
 };
 
@@ -259,8 +269,10 @@ void ImuProcess::UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikf
   /*** sort point clouds by offset time ***/
   pcl_out = *(meas.lidar);
   sort(pcl_out.points.begin(), pcl_out.points.end(), time_list);
-  std::cout<<"[ IMU Process ]: Process lidar from "<<pcl_beg_time<<" to "<<pcl_end_time<<", " \
-           <<meas.imu.size()<<" imu msgs from "<<imu_beg_time<<" to "<<imu_end_time<<std::endl;
+  if (log_imu_process_) {
+    std::cout<<"[ IMU Process ]: Process lidar from "<<pcl_beg_time<<" to "<<pcl_end_time<<", " \
+             <<meas.imu.size()<<" imu msgs from "<<imu_beg_time<<" to "<<imu_end_time<<std::endl;
+  }
 
   /*** Initialize IMU pose ***/
   state_ikfom imu_state = kf_state.get_x();
@@ -315,8 +327,7 @@ void ImuProcess::UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikf
 
     /* save the poses at each IMU measurements */
     imu_state = kf_state.get_x();
-    bool pub_imu_odom = true;
-    if(pub_imu_odom){
+    if(publish_high_frequency_odom_){
         PublishOdometry(imu_state, tail_stamp);
     }
     angvel_last = angvel_avr - imu_state.bg;

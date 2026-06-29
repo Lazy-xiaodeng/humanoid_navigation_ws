@@ -1,0 +1,191 @@
+# humanoid_route_runtime 路线任务运行层参数。
+# 本文件集中管理路线任务状态机、导航启动门控、障碍等待恢复、定位健康检查和 Nav2 action 名称。
+# 现场调试时优先修改本文件，避免将临时经验值散落在源码里。
+# 注意：本包最终会驱动 Nav2 action，涉及机器人真实运动；修改参数后必须先做隔离验证。
+
+navigation_state_manager_cpp:
+  ros__parameters:
+    # 到点位置容差，单位米；用于判断机器人是否已经到达当前目标附近。
+    position_tolerance: 0.15
+
+    # 到点朝向容差，单位弧度；最终 task 的 yaw 对齐仍主要交给 Nav2 行为树。
+    orientation_tolerance: 0.3
+
+    # 周期状态发布频率，单位 Hz；事件类状态仍应即时发布。
+    status_publish_rate: 1.0
+
+    # 默认坐标系；路线点、状态输出和目标点默认使用 map。
+    default_frame_id: "map"
+
+    # 地图坐标系名称；TF 查询 map -> base_frame 时使用。
+    map_frame: "map"
+
+    # 机器人底盘坐标系名称；当前系统使用 base_footprint。
+    base_frame: "base_footprint"
+
+    # TF 查询超时时间，单位秒；过长会拖慢高频 odom 回调，过短可能在 TF 抖动时拿不到位姿。
+    pose_tf_timeout_sec: 0.05
+
+    # 障碍物兜底阻塞超时时间，单位秒；主判断仍由 Nav2/RPP 失败接管。
+    obstacle_block_timeout: 4.0
+
+    # 判断机器人是否停滞的速度阈值，单位 m/s。
+    velocity_threshold: 0.10
+
+    # 基于位姿差分估算速度时的小位移死区，单位米，用于降低短暂停顿误判。
+    blockage_pose_delta_deadzone: 0.10
+
+    # 解除阻塞需要达到的恢复速度阈值，单位 m/s。
+    blockage_recovery_velocity_threshold: 0.15
+
+    # 解除阻塞需要连续确认的时间，单位秒。
+    blockage_recovery_confirm_sec: 1.0
+
+    # 是否启用障碍等待恢复状态机；false 时 Nav2 失败会直接进入失败流程。
+    obstacle_wait_enable: true
+
+    # 障碍等待期间向 APP 推送等待事件的间隔，单位秒。
+    obstacle_wait_push_interval_sec: 4.0
+
+    # costmap/ROI 连续 clear 帧数要求。
+    obstacle_clear_required_frames: 5
+
+    # 障碍恢复检查频率，单位 Hz；越高恢复越快，但 CPU 占用更高。
+    obstacle_clear_check_rate_hz: 5.0
+
+    # local_costmap 中认为是致命障碍的代价值，OccupancyGrid 通常 100 表示占用。
+    obstacle_clear_cost_threshold: 100
+
+    # 障碍恢复窗口前向最小距离，单位米；小于该距离通常是机器人自身或近场噪声。
+    obstacle_clear_front_min_x_m: 0.15
+
+    # 障碍恢复窗口前向最大距离，单位米；只看近前方，避免墙/玻璃门远处误判。
+    obstacle_clear_front_max_x_m: 0.80
+
+    # 障碍恢复窗口左右半宽，单位米。
+    obstacle_clear_half_width_m: 0.30
+
+    # 进入障碍等待后最短等待时间，单位秒，避免刚暂停就被单帧 clear 误恢复。
+    obstacle_min_wait_before_resume_sec: 2.0
+
+    # 正常恢复前要求前方连续 clear 的时间，单位秒。
+    obstacle_clear_required_duration_sec: 2.5
+
+    # 如果刚恢复后很快再次阻塞，下一次恢复要求更长 clear 时间，单位秒。
+    obstacle_clear_required_duration_after_false_resume_sec: 4.0
+
+    # 恢复后在该时间窗口内再次阻塞，则认为上一次是误恢复，单位秒。
+    obstacle_false_resume_window_sec: 3.0
+
+    # 是否结合 ROI 障碍检测结果判断恢复；true 时优先相信点云 ROI 对近前方障碍的确认。
+    obstacle_resume_use_roi: true
+
+    # ROI 障碍检测输入话题，来自 roi_obstacle_detector。
+    obstacle_roi_has_obstacle_topic: "/front_obstacle/has_obstacle"
+
+    # ROI 状态超时时间，单位秒；超时后不能继续认为 ROI clear。
+    obstacle_roi_timeout_sec: 1.0
+
+    # ROI 连续 clear 帧数要求。
+    obstacle_roi_required_clear_frames: 3
+
+    # local costmap 输入话题。
+    local_costmap_topic: "/local_costmap/costmap"
+
+    # 性能优化：正常导航时 local costmap 只缓存，只有障碍等待恢复时才分析前方窗口。
+    obstacle_costmap_analyze_only_when_waiting: true
+
+    # 性能优化：分析前方窗口时只遍历窗口外接 cell 区域，不扫描整张 costmap。
+    obstacle_costmap_window_bounded_scan: true
+
+    # 是否要求机器人处于 walk/可运动状态才能开始导航。
+    require_walk_mode_for_navigation: true
+
+    # robot_status_raw 超时时间，单位秒；超时后认为机器人控制状态不可信。
+    robot_status_timeout: 2.0
+
+    # 等待定位/Nav2 就绪的 pending 导航请求最长保留时间，单位秒。
+    pending_navigation_timeout: 90.0
+
+    # 距离目标小于该值时，阻塞失败会更谨慎处理，避免临近终点误报。
+    obstacle_block_near_goal_distance: 0.7
+
+    # 定位恢复需要连续健康帧数。
+    localization_resume_stable_frames: 3
+
+    # prior-map 定位健康状态话题。
+    localization_health_status_topic: "/localization/prior_map_odom_bridge_status"
+
+    # 地图状态话题；用于确认当前地图是否 ready。
+    map_status_topic: "/map/status"
+
+    # 定位健康状态超时时间，单位秒。
+    localization_health_timeout_sec: 3.0
+
+    # 当前候选定位 rejected/pending 时，如果已有 last good TF，是否允许继续按 odom 推进。
+    localization_allow_start_with_last_good_tf: true
+
+    # last good TF 最大年龄，单位秒；0 表示不限制年龄。
+    localization_last_good_tf_max_age_sec: 0.0
+
+    # 首个 task 到达容差，单位米；机器人启动时已经在首点附近可直接进入播报/完成流程。
+    route_task.first_task_reached_tolerance_m: 0.4
+
+    # transit 经过判定容差，单位米；用于 feedback 不完整时的兜底判断。
+    route_task.transit_passed_tolerance_m: 0.5
+
+    # 是否允许通过“上一执行点 -> transit”的投影越过终点来补判 transit 已经过。
+    route_task.transit_projection_passed_enabled: true
+
+    # Nav2 feedback 超时时间，单位秒；长时间没有 feedback 时可判定链路异常。
+    route_task.nav2_feedback_timeout_sec: 3.0
+
+    # jump/stop 时等待旧 goal 取消的时间，单位秒，避免旧回调污染新段。
+    route_task.goal_cancel_timeout_sec: 2.0
+
+    # NavigateThroughPoses goal rejected 后允许重试的最长时间，单位秒。
+    route_task.goal_reject_retry_timeout_sec: 8.0
+
+    # 是否默认允许 jump 打断播报等待。
+    route_task.default_interrupt_broadcast: true
+
+    # 是否真正向 Nav2 action 下发路线任务 goal。
+    # false：只运行 C++ 路线任务状态机和协议层，适合验证测试、日志验证和逐步接入。
+    # true：start/jump/下一段会驱动 NavigateThroughPoses 或 NavigateToPose，机器人会真实运动；打开前必须确认 Nav2、地图、定位和安全急停可用。
+    route_task.nav2_execution_enable: false
+
+    # 倒走导航使用的行为树 XML。
+    reverse_navigation_bt_xml: "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/config/behavior_tree/navigate_reverse_xy_then_yaw.xml"
+
+    # 导航请求输入话题。
+    navigation_requests_topic: "/navigation/requests"
+
+    # 点位库同步输入话题。
+    navigation_waypoints_data_topic: "/navigation/waypoints_data"
+
+    # 导航状态输出话题，APP 导航页主要依赖它。
+    navigation_status_topic: "/navigation/status"
+
+    # 兼容确认输出话题。
+    navigation_acknowledgments_topic: "/navigation/acknowledgments"
+
+    # 调试/可视化目标点输出话题。
+    navigation_goal_topic: "/goal_pose"
+
+    # 停止/暂停兜底速度输出话题。
+    cmd_vel_topic: "/cmd_vel"
+
+    # odom 输入话题。
+    odom_topic: "/odom"
+
+    # 机器人原始状态输入话题。
+    robot_status_topic: "/robot_status_raw"
+
+    # Nav2 行为树日志输入话题。
+    behavior_tree_log_topic: "/behavior_tree_log"
+
+    # NavigateToPose action 名称。
+    navigate_to_pose_action: "navigate_to_pose"
+
+    # NavigateThroughPoses action 名称。
+    navigate_through_poses_action: "navigate_through_poses"

@@ -121,7 +121,7 @@ def generate_launch_description():
         if extra_parameters:
             parameters.append(extra_parameters)
         return Node(
-            package='humanoid_navigation2_cpp_nodes',
+            package='humanoid_localization_runtime',
             executable=executable,
             name=node_name,
             output='screen',
@@ -185,7 +185,7 @@ def generate_launch_description():
     )
 
     tf_map_to_ground = Node(
-        package='humanoid_navigation2_cpp_nodes',
+        package='humanoid_localization_runtime',
         executable='dynamic_odom_ground_publisher',
         name='dynamic_map_ground_publisher',
         output='screen',
@@ -208,7 +208,7 @@ def generate_launch_description():
     )
 
     tf_odom_to_ground = Node(
-        package='humanoid_navigation2_cpp_nodes',
+        package='humanoid_localization_runtime',
         executable='dynamic_odom_ground_publisher',
         name='dynamic_odom_ground_publisher',
         output='screen',
@@ -578,7 +578,7 @@ def generate_launch_description():
         period=2.0,
         actions=[
             Node(
-                package='humanoid_navigation2_cpp_nodes',
+                package='humanoid_costmap_runtime',
                 executable='periodic_clearing_3d_publisher',
                 name='periodic_clearing_3d_publisher',
                 condition=IfCondition(enable_periodic_clearing),

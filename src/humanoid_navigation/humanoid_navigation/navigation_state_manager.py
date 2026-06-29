@@ -93,6 +93,10 @@ class NavigationStateManager(Node):
             ('obstacle_roi_timeout_sec', 1.0),
             ('obstacle_roi_required_clear_frames', 3),
             ('local_costmap_topic', '/local_costmap/costmap'),
+            # 性能优化开关：正常导航时 local costmap 只缓存，只有障碍等待恢复阶段才分析前方窗口。
+            ('obstacle_costmap_analyze_only_when_waiting', True),
+            # 性能优化开关：分析前方窗口时只遍历窗口外接 cell 区域，不再扫描整张 costmap。
+            ('obstacle_costmap_window_bounded_scan', True),
             ('require_walk_mode_for_navigation', True),
             ('robot_status_timeout', 2.0),
             ('pending_navigation_timeout', 90.0),
@@ -163,6 +167,10 @@ class NavigationStateManager(Node):
         self.obstacle_roi_required_clear_frames = max(
             1, int(self.get_parameter('obstacle_roi_required_clear_frames').value))
         self.local_costmap_topic = str(self.get_parameter('local_costmap_topic').value)
+        self.obstacle_costmap_analyze_only_when_waiting = bool(
+            self.get_parameter('obstacle_costmap_analyze_only_when_waiting').value)
+        self.obstacle_costmap_window_bounded_scan = bool(
+            self.get_parameter('obstacle_costmap_window_bounded_scan').value)
         self.require_walk_mode_for_navigation = self.get_parameter('require_walk_mode_for_navigation').value
         self.robot_status_timeout = float(self.get_parameter('robot_status_timeout').value)
         self.pending_navigation_timeout = float(self.get_parameter('pending_navigation_timeout').value)
@@ -846,6 +854,12 @@ class NavigationStateManager(Node):
         try:
             self.latest_local_costmap_stamp = time.time()
             self.latest_local_costmap = msg
+
+            # 正常导航时 Nav2 自己负责避障；这里的 costmap 窗口只服务“障碍暂停后的恢复确认”。
+            # 因此默认只缓存最新 costmap，避免每帧在 Python 中扫描整张地图。
+            if self.obstacle_costmap_analyze_only_when_waiting and not self.obstacle_wait_active:
+                return
+
             blocked, stats = self.analyze_front_obstacle_window(msg)
             self.latest_front_obstacle_blocked = blocked
             self.latest_front_obstacle_stats = stats
@@ -910,9 +924,41 @@ class NavigationStateManager(Node):
 
         cos_yaw = math.cos(robot_yaw)
         sin_yaw = math.sin(robot_yaw)
-        for cell_y in range(height):
+        cell_x_begin = 0
+        cell_x_end = width
+        cell_y_begin = 0
+        cell_y_end = height
+
+        if self.obstacle_costmap_window_bounded_scan and resolution > 0.0:
+            # 先把机器人前方矩形窗口四个角转成 world，再换算成 costmap cell 外接框。
+            # 后续仍保留精确 forward/lateral 判断，所以只是减少遍历候选格子，不改变判定语义。
+            window_corners = (
+                (self.obstacle_clear_front_min_x_m, -self.obstacle_clear_half_width_m),
+                (self.obstacle_clear_front_min_x_m, self.obstacle_clear_half_width_m),
+                (self.obstacle_clear_front_max_x_m, -self.obstacle_clear_half_width_m),
+                (self.obstacle_clear_front_max_x_m, self.obstacle_clear_half_width_m),
+            )
+            world_x_values = []
+            world_y_values = []
+            for forward_x, lateral_y in window_corners:
+                world_x_values.append(robot_x + cos_yaw * forward_x - sin_yaw * lateral_y)
+                world_y_values.append(robot_y + sin_yaw * forward_x + cos_yaw * lateral_y)
+
+            min_cell_x = math.floor((min(world_x_values) - origin_x) / resolution) - 1
+            max_cell_x = math.ceil((max(world_x_values) - origin_x) / resolution) + 1
+            min_cell_y = math.floor((min(world_y_values) - origin_y) / resolution) - 1
+            max_cell_y = math.ceil((max(world_y_values) - origin_y) / resolution) + 1
+
+            cell_x_begin = max(0, min(width, min_cell_x))
+            cell_x_end = max(0, min(width, max_cell_x + 1))
+            cell_y_begin = max(0, min(height, min_cell_y))
+            cell_y_end = max(0, min(height, max_cell_y + 1))
+
+        candidate_cells = max(0, cell_x_end - cell_x_begin) * max(0, cell_y_end - cell_y_begin)
+
+        for cell_y in range(cell_y_begin, cell_y_end):
             world_y = origin_y + (cell_y + 0.5) * resolution
-            for cell_x in range(width):
+            for cell_x in range(cell_x_begin, cell_x_end):
                 world_x = origin_x + (cell_x + 0.5) * resolution
 
                 dx = world_x - robot_x
@@ -948,9 +994,11 @@ class NavigationStateManager(Node):
             "window_front_max_x_m": round(self.obstacle_clear_front_max_x_m, 3),
             "window_half_width_m": round(self.obstacle_clear_half_width_m, 3),
             "sample_cells": sample_cells,
+            "candidate_cells": candidate_cells,
             "occupied_cells": occupied_cells,
             "max_cost": max_cost,
             "blocked": blocked,
+            "bounded_scan": self.obstacle_costmap_window_bounded_scan,
         }
         return blocked, stats
 
@@ -1292,7 +1340,61 @@ class NavigationStateManager(Node):
         }
         if extra_data:
             event_data.update(extra_data)
+        self.add_route_task_protocol_context(event_data, include_current_waypoint=True)
         return event_data
+
+    def add_route_task_protocol_context(
+        self,
+        event_data: Dict[str, Any],
+        *,
+        include_current_waypoint: bool = False,
+        include_waiting_broadcast: bool = False,
+    ) -> None:
+        """为 route task 离散事件补齐协议表要求的任务上下文字段。"""
+        if not self.active_route_task:
+            return
+
+        target_task_id = self.route_task_id(self.current_target_task_id)
+        target_waypoint = self.find_route_waypoint_by_id(target_task_id) if target_task_id else None
+        event_data.setdefault("task_session_id", self.active_route_task.get("task_session_id", ""))
+        event_data.setdefault("route_id", self.active_route_task.get("route_id", ""))
+        event_data.setdefault("map_id", self.active_route_task.get("map_id", ""))
+        event_data.setdefault("route_task", True)
+        event_data.setdefault("current_target_task_id", target_task_id)
+        event_data.setdefault("segment_id", self.active_segment.get("segment_id", "") if self.active_segment else "")
+        event_data.setdefault("waypoint_index", self.current_target_task_index)
+        event_data.setdefault("total_waypoints", len(self.master_route_task_ids))
+
+        if include_current_waypoint:
+            event_data["current_waypoint_id"] = event_data.get("current_waypoint_id") or target_task_id
+            event_data["current_waypoint_name"] = (
+                event_data.get("current_waypoint_name")
+                or (target_waypoint.get("name", "") if target_waypoint else target_task_id)
+            )
+
+        if include_waiting_broadcast:
+            event_data.setdefault("awaiting_broadcast", self.awaiting_broadcast)
+            event_data.setdefault("waiting_broadcast_waypoint_id", self.waiting_broadcast_waypoint_id)
+            event_data.setdefault("waiting_broadcast_id", self.waiting_broadcast_id)
+
+    def add_route_task_blocked_protocol_context(self, event_data: Dict[str, Any]) -> None:
+        """为障碍等待事件补齐被阻塞目标点字段。"""
+        if not self.active_route_task:
+            return
+
+        self.add_route_task_protocol_context(event_data)
+        target_task_id = self.route_task_id(self.current_target_task_id)
+        target_waypoint = self.find_route_waypoint_by_id(target_task_id) if target_task_id else None
+        event_data["blocked_waypoint_id"] = event_data.get("blocked_waypoint_id") or target_task_id
+        event_data["blocked_waypoint_name"] = (
+            event_data.get("blocked_waypoint_name")
+            or (target_waypoint.get("name", "") if target_waypoint else target_task_id)
+        )
+        if event_data.get("blocked_waypoint_index", -1) in (-1, None):
+            event_data["blocked_waypoint_index"] = self.current_target_task_index
+        event_data["total_waypoints"] = event_data.get("total_waypoints") or len(self.master_route_task_ids)
+        if not event_data.get("position") and target_waypoint:
+            event_data["position"] = target_waypoint.get("position", [])
 
     def reset_block_detection(self):
         """重置阻塞检测状态"""
@@ -1330,6 +1432,7 @@ class NavigationStateManager(Node):
         if self.latest_front_obstacle_stats:
             event_data["front_obstacle_stats"] = self.latest_front_obstacle_stats
         event_data["roi_obstacle_stats"] = self.build_roi_obstacle_stats()
+        self.add_route_task_blocked_protocol_context(event_data)
 
         self.publish_status_update("navigation_obstacle_blocked", event_data)
         if send_ack:
@@ -4076,6 +4179,17 @@ class NavigationStateManager(Node):
             self.obstacle_clear_started_at = 0.0
             return
 
+        if self.latest_local_costmap is not None:
+            try:
+                blocked, stats = self.analyze_front_obstacle_window(self.latest_local_costmap)
+                self.latest_front_obstacle_blocked = blocked
+                self.latest_front_obstacle_stats = stats
+            except Exception as e:
+                self.get_logger().error(f'❌ 障碍等待阶段分析 local costmap 错误: {e}')
+                self.obstacle_clear_confirm_count = 0
+                self.obstacle_clear_started_at = 0.0
+                return
+
         if self.latest_front_obstacle_blocked:
             self.obstacle_clear_confirm_count = 0
             self.obstacle_clear_started_at = 0.0
@@ -4168,6 +4282,11 @@ class NavigationStateManager(Node):
         if self.latest_front_obstacle_stats:
             event_data["front_obstacle_stats"] = self.latest_front_obstacle_stats
         event_data["roi_obstacle_stats"] = self.build_roi_obstacle_stats()
+        self.add_route_task_protocol_context(
+            event_data,
+            include_current_waypoint=False,
+            include_waiting_broadcast=True,
+        )
 
         self.send_acknowledgment("navigation_resumed", "success", "障碍物已消失，导航自动恢复", event_data)
         self.publish_status_update("navigation_resumed", event_data)
@@ -4437,6 +4556,7 @@ class NavigationStateManager(Node):
     
     def get_current_status_summary(self) -> Dict[str, Any]:
         """获取当前状态摘要"""
+        obstacle_blockage_suppression_reason = self.get_obstacle_blockage_suppression_reason()
         status_summary = {
             "timestamp": time.time(),
             "current_state": self.current_state.value,
@@ -4451,8 +4571,8 @@ class NavigationStateManager(Node):
             "obstacle_blocked": self.is_blocked_by_obstacle,
             "block_duration": (time.time() - self.block_start_time) if self.block_start_time else 0,
             "block_reported": self.block_reported,
-            "obstacle_block_suppressed": bool(self.get_obstacle_blockage_suppression_reason()),
-            "obstacle_block_suppression_reason": self.get_obstacle_blockage_suppression_reason() or "",
+            "obstacle_block_suppressed": bool(obstacle_blockage_suppression_reason),
+            "obstacle_block_suppression_reason": obstacle_blockage_suppression_reason or "",
             "pending_navigation": self.pending_navigation_request is not None,
             "pending_navigation_age": (
                 time.time() - self.pending_navigation_created_at

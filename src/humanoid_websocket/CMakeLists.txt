@@ -25,7 +25,6 @@ ament_python_install_package(humanoid_websocket
 install(PROGRAMS
   scripts/websocket_server_node.py
   scripts/websocket_client_node.py
-  scripts/message_bridge_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -51,6 +50,11 @@ install(DIRECTORY
 install(DIRECTORY
   resource
   DESTINATION share/${PROJECT_NAME}/
+)
+
+install(FILES
+  README.md
+  DESTINATION share/${PROJECT_NAME}
 )
 
 # Export dependencies

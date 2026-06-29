@@ -3,8 +3,9 @@ websocket_client:
   ros__parameters:
     robot_ws_server: "ws://10.192.1.2:5000"
     reconnect_interval: 5.0
-    # 兜底值只在运行初期使用；连接机器人后会被 notify_robot_info 动态覆盖。
-    fallback_accid: "HU_D04_01_289"
+    # 兜底值默认留空；连接机器人后会被 notify_robot_info/response 动态学习。
+    # 如果某台机器人固件不会回传 accid，可临时填写兜底值。
+    fallback_accid: ""
     fallback_sn: ""
 
 websocket_server:
@@ -38,8 +39,8 @@ websocket_server:
     # ================= 原 robot_status_forwarding 部分 =================
     robot_status_forwarding:
       enabled: true
-      topics_names: ["/robot_status_processed", "/imu", "/joint_states"] # 修改为你实际存在的话题
-      topics_types: ["humanoid_interfaces/msg/RobotStatus", "sensor_msgs/msg/Imu", "sensor_msgs/msg/JointState"]
+      topics_names: ["/robot_status_raw", "/imu", "/joint_states"] # 当前机器人状态由 data_integration_node 直接读取原始状态
+      topics_types: ["std_msgs/msg/String", "sensor_msgs/msg/Imu", "sensor_msgs/msg/JointState"]
 
     # ================= 原 app_command_handling 部分 =================
     app_command_handling:
@@ -62,4 +63,4 @@ websocket_server:
       inputs_navigation_goal: "/goal_pose"  # 修正为Nav2的标准话题
       inputs_emergency_stop: "/emergency_stop"
       inputs_cmd_vel: "/cmd_vel"
-      outputs_robot_status: "/robot_status_processed"
+      outputs_robot_status: "/robot_status_raw"

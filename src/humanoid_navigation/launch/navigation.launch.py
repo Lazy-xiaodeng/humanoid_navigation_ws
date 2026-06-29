@@ -74,6 +74,12 @@ def generate_launch_description():
             'position_tolerance': 0.15,
             'publish_tf': True,
             'default_frame_id': 'map',
+            # 性能优化：完整导航状态 JSON 降到 1Hz；事件类状态仍会即时发布，不影响按钮/任务事件。
+            'status_publish_rate': 1.0,
+            # 性能优化：正常导航时 local costmap 只缓存，只有障碍等待恢复时才分析前方窗口。
+            'obstacle_costmap_analyze_only_when_waiting': True,
+            # 性能优化：障碍恢复窗口只扫描前方小区域的外接 cell，不再遍历整张 costmap。
+            'obstacle_costmap_window_bounded_scan': True,
             'waypoint_speed_min_mps': 0.15,
             'waypoint_speed_max_mps': 1.0,
             'default_navigation_speed_mps': 0.5,

@@ -3,7 +3,8 @@ websocket_client:
   ros__parameters:
     robot_ws_server: "ws://10.192.1.2:5000"
     reconnect_interval: 5.0
-    fallback_accid: "HU_D04_01_289"
+    # 默认不写死机器人 accid，连接后从机器人回包动态学习。
+    fallback_accid: ""
     fallback_sn: ""
 
 websocket_server:

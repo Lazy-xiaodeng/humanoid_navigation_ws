@@ -45,6 +45,8 @@ private:
   double elev_max_z_;
   double nav_min_z_;
   double nav_max_z_;
+  int scan_queue_size_;
+  bool enable_elevation_output_;
 
   //===== 手臂包络盒过滤参数 =====
   bool enable_body_box_filter_;
@@ -54,6 +56,15 @@ private:
   float arm_box_y_max_;
   float arm_box_z_min_;
   float arm_box_z_max_;
+
+  //===== 吊架包络盒过滤参数 =====
+  bool enable_mount_filter_;
+  float mount_box_x_min_;
+  float mount_box_x_max_;
+  float mount_box_y_min_;
+  float mount_box_y_max_;
+  float mount_box_z_min_;
+  float mount_box_z_max_;
 
   // 性能监控
   bool enable_performance_log_;
@@ -71,6 +82,7 @@ private:
   std::deque<double> timing_sor_;
   std::deque<double> timing_height_;
   std::deque<double> timing_density_;
+  std::deque<double> timing_pre_voxel_;
   std::deque<double> timing_voxel_;
   std::deque<double> timing_publish_elevation_;
   std::deque<double> timing_publish_nav_;

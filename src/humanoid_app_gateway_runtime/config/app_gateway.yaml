@@ -1,0 +1,61 @@
+# humanoid_app_gateway_runtime APP 网关参数。
+# 本文件用于配置 APP WebSocket 接入、客户端管理和 APP 指令转 ROS topic。
+# 当前 C++ 包处于分阶段实现阶段，默认不启用真实 WebSocket 服务，避免误接管线上 APP 链路。
+# 上游节点：APP / 导航页 WebSocket 客户端，以及 data_integration_node 发布的 integration 系列话题。
+# 下游节点：dynamic_waypoints_manager、map_context_manager、robot_gateway_node、facial_driver、RViz initialpose 适配链路。
+
+app_gateway_node:
+  ros__parameters:
+    # 是否启用真实 APP WebSocket 服务；分阶段验证阶段保持 false，确认 C++ 链路稳定后再由 bringup 开关接管。
+    websocket_server_enable: false
+
+    # APP WebSocket 监听地址；正式接入时应与当前线上 APP 网关保持一致。
+    websocket_host: "0.0.0.0"
+
+    # APP WebSocket 监听端口；线上协议默认使用 8765。
+    websocket_port: 8765
+
+    # APP 客户端心跳检查周期，单位秒。
+    client_health_check_interval_sec: 30.0
+
+    # APP 网关状态日志打印周期，单位秒。
+    status_report_interval_sec: 60.0
+
+    # 是否在 APP 连接后主动发送当前地图/点位/动作库快照。
+    send_initial_snapshot_on_connect: true
+
+    # APP 数据请求转发话题。
+    data_requests_topic: "/websocket/data_requests"
+
+    # APP 数据订阅转发话题。
+    data_subscriptions_topic: "/websocket/data_subscriptions"
+
+    # 数据整合响应输入话题。
+    integration_data_responses_topic: "/integration/data_responses"
+
+    # 数据整合主动推送输入话题。
+    integration_push_messages_topic: "/integration/push_messages"
+
+    # 数据整合订阅响应输入话题。
+    integration_subscription_responses_topic: "/integration/subscription_responses"
+
+    # APP 点位命令输出话题。
+    app_waypoint_command_topic: "/app/waypoint_command"
+
+    # APP 导航命令输出话题。
+    app_navigation_command_topic: "/app/navigation_command"
+
+    # APP 地图命令输出话题。
+    app_map_command_topic: "/app/map_command"
+
+    # APP 机器人控制命令输出话题。
+    app_robot_control_topic: "/app/robot_control"
+
+    # APP 系统命令输出话题。
+    app_system_command_topic: "/app/system_command"
+
+    # 面部表情原始命令输出话题。
+    facial_raw_command_topic: "/robot/facial_raw_cmd"
+
+    # APP 初始位姿输出话题。
+    initial_pose_topic: "/initialpose"

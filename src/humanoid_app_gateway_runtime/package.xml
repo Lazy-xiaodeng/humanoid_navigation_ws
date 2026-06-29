@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!--
+  文件用途：
+  1. 声明 humanoid_app_gateway_runtime 的 ROS 包信息、构建类型和依赖。
+  2. 上游：colcon、rosdep、ament package 索引。
+  3. 下游：launch 包查找、依赖解析和安装导出。
+-->
+<package format="3">
+  <name>humanoid_app_gateway_runtime</name>
+  <version>0.1.0</version>
+  <description>C++ runtime package for APP WebSocket gateway and data integration.</description>
+  <maintainer email="ros@example.com">ROS User</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>ament_index_cpp</depend>
+  <depend>humanoid_interfaces</depend>
+  <depend>boost</depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

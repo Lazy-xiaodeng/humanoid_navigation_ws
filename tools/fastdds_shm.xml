@@ -1,10 +1,10 @@
-<?xml version="1.0" encoding="UTF-8" ?>
+<?xml version="1.0" encoding="UTF-8"?>
 <profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
   <transport_descriptors>
     <transport_descriptor>
       <transport_id>shm_transport</transport_id>
       <type>SHM</type>
-      <segment_size>134217728</segment_size>
+      <segment_size>67108864</segment_size>
     </transport_descriptor>
     <transport_descriptor>
       <transport_id>udp_transport</transport_id>
@@ -13,13 +13,96 @@
       <receiveBufferSize>10485760</receiveBufferSize>
     </transport_descriptor>
   </transport_descriptors>
-  <participant profile_name="humanoid_fastdds_profile" is_default_profile="true">
+  <!--
+    ROS2 默认 participant：
+    - SHM segment_size=64MB，用于大点云同机进程间传输。
+    - UDP 保留用于非共享内存场景/发现。
+    - socket buffer 放大到 100MB，避免大消息突发时系统 socket buffer 过小。
+  -->
+  <participant profile_name="participant_profile_ros2" is_default_profile="true">
     <rtps>
+      <name>profile_for_ros2_context</name>
       <userTransports>
         <transport_id>shm_transport</transport_id>
         <transport_id>udp_transport</transport_id>
       </userTransports>
       <useBuiltinTransports>false</useBuiltinTransports>
+      <sendSocketBufferSize>104857600</sendSocketBufferSize>
+      <listenSocketBufferSize>104857600</listenSocketBufferSize>
     </rtps>
   </participant>
+
+  <data_writer profile_name="default publisher profile" is_default_profile="true">
+    <historyMemoryPolicy>DYNAMIC</historyMemoryPolicy>
+  </data_writer>
+
+  <data_reader profile_name="default subscription profile" is_default_profile="true">
+    <historyMemoryPolicy>DYNAMIC</historyMemoryPolicy>
+  </data_reader>
+
+  <!-- 原始 96 线雷达点云：保持共享内存 data_sharing，保障 10Hz 输入链路。 -->
+  <data_writer profile_name="/airy_points">
+    <qos>
+      <publishMode>
+        <kind>ASYNCHRONOUS</kind>
+      </publishMode>
+      <data_sharing>
+        <kind>AUTOMATIC</kind>
+      </data_sharing>
+    </qos>
+    <historyMemoryPolicy>DYNAMIC</historyMemoryPolicy>
+  </data_writer>
+
+  <data_reader profile_name="/airy_points">
+    <qos>
+      <data_sharing>
+        <kind>AUTOMATIC</kind>
+      </data_sharing>
+    </qos>
+    <historyMemoryPolicy>DYNAMIC</historyMemoryPolicy>
+  </data_reader>
+
+  <!-- LIO 注册点云：LIO -> 点云滤波，是当前导航链路第二个大点云传输段。 -->
+  <data_writer profile_name="/fast_lio/cloud_registered">
+    <qos>
+      <publishMode>
+        <kind>ASYNCHRONOUS</kind>
+      </publishMode>
+      <data_sharing>
+        <kind>AUTOMATIC</kind>
+      </data_sharing>
+    </qos>
+    <historyMemoryPolicy>DYNAMIC</historyMemoryPolicy>
+  </data_writer>
+
+  <data_reader profile_name="/fast_lio/cloud_registered">
+    <qos>
+      <data_sharing>
+        <kind>AUTOMATIC</kind>
+      </data_sharing>
+    </qos>
+    <historyMemoryPolicy>DYNAMIC</historyMemoryPolicy>
+  </data_reader>
+
+  <!-- 过滤后点云：点云滤波 -> Nav2/ROI，功能不变，只减少大消息传输开销。 -->
+  <data_writer profile_name="/airy_points_filtered">
+    <qos>
+      <publishMode>
+        <kind>ASYNCHRONOUS</kind>
+      </publishMode>
+      <data_sharing>
+        <kind>AUTOMATIC</kind>
+      </data_sharing>
+    </qos>
+    <historyMemoryPolicy>DYNAMIC</historyMemoryPolicy>
+  </data_writer>
+
+  <data_reader profile_name="/airy_points_filtered">
+    <qos>
+      <data_sharing>
+        <kind>AUTOMATIC</kind>
+      </data_sharing>
+    </qos>
+    <historyMemoryPolicy>DYNAMIC</historyMemoryPolicy>
+  </data_reader>
 </profiles>

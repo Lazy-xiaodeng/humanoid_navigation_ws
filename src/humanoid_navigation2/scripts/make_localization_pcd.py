@@ -39,10 +39,59 @@ R_CAMERA_TO_MAP = np.array(
 T_CAMERA_BASE = np.array([0.004, 1.215, 0.072], dtype=np.float32)
 
 
-def read_ascii_pcd(path: Path) -> tuple[list[str], list[str], np.ndarray]:
+def _parse_header_value(header: list[str], key: str) -> list[str]:
+    prefix = key + " "
+    for line in header:
+        if line.startswith(prefix):
+            return line.split()[1:]
+    return []
+
+
+def _pcd_dtype(fields: list[str], sizes: list[str], types: list[str], counts: list[str]) -> np.dtype:
+    if len(fields) != len(sizes) or len(fields) != len(types) or len(fields) != len(counts):
+        raise ValueError("PCD header FIELDS/SIZE/TYPE/COUNT lengths do not match")
+
+    dtype_fields = []
+    for field, size, type_name, count in zip(fields, sizes, types, counts):
+        size_int = int(size)
+        count_int = int(count)
+        type_name = type_name.upper()
+        if count_int != 1:
+            raise ValueError(f"Unsupported PCD field COUNT for {field}: {count_int}")
+        if type_name == "F" and size_int == 4:
+            dtype = "<f4"
+        elif type_name == "F" and size_int == 8:
+            dtype = "<f8"
+        elif type_name == "I" and size_int == 1:
+            dtype = "<i1"
+        elif type_name == "I" and size_int == 2:
+            dtype = "<i2"
+        elif type_name == "I" and size_int == 4:
+            dtype = "<i4"
+        elif type_name == "U" and size_int == 1:
+            dtype = "<u1"
+        elif type_name == "U" and size_int == 2:
+            dtype = "<u2"
+        elif type_name == "U" and size_int == 4:
+            dtype = "<u4"
+        else:
+            raise ValueError(f"Unsupported PCD field type for {field}: TYPE={type_name}, SIZE={size_int}")
+        dtype_fields.append((field, dtype))
+    return np.dtype(dtype_fields)
+
+
+def _structured_to_matrix(data: np.ndarray, fields: list[str]) -> np.ndarray:
+    matrix = np.empty((len(data), len(fields)), dtype=np.float32)
+    for i, field in enumerate(fields):
+        matrix[:, i] = data[field].astype(np.float32, copy=False)
+    return matrix
+
+
+def read_pcd(path: Path) -> tuple[list[str], list[str], np.ndarray]:
     header: list[str] = []
     fields: list[str] | None = None
     data_offset = 0
+    data_type = ""
 
     with path.open("rb") as f:
         while True:
@@ -56,23 +105,36 @@ def read_ascii_pcd(path: Path) -> tuple[list[str], list[str], np.ndarray]:
                 fields = line.split()[1:]
             if line.startswith("DATA "):
                 data_type = line.split()[1].lower()
-                if data_type != "ascii":
-                    raise ValueError(
-                        f"Only ASCII PCD input is supported by this tool, got DATA {data_type}"
-                    )
                 break
 
     if not fields:
         raise ValueError(f"PCD FIELDS line is missing: {path}")
 
-    data = np.loadtxt(path, dtype=np.float32, comments="#", skiprows=len(header))
-    if data.ndim == 1:
-        data = data.reshape(1, -1)
-    if data.shape[1] != len(fields):
-        raise ValueError(
-            f"PCD field count mismatch: header has {len(fields)}, data has {data.shape[1]}"
-        )
-    _ = data_offset
+    if data_type == "ascii":
+        data = np.loadtxt(path, dtype=np.float32, comments="#", skiprows=len(header))
+        if data.ndim == 1:
+            data = data.reshape(1, -1)
+        if data.shape[1] != len(fields):
+            raise ValueError(
+                f"PCD field count mismatch: header has {len(fields)}, data has {data.shape[1]}"
+            )
+        return header, fields, data
+
+    if data_type != "binary":
+        raise ValueError(f"Unsupported PCD DATA type: {data_type}")
+
+    sizes = _parse_header_value(header, "SIZE")
+    types = _parse_header_value(header, "TYPE")
+    counts = _parse_header_value(header, "COUNT") or ["1"] * len(fields)
+    points_values = _parse_header_value(header, "POINTS")
+    if not points_values:
+        raise ValueError(f"PCD POINTS line is missing: {path}")
+
+    dtype = _pcd_dtype(fields, sizes, types, counts)
+    with path.open("rb") as f:
+        f.seek(data_offset)
+        structured = np.fromfile(f, dtype=dtype, count=int(points_values[0]))
+    data = _structured_to_matrix(structured, fields)
     return header, fields, data
 
 
@@ -144,7 +206,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    _, fields, data = read_ascii_pcd(args.input_pcd)
+    _, fields, data = read_pcd(args.input_pcd)
     field_index = {name: i for i, name in enumerate(fields)}
     for required in ("x", "y", "z"):
         if required not in field_index:
@@ -157,6 +219,9 @@ def main() -> None:
 
     xyz_map = (R_CAMERA_TO_MAP @ (data[:, xyz_cols] - T_CAMERA_BASE).T).T
     data[:, xyz_cols] = xyz_map
+    if all(name in field_index for name in ("normal_x", "normal_y", "normal_z")):
+        normal_cols = [field_index["normal_x"], field_index["normal_y"], field_index["normal_z"]]
+        data[:, normal_cols] = (R_CAMERA_TO_MAP @ data[:, normal_cols].T).T
     summarize("grounded ROS map", xyz_map)
 
     if args.keep_ceiling:

@@ -1,0 +1,45 @@
+# humanoid_obstacle_runtime 障碍检测参考参数。
+# 正式导航当前通常使用 humanoid_roi_obstacle_detector/config/roi_obstacle_detector.yaml；
+# 本文件用于新包独立调试和后续参数归拢。
+
+roi_obstacle_detector:
+  ros__parameters:
+    # 输入点云话题。
+    input_topic: "/airy_points"
+    # ROI 检测使用的目标坐标系。
+    target_frame: "base_footprint"
+    # 坐标转换模式；tf 表示通过 TF 查询外参。
+    transform_mode: "tf"
+    # TF 查询超时时间，单位秒。
+    tf_timeout_sec: 0.05
+    # ROI 前向范围，单位 m。
+    roi_min_x: 0.25
+    roi_max_x: 2.0
+    # ROI 左右范围，单位 m。
+    roi_min_y: -0.45
+    roi_max_y: 0.45
+    # ROI 高度范围，单位 m。
+    roi_min_z: 0.05
+    roi_max_z: 1.2
+    # 体素降采样叶子大小，单位 m。
+    voxel_leaf_size: 0.05
+    # 触发障碍所需最小点数。
+    min_points: 10
+    # 是否启用聚类过滤。
+    use_clustering: true
+    # 聚类最小点数。
+    cluster_min_size: 10
+    # 连续多少帧检测到障碍才触发。
+    trigger_frames: 2
+    # 连续多少帧清空才恢复。
+    clear_frames: 4
+    # 障碍状态输出话题。
+    has_obstacle_topic: "/front_obstacle/has_obstacle"
+    # 调试 JSON 输出话题。
+    debug_topic: "/front_obstacle/debug"
+    # ROI 点云输出话题。
+    roi_cloud_topic: "/front_obstacle/roi_cloud"
+    # 是否发布 ROI 点云。
+    publish_roi_cloud: true
+    # 是否发布 debug 信息。
+    publish_debug: true

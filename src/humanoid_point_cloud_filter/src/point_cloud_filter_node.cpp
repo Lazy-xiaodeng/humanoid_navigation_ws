@@ -68,6 +68,10 @@ PointCloudFilterNode::PointCloudFilterNode(const rclcpp::NodeOptions & options)
   input_topic_ = this->get_parameter("input_topic").as_string();
   output_elevation_topic_ = this->get_parameter("output_elevation_topic").as_string();
   output_nav_topic_ = this->get_parameter("output_nav_topic").as_string();
+  this->declare_parameter("enable_elevation_output", true);
+  enable_elevation_output_ = this->get_parameter("enable_elevation_output").as_bool();
+  this->declare_parameter("scan_queue_size", 10);
+  scan_queue_size_ = std::max(1, static_cast<int>(this->get_parameter("scan_queue_size").as_int()));
   
   // 距离过滤参数
   this->declare_parameter("min_range", 0.6);
@@ -97,7 +101,16 @@ PointCloudFilterNode::PointCloudFilterNode(const rclcpp::NodeOptions & options)
   
   // 体素下采样
   this->declare_parameter("voxel_leaf_size", 0.05);
+  this->declare_parameter("enable_pre_voxel_for_filter", false);
+  this->declare_parameter("pre_voxel_leaf_size", 0.05);
+  this->declare_parameter("voxel_before_filters", false);
+  this->declare_parameter("filter_mode", "sor");
   config.voxel_leaf_size = this->get_parameter("voxel_leaf_size").as_double();
+  config.enable_pre_voxel_for_filter =
+    this->get_parameter("enable_pre_voxel_for_filter").as_bool();
+  config.pre_voxel_leaf_size = this->get_parameter("pre_voxel_leaf_size").as_double();
+  config.voxel_before_filters = this->get_parameter("voxel_before_filters").as_bool();
+  config.filter_mode = this->get_parameter("filter_mode").as_string();
   
   // SOR 参数
   this->declare_parameter("sor_k", 20);
@@ -143,16 +156,35 @@ PointCloudFilterNode::PointCloudFilterNode(const rclcpp::NodeOptions & options)
   arm_box_y_max_ = static_cast<float>(this->get_parameter("arm_box_y_max").as_double());
   arm_box_z_min_ = static_cast<float>(this->get_parameter("arm_box_z_min").as_double());
   arm_box_z_max_ = static_cast<float>(this->get_parameter("arm_box_z_max").as_double());
+
+  // ===== 吊架包络盒过滤参数 =====
+  this->declare_parameter("enable_mount_filter", true);
+  this->declare_parameter("mount_box_x_min", -0.20);
+  this->declare_parameter("mount_box_x_max",  0.20);
+  this->declare_parameter("mount_box_y_min", -0.20);
+  this->declare_parameter("mount_box_y_max",  0.20);
+  this->declare_parameter("mount_box_z_min", -0.05);
+  this->declare_parameter("mount_box_z_max",  0.25);
+
+  enable_mount_filter_ = this->get_parameter("enable_mount_filter").as_bool();
+  mount_box_x_min_ = static_cast<float>(this->get_parameter("mount_box_x_min").as_double());
+  mount_box_x_max_ = static_cast<float>(this->get_parameter("mount_box_x_max").as_double());
+  mount_box_y_min_ = static_cast<float>(this->get_parameter("mount_box_y_min").as_double());
+  mount_box_y_max_ = static_cast<float>(this->get_parameter("mount_box_y_max").as_double());
+  mount_box_z_min_ = static_cast<float>(this->get_parameter("mount_box_z_min").as_double());
+  mount_box_z_max_ = static_cast<float>(this->get_parameter("mount_box_z_max").as_double());
   
   // 滤波开关
   this->declare_parameter("enable_sor", true);
   this->declare_parameter("enable_height_continuity", false);
   this->declare_parameter("enable_density", false);
   this->declare_parameter("enable_motion_detection", true);
+  this->declare_parameter("combine_sor_height_kdtree", false);
   config.enable_sor = this->get_parameter("enable_sor").as_bool();
   config.enable_height_continuity = this->get_parameter("enable_height_continuity").as_bool();
   config.enable_density = this->get_parameter("enable_density").as_bool();
   config.enable_motion_detection = this->get_parameter("enable_motion_detection").as_bool();
+  config.combine_sor_height_kdtree = this->get_parameter("combine_sor_height_kdtree").as_bool();
 
   // 多线程配置
   this->declare_parameter("num_threads", 4);  // 默认8线程，适合16核CPU
@@ -170,14 +202,16 @@ PointCloudFilterNode::PointCloudFilterNode(const rclcpp::NodeOptions & options)
   // ===== 创建订阅和发布 =====
   sub_cloud_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
     input_topic_,
-    rclcpp::SensorDataQoS(),
+    rclcpp::SensorDataQoS().keep_last(scan_queue_size_),
     std::bind(&PointCloudFilterNode::cloudCallback, this, std::placeholders::_1)
   );
   
-  pub_elevation_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
-    output_elevation_topic_,
-    10
-  );
+  if (enable_elevation_output_) {
+    pub_elevation_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
+      output_elevation_topic_,
+      10
+    );
+  }
   
   pub_nav_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
     output_nav_topic_,
@@ -190,15 +224,27 @@ PointCloudFilterNode::PointCloudFilterNode(const rclcpp::NodeOptions & options)
     "  输入话题: %s\n"
     "  高程图输出: %s\n"
     "  导航输出: %s\n"
-    "  启用滤波: SOR=%s, 高度连续=%s, 密度=%s, 运动检测=%s",
+    "  高程图输出启用: %s\n"
+    "  滤波模式: %s\n"
+    "  启用滤波: SOR=%s, 高度连续=%s, 密度=%s, 运动检测=%s, 合并KDTree=%s",
     input_topic_.c_str(),
     output_elevation_topic_.c_str(),
     output_nav_topic_.c_str(),
+    enable_elevation_output_ ? "是" : "否",
+    config.filter_mode.c_str(),
     config.enable_sor ? "是" : "否",
     config.enable_height_continuity ? "是" : "否",
     config.enable_density ? "是" : "否",
-    config.enable_motion_detection ? "是" : "否"
+    config.enable_motion_detection ? "是" : "否",
+    config.combine_sor_height_kdtree ? "是" : "否"
   );
+  RCLCPP_INFO(
+    this->get_logger(),
+    "Pre-voxel滤波前降采样: %s, leaf=%.3fm, voxel提前: %s, 输出voxel leaf=%.3fm",
+    config.enable_pre_voxel_for_filter ? "是" : "否",
+    config.pre_voxel_leaf_size,
+    config.voxel_before_filters ? "是" : "否",
+    config.voxel_leaf_size);
 }
 
 /**
@@ -331,23 +377,15 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
   pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_elevation(new pcl::PointCloud<pcl::PointXYZI>);
   pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_nav(new pcl::PointCloud<pcl::PointXYZI>);
   
-  cloud_elevation->reserve(cloud_filtered->size());
+  if (enable_elevation_output_) {
+    cloud_elevation->reserve(cloud_filtered->size());
+  }
   cloud_nav->reserve(cloud_filtered->size());
 
   float bf_z_min = std::numeric_limits<float>::infinity();
   float bf_z_max = -std::numeric_limits<float>::infinity();
   size_t mount_filtered_count = 0;
   size_t body_filtered_count = 0;
-
-  // ★★★ 吊架包络盒参数（base_footprint 坐标系）
-  // 注意：吊架在 LiDAR 下方约1.2m处（因为 body 在 base_footprint 上方 1.215m）
-  // 所以吊架在 base_footprint 坐标系中大约在 Z=0.0~0.2m 范围
-  const float mount_x_min = -0.2f;   // 吊架后方20cm
-  const float mount_x_max =  0.2f;   // 吊架前方20cm
-  const float mount_y_min = -0.2f;   // 吊架右侧20cm
-  const float mount_y_max =  0.2f;   // 吊架左侧20cm
-  const float mount_z_min = -0.05f;  // 吊架下方（地面附近）
-  const float mount_z_max =  0.25f;  // 吊架上方25cm（LiDAR 正下方区域）
 
   for (size_t i = 0; i < cloud_filtered->size(); ++i) {
 
@@ -360,9 +398,10 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
     bf_z_max = std::max(bf_z_max, z);
 
     // ★★★ 吊架过滤：过滤 LiDAR 正下方的支架点云
-    bool in_mount_box = (x > mount_x_min && x < mount_x_max &&
-                         y > mount_y_min && y < mount_y_max &&
-                         z > mount_z_min && z < mount_z_max);
+    bool in_mount_box = enable_mount_filter_ &&
+                        (x > mount_box_x_min_ && x < mount_box_x_max_ &&
+                         y > mount_box_y_min_ && y < mount_box_y_max_ &&
+                         z > mount_box_z_min_ && z < mount_box_z_max_);
     if (in_mount_box) {
       mount_filtered_count++;
       continue;  // 丢弃吊架上的点
@@ -379,7 +418,7 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
     }
     
     // 高程图点云：用于建立高程地图
-    if (z > elev_min_z_ && z < elev_max_z_) {
+    if (enable_elevation_output_ && z > elev_min_z_ && z < elev_max_z_) {
         cloud_elevation->push_back(cloud_bf->points[i]);
     }
     
@@ -399,7 +438,7 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
   header.stamp = msg->header.stamp;
   header.frame_id = "base_footprint";
   
-  if (!cloud_elevation->empty()) {
+  if (enable_elevation_output_ && !cloud_elevation->empty()) {
     auto t_publish_elevation_start = std::chrono::high_resolution_clock::now();
     sensor_msgs::msg::PointCloud2 msg_elevation;
     pcl::toROSMsg(*cloud_elevation, msg_elevation);
@@ -430,7 +469,7 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
       this->get_logger(), *this->get_clock(), 2000,
       "导航点云为空，未发布 %s: input=%zu range=%zu filtered=%zu elevation=%zu "
       "mount_filtered=%zu body_filtered=%zu bf_z=[%.3f, %.3f] "
-      "nav_z_filter=(%.3f, %.3f), body_box=%s",
+      "nav_z_filter=(%.3f, %.3f), body_box=%s mount_box=%s",
       output_nav_topic_.c_str(),
       cloud_input->size(),
       cloud_range_filtered->size(),
@@ -442,7 +481,8 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
       std::isfinite(bf_z_max) ? bf_z_max : 0.0f,
       nav_min_z_,
       nav_max_z_,
-      enable_body_box_filter_ ? "on" : "off");
+      enable_body_box_filter_ ? "on" : "off",
+      enable_mount_filter_ ? "on" : "off");
   }
   
   // ===== 第 8 步：性能统计 =====
@@ -459,6 +499,7 @@ void PointCloudFilterNode::cloudCallback(const sensor_msgs::msg::PointCloud2::Sh
   pushTimingSample(timing_sor_, timings.sor_ms);
   pushTimingSample(timing_height_, timings.height_ms);
   pushTimingSample(timing_density_, timings.density_ms);
+  pushTimingSample(timing_pre_voxel_, timings.pre_voxel_ms);
   pushTimingSample(timing_voxel_, timings.voxel_ms);
   
   frame_count_++;
@@ -500,6 +541,7 @@ void PointCloudFilterNode::logPerformanceStats()
   const double avg_sor = averageTiming(timing_sor_);
   const double avg_height = averageTiming(timing_height_);
   const double avg_density = averageTiming(timing_density_);
+  const double avg_pre_voxel = averageTiming(timing_pre_voxel_);
   const double avg_voxel = averageTiming(timing_voxel_);
   const double avg_publish_elevation = averageTiming(timing_publish_elevation_);
   const double avg_publish_nav = averageTiming(timing_publish_nav_);
@@ -517,6 +559,7 @@ void PointCloudFilterNode::logPerformanceStats()
     "SOR: %.2f ms\n"
     "Height continuity: %.2f ms\n"
     "Density: %.2f ms\n"
+    "Pre-voxel downsample: %.2f ms\n"
     "Voxel downsample: %.2f ms\n"
     "TF lookup to base_footprint: %.2f ms\n"
     "Transform to base_footprint: %.2f ms\n"
@@ -535,6 +578,7 @@ void PointCloudFilterNode::logPerformanceStats()
     avg_sor,
     avg_height,
     avg_density,
+    avg_pre_voxel,
     avg_voxel,
     avg_tf_lookup_bf,
     avg_transform_bf,

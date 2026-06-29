@@ -11,16 +11,13 @@ __description__ = 'WebSocket communication package for humanoid robot'
 # 导出主要类
 from .websocket_server import CompleteWebSocketServer
 from .websocket_client import HumanoidWebSocketClient
-from .message_bridge import MessageBridge
 
 # 导出主要函数
 __all__ = [
     'CompleteWebSocketServer',
     'HumanoidWebSocketClient',
-    'MessageBridge',
     'start_websocket_server',
-    'start_websocket_client',
-    'start_message_bridge'
+    'start_websocket_client'
 ]
 
 # 辅助函数
@@ -32,9 +29,4 @@ def start_websocket_server():
 def start_websocket_client():
     """启动WebSocket客户端"""
     from .websocket_client import main
-    main()
-
-def start_message_bridge():
-    """启动消息桥接"""
-    from .message_bridge import main
     main()

@@ -1,0 +1,86 @@
+# humanoid_expression_runtime 表情运行层参数。
+# 本文件用于配置 C++ 表情串口驱动 facial_driver_cpp。
+# 调试时优先修改这里，不要把现场参数写死到源码中。
+
+facial_driver:
+  ros__parameters:
+    # 表情动作库 YAML 路径；为空时会自动从本包 config/facial_gestures.yaml 查找。
+    # 该 YAML 中 facial_gestures 下的每个 key 都是一个可执行表情名。
+    config_path: ""
+
+    # 表情控制输入话题；上游 APP 网关会发布纯动作名字符串，例如 talk、idle、sleeping。
+    command_topic: "/robot/facial_raw_cmd"
+
+    # 仿生头串口设备路径；实机通常是 USB 串口的 by-id 路径，避免 ttyUSB 序号漂移。
+    port: "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"
+
+    # 串口兜底候选列表；当 port 不存在或打开失败时，会按顺序尝试这些设备。
+    # 用途：现场偶发从 ttyUSB0 变成 ttyUSB1 时，不需要改源码或重配 by-id。
+    # 推荐顺序：先 ttyUSB0，再 ttyUSB1；如果现场有更多 USB 串口，可继续追加。
+    fallback_ports: ["/dev/ttyUSB0", "/dev/ttyUSB1"]
+
+    # 串口波特率；必须与仿生头控制板固件配置一致。
+    baudrate: 115200
+
+    # 串口读写超时时间，单位毫秒；当前节点主要写串口，保留超时用于 termios 配置。
+    serial_timeout_ms: 100
+
+    # 串口首次连接成功后的稳定等待时间，单位秒；对齐旧节点，给 USB 串口硬件一点初始化时间。
+    connect_settle_sec: 2.0
+
+    # 收到新动作后，清缓冲和执行新动作前等待的时间，单位秒；用于尽量打断上一轮动作残留。
+    interrupt_wait_sec: 0.5
+
+    # 节点启动后自动执行的默认表情；旧节点启动后执行 idle。
+    startup_gesture: "idle"
+
+    # 节点退出时尝试执行的表情；旧节点退出时执行 sleeping。
+    shutdown_gesture: "sleeping"
+
+    # 是否在执行普通复合动作前先停止眼部循环。
+    pre_stop_eye_enable: true
+
+    # 执行普通复合动作前发送 eye_stop 的轮数；旧节点为 2 轮。
+    pre_stop_eye_repeat: 2
+
+    # eye_stop 每条串口指令后的等待时间，单位秒。
+    pre_stop_eye_command_delay_sec: 0.1
+
+    # 是否在执行普通复合动作前先停止嘴部说话循环。
+    pre_stop_mouth_enable: true
+
+    # 执行普通复合动作前发送 mouth_speak_stop 的轮数；旧节点为 1 轮。
+    pre_stop_mouth_repeat: 1
+
+    # mouth_speak_stop 每条串口指令后的等待时间，单位秒。
+    pre_stop_mouth_command_delay_sec: 0.1
+
+    # 前置停止后是否强制恢复睁眼状态；旧节点只发送 $DGL:1!。
+    eye_reset_enable: true
+
+    # 眼部复位串口指令；每条指令会自动追加 CRLF。
+    eye_reset_commands: ["$DGL:1!"]
+
+    # 每条眼部复位指令后的等待时间，单位秒。
+    eye_reset_command_delay_sec: 0.1
+
+    # idle 表情遇到 !normal_start 时，发送前的额外等待时间，单位秒。
+    idle_normal_start_pre_delay_sec: 0.5
+
+    # idle 表情遇到 !normal_start 时，发送后的额外等待时间，单位秒。
+    idle_normal_start_post_delay_sec: 0.8
+
+    # stop 表情每条普通指令后的等待时间，单位秒。
+    stop_command_delay_sec: 0.6
+
+    # 遇到 !silent_start 或 !normal_start 指令后的等待时间，单位秒。
+    loop_start_command_delay_sec: 0.8
+
+    # 其他普通串口指令发送后的默认等待时间，单位秒。
+    default_command_delay_sec: 0.1
+
+    # 退出时执行 shutdown_gesture 后等待多久再关闭串口，单位秒。
+    shutdown_wait_sec: 1.0
+
+    # 是否打印每条串口输出；调试表情时建议 true，正式运行如果日志太多可关掉。
+    log_serial_output: true

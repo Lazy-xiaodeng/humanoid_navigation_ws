@@ -292,6 +292,44 @@ class CompleteWebSocketServer(Node):
         }
     
     # ==================== WebSocket连接管理 ====================
+
+    def is_normal_client_close(self, error: Exception) -> bool:
+        """判断是否为 APP 主动正常关闭连接。
+
+        APP 某些一次性命令会采用“连接-发送-关闭”的短连接方式，关闭码 1000 属于
+        WebSocket 正常结束。服务端不能把这种关闭误判为业务失败，否则日志会出现
+        “处理命令错误/发送错误消息错误”，但实际 ROS 指令已经成功发出。
+        """
+        return (
+            isinstance(error, websockets.exceptions.ConnectionClosedOK)
+            or (
+                isinstance(error, websockets.exceptions.ConnectionClosed)
+                and getattr(error, "code", None) == 1000
+            )
+        )
+
+    def websocket_is_open(self, websocket) -> bool:
+        """兼容不同 websockets 版本，判断连接是否仍可发送消息。"""
+        closed = getattr(websocket, "closed", None)
+        if closed is not None:
+            return not closed
+        close_code = getattr(websocket, "close_code", None)
+        return close_code is None
+
+    async def safe_send_json(self, websocket, payload: Dict, client_id: str, context: str) -> bool:
+        """安全发送 JSON 消息，客户端已正常关闭时只记录调试日志。"""
+        if not self.websocket_is_open(websocket):
+            self.get_logger().debug(f'{context}: 客户端 {client_id} 已关闭连接，跳过响应发送')
+            return False
+
+        try:
+            await websocket.send(json.dumps(payload, ensure_ascii=False))
+            return True
+        except Exception as e:
+            if self.is_normal_client_close(e):
+                self.get_logger().debug(f'{context}: 客户端 {client_id} 已正常关闭，跳过响应发送')
+                return False
+            raise
     
     async def handle_client_connection(self, websocket):
         """处理客户端WebSocket连接"""
@@ -328,13 +366,21 @@ class CompleteWebSocketServer(Node):
                     # 处理客户端消息
                     await self.handle_client_message(websocket, message, client_id)
                     
-                except websockets.exceptions.ConnectionClosed:
-                    self.get_logger().info(f'🔌 客户端 {client_id} 连接已关闭')
+                except websockets.exceptions.ConnectionClosed as e:
+                    if self.is_normal_client_close(e):
+                        self.get_logger().info(f'🔌 客户端 {client_id} 已正常关闭连接')
+                    else:
+                        self.get_logger().warning(f'🔌 客户端 {client_id} 异常关闭连接: {e}')
                     break
                 except Exception as e:
                     self.get_logger().error(f'❌ 处理客户端消息错误 {client_id}: {e}')
                     await self.send_error_to_client(websocket, client_id, f"处理消息失败: {str(e)}")
             
+        except websockets.exceptions.ConnectionClosed as e:
+            if self.is_normal_client_close(e):
+                self.get_logger().info(f'🔌 客户端 {client_id} 已正常关闭连接')
+            else:
+                self.get_logger().warning(f'🔌 客户端 {client_id} 异常关闭连接: {e}')
         except Exception as e:
             self.get_logger().error(f'❌ 处理客户端连接错误 {client_id}: {e}')
         finally:
@@ -373,7 +419,7 @@ class CompleteWebSocketServer(Node):
             }
             ack_message["metadata"]["message"] = "WebSocket连接成功"
             
-            await websocket.send(json.dumps(ack_message, ensure_ascii=False))
+            await self.safe_send_json(websocket, ack_message, client_id, "发送连接确认")
             
             self.get_logger().info(f'✅ 发送连接确认给 {client_id}')
             
@@ -388,14 +434,14 @@ class CompleteWebSocketServer(Node):
                 waypoints_msg = self.create_base_message("push", "waypoints_data", "websocket_server", client_id)
                 waypoints_msg["data"] = self.business_state['dynamic_waypoints']
                 waypoints_msg["metadata"]["push_reason"] = "initial_data"
-                await websocket.send(json.dumps(waypoints_msg, ensure_ascii=False))
+                await self.safe_send_json(websocket, waypoints_msg, client_id, "发送初始路点数据")
             
             # 发送动作库数据
             if 'gesture_list' in self.business_state:
                 gesture_msg = self.create_base_message("push", "gesture_list", "websocket_server", client_id)
                 gesture_msg["data"] = self.business_state['gesture_list']
                 gesture_msg["metadata"]["push_reason"] = "initial_data_sync"
-                await websocket.send(json.dumps(gesture_msg, ensure_ascii=False))
+                await self.safe_send_json(websocket, gesture_msg, client_id, "发送初始动作库")
                 self.get_logger().info(f'🤖 已向 {client_id} 推送动作库')
             
             # 推送面部表情库
@@ -403,7 +449,7 @@ class CompleteWebSocketServer(Node):
                 facial_msg = self.create_base_message("push", "facial_gesture_list", "websocket_server", client_id)
                 facial_msg["data"] = self.business_state['facial_gesture_list']
                 facial_msg["metadata"]["push_reason"] = "initial_data_sync"
-                await websocket.send(json.dumps(facial_msg, ensure_ascii=False))
+                await self.safe_send_json(websocket, facial_msg, client_id, "发送初始表情库")
                 self.get_logger().info(f'🎭 已向 {client_id} 推送面部表情库')
 
             # 发送当前导航状态
@@ -414,7 +460,7 @@ class CompleteWebSocketServer(Node):
                     "current_waypoint_index": self.business_state['current_waypoint_index']
                 }
                 status_msg["metadata"]["push_reason"] = "initial_data"
-                await websocket.send(json.dumps(status_msg, ensure_ascii=False))
+                await self.safe_send_json(websocket, status_msg, client_id, "发送初始导航状态")
             
             self.get_logger().info(f'📊 发送初始业务数据给 {client_id}')
             
@@ -426,23 +472,30 @@ class CompleteWebSocketServer(Node):
         try:
             subscriptions_to_remove = []  # 用于临时存储需要取消的订阅
 
+            cleaned = False
             with self.client_lock:
                 if client_id in self.connected_clients:
                     del self.connected_clients[client_id]
+                    cleaned = True
                 if client_id in self.client_sessions:
                     del self.client_sessions[client_id]
+                    cleaned = True
                 
                 # 先取出订阅列表，再从内存中删除
                 # 否则一旦删除了，后面就不知道通过ROS告诉整合节点要取消什么了
                 if client_id in self.client_subscriptions:
                     subscriptions_to_remove = list(self.client_subscriptions[client_id].keys())
                     del self.client_subscriptions[client_id]
+                    cleaned = True
             
             # 通知数据整合节点取消订阅 (如果该客户端有订阅的话)
             if subscriptions_to_remove:
                 await self.remove_client_subscriptions(client_id, subscriptions_to_remove)
             
-            self.get_logger().info(f'🧹 清理客户端资源完成: {client_id}')
+            if cleaned or subscriptions_to_remove:
+                self.get_logger().info(f'🧹 清理客户端资源完成: {client_id}')
+            else:
+                self.get_logger().debug(f'🧹 客户端资源已清理，无需重复处理: {client_id}')
             
         except Exception as e:
             self.get_logger().error(f'❌ 清理客户端资源错误 {client_id}: {e}')
@@ -542,11 +595,14 @@ class CompleteWebSocketServer(Node):
                 "error_message": error_message
             })
 
-            await websocket.send(json.dumps(error_msg, ensure_ascii=False))
+            await self.safe_send_json(websocket, error_msg, client_id, "发送处理异常")
 
         except Exception as e:
             # 如果发送错误消息过程中再发生异常，打印日志但不再抛出
-            self.get_logger().error(f"发送错误消息失败: {e}", exc_info=True)
+            if self.is_normal_client_close(e):
+                self.get_logger().debug(f"发送错误消息时客户端已正常关闭: {client_id}")
+            else:
+                self.get_logger().error(f"发送错误消息失败: {e}", exc_info=True)
     
     
     def validate_client_message(self, message: Dict) -> tuple[bool, str]:
@@ -595,7 +651,7 @@ class CompleteWebSocketServer(Node):
             }
             ack_message["metadata"]["request_id"] = message_data.get("message_id", "")
             
-            await websocket.send(json.dumps(ack_message, ensure_ascii=False))
+            await self.safe_send_json(websocket, ack_message, client_id, "发送数据请求确认")
             
             self.get_logger().info(f'📤 转发数据请求: {message_data.get("data_type", "unknown")} from {client_id}')
             
@@ -645,7 +701,7 @@ class CompleteWebSocketServer(Node):
             }
             ack_message["metadata"]["request_id"] = message_data.get("message_id", "")
             
-            await websocket.send(json.dumps(ack_message, ensure_ascii=False))
+            await self.safe_send_json(websocket, ack_message, client_id, "发送订阅确认")
             
             self.get_logger().info(f'📋 转发订阅请求: {message_data.get("data_type", "unknown")}')
             
@@ -913,11 +969,14 @@ class CompleteWebSocketServer(Node):
                 "message": f"机器人控制命令'{action}'已接收"
             }
             
-            await websocket.send(json.dumps(ack_message, ensure_ascii=False))
+            await self.safe_send_json(websocket, ack_message, client_id, "发送机器人控制确认")
             
             self.get_logger().info(f'🤖 处理机器人控制命令: {action} from {client_id}')
             
         except Exception as e:
+            if self.is_normal_client_close(e):
+                self.get_logger().debug(f'机器人控制确认发送前客户端已正常关闭: {client_id}')
+                return
             self.get_logger().error(f'❌ 处理机器人控制命令错误: {e}')
             await self.send_error_to_client(websocket, client_id, f"处理机器人命令失败: {str(e)}")
     
@@ -979,9 +1038,12 @@ class CompleteWebSocketServer(Node):
             ack_message["metadata"]["request_id"] = request_id
 
             # 发送回 APP
-            await websocket.send(json.dumps(ack_message, ensure_ascii=False))
+            await self.safe_send_json(websocket, ack_message, client_id, "发送面部控制确认")
         
         except Exception as e:
+            if self.is_normal_client_close(e):
+                self.get_logger().debug(f'面部控制确认发送前客户端已正常关闭: {client_id}')
+                return
             self.get_logger().error(f'❌ 处理面部控制命令错误: {e}')
             # 报错时也尝试带回 ID
             error_message = f"失败: {str(e)}"
@@ -1038,11 +1100,14 @@ class CompleteWebSocketServer(Node):
                 "pose": {"x": x, "y": y, "yaw": yaw, "frame_id": frame_id},
                 "message": "初始位姿已设置"
             }
-            await websocket.send(json.dumps(ack_message, ensure_ascii=False))
+            await self.safe_send_json(websocket, ack_message, client_id, "发送初始位姿确认")
 
             self.get_logger().info(f'📍 设置初始位姿: x={x:.3f}, y={y:.3f}, yaw={yaw:.3f} [{frame_id}] from {client_id}')
 
         except Exception as e:
+            if self.is_normal_client_close(e):
+                self.get_logger().debug(f'初始位姿确认发送前客户端已正常关闭: {client_id}')
+                return
             self.get_logger().error(f'❌ 处理初始位姿命令错误: {e}')
             await self.send_error_to_client(websocket, client_id, f"设置初始位姿失败: {str(e)}")
 
@@ -1073,11 +1138,14 @@ class CompleteWebSocketServer(Node):
                 "message": f"系统管理命令'{action}'已接收"
             }
             
-            await websocket.send(json.dumps(ack_message, ensure_ascii=False))
+            await self.safe_send_json(websocket, ack_message, client_id, "发送系统命令确认")
             
             self.get_logger().info(f'⚙️ 处理系统管理命令: {action} from {client_id}')
             
         except Exception as e:
+            if self.is_normal_client_close(e):
+                self.get_logger().debug(f'系统命令确认发送前客户端已正常关闭: {client_id}')
+                return
             self.get_logger().error(f'❌ 处理系统管理命令错误: {e}')
             await self.send_error_to_client(websocket, client_id, f"处理系统命令失败: {str(e)}")
     
@@ -1322,7 +1390,7 @@ class CompleteWebSocketServer(Node):
             
             for client_id, websocket in clients_to_notify:
                 try:
-                    await websocket.send(json.dumps(message, ensure_ascii=False))
+                    await self.safe_send_json(websocket, message, client_id, "广播消息")
                 except Exception as e:
                     self.get_logger().debug(f'广播到 {client_id} 失败: {e}')
                     disconnected_clients.append(client_id)
@@ -1392,10 +1460,13 @@ class CompleteWebSocketServer(Node):
                 "error_message": error_message
             })
             
-            await websocket.send(json.dumps(error_msg, ensure_ascii=False))
+            await self.safe_send_json(websocket, error_msg, client_id, "发送错误消息")
             
         except Exception as e:
-            self.get_logger().error(f'❌ 发送错误消息错误: {e}')
+            if self.is_normal_client_close(e):
+                self.get_logger().debug(f'发送错误消息时客户端已正常关闭: {client_id}')
+            else:
+                self.get_logger().error(f'❌ 发送错误消息错误: {e}')
     
     def check_connections_health(self):
         """检查连接健康状态"""

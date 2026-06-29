@@ -9,17 +9,36 @@
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
+    use_cpp_control_runtime = LaunchConfiguration('use_cpp_control_runtime')
+    cpp_control_config_file = LaunchConfiguration('cpp_control_config_file')
+    pkg_humanoid_control_runtime = FindPackageShare('humanoid_control_runtime')
 
     declare_use_sim_time = DeclareLaunchArgument(
         'use_sim_time',
         default_value='false',
         description='使用仿真时钟',
+    )
+    declare_use_cpp_control_runtime = DeclareLaunchArgument(
+        'use_cpp_control_runtime',
+        default_value='true',
+        description='是否使用 C++ 控制层运行包；默认 true，false 时回退 Python dynamic/map 节点',
+    )
+    declare_cpp_control_config_file = DeclareLaunchArgument(
+        'cpp_control_config_file',
+        default_value=PathJoinSubstitution([
+            pkg_humanoid_control_runtime,
+            'config',
+            'control_runtime.yaml',
+        ]),
+        description='C++ 控制层运行包参数文件',
     )
 
     dynamic_waypoints_node = Node(
@@ -27,6 +46,7 @@ def generate_launch_description():
         executable='dynamic_waypoints_manager',
         name='dynamic_waypoints_manager',
         output='screen',
+        condition=IfCondition(PythonExpression(["'", use_cpp_control_runtime, "' != 'true'"])),
         parameters=[{
             'use_sim_time': use_sim_time,
             # APP 设置点位后写入 Todesk 工作区，避免误写主工作区在线源码。
@@ -46,6 +66,7 @@ def generate_launch_description():
         executable='map_context_manager',
         name='map_context_manager',
         output='screen',
+        condition=IfCondition(PythonExpression(["'", use_cpp_control_runtime, "' != 'true'"])),
         parameters=[{
             'use_sim_time': use_sim_time,
             'map_registry_path': '/home/ubuntu/software/Todesk/Files/humanoid_ws/data/maps/map_registry.json',
@@ -58,8 +79,36 @@ def generate_launch_description():
         }],
     )
 
+    dynamic_waypoints_cpp_node = Node(
+        package='humanoid_control_runtime',
+        executable='dynamic_waypoints_manager_cpp',
+        name='dynamic_waypoints_manager_cpp',
+        output='screen',
+        condition=IfCondition(PythonExpression(["'", use_cpp_control_runtime, "' == 'true'"])),
+        parameters=[
+            cpp_control_config_file,
+            {'use_sim_time': use_sim_time},
+        ],
+    )
+
+    map_context_cpp_node = Node(
+        package='humanoid_control_runtime',
+        executable='map_context_manager_cpp',
+        name='map_context_manager_cpp',
+        output='screen',
+        condition=IfCondition(PythonExpression(["'", use_cpp_control_runtime, "' == 'true'"])),
+        parameters=[
+            cpp_control_config_file,
+            {'use_sim_time': use_sim_time},
+        ],
+    )
+
     return LaunchDescription([
         declare_use_sim_time,
+        declare_use_cpp_control_runtime,
+        declare_cpp_control_config_file,
         dynamic_waypoints_node,
         map_context_node,
+        dynamic_waypoints_cpp_node,
+        map_context_cpp_node,
     ])

@@ -124,12 +124,15 @@ fi
 
 source "$ACTIVE_MAP_ENV_FILE"
 
-ros2 launch humanoid_bringup robot_navigation_stack.launch.py \
+setsid nohup ros2 launch humanoid_bringup robot_navigation_stack.launch.py \
   use_sim_time:=false \
+  rviz:=false \
   map_id:="$ACTIVE_MAP_ID" \
   map_yaml_file:="$ACTIVE_MAP_YAML_FILE" \
   prior_map_path:="$ACTIVE_PRIOR_MAP_PATH" \
-  robosense_config_file:="$ACTIVE_ROBOSENSE_CONFIG_FILE" &
+  robosense_config_file:="$ACTIVE_ROBOSENSE_CONFIG_FILE" \
+  use_cpp_route_runtime:="${USE_CPP_ROUTE_RUNTIME:-true}" \
+  >> "$LOG_FILE" 2>&1 < /dev/null &
 
 STACK_PID=$!
 echo "$STACK_PID" > "$PID_FILE"

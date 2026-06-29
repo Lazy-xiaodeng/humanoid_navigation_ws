@@ -30,7 +30,6 @@ setup(
         'console_scripts': [
             'websocket_client_node = humanoid_websocket.websocket_client:main',
             'websocket_server_node = humanoid_websocket.websocket_server:main',
-            'message_bridge_node = humanoid_websocket.message_bridge:main',
             'data_integration_node = humanoid_websocket.data_integration_node:main',
             'data_integration_node_recoverable = humanoid_websocket.data_integration_node_recoverable:main',
             'test_data_integration_node = humanoid_websocket.test_data_integration_node:main',

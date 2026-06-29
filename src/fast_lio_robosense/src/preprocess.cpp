@@ -1217,7 +1217,9 @@ void Preprocess::robosenseM1_handler(const sensor_msgs::msg::PointCloud2::Unique
                         pl_surf.points.push_back(added_pt);
                     }
                 }
-                std::cout << " point_size_downsample: " << pl_surf.size() << std::endl;
+                if (log_point_size) {
+                    std::cout << " point_size_downsample: " << pl_surf.size() << std::endl;
+                }
             }
             return;
         } catch (const std::exception& e) {
@@ -1332,6 +1334,8 @@ void Preprocess::robosenseM1_handler(const sensor_msgs::msg::PointCloud2::Unique
             }
         }
         std::sort(time_stamp_of_points.begin(), time_stamp_of_points.end());
-        std::cout << " point_size_downsample: "<< pl_surf.size()<<std::endl;
+        if (log_point_size) {
+            std::cout << " point_size_downsample: " << pl_surf.size() << std::endl;
+        }
     }
 }

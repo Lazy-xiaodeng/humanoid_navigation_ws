@@ -1,0 +1,47 @@
+# humanoid_broadcast_runtime 播报运行层参数。
+# 本文件用于配置 C++ 播报服务 broadcast_service_node_cpp。
+# 现场调试优先修改这里或通过环境变量覆盖，不要把设备名、播放模式写死到源码。
+
+xiaorui_broadcast_service:
+  ros__parameters:
+    # 音频后端选择策略。
+    # auto：优先 PipeWire/Pulse，再尝试 ALSA；pipewire/pulse：只走 pactl sink；alsa：只走 ALSA 设备。
+    # 兼容环境变量：XIAORUI_AUDIO_BACKEND。
+    audio_backend: "auto"
+
+    # PipeWire/Pulse 指定输出 sink；auto 表示自动选择默认或评分最高的 sink。
+    # 兼容环境变量：XIAORUI_AUDIO_SINK。
+    audio_sink: "auto"
+
+    # ALSA 指定设备，例如 plughw:0,0；auto 表示自动从 aplay -l 中选择。
+    # 兼容环境变量：XIAORUI_ALSA_DEVICE。
+    alsa_device: "auto"
+
+    # 播放器模式。
+    # dry_run/none：只等待一小段时间，不真实播放，适合自动化测试。
+    # command：执行 player_command，可用于 edge-tts + ffplay。
+    # beep：生成短测试音并播放，用于验证音频设备。
+    # 兼容环境变量：XIAORUI_BROADCAST_PLAYER。
+    player_mode: "dry_run"
+
+    # command 模式下执行的外部命令模板。
+    # 支持占位符：{{text}}、{{volumePercent}}、{{broadcastId}}、{{waypointId}}、{{selectedDevice}}、{{backend}}。
+    # 同时会向命令进程注入 XIAORUI_BROADCAST_TEXT 等环境变量。
+    # 兼容环境变量：XIAORUI_BROADCAST_PLAYER_COMMAND。
+    player_command: ""
+
+    # dry_run 模式模拟播报耗时，单位秒。
+    # 兼容环境变量：XIAORUI_BROADCAST_DRY_RUN_SEC。
+    dry_run_sec: 0.2
+
+    # 默认播报音量，范围 0-100。
+    # 兼容环境变量：XIAORUI_BROADCAST_DEFAULT_VOLUME。
+    default_volume_percent: 72
+
+    # 每次请求是否重新选择音频设备。
+    # false：启动时选一次，只有当前设备不可用时才重新选择；true：每次 play/set_volume/health 都重新选择。
+    # 兼容环境变量：XIAORUI_AUDIO_RESELECT_EACH_REQUEST。
+    reselect_each_request: false
+
+    # 是否打印外部命令失败时的 stdout/stderr 摘要；调试音频链路时建议开启。
+    log_command_error: true
