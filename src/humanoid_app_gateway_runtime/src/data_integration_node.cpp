@@ -716,7 +716,7 @@ private:
     load_facial_gesture_list(false);
   }
 
-  std::string resolve_locomotion_config_path(
+  std::string resolve_expression_config_path(
     const std::string & configured_path,
     const std::string & file_name) const
   {
@@ -724,10 +724,10 @@ private:
       return configured_path;
     }
     try {
-      return ament_index_cpp::get_package_share_directory("humanoid_locomotion") +
+      return ament_index_cpp::get_package_share_directory("humanoid_expression_runtime") +
              "/config/" + file_name;
     } catch (const std::exception &) {
-      return "src/humanoid_locomotion/config/" + file_name;
+      return "src/humanoid_expression_runtime/config/" + file_name;
     }
   }
 
@@ -735,7 +735,7 @@ private:
   {
     // 读取 gestures_app.yaml 并构造 gesture_list 数据。
     // publish_after_load=true 时说明来自热重载，需要立即通知 APP 刷新动作列表。
-    const std::string path = resolve_locomotion_config_path(
+    const std::string path = resolve_expression_config_path(
       config_.gesture_list_yaml_path,
       "gestures_app.yaml");
     std::ifstream file(path);
@@ -819,7 +819,7 @@ private:
   {
     // 读取表情动作配置并构造 facial_gesture_list 数据。
     // 该数据只用于 APP 展示和下发表情命令，不参与导航控制。
-    const std::string path = resolve_locomotion_config_path(
+    const std::string path = resolve_expression_config_path(
       config_.facial_gesture_list_yaml_path,
       "facial_gestures.yaml");
     std::ifstream file(path);

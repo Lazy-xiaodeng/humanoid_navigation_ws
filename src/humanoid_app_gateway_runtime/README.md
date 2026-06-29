@@ -14,8 +14,8 @@
 
 当前采用“安全验证、按开关接入”的方式推进：
 
-- `app_gateway_node`：已接入 APP WebSocket server、客户端连接管理、APP 请求/订阅转发、integration 响应回发和业务命令路由；默认 `websocket_server_enable=false`，不会抢占线上端口。
-- `data_integration_node`：已接入机器人状态、导航状态、导航 ack、地图状态、地图响应、点位数据、动作结果、路径、定位位姿、odom 速度、APP 请求和 APP 订阅的核心数据链路；默认 `data_integration_enable=false`，不会重复发布正式 integration 数据。
+- `app_gateway_node`：已接入 APP WebSocket server、客户端连接管理、APP 请求/订阅转发、integration 响应回发和业务命令路由；正式导航默认 `websocket_server_enable=true`。
+- `data_integration_node`：已接入机器人状态、导航状态、导航 ack、地图状态、地图响应、点位数据、动作结果、路径、定位位姿、odom 速度、APP 请求和 APP 订阅的核心数据链路；正式导航默认 `data_integration_enable=true`。
 - `robot_status_adapter`：已实现 `/robot_status_raw` 到 `system_status` 的纯转换逻辑，并通过 协议一致性验证。
 - `protocol_builder`：已实现 response、push、subscription_response、error_response 的协议组包逻辑，并通过 协议一致性验证。
 - `data_store`：已实现数据缓存、更新时间、TTL 新鲜度判断和过期清理逻辑，并通过 协议一致性验证。
@@ -60,35 +60,34 @@ ros2 launch humanoid_app_gateway_runtime app_gateway_runtime.launch.py \
   data_integration_enable:=true
 ```
 
-通过统一 ws 入口分阶段接管 APP 网关和数据整合：
-
-```bash
-ros2 launch humanoid_websocket websocket_server.launch.py \
-  use_cpp_app_gateway:=true \
-  use_cpp_robot_gateway:=false
-```
-
-通过控制层总入口分阶段接管：
+通过控制层总入口只验证 APP 网关，不连接机器人本体：
 
 ```bash
 ros2 launch humanoid_bringup robot_control_plane.launch.py \
-  use_cpp_app_gateway:=true
+  app_websocket_server_enable:=false \
+  data_integration_enable:=true \
+  robot_ws_enable:=false
+```
+
+通过控制层总入口按正式 C++ 控制层启动：
+
+```bash
+ros2 launch humanoid_bringup robot_control_plane.launch.py
 ```
 
 如果要同时验证 APP 侧 C++ 和机器人侧 C++，但不连接真实机器人：
 
 ```bash
 ros2 launch humanoid_bringup robot_control_plane.launch.py \
-  use_cpp_app_gateway:=true \
-  cpp_app_websocket_server_enable:=false \
-  cpp_data_integration_enable:=true \
-  use_cpp_robot_gateway:=true \
-  cpp_robot_ws_enable:=false \
-  cpp_robot_walk_velocity_send_enable:=false \
-  cpp_robot_motion_execution_enable:=false
+  app_websocket_server_enable:=false \
+  data_integration_enable:=true \
+  robot_ws_enable:=false \
+  robot_walk_velocity_send_enable:=false \
+  robot_motion_execution_enable:=false \
+  robot_gesture_sync_enable:=false
 ```
 
-正式接入前应先在真实 APP 页面做长连接、订阅、刷新页面初始回显、导航事件和异常弹窗核对；如果发现问题，把 `use_cpp_app_gateway` 改回 `false` 即可切换。
+正式接入前应先在真实 APP 页面做长连接、订阅、刷新页面初始回显、导航事件和异常弹窗核对；如果发现问题，优先通过 launch 参数临时关闭 `app_websocket_server_enable` 或 `data_integration_enable` 做定位。
 
 切换前后建议运行状态检查：
 
@@ -140,33 +139,29 @@ config/data_integration.yaml
 - `include/.../app_gateway_config.hpp` / `src/app_gateway_config.cpp`：声明和读取 ROS 参数；上游是 YAML，下游是 `app_gateway_node`、`data_integration_node`。
 - `src/app_gateway_node.cpp`：APP 网关 ROS Node 外壳；上游是 APP WebSocket 客户端和 integration 话题，下游是 `/websocket/*`、`/app/*` 等 ROS topic。
 - `include/.../app_protocol.hpp` / `src/app_protocol.cpp`：APP 协议解析和基础消息校验；上游是 APP WebSocket JSON，下游是命令路由和数据请求转发。
-- `src/app_protocol_probe.cpp`：APP 协议校验开发期验证工具；上游是 协议一致性验证脚本输入的 APP 请求或订阅 JSON，下游是 stdout 输出的校验结果。
 - `include/.../client_registry.hpp` / `src/client_registry.cpp`：APP 客户端连接和订阅关系管理；上游是 WebSocket 连接事件，下游是 integration 转发和订阅推送。
-- `src/client_registry_probe.cpp`：客户端连接/订阅缓存开发期验证工具；上游是 协议一致性验证脚本定义的连接和订阅场景，下游是 stdout 输出的客户端状态结果。
 - `include/.../business_command_router.hpp` / `src/business_command_router.cpp`：APP 业务命令路由；上游是 APP business_command，下游是导航、地图、机器人控制、表情和系统命令 topic。
-- `src/business_command_router_probe.cpp`：业务命令路由开发期验证工具；上游是 协议一致性验证脚本定义的 APP command 场景，下游是 stdout 输出的路由结果。
 - `include/.../integration_forwarder.hpp` / `src/integration_forwarder.cpp`：integration 数据回推 APP；上游是 `/integration/data_responses`、`/integration/push_messages`、`/integration/subscription_responses`，下游是 APP WebSocket 客户端。
-- `src/integration_forwarder_probe.cpp`：integration 路由开发期验证工具；上游是 协议一致性验证脚本定义的 response/push/subscription_response 场景，下游是 stdout 输出的路由决策。
 
 ### 数据整合节点相关
 
 - `src/data_integration_node.cpp`：数据整合 ROS Node 外壳；上游是导航、地图、定位、机器人状态和 APP 请求 topic，下游是 integration 系列 topic。
 - `include/.../data_store.hpp` / `src/data_store.cpp`：统一数据缓存和 TTL 管理；上游是各 adapter 输出，下游是请求响应和订阅推送。
-- `src/data_store_probe.cpp`：数据缓存开发期验证工具；上游是 协议一致性验证脚本定义的缓存场景，下游是 stdout 输出的可用性、新鲜度和过期清理结果。
 - `include/.../subscription_manager.hpp` / `src/subscription_manager.cpp`：APP 数据订阅关系与推送频率管理；上游是 `/websocket/data_subscriptions`，下游是 push message 生成。
-- `src/subscription_manager_probe.cpp`：订阅管理开发期验证工具；上游是 协议一致性验证脚本定义的订阅场景，下游是 stdout 输出的订阅者、统计和取消订阅结果。
 - `include/.../protocol_builder.hpp` / `src/protocol_builder.cpp`：构建 response、push、error、subscription_response 协议消息；上游是 data store、adapter、APP 请求和订阅请求，下游是 integration publisher。
-- `src/protocol_builder_probe.cpp`：协议组包开发期验证工具；上游是 协议一致性验证脚本输入的测试 JSON，下游是 stdout 输出的 C++ 组包 JSON。
 - `include/.../robot_status_adapter.hpp` / `src/robot_status_adapter.cpp`：转换 `/robot_status_raw` 为 `system_status`；上游是 `robot_gateway_node`，下游是 data store。
-- `src/robot_status_adapter_probe.cpp`：机器人状态转换开发期验证工具；上游是 协议一致性验证脚本输入的原始机器人状态，下游是 stdout 输出的 C++ `system_status` JSON。
 - `include/.../navigation_status_adapter.hpp` / `src/navigation_status_adapter.cpp`：转换导航状态、ack、异常事件；上游是 `humanoid_route_runtime` 和导航状态 topic，下游是 data store / push message。
-- `src/navigation_status_adapter_probe.cpp`：导航状态转换开发期验证工具；上游是 协议一致性验证脚本定义的 ack 和 event_type，下游是 stdout 输出的导航事件转换结果。
 - `include/.../map_waypoint_adapter.hpp` / `src/map_waypoint_adapter.cpp`：转换地图状态、地图响应和点位库；上游是地图/点位管理节点，下游是 data store / APP 初始快照。
-- `src/map_waypoint_adapter_probe.cpp`：地图/点位转换开发期验证工具；上游是 协议一致性验证脚本定义的 map/waypoints payload，下游是 stdout 输出的字段整理结果。
 - `include/.../pose_speed_adapter.hpp` / `src/pose_speed_adapter.cpp`：转换定位位姿、odom 和速度估算；上游是定位/odom 话题，下游是 `robot_pose`、`robot_speed`。
-- `src/pose_speed_adapter_probe.cpp`：位姿/速度转换开发期验证工具；上游是 协议一致性验证脚本定义的 twist、covariance、quaternion，下游是 stdout 输出的速度和定位质量结果。
 - `include/.../path_metrics.hpp` / `src/path_metrics.cpp`：路径长度、平滑度、复杂度等纯计算工具；上游是 `/plan`，下游是 navigation_path 响应增强字段。
-- `src/path_metrics_probe.cpp`：路径指标开发期验证工具；上游是 协议一致性验证脚本定义的路径点，下游是 stdout 输出的路径分析结果。
+
+### 开发期探针
+
+`test/probes/*_probe.cpp` 是迁移和协议一致性验证时使用的开发期小程序，默认不参与正式构建和安装。需要单独验证某个纯逻辑模块时，可临时执行：
+
+```bash
+colcon build --packages-select humanoid_app_gateway_runtime --cmake-args -DBUILD_RUNTIME_PROBES=ON
+```
 
 ## 维护原则
 

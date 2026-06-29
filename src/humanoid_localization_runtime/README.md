@@ -8,6 +8,7 @@
 - 动态发布 `map_ground` 和 `odom_ground` 地面坐标系。
 - 根据 TF 输出 `/robot_realpose`。
 - 将 RViz `/initialpose` 转换给定位桥和 RoboSense 定位初始化链路。
+- 在 Nav2 启动前等待定位 TF 就绪，避免导航核心节点过早启动。
 
 ## 文件说明
 
@@ -15,6 +16,7 @@
 - `src/dynamic_odom_ground_publisher.cpp`：动态地面 TF 发布节点，根据机器人当前高度发布 `map_ground` 或 `odom_ground`。
 - `src/robot_realpose_publisher.cpp`：机器人真实位姿发布节点，从 TF 查询全局位姿并发布 `/robot_realpose`。
 - `src/rviz_initialpose_adapter.cpp`：RViz 初始位姿适配节点，把 `/initialpose` 同步给定位桥和 RoboSense。
+- `src/wait_for_tf.cpp`：TF 就绪门控节点，等待指定 TF 连续稳定后退出，供 launch 继续启动 Nav2。
 - `config/localization_runtime.yaml`：定位运行层参考参数，带中文注释，当前主启动链路仍以内联 launch 参数为准。
 - `launch/localization_runtime.launch.py`：独立调试 launch，便于单独启动定位辅助节点。
 
@@ -23,7 +25,7 @@
 上游：
 
 - `fast_lio_node`：提供 `/odom` 和底盘相关 TF。
-- `robosense_lidar_localization_node`：提供 `/prior_localization/odom` 等全局定位输入。
+- `humanoid_robosense_localization_runtime/robosense_lidar_localization_node`：提供 `/prior_localization/odom` 等全局定位输入。
 - RViz 或 APP：通过 `/initialpose` 设置初始位姿。
 
 下游：
@@ -31,6 +33,7 @@
 - Nav2：使用 `map_ground`、`odom_ground` 和 `map -> odom`。
 - 路线运行层：订阅 `/localization/prior_map_odom_bridge_status` 判断定位健康。
 - APP/数据整合层：订阅 `/robot_realpose` 展示机器人实时位置。
+- `wait_for_tf` 启动门控：在 TF 稳定后退出，触发正式 launch 启动 Nav2 核心节点。
 
 ## 使用说明
 
@@ -42,6 +45,6 @@ source install/local_setup.bash
 ros2 launch humanoid_localization_runtime localization_runtime.launch.py
 ```
 
-## 回退策略
+## 维护说明
 
-旧综合包 `humanoid_navigation2_cpp_nodes` 暂时保留。若新包启动异常，可以把 launch 中对应 package 临时改回旧包名回退。
+定位相关 C++ 节点已经从旧综合包中独立到本包。后续如果定位桥、地面 TF、真实位姿或 RViz 初始位姿适配需要调整，优先在本包内维护。

@@ -1,13 +1,13 @@
 # humanoid_app_gateway_runtime 数据整合参数。
 # 本文件用于配置系统状态、导航状态、地图点位、定位速度和订阅推送。
-# 本包支持通过运行开关接入正式数据整合链路，默认保持安全验证模式。
+# 正式导航默认启用数据整合链路；离线验证或排查重复推送时可通过 launch 参数关闭。
 # 上游节点：robot_gateway_node、navigation_state_manager、map_context_manager、定位/odom/plan 等系统话题。
 # 下游节点：app_gateway_node，通过 integration 系列话题把数据返回 APP。
 
 data_integration_node:
   ros__parameters:
-    # 是否启用真实数据整合逻辑；默认 false，避免在验证时重复发布 integration 数据。
-    data_integration_enable: false
+    # 是否启用真实数据整合逻辑；正式导航默认 true。
+    data_integration_enable: true
 
     # 数据主动推送主循环频率，单位 Hz；线上协议约 10Hz。
     push_update_rate_hz: 10.0
@@ -98,10 +98,10 @@ data_integration_node:
     # 动作库更新通知输入话题。
     gesture_list_updated_topic: "/system/gesture_list_updated"
 
-    # 上半身动作库 YAML 路径；为空时自动从 humanoid_locomotion/config/gestures_app.yaml 查找。
+    # 上半身动作库 YAML 路径；为空时自动从 humanoid_expression_runtime/config/gestures_app.yaml 查找。
     gesture_list_yaml_path: ""
 
-    # 面部表情库 YAML 路径；为空时自动从 humanoid_locomotion/config/facial_gestures.yaml 查找。
+    # 面部表情库 YAML 路径；为空时自动从 humanoid_expression_runtime/config/facial_gestures.yaml 查找。
     facial_gesture_list_yaml_path: ""
 
     # APP 数据请求输入话题。

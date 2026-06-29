@@ -20,6 +20,7 @@
 #include <chrono>
 #include <algorithm>
 #include <cctype>
+#include <iostream>
 #include <memory>
 #include <sstream>
 #include <thread>
@@ -465,26 +466,35 @@ void RobotWsClient::connection_loop()
     const auto url = parse_ws_url(config_.robot_ws_server);
     if (!url.ok) {
       connected_ = false;
+      std::cerr << "[robot_ws_client] 机器人 WebSocket 地址解析失败: "
+                << config_.robot_ws_server << ", error=" << url.error << std::endl;
       std::this_thread::sleep_for(std::chrono::duration<double>(config_.reconnect_interval_sec));
       continue;
     }
 
     try {
+      std::cerr << "[robot_ws_client] 正在连接机器人 WebSocket: "
+                << config_.robot_ws_server << std::endl;
       tcp::resolver resolver(impl_->ioc);
       impl_->ws = std::make_unique<websocket::stream<tcp::socket>>(impl_->ioc);
       const auto results = resolver.resolve(url.host, url.port);
       net::connect(impl_->ws->next_layer(), results.begin(), results.end());
       impl_->ws->handshake(url.host, url.target);
       connected_ = true;
+      std::cerr << "[robot_ws_client] 机器人 WebSocket 已连接: "
+                << config_.robot_ws_server << std::endl;
 
       while (running_ && connected_) {
         beast::flat_buffer buffer;
         impl_->ws->read(buffer);
         handle_incoming_message(beast::buffers_to_string(buffer.data()));
       }
-    } catch (const std::exception &) {
+    } catch (const std::exception & ex) {
       connected_ = false;
       impl_->ws.reset();
+      std::cerr << "[robot_ws_client] 机器人 WebSocket 连接/接收失败: "
+                << ex.what() << "，将在 " << config_.reconnect_interval_sec
+                << " 秒后重试。" << std::endl;
       if (running_) {
         std::this_thread::sleep_for(std::chrono::duration<double>(config_.reconnect_interval_sec));
       }

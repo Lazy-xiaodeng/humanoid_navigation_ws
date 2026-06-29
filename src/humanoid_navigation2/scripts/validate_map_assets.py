@@ -30,7 +30,6 @@ OPTIONAL_BUT_RECOMMENDED = (
     "map_data_file",
     "raw_pcd_file",
     "standard_pcd_file",
-    "scancontext_database_file",
     "waypoints_file",
 )
 

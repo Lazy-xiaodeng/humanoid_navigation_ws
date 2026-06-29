@@ -150,9 +150,9 @@ navigation_state_manager_cpp:
     route_task.default_interrupt_broadcast: true
 
     # 是否真正向 Nav2 action 下发路线任务 goal。
-    # false：只运行 C++ 路线任务状态机和协议层，适合验证测试、日志验证和逐步接入。
-    # true：start/jump/下一段会驱动 NavigateThroughPoses 或 NavigateToPose，机器人会真实运动；打开前必须确认 Nav2、地图、定位和安全急停可用。
-    route_task.nav2_execution_enable: false
+    # true：start/jump/下一段会驱动 NavigateThroughPoses 或 NavigateToPose，正式导航默认打开。
+    # false：只运行协议和状态机，适合离线协议验证，不会驱动机器人运动。
+    route_task.nav2_execution_enable: true
 
     # 倒走导航使用的行为树 XML。
     reverse_navigation_bt_xml: "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/config/behavior_tree/navigate_reverse_xy_then_yaw.xml"

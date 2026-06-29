@@ -1,13 +1,13 @@
 # humanoid_app_gateway_runtime APP 网关参数。
 # 本文件用于配置 APP WebSocket 接入、客户端管理和 APP 指令转 ROS topic。
-# 当前 C++ 包处于分阶段实现阶段，默认不启用真实 WebSocket 服务，避免误接管线上 APP 链路。
+# 正式导航启动默认启用真实 WebSocket 服务；如需离线验证，可在 launch 参数中覆盖为 false。
 # 上游节点：APP / 导航页 WebSocket 客户端，以及 data_integration_node 发布的 integration 系列话题。
 # 下游节点：dynamic_waypoints_manager、map_context_manager、robot_gateway_node、facial_driver、RViz initialpose 适配链路。
 
 app_gateway_node:
   ros__parameters:
-    # 是否启用真实 APP WebSocket 服务；分阶段验证阶段保持 false，确认 C++ 链路稳定后再由 bringup 开关接管。
-    websocket_server_enable: false
+    # 是否启用真实 APP WebSocket 服务；完整导航默认 true，离线测试/端口冲突时可覆盖为 false。
+    websocket_server_enable: true
 
     # APP WebSocket 监听地址；正式接入时应与当前线上 APP 网关保持一致。
     websocket_host: "0.0.0.0"

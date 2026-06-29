@@ -3,7 +3,7 @@ Open3D prior-map 定位导航启动文件。
 
 数据流：
   rslidar_sdk -> Fast-LIO -> fastlio_open3d_axis_adapter
-      -> open3d_loc
+      -> humanoid_prior_localization_runtime
       -> /prior_localization/odom
       -> prior_map_odom_bridge -> map->odom
       -> Nav2
@@ -36,13 +36,13 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     pkg_nav2 = get_package_share_directory('humanoid_navigation2')
-    pkg_roi_obstacle = get_package_share_directory('humanoid_roi_obstacle_detector')
+    pkg_obstacle_runtime = get_package_share_directory('humanoid_obstacle_runtime')
 
     default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params.yaml')
     default_bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_xy_then_yaw.xml')
     default_through_bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_through_poses_no_backup.xml')
     default_prior_map_path = os.path.join(pkg_nav2, 'pcd', 'hall_open3d_grounded.pcd')
-    default_roi_obstacle_params_file = os.path.join(pkg_roi_obstacle, 'config', 'roi_obstacle_detector.yaml')
+    default_roi_obstacle_params_file = os.path.join(pkg_obstacle_runtime, 'config', 'obstacle_runtime.yaml')
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     nav2_params_file = LaunchConfiguration('nav2_params_file', default=default_nav2_params_file)
@@ -93,23 +93,6 @@ def generate_launch_description():
             condition=IfCondition(enable_fastdds_shm),
         ),
     ]
-
-    def nav2_python_node(executable, node_name, extra_parameters=None):
-        parameters = [
-            {
-                # 是否使用仿真时间；实机 false，bag 回放 true。
-                'use_sim_time': use_sim_time,
-            }
-        ]
-        if extra_parameters:
-            parameters.append(extra_parameters)
-        return Node(
-            package='humanoid_navigation2',
-            executable=executable,
-            name=node_name,
-            output='screen',
-            parameters=parameters,
-        )
 
     def nav2_cpp_node(executable, node_name, extra_parameters=None):
         parameters = [
@@ -277,8 +260,8 @@ def generate_launch_description():
     )
 
     roi_obstacle_detector_node = Node(
-        package='humanoid_roi_obstacle_detector',
-        executable='roi_obstacle_detector',
+        package='humanoid_obstacle_runtime',
+        executable='roi_obstacle_detector_cpp',
         name='roi_obstacle_detector',
         output='screen',
         condition=IfCondition(enable_roi_obstacle_detector),
@@ -351,7 +334,7 @@ def generate_launch_description():
     )
 
     fastlio_open3d_axis_adapter_node = Node(
-        package='humanoid_open3d_adapter',
+        package='humanoid_prior_localization_runtime',
         executable='fastlio_open3d_axis_adapter',
         name='fastlio_open3d_axis_adapter',
         output='screen',
@@ -367,9 +350,9 @@ def generate_launch_description():
                 'raw_odom_topic': '/odom',
                 # Fast-LIO 原始注册点云输入。
                 'raw_cloud_topic': '/fast_lio/cloud_registered',
-                # 转成标准轴后的 odom 输出，供 open3d_loc 和 bridge 使用。
+                # 转成标准轴后的 odom 输出，供先验地图定位节点和 bridge 使用。
                 'output_odom_topic': '/prior_localization/open3d_input_odom',
-                # 转成标准轴后的点云输出，供 open3d_loc 使用。
+                # 转成标准轴后的点云输出，供先验地图定位节点使用。
                 'output_cloud_topic': '/prior_localization/open3d_input_cloud',
                 # 输出 odom 的父坐标系。
                 'odom_frame': 'odom',
@@ -384,7 +367,7 @@ def generate_launch_description():
     )
 
     prior_map_localization_node = Node(
-        package='open3d_loc',
+        package='humanoid_prior_localization_runtime',
         executable='global_localization_node',
         name='prior_map_open3d_localization',
         output='screen',
@@ -393,7 +376,7 @@ def generate_launch_description():
         parameters=[
             # Open3D 定位包自带默认参数。
             PathJoinSubstitution([
-                FindPackageShare('open3d_loc'),
+                FindPackageShare('humanoid_prior_localization_runtime'),
                 'config',
                 'loc_param_g1.yaml',
             ]),
@@ -410,7 +393,7 @@ def generate_launch_description():
                 'kf_baselink2map/y': [0.001, 0.005],
                 # Kalman z 方向过程/测量噪声参数。
                 'kf_baselink2map/z': [0.00001, 0.04],
-                # 禁止 open3d_loc 发布 TF，map->odom 只由 bridge 发布。
+                # 禁止先验地图定位节点发布 TF，map->odom 只由 bridge 发布。
                 'publish_tf': False,
                 # 输入点云队列长度。
                 'pcd_queue_maxsize': 10,
@@ -469,8 +452,8 @@ def generate_launch_description():
         ],
     )
 
-    prior_map_odom_bridge_node = nav2_python_node(
-        'prior_map_odom_bridge',
+    prior_map_odom_bridge_node = nav2_cpp_node(
+        'prior_map_odom_bridge_cpp',
         'prior_map_odom_bridge',
         {
             # 全局地图坐标系。
@@ -595,10 +578,11 @@ def generate_launch_description():
         ],
     )
 
-    localization_ready_gate = nav2_python_node(
-        'wait_for_tf',
-        'wait_for_localization_tf',
-        {
+    localization_ready_gate = Node(
+        package='humanoid_localization_runtime',
+        executable='wait_for_tf',
+        name='wait_for_localization_tf',
+        parameters=[{
             # 等待 Nav2 使用的全局地面坐标系。
             'target_frame': 'map_ground',
             # 等待机器人底盘坐标系。
@@ -609,7 +593,9 @@ def generate_launch_description():
             'poll_period': 0.2,
             # 连续成功次数，避免 TF 瞬时可用就启动 Nav2。
             'stable_count': 3,
-        },
+            'use_sim_time': use_sim_time,
+        }],
+        output='screen',
     )
 
     nav2_core_nodes = GroupAction([

@@ -16,7 +16,7 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
-    config_file = LaunchConfiguration('config_file')
+    config_file = LaunchConfiguration('route_runtime_config_file')
     nav2_execution_enable = LaunchConfiguration('nav2_execution_enable')
 
     return LaunchDescription([
@@ -26,7 +26,7 @@ def generate_launch_description():
             description='是否使用仿真时间',
         ),
         DeclareLaunchArgument(
-            'config_file',
+            'route_runtime_config_file',
             default_value=PathJoinSubstitution([
                 FindPackageShare('humanoid_route_runtime'),
                 'config',

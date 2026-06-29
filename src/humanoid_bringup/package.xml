@@ -18,12 +18,13 @@
   
   <exec_depend>humanoid_description</exec_depend>
   <exec_depend>humanoid_navigation2</exec_depend>
-  <exec_depend>humanoid_navigation</exec_depend>
-  <exec_depend>humanoid_websocket</exec_depend>
+  <exec_depend>humanoid_control_runtime</exec_depend>
+  <exec_depend>humanoid_route_runtime</exec_depend>
   <exec_depend>humanoid_app_gateway_runtime</exec_depend>
   <exec_depend>humanoid_robot_gateway_runtime</exec_depend>
-  <exec_depend>humanoid_elevation_mapping</exec_depend>
+  <exec_depend>humanoid_expression_runtime</exec_depend>
   <exec_depend>fast_lio_robosense</exec_depend>
+  <exec_depend>humanoid_robosense_localization_runtime</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>

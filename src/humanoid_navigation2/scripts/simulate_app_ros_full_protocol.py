@@ -115,21 +115,31 @@ def validate_protocol_artifacts() -> None:
     excel_text = read_excel_text(EXCEL_PATH)
     require_tokens("功能指令库 Excel", excel_text, required_tokens)
 
-    # 额外核对 websocket 入口层源码确实支持这三类 APP data_type。
+    # 额外核对 APP 网关入口层源码确实支持这三类 APP data_type。
     websocket_source = (
-        WORKSPACE_ROOT / "src/humanoid_websocket/humanoid_websocket/websocket_server.py"
+        WORKSPACE_ROOT / "src/humanoid_app_gateway_runtime/src/app_gateway_node.cpp"
     ).read_text(encoding="utf-8")
     require_tokens(
-        "websocket_server 转发入口",
+        "app_gateway_node 转发入口",
         websocket_source,
         [
             '"waypoint_management"',
             '"navigation_control"',
             '"map_management"',
-            '"map_id": command_data.get("map_id", "")',
-            '"route_waypoint_ids": command_data.get("route_waypoint_ids", [])',
-            '"waypoints_revision": command_data.get("waypoints_revision", "")',
-            '"target_map_id": command_data.get("target_map_id", "")',
+        ],
+    )
+
+    router_source = (
+        WORKSPACE_ROOT / "src/humanoid_app_gateway_runtime/src/business_command_router.cpp"
+    ).read_text(encoding="utf-8")
+    require_tokens(
+        "business_command_router 字段转发",
+        router_source,
+        [
+            '"map_id"',
+            '"route_waypoint_ids"',
+            '"waypoints_revision"',
+            '"target_map_id"',
         ],
     )
 

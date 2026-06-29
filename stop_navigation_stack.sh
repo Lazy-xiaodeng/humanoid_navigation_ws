@@ -34,9 +34,9 @@ collect_navigation_stack_pids() {
   fi
   local patterns=(
     "ros2 launch humanoid_bringup robot_navigation_stack.launch.py"
+    "ros2 launch humanoid_bringup robot_real.launch.py"
     "ros2 launch humanoid_description display.launch.py"
     "ros2 launch humanoid_navigation2"
-    "ros2 launch humanoid_navigation navigation_route_runtime.launch.py"
     "robot_state_publisher"
     "joint_state_publisher"
     "rslidar_sdk_node"
@@ -50,10 +50,12 @@ collect_navigation_stack_pids() {
     "nav2_map_server.*/map_server"
     "nav2_lifecycle_manager.*/lifecycle_manager"
     "robosense_lidar_localization_node"
-    "open3d_loc"
+    "humanoid_prior_localization_runtime"
     "fastlio_open3d_axis_adapter"
     "prior_map_odom_bridge"
     "robot_realpose_publisher"
+    "roi_obstacle_detector"
+    "rviz_initialpose_adapter"
     "periodic_clearing_publisher"
     "periodic_clearing_3d_publisher"
     "wait_for_tf.*wait_for_localization_tf"
@@ -61,7 +63,7 @@ collect_navigation_stack_pids() {
     "nav2_controller.*/controller_server"
     "nav2_behaviors.*/behavior_server"
     "nav2_bt_navigator.*/bt_navigator"
-    "navigation_state_manager"
+    "navigation_state_manager_cpp"
     "rviz2.*humanoid_navigation2.*navigation.rviz"
   )
   local pattern pid

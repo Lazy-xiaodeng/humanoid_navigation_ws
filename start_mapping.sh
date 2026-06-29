@@ -2,7 +2,9 @@
 set -Eeo pipefail
 set +u
 
-WORKSPACE="${WORKSPACE:-$HOME/humanoid_ws}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 默认使用脚本所在工作区，避免 Todesk/Ubuntu 两套源码互相串台。
+WORKSPACE="${WORKSPACE:-$SCRIPT_DIR}"
 MAP_NAME="${1:-hall}"
 START_TIME="$(date +%Y%m%d_%H%M%S)"
 
@@ -20,7 +22,6 @@ MAP_PREFIX="$MAP_DIR/$MAP_NAME"
 PCD_FILE="$PCD_DIR/$MAP_NAME.pcd"
 PCD_STANDARD_FILE="$PCD_DIR/${MAP_NAME}_standard.pcd"
 PCD_OPEN3D_FILE="$PCD_DIR/${MAP_NAME}_open3d_grounded.pcd"
-SC_DB_FILE="$MAP_DIR/${MAP_NAME}_sc.bin"
 BAG_DIR="$BAG_ROOT/${MAP_NAME}_mapping_${START_TIME}"
 
 MAPPING_PID=""
@@ -160,7 +161,6 @@ register_completed_map() {
   RAW_PCD_FILE_ENV="$PCD_FILE" \
   STANDARD_PCD_FILE_ENV="$PCD_STANDARD_FILE" \
   OPEN3D_PCD_FILE_ENV="$PCD_OPEN3D_FILE" \
-  SC_DB_FILE_ENV="$SC_DB_FILE" \
   BAG_DIR_ENV="$BAG_DIR" \
   START_TIME_ENV="$START_TIME" \
   python3 - <<'PY'
@@ -202,7 +202,6 @@ new_entry = {
     "raw_pcd_file": os.environ["RAW_PCD_FILE_ENV"],
     "standard_pcd_file": os.environ["STANDARD_PCD_FILE_ENV"],
     "open3d_prior_map_file": os.environ["OPEN3D_PCD_FILE_ENV"],
-    "scancontext_database_file": os.environ["SC_DB_FILE_ENV"],
     "bag_dir": os.environ["BAG_DIR_ENV"],
     "initial_pose": {
         "frame_id": "map",
@@ -269,13 +268,13 @@ finish_mapping() {
 
   log "Finish requested. Finishing mapping and saving outputs..."
 
-  log "[1/9] Stopping recorders and flushing bag/PCD data..."
+  log "[1/8] Stopping recorders and flushing bag/PCD data..."
 
   # Stop data recorders first so bag and PCD are flushed to disk.
   stop_process_int "rosbag recorder" "$BAG_PID" 90
   stop_process_int "PCD saver" "$PCD_PID" 120
 
-  log "[2/9] Saving Fast-LIO map through /map_save when available..."
+  log "[2/8] Saving Fast-LIO map through /map_save when available..."
   if wait_for_service "/map_save" 5; then
     run_step "Fast-LIO /map_save" run_ros "ros2 service call /map_save std_srvs/srv/Trigger '{}'" || \
       log "WARN: /map_save call failed; continuing with PCD saver output."
@@ -283,7 +282,7 @@ finish_mapping() {
     log "WARN: /map_save service unavailable; continuing with PCD saver output."
   fi
 
-  log "[3/9] Saving 2D occupancy grid map: ${MAP_PREFIX}.yaml/.pgm"
+  log "[3/8] Saving 2D occupancy grid map: ${MAP_PREFIX}.yaml/.pgm"
   if wait_for_service "/slam_toolbox/save_map" 20; then
     run_step "2D occupancy grid map save" run_ros "ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap \"{name: {data: '$MAP_PREFIX'}}\""
   else
@@ -291,21 +290,14 @@ finish_mapping() {
     run_step "2D occupancy grid map save via map_saver_cli" run_ros "ros2 run nav2_map_server map_saver_cli -f '$MAP_PREFIX'" || true
   fi
 
-  log "[4/9] Saving slam_toolbox posegraph: ${MAP_PREFIX}.posegraph/.data"
+  log "[4/8] Saving slam_toolbox posegraph: ${MAP_PREFIX}.posegraph/.data"
   if wait_for_service "/slam_toolbox/serialize_map" 20; then
     run_step "slam_toolbox posegraph save" run_ros "ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph \"{filename: '$MAP_PREFIX'}\""
   else
     log "WARN: /slam_toolbox/serialize_map unavailable; posegraph will not be saved."
   fi
 
-  log "[5/9] Building Scan Context database: $SC_DB_FILE"
-  if [ -d "$BAG_DIR" ]; then
-    run_step "Scan Context database build" run_ros "ros2 run humanoid_relocalization build_sc_database.py --bag '$BAG_DIR' --output '$SC_DB_FILE' --cloud-topic /fast_lio/cloud_registered --odom-topic /odom --interval 2.0"
-  else
-    log "ERROR: bag directory not found, skip Scan Context database: $BAG_DIR"
-  fi
-
-  log "[6/9] Generating derived PCD files..."
+  log "[5/8] Generating derived PCD files..."
   if [ -s "$PCD_FILE" ]; then
     log "Generating standard-frame PCD: $PCD_STANDARD_FILE"
     run_step "standard-frame PCD generation" run_ros "python3 '$WORKSPACE/src/humanoid_navigation2/humanoid_navigation2/pcd_converter.py' '$PCD_FILE' '$PCD_STANDARD_FILE'" || \
@@ -321,16 +313,15 @@ finish_mapping() {
     log "ERROR: base PCD is missing; skip PCD conversions: $PCD_FILE"
   fi
 
-  log "[7/9] Stopping mapping launch..."
+  log "[6/8] Stopping mapping launch..."
   stop_process_int "mapping launch" "$MAPPING_PID" 30
 
-  log "[8/9] Checking output files..."
+  log "[7/8] Checking output files..."
   local failed=0
   check_required_file "${MAP_PREFIX}.yaml" || failed=1
   check_required_file "${MAP_PREFIX}.pgm" || failed=1
   check_required_file "${MAP_PREFIX}.posegraph" || failed=1
   check_required_file "${MAP_PREFIX}.data" || failed=1
-  check_required_file "$SC_DB_FILE" || failed=1
   check_required_file "$PCD_FILE" || failed=1
   check_required_file "$PCD_STANDARD_FILE" || failed=1
   check_required_file "$PCD_OPEN3D_FILE" || failed=1
@@ -346,7 +337,7 @@ finish_mapping() {
   log "ROS log dir: $ROS_LOG_DIR"
 
   if [ "$failed" -eq 0 ]; then
-    log "[9/9] Registering map for APP map switching..."
+    log "[8/8] Registering map for APP map switching..."
     register_completed_map
     log "Mapping completed successfully."
     exit 0
@@ -437,7 +428,6 @@ log "Map name: $MAP_NAME"
 log "2D map prefix: $MAP_PREFIX"
 log "PCD map: $PCD_FILE"
 log "Open3D prior-map alias: $PCD_OPEN3D_FILE"
-log "Scan Context database: $SC_DB_FILE"
 log "Map registry: $MAP_REGISTRY_FILE"
 log "Bag directory: $BAG_DIR"
 log "Run log: $RUN_LOG"
@@ -502,10 +492,7 @@ ros2 bag record -o "$BAG_DIR" \
   /spin/_action/feedback \
   /back_up/_action/status \
   /back_up/_action/feedback \
-  /behavior_tree_log \
-  /scancontext_global_localization/best_pose \
-  /scancontext_global_localization/status \
-  /scancontext_global_localization/candidate &
+  /behavior_tree_log &
 BAG_PID=$!
 
 log "Mapping is running."
@@ -515,7 +502,7 @@ log "If this run is invalid and you want to restart without saving maps, type 'a
 log "If terminal output is too noisy, use another terminal:"
 log "  echo finish > $COMMAND_FILE"
 log "  echo abort  > $COMMAND_FILE"
-log "The script will then save maps, bag, PCD files, Scan Context database, and check output files."
+log "The script will then save maps, bag, PCD files, and check output files."
 
 while is_alive "$MAPPING_PID"; do
   user_cmd=""

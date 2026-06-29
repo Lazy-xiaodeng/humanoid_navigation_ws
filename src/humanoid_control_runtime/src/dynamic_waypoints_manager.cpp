@@ -279,7 +279,7 @@ public:
     RCLCPP_WARN(
       get_logger(),
       "dynamic_waypoints_manager_cpp 已启动：负责点位持久化、点位命令处理和导航命令桥接；"
-      "当前通过 use_cpp_control_runtime 运行开关启用，已接入点位管理运行链路。");
+      "当前作为正式 C++ 点位管理链路运行。");
   }
 
 private:

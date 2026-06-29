@@ -23,9 +23,6 @@
   <depend>rcl_interfaces</depend>
   <exec_depend>python3-numpy</exec_depend>
 
-  <!-- ===== Grid Map（costmap 插件依赖）===== -->
-  <depend>grid_map_costmap_2d</depend>
-
   <!-- ===== Nav2 核心组件 ===== -->
   <depend>nav2_bringup</depend>
   <depend>nav2_controller</depend>
@@ -49,17 +46,12 @@
 
   <!-- ===== 你拆分出的独立功能包 ===== -->
   <depend>humanoid_point_cloud_filter</depend>
-  <exec_depend>humanoid_navigation2_cpp_nodes</exec_depend>
-  <depend>humanoid_roi_obstacle_detector</depend>
+  <depend>humanoid_obstacle_runtime</depend>
+  <depend>humanoid_localization_runtime</depend>
+  <depend>humanoid_costmap_runtime</depend>
   <depend>humanoid_nav2_bt_nodes</depend>
-  <depend>elevation_mapping_opencl</depend>
-  <depend>humanoid_terrain_analyzer</depend>
-  <depend>lidar_localization</depend>
-  <depend>lidar_localization_ros2</depend>
-  <depend>open3d_loc</depend>
-  <depend>hdl_localization</depend>
-  <depend>hdl_global_localization</depend>
-  <depend>humanoid_scancontext_global_localization</depend>
+  <depend>humanoid_prior_localization_runtime</depend>
+  <depend>humanoid_robosense_localization_runtime</depend>
 
   <!-- ===== 测试 ===== -->
   <test_depend>ament_copyright</test_depend>

@@ -218,7 +218,7 @@ public:
       std::chrono::milliseconds(500),
       [this]() { maybe_start_gesture_sync(); });
 
-    // 只有 robot_ws_enable=true 才连接真实机器人；默认关闭时可以安全测试 ROS 侧逻辑。
+    // 只有 robot_ws_enable=true 才连接真实机器人；正式导航默认连接，离线验证可关闭。
     if (config_.robot_ws_enable) {
       ws_client_->start();
     }
@@ -694,12 +694,12 @@ private:
 
   std::string resolve_gestures_yaml_path() const
   {
-    // 优先使用 YAML 配置的动作库路径；未配置时尝试定位 humanoid_locomotion 包内默认路径。
+    // 优先使用 YAML 配置的动作库路径；未配置时定位表情/动作运行包内默认路径。
     if (!config_.gestures_yaml_path.empty()) {
       return config_.gestures_yaml_path;
     }
     try {
-      return ament_index_cpp::get_package_share_directory("humanoid_locomotion") + "/config/gestures.yaml";
+      return ament_index_cpp::get_package_share_directory("humanoid_expression_runtime") + "/config/gestures.yaml";
     } catch (const std::exception & ex) {
       RCLCPP_WARN(get_logger(), "无法自动定位 gestures.yaml: %s", ex.what());
       return "";

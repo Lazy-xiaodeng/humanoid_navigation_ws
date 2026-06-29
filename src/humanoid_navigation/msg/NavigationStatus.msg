@@ -1,3 +1,0 @@
-string status
-string waypoint_id
-float64 timestamp

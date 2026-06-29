@@ -264,7 +264,7 @@ private:
   }
 
   // WebSocket server 独立线程运行，避免阻塞 rclcpp executor。
-  // 是否真正监听端口由 websocket_server_enable 控制，默认关闭时仍可测试 ROS 侧路由逻辑。
+  // 是否真正监听端口由 websocket_server_enable 控制；正式导航默认监听，离线验证可关闭。
   void start_websocket_server()
   {
     running_ = true;

@@ -1,45 +1,97 @@
-# humanoid_obstacle_runtime 障碍检测参考参数。
-# 正式导航当前通常使用 humanoid_roi_obstacle_detector/config/roi_obstacle_detector.yaml；
-# 本文件用于新包独立调试和后续参数归拢。
+# humanoid_obstacle_runtime 前方 ROI 障碍检测参数。
+# 本文件是正式导航链路使用的参数文件，由 navigation2_robosense_lidar.launch.py 默认加载。
+# 该节点主要服务于“导航暂停后的障碍恢复校验”，不是主动遇障停车模块。
 
 roi_obstacle_detector:
   ros__parameters:
-    # 输入点云话题。
-    input_topic: "/airy_points"
-    # ROI 检测使用的目标坐标系。
+    # 输入点云话题；使用点云滤波节点输出给 Nav2 的轻量点云，坐标已经在 base_footprint 下。
+    input_topic: "/airy_points_filtered"
+
+    # ROI 检测坐标系；transform_mode=none 时仅作为语义说明，点云不再二次 TF 转换。
     target_frame: "base_footprint"
-    # 坐标转换模式；tf 表示通过 TF 查询外参。
-    transform_mode: "tf"
-    # TF 查询超时时间，单位秒。
+    source_frame_override: ""
+
+    # 坐标变换模式：
+    #   none   - 输入点云已经在目标坐标系下，直接按 ROI 范围判断。
+    #   tf     - 通过 TF 从点云 frame 转到 target_frame。
+    #   manual - 使用下面 manual_* 外参做固定变换。
+    #   imu    - 使用 IMU 姿态做水平校正后再套固定外参。
+    # 当前正式链路 /airy_points_filtered 已由滤波节点完成坐标处理，所以保持 none。
+    transform_mode: "none"
+    fallback_to_manual: false
     tf_timeout_sec: 0.05
-    # ROI 前向范围，单位 m。
-    roi_min_x: 0.25
-    roi_max_x: 2.0
-    # ROI 左右范围，单位 m。
-    roi_min_y: -0.45
-    roi_max_y: 0.45
-    # ROI 高度范围，单位 m。
-    roi_min_z: 0.05
+
+    # 手动外参，供 transform_mode=manual/imu 调试时使用；正式 none 模式不会使用。
+    manual_translation_xyz: [0.07646, 0.00025, 1.21082]
+    manual_rotation_rpy: [0.800940953, -1.568796326, 2.338240618]
+    manual_rotation_matrix: [
+      -0.001422, -0.002460,  0.999996,
+       0.001474, -0.999996, -0.002458,
+       0.999998,  0.001470,  0.001425
+    ]
+
+    # IMU 水平校正参数；当前关闭，仅保留为后续复杂姿态恢复检测调试入口。
+    enable_imu_leveling: false
+    imu_topic: "/airy_imu"
+    imu_mode: "accel"
+    imu_filter_mode: "complementary"
+    source_to_imu_rotation_matrix: [
+       0.001474, -0.999996, -0.002458,
+      -0.999998, -0.001470, -0.001425,
+       0.001422,  0.002460, -0.999996
+    ]
+    imu_timeout_sec: 0.3
+    imu_accel_alpha: 0.003
+    imu_accel_is_up: true
+    imu_expected_accel_norm: 9.80665
+    imu_accel_gate_sigma: 3.0
+    imu_max_gyro_dt_sec: 0.05
+    imu_gyro_bias_xyz: [0.0, 0.0, 0.0]
+    estimate_gyro_bias: false
+    gyro_bias_estimation_sec: 2.0
+    gyro_bias_min_samples: 100
+    level_up_axis: [0.0, 0.0, 1.0]
+
+    # 地面高度补偿；滤波后点云已经在 base_footprint 坐标系下，恢复判断使用固定 z 窗口即可。
+    enable_ground_z_compensation: false
+    ground_roi_min_x: 0.25
+    ground_roi_max_x: 3.0
+    ground_roi_min_y: -1.2
+    ground_roi_max_y: 1.2
+    ground_roi_min_z: -0.45
+    ground_roi_max_z: 0.35
+    ground_z_percentile: 35.0
+    ground_min_points: 200
+    ground_filter_alpha: 0.35
+    ground_max_step: 0.08
+    ground_z_offset: 0.0
+
+    # 前方恢复检测 ROI，单位 m；x 前方，y 左右，z 高度。
+    roi_min_x: 0.30
+    roi_max_x: 0.80
+    roi_min_y: -0.30
+    roi_max_y: 0.30
+    roi_min_z: 0.28
     roi_max_z: 1.2
-    # 体素降采样叶子大小，单位 m。
+
+    # 点云预处理与判定阈值。
     voxel_leaf_size: 0.05
-    # 触发障碍所需最小点数。
     min_points: 10
-    # 是否启用聚类过滤。
     use_clustering: true
-    # 聚类最小点数。
-    cluster_min_size: 10
-    # 连续多少帧检测到障碍才触发。
-    trigger_frames: 2
-    # 连续多少帧清空才恢复。
-    clear_frames: 4
-    # 障碍状态输出话题。
+    cluster_min_size: 20
+    cluster_connectivity: 26
+
+    # 连续帧迟滞，抑制步态晃动和稀疏点闪烁。
+    trigger_frames: 3
+    clear_frames: 3
+
+    # 输出话题。
     has_obstacle_topic: "/front_obstacle/has_obstacle"
-    # 调试 JSON 输出话题。
     debug_topic: "/front_obstacle/debug"
-    # ROI 点云输出话题。
     roi_cloud_topic: "/front_obstacle/roi_cloud"
-    # 是否发布 ROI 点云。
-    publish_roi_cloud: true
-    # 是否发布 debug 信息。
+
+    # 默认关闭 ROI 调试点云，避免每帧额外序列化点云造成 CPU/带宽压力。
+    publish_roi_cloud: false
     publish_debug: true
+    debug_publish_period_sec: 0.5
+    log_input_stats: true

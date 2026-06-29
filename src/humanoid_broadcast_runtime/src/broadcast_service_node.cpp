@@ -5,7 +5,7 @@
  * 1. 提供机器人本机播报服务，保持 /xiaorui_broadcast/play、/set_volume、/health 三个服务接口不变。
  * 2. 自动选择音频输出设备，优先 PipeWire/Pulse sink，必要时回退 ALSA 设备。
  * 3. 按请求设置播报音量，并根据 dry_run、command、beep 三种模式执行播报。
- * 4. 保留旧节点使用的环境变量语义，方便现场脚本和产品配置继续复用。
+ * 4. 保留历史播报节点使用的环境变量语义，方便现场脚本和产品配置继续复用。
  *
  * 上游节点：
  * - app_gateway_node：把 APP 的 set_broadcast_volume 命令转换成 /xiaorui_broadcast/set_volume 服务调用。
@@ -185,7 +185,7 @@ std::string replace_all(std::string text, const std::string & from, const std::s
 
 CommandResult run_shell_command(const std::string & command)
 {
-  // 用 shell 执行是为了兼容旧 Python 节点的 shell=True 语义，以及现场传入的复合播放器命令。
+  // 用 shell 执行是为了兼容历史播报节点的 shell 执行语义，以及现场传入的复合播放器命令。
   const std::string wrapped = command + " 2>&1";
   std::array<char, 4096> buffer{};
   CommandResult result;
@@ -354,7 +354,7 @@ public:
     }
 
     if (device.backend == "alsa" && !device.alsa_device.empty()) {
-      // 对齐旧 Python 节点：ALSA 音量设置失败不抛错，因为部分 USB 声卡没有 Master mixer。
+      // 对齐历史播报节点：ALSA 音量设置失败不抛错，因为部分 USB 声卡没有 Master mixer。
       (void)run_command({"amixer", "-D", device.alsa_device, "sset", "Master", std::to_string(volume) + "%"});
     }
   }
@@ -604,7 +604,7 @@ public:
 private:
   void load_parameters()
   {
-    // YAML 用于产品默认配置；环境变量用于现场临时覆盖。旧 Python 节点完全依赖环境变量，
+    // YAML 用于产品默认配置；环境变量用于现场临时覆盖。历史播报节点完全依赖环境变量，
     // 因此这里在声明参数后再次读取环境变量，让启动脚本的覆盖语义保持一致。
     audio_backend_ = declare_parameter<std::string>("audio_backend", "auto");
     audio_sink_ = declare_parameter<std::string>("audio_sink", "auto");

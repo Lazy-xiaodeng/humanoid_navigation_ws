@@ -34,8 +34,8 @@ fi
 echo "[0/2] Validating target map before stopping current navigation stack..."
 WORKSPACE="$WORKSPACE" MAP_ID="$TARGET_MAP_ID" VALIDATE_ONLY=1 "$WORKSPACE/start_navigation_stack.sh"
 
-# 切图只允许重启导航定位层：Nav2、地图服务器、RO/OP 定位、navigation_state_manager。
-# websocket、点位管理、map_context_manager 必须保持运行，APP 才能持续收到 map_status/map_response。
+# 切图只允许重启导航定位层：Nav2、地图服务器、RO/OP 定位、navigation_state_manager_cpp。
+# APP/机器人网关、点位管理和 map_context_manager_cpp 必须保持运行，APP 才能持续收到 map_status/map_response。
 echo "[1/2] Stopping map-bound navigation stack only..."
 WORKSPACE="$WORKSPACE" "$WORKSPACE/stop_navigation_stack.sh" || true
 

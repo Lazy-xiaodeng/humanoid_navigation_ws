@@ -10,8 +10,8 @@
       ComputePathThroughPoses 连续跟随，避免到每个 transit 都停车、对齐、播报。
 
       这里取消 BT 自己的 RecoveryNode / Wait / Spin / ClearCostmap 恢复动作。
-      FollowPath 或规划失败时直接把失败返回给 navigation_state_manager.py，
-      由状态机统一进入动态障碍等待、APP 周期提示和自动恢复。
+      FollowPath 或规划失败时直接返回给 humanoid_route_runtime 的
+      navigation_state_manager_cpp，由状态机统一进入动态障碍等待、APP 周期提示和自动恢复。
     -->
 
     <PipelineSequence name="NavigateThroughWithReplanning">

@@ -96,7 +96,7 @@ public:
     connect_serial();
     load_gesture_config();
 
-    // 命令入口保持与旧 Python 节点一致：只接收纯动作名字符串，不接收 JSON。
+    // 命令入口保持与历史表情节点一致：只接收纯动作名字符串，不接收 JSON。
     command_sub_ = create_subscription<std_msgs::msg::String>(
       command_topic_,
       rclcpp::QoS(10),

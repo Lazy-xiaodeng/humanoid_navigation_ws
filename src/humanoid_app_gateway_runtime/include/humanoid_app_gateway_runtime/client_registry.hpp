@@ -39,7 +39,7 @@ struct ClientSubscriptionInfo
 class ClientRegistry
 {
 public:
-  // 注册客户端连接，对齐 websocket_server.py handle_client_connection() 的会话字段。
+  // 注册客户端连接，对齐 APP 网关会话字段。
   void register_client(const std::string & client_id, const std::string & ip, double timestamp_sec);
 
   // 更新客户端活跃时间。

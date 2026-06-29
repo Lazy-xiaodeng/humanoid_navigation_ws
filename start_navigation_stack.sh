@@ -42,7 +42,7 @@ workspace = Path(sys.argv[1])
 requested_map_id = str(sys.argv[2]).strip()
 env_file = Path(sys.argv[3])
 registry_path = workspace / "data/maps/map_registry.json"
-base_ro_config = workspace / "src/robosense_lidar_localization/config/robosense_lidar_localization.yaml"
+base_ro_config = workspace / "src/humanoid_robosense_localization_runtime/config/robosense_lidar_localization.yaml"
 
 if not registry_path.exists():
     raise SystemExit(f"ERROR: map registry not found: {registry_path}")
@@ -131,7 +131,6 @@ setsid nohup ros2 launch humanoid_bringup robot_navigation_stack.launch.py \
   map_yaml_file:="$ACTIVE_MAP_YAML_FILE" \
   prior_map_path:="$ACTIVE_PRIOR_MAP_PATH" \
   robosense_config_file:="$ACTIVE_ROBOSENSE_CONFIG_FILE" \
-  use_cpp_route_runtime:="${USE_CPP_ROUTE_RUNTIME:-true}" \
   >> "$LOG_FILE" 2>&1 < /dev/null &
 
 STACK_PID=$!

@@ -38,7 +38,7 @@ if [ -f "$OPEN3D_PREFIX/lib/cmake/Open3D/Open3DConfig.cmake" ]; then
   export Open3D_DIR="${Open3D_DIR:-$OPEN3D_PREFIX/lib/cmake/Open3D}"
   export LD_LIBRARY_PATH="$OPEN3D_PREFIX/lib:${LD_LIBRARY_PATH:-}"
 else
-  echo "WARN: Open3DConfig.cmake not found under $OPEN3D_PREFIX, open3d_loc may fail to build."
+  echo "WARN: Open3DConfig.cmake not found under $OPEN3D_PREFIX, humanoid_prior_localization_runtime may fail to build."
 fi
 
 export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
@@ -57,16 +57,31 @@ fi
 source "$WORKSPACE/install/local_setup.bash"
 
 python3 - <<'PYCHECK'
-import importlib.metadata as metadata
-required = ("humanoid-navigation", "humanoid-navigation2", "humanoid-websocket", "humanoid-bringup")
+import subprocess
+import sys
+
+required = (
+    "humanoid_bringup",
+    "humanoid_navigation2",
+    "humanoid_control_runtime",
+    "humanoid_route_runtime",
+    "humanoid_app_gateway_runtime",
+    "humanoid_robot_gateway_runtime",
+    "humanoid_expression_runtime",
+    "humanoid_obstacle_runtime",
+)
 missing = []
 for package_name in required:
-    try:
-        metadata.distribution(package_name)
-    except metadata.PackageNotFoundError:
+    result = subprocess.run(
+        ["ros2", "pkg", "prefix", package_name],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if result.returncode != 0:
         missing.append(package_name)
 if missing:
-    raise SystemExit("ERROR: missing Python package metadata: " + ", ".join(missing))
+    sys.exit("ERROR: missing ROS package after build: " + ", ".join(missing))
 PYCHECK
 
 echo "ROS environment loaded from /opt/ros/jazzy + $WORKSPACE/install/local_setup.bash"

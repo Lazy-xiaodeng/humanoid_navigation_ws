@@ -190,7 +190,7 @@ public:
     RCLCPP_WARN(
       get_logger(),
       "map_context_manager_cpp 已启动：负责地图查询、切图状态机、初始位姿和地图状态发布；"
-      "当前通过 use_cpp_control_runtime 运行开关启用，已接入地图上下文运行链路。");
+      "当前作为正式 C++ 地图上下文链路运行。");
   }
 
 private:

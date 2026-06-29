@@ -36,13 +36,11 @@ stop_existing_control_plane() {
   if command -v pgrep >/dev/null 2>&1; then
     local patterns=(
       "ros2 launch humanoid_bringup robot_control_plane.launch.py"
-      "dynamic_waypoints_manager"
-      "map_context_manager"
-      "websocket_server_node"
+      "dynamic_waypoints_manager_cpp"
+      "map_context_manager_cpp"
       "data_integration_node"
       "app_gateway_node"
       "robot_gateway_node"
-      "websocket_client_node"
       "facial_driver"
       "facial_driver_cpp"
     )
@@ -82,21 +80,17 @@ stop_existing_control_plane
 
 setsid nohup ros2 launch humanoid_bringup robot_control_plane.launch.py \
   use_sim_time:=false \
-  use_cpp_control_runtime:="${USE_CPP_CONTROL_RUNTIME:-true}" \
-  use_cpp_app_gateway:="${USE_CPP_APP_GATEWAY:-true}" \
-  cpp_app_websocket_server_enable:="${CPP_APP_WEBSOCKET_SERVER_ENABLE:-true}" \
-  cpp_app_websocket_host:="${CPP_APP_WEBSOCKET_HOST:-0.0.0.0}" \
-  cpp_app_websocket_port:="${CPP_APP_WEBSOCKET_PORT:-8765}" \
-  cpp_data_integration_enable:="${CPP_DATA_INTEGRATION_ENABLE:-true}" \
-  use_cpp_robot_gateway:="${USE_CPP_ROBOT_GATEWAY:-true}" \
-  cpp_robot_ws_enable:="${CPP_ROBOT_WS_ENABLE:-true}" \
-  cpp_robot_walk_velocity_send_enable:="${CPP_ROBOT_WALK_VELOCITY_SEND_ENABLE:-false}" \
-  cpp_robot_motion_execution_enable:="${CPP_ROBOT_MOTION_EXECUTION_ENABLE:-false}" \
-  cpp_robot_motion_allow_enter_menu:="${CPP_ROBOT_MOTION_ALLOW_ENTER_MENU:-false}" \
-  cpp_robot_motion_allow_return_walk:="${CPP_ROBOT_MOTION_ALLOW_RETURN_WALK:-false}" \
-  cpp_robot_gesture_sync_enable:="${CPP_ROBOT_GESTURE_SYNC_ENABLE:-false}" \
-  use_cpp_expression_runtime:="${USE_CPP_EXPRESSION_RUNTIME:-true}" \
-  cpp_expression_config_file:="${CPP_EXPRESSION_CONFIG_FILE:-/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_expression_runtime/config/expression_runtime.yaml}" \
+  app_websocket_server_enable:="${APP_WEBSOCKET_SERVER_ENABLE:-true}" \
+  app_websocket_host:="${APP_WEBSOCKET_HOST:-0.0.0.0}" \
+  app_websocket_port:="${APP_WEBSOCKET_PORT:-8765}" \
+  data_integration_enable:="${DATA_INTEGRATION_ENABLE:-true}" \
+  robot_ws_enable:="${ROBOT_WS_ENABLE:-true}" \
+  robot_walk_velocity_send_enable:="${ROBOT_WALK_VELOCITY_SEND_ENABLE:-true}" \
+  robot_motion_execution_enable:="${ROBOT_MOTION_EXECUTION_ENABLE:-true}" \
+  robot_motion_allow_enter_menu:="${ROBOT_MOTION_ALLOW_ENTER_MENU:-true}" \
+  robot_motion_allow_return_walk:="${ROBOT_MOTION_ALLOW_RETURN_WALK:-true}" \
+  robot_gesture_sync_enable:="${ROBOT_GESTURE_SYNC_ENABLE:-true}" \
+  expression_config_file:="${EXPRESSION_CONFIG_FILE:-/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_expression_runtime/config/expression_runtime.yaml}" \
   >> "$LOG_FILE" 2>&1 < /dev/null &
 CONTROL_PID=$!
 echo "$CONTROL_PID" > "$PID_FILE"

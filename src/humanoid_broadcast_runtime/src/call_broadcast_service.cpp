@@ -2,7 +2,7 @@
  * call_broadcast_service.cpp
  *
  * 文件作用：
- * 1. 提供 C++ 版播报服务命令行客户端，便于不依赖旧 Python 包时仍可手动测试播报链路。
+ * 1. 提供播报服务命令行客户端，便于不依赖历史播报包时仍可手动测试播报链路。
  * 2. 从环境变量读取播报文本、播报 ID、点位 ID、音量和等待超时时间。
  * 3. 调用 /xiaorui_broadcast/play，并把服务返回结果打印到终端。
  *
@@ -10,7 +10,7 @@
  * - 现场调试人员或 shell 脚本。
  *
  * 下游：
- * - xiaorui_broadcast_service，也就是 broadcast_service_node_cpp 或旧 Python broadcast_service_node。
+ * - xiaorui_broadcast_service，也就是 broadcast_service_node_cpp。
  */
 
 #include <rclcpp/rclcpp.hpp>

@@ -6,7 +6,7 @@
  * 2. 对齐现有动作库拉取、gestures.yaml 内容生成和热重载通知语义。
  * 3. 本模块会写配置文件，接入前需要独立验证文件路径和权限。
  * 4. 上游：机器人本体动作库接口。
- * 5. 下游：humanoid_locomotion gestures.yaml、/system/gesture_list_updated 和 data_integration_node。
+ * 5. 下游：humanoid_expression_runtime gestures.yaml、/system/gesture_list_updated 和 data_integration_node。
  */
 
 #pragma once

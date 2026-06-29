@@ -1,13 +1,13 @@
 # humanoid_robot_gateway_runtime 机器人本体网关参数。
 # 本文件用于配置机器人本体 WebSocket、速度命令、动作控制、状态发布和动作库同步。
-# 当前 C++ 包处于分阶段实现阶段，默认关闭真实连接、速度发送和动作执行，避免误控制机器人。
+# 正式导航启动默认连接机器人本体 WebSocket，并允许速度下发和 APP 动作执行，便于实机导航联调。
 # 上游节点：Nav2/controller 的 /cmd_vel、APP 网关的 /app/robot_control，以及机器人本体 WebSocket 服务。
 # 下游节点：data_integration_node、navigation_state_manager、APP 事件链路和动作库热重载链路。
 
 robot_gateway_node:
   ros__parameters:
-    # 是否启用真实机器人本体 WebSocket 连接；分阶段验证阶段保持 false，确认状态链路稳定后再打开。
-    robot_ws_enable: false
+    # 是否启用真实机器人本体 WebSocket 连接；完整导航默认 true，离线测试时可覆盖为 false。
+    robot_ws_enable: true
 
     # 机器人本体 WebSocket 地址；线上协议默认 ws://10.192.1.2:5000。
     robot_ws_server: "ws://10.192.1.2:5000"
@@ -25,8 +25,8 @@ robot_gateway_node:
     # 兜底机器人 sn；通常为空，连接机器人后从原始消息中学习。
     fallback_sn: ""
 
-    # 是否允许真实发送 /cmd_vel 到机器人本体；接入初期必须保持 false。
-    walk_velocity_send_enable: false
+    # 是否允许真实发送 /cmd_vel 到机器人本体；正式导航联调默认打开。
+    walk_velocity_send_enable: true
 
     # 行走速度发送频率，单位 Hz；线上协议 walk_command_loop 实际按 50Hz 定频发送。
     walk_velocity_send_rate_hz: 50.0
@@ -34,14 +34,14 @@ robot_gateway_node:
     # cmd_vel 超时时间，单位秒；超时后应发送零速度保护。
     cmd_vel_timeout_sec: 0.5
 
-    # 是否允许真实执行 APP 上半身动作；接入初期必须保持 false。
-    motion_execution_enable: false
+    # 是否允许真实执行 APP 上半身动作；正式导航联调默认打开。
+    motion_execution_enable: true
 
-    # 执行动作前是否允许自动切换到 Menu 模式。
-    motion_allow_enter_menu: false
+    # 执行动作前是否允许自动切换到 Menu 模式；正式联调默认打开，动作结束后会按配置切回 Walk。
+    motion_allow_enter_menu: true
 
-    # 动作完成后是否允许自动切回 Walk 模式。
-    motion_allow_return_walk: false
+    # 动作完成后是否允许自动切回 Walk 模式；正式联调默认打开。
+    motion_allow_return_walk: true
 
     # 动作完成默认等待超时时间，单位秒；保持线上协议 default_motion_timeout。
     motion_default_timeout_sec: 25.0
@@ -52,10 +52,10 @@ robot_gateway_node:
     # 动作完成等待的最大超时时间，单位秒，避免异常动作名导致无限等待。
     motion_max_timeout_sec: 90.0
 
-    # 是否启用动作库同步；低风险，但会写 gestures.yaml，接入前也应单独验证。
-    gesture_sync_enable: false
+    # 是否启用动作库同步；连接机器人后拉取动作库并更新 gestures.yaml，正式联调默认打开。
+    gesture_sync_enable: true
 
-    # 动作库 YAML 写入路径；留空时自动定位 humanoid_locomotion/config/gestures.yaml。
+    # 动作库 YAML 写入路径；留空时自动定位 humanoid_expression_runtime/config/gestures.yaml。
     # 只有 gesture_sync_enable=true 且 robot_ws_enable=true 时才会写入。
     gestures_yaml_path: ""
 

@@ -2,7 +2,7 @@
 RoboSense lidar_localization 导航启动文件。
 
 数据流：
-  rslidar_sdk -> Fast-LIO -> robosense_lidar_localization
+  rslidar_sdk -> Fast-LIO -> humanoid_robosense_localization_runtime
       -> /prior_localization/robosense_odom
       -> prior_map_odom_bridge -> map->odom
       -> Nav2
@@ -28,20 +28,20 @@ from launch.actions import (
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
     pkg_nav2 = get_package_share_directory('humanoid_navigation2')
-    pkg_roi_obstacle = get_package_share_directory('humanoid_roi_obstacle_detector')
+    pkg_obstacle_runtime = get_package_share_directory('humanoid_obstacle_runtime')
 
     default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params.yaml')
     default_bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_xy_then_yaw.xml')
     default_through_bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_through_poses_no_backup.xml')
-    default_roi_obstacle_params_file = os.path.join(pkg_roi_obstacle, 'config', 'roi_obstacle_detector.yaml')
+    default_roi_obstacle_params_file = os.path.join(pkg_obstacle_runtime, 'config', 'obstacle_runtime.yaml')
     default_robosense_config_file = (
-        '/home/ubuntu/software/Todesk/Files/humanoid_ws/src/robosense_lidar_localization/config/'
+        '/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_robosense_localization_runtime/config/'
         'robosense_lidar_localization.yaml'
     )
 
@@ -53,8 +53,6 @@ def generate_launch_description():
     enable_rslidar = LaunchConfiguration('enable_rslidar', default='true')
     enable_periodic_clearing = LaunchConfiguration('enable_periodic_clearing', default='true')
     enable_roi_obstacle_detector = LaunchConfiguration('enable_roi_obstacle_detector', default='true')
-    use_cpp_roi_obstacle_detector = LaunchConfiguration('use_cpp_roi_obstacle_detector', default='true')
-    use_cpp_prior_map_odom_bridge = LaunchConfiguration('use_cpp_prior_map_odom_bridge', default='true')
     roi_obstacle_params_file = LaunchConfiguration(
         'roi_obstacle_params_file',
         default=default_roi_obstacle_params_file,
@@ -99,22 +97,6 @@ def generate_launch_description():
             condition=IfCondition(enable_fastdds_shm),
         ),
     ]
-
-    def nav2_python_node(executable, node_name, extra_parameters=None, condition=None):
-        parameters = [
-            # 是否使用仿真时间；实机 false，bag 回放 true。
-            {'use_sim_time': use_sim_time},
-        ]
-        if extra_parameters:
-            parameters.append(extra_parameters)
-        return Node(
-            package='humanoid_navigation2',
-            executable=executable,
-            name=node_name,
-            output='screen',
-            condition=condition,
-            parameters=parameters,
-        )
 
     def nav2_cpp_node(executable, node_name, extra_parameters=None, condition=None):
         parameters = [
@@ -287,28 +269,7 @@ def generate_launch_description():
         executable='roi_obstacle_detector_cpp',
         name='roi_obstacle_detector',
         output='screen',
-        condition=IfCondition(PythonExpression([
-            "'", enable_roi_obstacle_detector, "' == 'true' and '",
-            use_cpp_roi_obstacle_detector, "' == 'true'",
-        ])),
-        parameters=[
-            roi_obstacle_params_file,
-            {
-                # 跟随导航系统时间源；实机 false，bag/仿真 true。
-                'use_sim_time': use_sim_time,
-            },
-        ],
-    )
-
-    roi_obstacle_detector_py_node = Node(
-        package='humanoid_roi_obstacle_detector',
-        executable='roi_obstacle_detector',
-        name='roi_obstacle_detector',
-        output='screen',
-        condition=IfCondition(PythonExpression([
-            "'", enable_roi_obstacle_detector, "' == 'true' and '",
-            use_cpp_roi_obstacle_detector, "' != 'true'",
-        ])),
+        condition=IfCondition(enable_roi_obstacle_detector),
         parameters=[
             roi_obstacle_params_file,
             {
@@ -378,7 +339,7 @@ def generate_launch_description():
     )
 
     robosense_lidar_localization_node = Node(
-        package='robosense_lidar_localization',
+        package='humanoid_robosense_localization_runtime',
         executable='robosense_lidar_localization_node',
         name='robosense_lidar_localization_node',
         output='screen',
@@ -498,13 +459,6 @@ def generate_launch_description():
         'prior_map_odom_bridge_cpp',
         'prior_map_odom_bridge',
         prior_map_odom_bridge_params,
-        condition=IfCondition(PythonExpression(["'", use_cpp_prior_map_odom_bridge, "' == 'true'"])),
-    )
-    prior_map_odom_bridge_py_node = nav2_python_node(
-        'prior_map_odom_bridge',
-        'prior_map_odom_bridge',
-        prior_map_odom_bridge_params,
-        condition=IfCondition(PythonExpression(["'", use_cpp_prior_map_odom_bridge, "' != 'true'"])),
     )
 
     rviz_initialpose_adapter_node = nav2_cpp_node(
@@ -547,10 +501,11 @@ def generate_launch_description():
         ],
     )
 
-    localization_ready_gate = nav2_python_node(
-        'wait_for_tf',
-        'wait_for_localization_tf',
-        {
+    localization_ready_gate = Node(
+        package='humanoid_localization_runtime',
+        executable='wait_for_tf',
+        name='wait_for_localization_tf',
+        parameters=[{
             # 等待 Nav2 使用的全局地面坐标系。
             'target_frame': 'map_ground',
             # 等待机器人底盘坐标系。
@@ -561,7 +516,9 @@ def generate_launch_description():
             'poll_period': 0.2,
             # 连续成功次数，避免 TF 瞬时可用就启动 Nav2。
             'stable_count': 3,
-        },
+            'use_sim_time': use_sim_time,
+        }],
+        output='screen',
     )
 
     nav2_core_nodes = GroupAction([
@@ -674,8 +631,6 @@ def generate_launch_description():
         DeclareLaunchArgument('through_bt_xml_file', default_value=default_through_bt_xml_file, description='Nav2 through poses 行为树 XML'),
         DeclareLaunchArgument('enable_periodic_clearing', default_value='true', description='是否启动周期性清障节点'),
         DeclareLaunchArgument('enable_roi_obstacle_detector', default_value='true', description='是否启动前方 ROI 点云障碍检测节点'),
-        DeclareLaunchArgument('use_cpp_roi_obstacle_detector', default_value='true', description='是否使用 C++ ROI 障碍检测节点；false 回退 Python'),
-        DeclareLaunchArgument('use_cpp_prior_map_odom_bridge', default_value='true', description='是否使用 C++ prior_map_odom_bridge；false 回退 Python'),
         DeclareLaunchArgument('roi_obstacle_params_file', default_value=default_roi_obstacle_params_file, description='ROI 障碍检测参数文件'),
         DeclareLaunchArgument('prior_pose_topic', default_value='/prior_localization/pose', description='兼容 PoseStamped 定位输入'),
         DeclareLaunchArgument('prior_pose_with_covariance_topic', default_value='/prior_localization/pose_with_covariance', description='兼容 PoseWithCovarianceStamped 定位输入'),
@@ -695,11 +650,10 @@ def generate_launch_description():
         tf_bridge_clearing_lidar,
         point_cloud_filter_launch,
         roi_obstacle_detector_cpp_node,
-        roi_obstacle_detector_py_node,
         map_server_node,
         map_server_lifecycle,
         TimerAction(period=4.5, actions=[robosense_lidar_localization_node]),
-        TimerAction(period=5.5, actions=[prior_map_odom_bridge_cpp_node, prior_map_odom_bridge_py_node]),
+        TimerAction(period=5.5, actions=[prior_map_odom_bridge_cpp_node]),
         TimerAction(period=5.8, actions=[rviz_initialpose_adapter_node]),
         TimerAction(period=7.5, actions=[robot_realpose_publisher]),
         periodic_clearing_3d_node,

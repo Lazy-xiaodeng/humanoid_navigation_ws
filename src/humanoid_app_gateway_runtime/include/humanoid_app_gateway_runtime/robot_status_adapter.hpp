@@ -3,7 +3,7 @@
  *
  * 文件用途：
  * 1. 负责将 /robot_status_raw 原始 JSON 转换为 APP 使用的 system_status。
- * 2. 这里承接已经从 message_bridge_node 合并进 data_integration_node_recoverable 的逻辑。
+ * 2. 这里承接机器人状态协议归一化逻辑，避免额外桥接节点重复转换。
  * 3. 本模块是适合单元测试覆盖的纯数据转换模块。
  * 4. 上游：robot_gateway_node 发布的 /robot_status_raw。
  * 5. 下游：data_store 中的 system_status，以及 navigation_state_manager 的机器人状态参考链路。

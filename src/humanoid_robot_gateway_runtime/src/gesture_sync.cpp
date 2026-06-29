@@ -4,7 +4,7 @@
  * 文件用途：
  * 1. 实现机器人动作库响应解析、gestures.yaml 内容生成和热重载通知组包。
  * 2. 上游：机器人本体动作库接口。
- * 3. 下游：humanoid_locomotion gestures.yaml、/system/gesture_list_updated 和 data_integration_node。
+ * 3. 下游：humanoid_expression_runtime gestures.yaml、/system/gesture_list_updated 和 data_integration_node。
  * 4. 本模块当前只提供纯逻辑能力，不直接请求机器人、不直接写真实配置文件。
  */
 

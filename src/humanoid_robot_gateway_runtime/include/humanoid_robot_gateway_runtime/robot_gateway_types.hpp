@@ -25,18 +25,18 @@ struct RobotGatewayConfig
   std::string fallback_accid{""};
   std::string fallback_sn{""};
 
-  bool walk_velocity_send_enable{false};
+  bool walk_velocity_send_enable{true};
   double walk_velocity_send_rate_hz{50.0};
   double cmd_vel_timeout_sec{0.5};
 
-  bool motion_execution_enable{false};
-  bool motion_allow_enter_menu{false};
-  bool motion_allow_return_walk{false};
+  bool motion_execution_enable{true};
+  bool motion_allow_enter_menu{true};
+  bool motion_allow_return_walk{true};
   double motion_default_timeout_sec{25.0};
   double motion_timeout_buffer_sec{8.0};
   double motion_max_timeout_sec{90.0};
 
-  bool gesture_sync_enable{false};
+  bool gesture_sync_enable{true};
   std::string gestures_yaml_path{""};
   double gesture_sync_delay_sec{2.0};
 

@@ -1,3 +1,72 @@
+# rslidar_sdk 在本工程中的用途
+
+## 这个包是做什么的
+
+`rslidar_sdk` 是 RoboSense 雷达 ROS2 驱动包，负责从真实雷达读取 UDP 数据，解析点云和 IMU，并发布给 Fast-LIO 和后续导航链路。
+
+这是 RoboSense 官方 SDK 体系的一部分，本工程主要使用它的 ROS2 节点能力。
+
+## 当前状态
+
+- 当前完整导航和建图链路会启动 `rslidar_sdk_node`。
+- 当前雷达类型面向 RoboSense Airy。
+- 点云类型使用 `XYZIRT`，包含 ring 和 timestamp 字段。
+- 共享内存 DDS 配置对原始点云 10Hz 传输很关键。
+
+## 主要输出
+
+- `/rslidar_points`：原始雷达点云，供 Fast-LIO 订阅。
+- `/rslidar_imu_data`：雷达/IMU 数据，供 Fast-LIO 订阅。
+
+## 主要文件说明
+
+- `node/rslidar_sdk_node.cpp`：ROS2 驱动节点入口。
+- `config/config.yaml`：雷达驱动参数，包括雷达类型、点云格式、网络配置和输出话题。
+- `launch/start.py`：通用启动文件。
+- `launch/humble_start.py`、`launch/elequent_start.py`：不同 ROS2 版本/环境的启动入口。
+- `src/rs_driver/`：RoboSense 驱动核心代码。
+
+## 上下游链路
+
+上游：
+
+- 真实 RoboSense 雷达，通过以太网 UDP 输出数据。
+
+下游：
+
+- `fast_lio_robosense` 订阅点云和 IMU。
+- bag 录制脚本记录原始雷达数据，用于离线回放和性能验证。
+
+## 使用方式
+
+正式导航通常由一键脚本启动：
+
+```bash
+./start_navigation.sh
+```
+
+单独启动雷达驱动：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source install/local_setup.bash
+ros2 launch rslidar_sdk start.py
+```
+
+查看点云频率：
+
+```bash
+ros2 topic hz /rslidar_points
+```
+
+## 维护注意事项
+
+- 本包是硬件驱动，升级 SDK 前要确认配置文件、点云字段和话题名是否兼容 Fast-LIO。
+- 如果原始点云频率下降，优先检查网络、DDS 共享内存、CPU 占用和订阅者数量。
+- 不建议在驱动包中添加业务逻辑；业务处理应放在 Fast-LIO、点云滤波或定位 runtime 包中。
+
+---
+
 # 1 **rslidar_sdk**
 
  [中文介绍](README_CN.md)

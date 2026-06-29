@@ -9,7 +9,7 @@ prior_map_odom_bridge:
     odom_frame: "odom"
     # 外部定位消息对应的机器人坐标系。
     localized_frame: "base_footprint"
-    # PoseStamped 定位输入话题，兼容旧输入。
+    # PoseStamped 定位输入话题，兼容历史定位输入。
     prior_pose_topic: "/prior_localization/pose"
     # PoseWithCovarianceStamped 定位输入话题，RViz initialpose 也会转发到这里。
     prior_pose_with_covariance_topic: "/prior_localization/pose_with_covariance"

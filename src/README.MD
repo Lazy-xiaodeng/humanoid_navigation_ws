@@ -362,12 +362,6 @@ ros2 pkg executables | grep humanoid
 
 # 测试点云滤波节点
 ros2 run humanoid_point_cloud_filter point_cloud_filter_node
-
-# 测试地形分析节点
-ros2 run humanoid_terrain_analyzer terrain_analyzer_node
-
-# 测试高程图映射
-ros2 run elevation_mapping_opencl elevation_mapping_opencl_node
 ```
 
 ### 6.2 Launch 文件测试
@@ -418,7 +412,6 @@ sycl-ls --verbose
 - [ROS2 Jazzy 官方文档](https://docs.ros.org/en/jazzy/)
 - [Intel oneAPI 文档](https://www.intel.com/content/www/us/en/developer/tools/oneapi.html)
 - [colcon 使用指南](https://colcon.readthedocs.io/)
-- [grid_map 文档](https://github.com/ANYbotics/grid_map)
 
 ---
 

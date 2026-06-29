@@ -36,6 +36,6 @@ source install/local_setup.bash
 ros2 launch humanoid_obstacle_runtime obstacle_runtime.launch.py
 ```
 
-## 回退策略
+## 维护说明
 
-旧综合包 `humanoid_navigation2_cpp_nodes` 暂时保留。若新包异常，可把 launch 中 `roi_obstacle_detector_cpp` 的 package 改回旧包名回退。
+ROI 障碍检测已经独立到本包。后续如果增加碰撞检测、恢复校验或障碍状态融合逻辑，建议继续放在本包内维护。

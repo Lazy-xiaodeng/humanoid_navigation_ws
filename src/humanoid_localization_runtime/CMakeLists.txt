@@ -41,11 +41,15 @@ add_executable(prior_map_odom_bridge_cpp src/prior_map_odom_bridge_cpp.cpp)
 target_link_libraries(prior_map_odom_bridge_cpp Eigen3::Eigen)
 ament_target_dependencies(prior_map_odom_bridge_cpp ${COMMON_DEPS})
 
+add_executable(wait_for_tf src/wait_for_tf.cpp)
+ament_target_dependencies(wait_for_tf ${COMMON_DEPS})
+
 install(TARGETS
   dynamic_odom_ground_publisher
   robot_realpose_publisher
   rviz_initialpose_adapter
   prior_map_odom_bridge_cpp
+  wait_for_tf
   DESTINATION lib/${PROJECT_NAME}
 )
 

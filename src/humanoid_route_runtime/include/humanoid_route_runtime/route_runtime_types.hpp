@@ -151,7 +151,7 @@ struct RouteRuntimeConfig
   double route_task_goal_cancel_timeout_sec{2.0};
   double route_task_goal_reject_retry_timeout_sec{8.0};
   bool route_task_default_interrupt_broadcast{true};
-  bool route_task_nav2_execution_enable{false};
+  bool route_task_nav2_execution_enable{true};
   std::string reverse_navigation_bt_xml{
     "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/config/behavior_tree/"
     "navigate_reverse_xy_then_yaw.xml"};
