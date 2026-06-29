@@ -34,11 +34,18 @@
       
 
     publish:
-      path_en: true  #是否在 Rviz 里显示机器人的运动轨迹
+      path_en: false  # 是否发布 /path 轨迹；导航链路当前无人订阅，关闭可减少一点发布开销
       scan_publish_en: true  # 是否发布处理后的实时点云（用于看效果）
       dense_publish_en: true  # 是否发布高密度地图
-      scan_bodyframe_pub_en: true  # true: output the point cloud scans in IMU-body-frame
+      scan_bodyframe_pub_en: false  # 是否发布 /cloud_registered_body；当前无人订阅，关闭不影响 /fast_lio/cloud_registered
+      high_frequency_odom_en: false  # 是否发布 /high_frequency_odometry；当前无人订阅，关闭不影响主 /odom
       tf_en: true
+
+    debug:
+      log_point_size: false  # 是否每帧打印 FastLIO 预处理后点数；正常运行建议关闭，避免终端/日志 IO 开销
+      log_imu_process: false  # 是否每帧打印 IMU 去畸变时间范围；正常运行建议关闭
+      performance_log_en: true  # 是否定期打印 FastLIO 分阶段耗时；用于定位 CPU 热点，开销很低
+      performance_log_period: 20  # 每多少帧输出一次性能统计，10Hz 下 20 表示约 2 秒一次
       
     pcd_save:
       pcd_save_en: false  #关机时是否自动把地图保存成 .pcd 文件

@@ -166,6 +166,46 @@ cleanup_old_navigation_processes() {
   rm -f "$PID_FILE"
 }
 
+cleanup_control_console_simulators() {
+  if ! command -v pgrep > /dev/null 2>&1; then
+    echo "WARN: pgrep not found, skip control-console simulator cleanup."
+    return 0
+  fi
+
+  local sim_pids=()
+  local patterns=(
+    "tools/ros/robot_body_ws_simulator.py"
+    "tools/ros/navigation_activity_simulator.py"
+  )
+  local pattern
+  local pid
+
+  for pattern in "${patterns[@]}"; do
+    while IFS= read -r pid; do
+      [ -n "$pid" ] || continue
+      [ "$pid" != "$$" ] || continue
+      sim_pids+=("$pid")
+    done < <(pgrep -f "$pattern" || true)
+  done
+
+  if [ "${#sim_pids[@]}" -eq 0 ]; then
+    echo "No control-console ROS simulators detected."
+    return 0
+  fi
+
+  echo "Stopping control-console ROS simulators before real navigation: ${sim_pids[*]}"
+  ps -o pid,ppid,stat,cmd -p "$(IFS=,; echo "${sim_pids[*]}")" || true
+  kill -TERM "${sim_pids[@]}" > /dev/null 2>&1 || true
+  if wait_for_processes_to_exit 5 "${sim_pids[@]}"; then
+    echo "Control-console ROS simulators stopped."
+    return 0
+  fi
+
+  echo "Some control-console ROS simulators are still alive, sending SIGKILL..."
+  kill -KILL "${sim_pids[@]}" > /dev/null 2>&1 || true
+  sleep 1
+}
+
 cd "$WORKSPACE"
 
 if [ ! -f /opt/ros/jazzy/setup.bash ]; then
@@ -216,6 +256,7 @@ PY
 
 echo "ROS environment loaded from $WORKSPACE/install/setup.bash"
 
+cleanup_control_console_simulators
 cleanup_old_navigation_processes
 
 ros2 launch humanoid_bringup robot_real.launch.py use_sim_time:=false &

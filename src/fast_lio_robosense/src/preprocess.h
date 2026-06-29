@@ -175,6 +175,7 @@ class Preprocess
   int lidar_type, point_filter_num, N_SCANS, SCAN_RATE, time_unit;
   double blind;
   bool feature_enabled, given_offset_time;
+  bool log_point_size = false;
   // ros::Publisher pub_full, pub_surf, pub_corn;
 
 private:

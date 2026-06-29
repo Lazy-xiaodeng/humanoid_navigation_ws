@@ -96,7 +96,9 @@ int    iterCount = 0, feats_down_size = 0, NUM_MAX_ITERATIONS = 0, laserCloudVal
 int    num_sub_cloud = 1;
 bool   point_selected_surf[100000] = {0};
 bool   lidar_pushed, flg_first_scan = true, flg_exit = false, flg_EKF_inited;
-bool   scan_pub_en = false, dense_pub_en = false, scan_body_pub_en = false;
+bool   scan_pub_en = false, dense_pub_en = false, scan_body_pub_en = false, high_frequency_odom_en = false;
+bool   log_imu_process_en = false, performance_log_en = true;
+int    performance_log_period = 20;
 bool    is_first_lidar = true;
 
 vector<vector<int>>  pointSearchInd_surf; 
@@ -843,6 +845,11 @@ public:
         this->declare_parameter<bool>("publish.scan_publish_en", true);
         this->declare_parameter<bool>("publish.dense_publish_en", true);
         this->declare_parameter<bool>("publish.scan_bodyframe_pub_en", true);
+        this->declare_parameter<bool>("publish.high_frequency_odom_en", false);
+        this->declare_parameter<bool>("debug.log_point_size", false);
+        this->declare_parameter<bool>("debug.log_imu_process", false);
+        this->declare_parameter<bool>("debug.performance_log_en", true);
+        this->declare_parameter<int>("debug.performance_log_period", 20);
         this->declare_parameter<int>("max_iteration", 4);
         this->declare_parameter<string>("map_file_path", "");
         this->declare_parameter<string>("common.lid_topic", "/livox/lidar");
@@ -879,6 +886,12 @@ public:
         this->get_parameter_or<bool>("publish.scan_publish_en", scan_pub_en, true);
         this->get_parameter_or<bool>("publish.dense_publish_en", dense_pub_en, true);
         this->get_parameter_or<bool>("publish.scan_bodyframe_pub_en", scan_body_pub_en, true);
+        this->get_parameter_or<bool>("publish.high_frequency_odom_en", high_frequency_odom_en, false);
+        this->get_parameter_or<bool>("debug.log_point_size", p_pre->log_point_size, false);
+        this->get_parameter_or<bool>("debug.log_imu_process", log_imu_process_en, false);
+        this->get_parameter_or<bool>("debug.performance_log_en", performance_log_en, true);
+        this->get_parameter_or<int>("debug.performance_log_period", performance_log_period, 20);
+        performance_log_period = std::max(1, performance_log_period);
         this->get_parameter_or<int>("max_iteration", NUM_MAX_ITERATIONS, 4);
         this->get_parameter_or<string>("map_file_path", map_file_path, "");
         this->get_parameter_or<string>("common.lid_topic", lid_topic, "/livox/lidar");
@@ -944,18 +957,19 @@ public:
         kf.init_dyn_share(get_f, df_dx, df_dw, h_share_model, NUM_MAX_ITERATIONS, epsi);
 
         /*** debug record ***/
-        // FILE *fp;
-        string pos_log_dir = root_dir + "/Log/pos_log.txt";
-        fp = fopen(pos_log_dir.c_str(),"w");
+        if (runtime_pos_log)
+        {
+            string pos_log_dir = root_dir + "/Log/pos_log.txt";
+            fp = fopen(pos_log_dir.c_str(),"w");
 
-        // ofstream fout_pre, fout_out, fout_dbg;
-        fout_pre.open(DEBUG_FILE_DIR("mat_pre.txt"),ios::out);
-        fout_out.open(DEBUG_FILE_DIR("mat_out.txt"),ios::out);
-        fout_dbg.open(DEBUG_FILE_DIR("dbg.txt"),ios::out);
-        if (fout_pre && fout_out)
-            cout << "~~~~"<<ROOT_DIR<<" file opened" << endl;
-        else
-            cout << "~~~~"<<ROOT_DIR<<" doesn't exist" << endl;
+            fout_pre.open(DEBUG_FILE_DIR("mat_pre.txt"),ios::out);
+            fout_out.open(DEBUG_FILE_DIR("mat_out.txt"),ios::out);
+            fout_dbg.open(DEBUG_FILE_DIR("dbg.txt"),ios::out);
+            if (fout_pre && fout_out)
+                cout << "~~~~"<<ROOT_DIR<<" file opened" << endl;
+            else
+                cout << "~~~~"<<ROOT_DIR<<" doesn't exist" << endl;
+        }
 
         /*** ROS subscribe initialization ***/
         if (p_pre->lidar_type == AVIA)
@@ -977,23 +991,37 @@ public:
         sub_imu_ = this->create_subscription<sensor_msgs::msg::Imu>(imu_topic, imu_qos, imu_cbk);
         
         pubLaserCloudFull_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered", 20);
-        pubLaserCloudFull_body_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered_body", 20);
-        pubLaserCloudEffect_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_effected", 20);
-        pubLaserCloudMap_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/Laser_map", 20);
+        if (scan_body_pub_en) {
+            pubLaserCloudFull_body_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered_body", 20);
+        }
+        if (effect_pub_en) {
+            pubLaserCloudEffect_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_effected", 20);
+        }
+        if (map_pub_en) {
+            pubLaserCloudMap_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/Laser_map", 20);
+        }
         pubOdomAftMapped_ = this->create_publisher<nav_msgs::msg::Odometry>("/Odometry", 20);
-        pubImuOdom_ = this->create_publisher<nav_msgs::msg::Odometry>("/high_frequency_odometry", 20);
-        pubPath_ = this->create_publisher<nav_msgs::msg::Path>("/path", 20);
+        if (high_frequency_odom_en) {
+            pubImuOdom_ = this->create_publisher<nav_msgs::msg::Odometry>("/high_frequency_odometry", 20);
+        }
+        if (path_en) {
+            pubPath_ = this->create_publisher<nav_msgs::msg::Path>("/path", 20);
+        }
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
         
         // 设置 IMU 处理的高频里程计发布者
         p_imu->set_node_handler(pubImuOdom_);
+        p_imu->set_high_frequency_odom_enabled(high_frequency_odom_en);
+        p_imu->set_log_imu_process_enabled(log_imu_process_en);
 
         //------------------------------------------------------------------------------------------------------
         auto period_ms = std::chrono::milliseconds(static_cast<int64_t>(1000.0 / 100.0));
         timer_ = rclcpp::create_timer(this, this->get_clock(), period_ms, std::bind(&LaserMappingNode::timer_callback, this));
 
-        auto map_period_ms = std::chrono::milliseconds(static_cast<int64_t>(1000.0));
-        map_pub_timer_ = rclcpp::create_timer(this, this->get_clock(), map_period_ms, std::bind(&LaserMappingNode::map_publish_callback, this));
+        if (map_pub_en) {
+            auto map_period_ms = std::chrono::milliseconds(static_cast<int64_t>(1000.0));
+            map_pub_timer_ = rclcpp::create_timer(this, this->get_clock(), map_period_ms, std::bind(&LaserMappingNode::map_publish_callback, this));
+        }
 
         map_save_srv_ = this->create_service<std_srvs::srv::Trigger>("map_save", std::bind(&LaserMappingNode::map_save_callback, this, std::placeholders::_1, std::placeholders::_2));
 
@@ -1002,9 +1030,10 @@ public:
 
     ~LaserMappingNode()
     {
-        fout_out.close();
-        fout_pre.close();
-        fclose(fp);
+        if (fout_out.is_open()) fout_out.close();
+        if (fout_pre.is_open()) fout_pre.close();
+        if (fout_dbg.is_open()) fout_dbg.close();
+        if (fp != nullptr) fclose(fp);
     }
 
 private:
@@ -1081,8 +1110,11 @@ private:
             feats_down_world->resize(feats_down_size);
 
             V3D ext_euler = SO3ToEuler(state_point.offset_R_L_I);
-            fout_pre<<setw(20)<<Measures.lidar_beg_time - first_lidar_time<<" "<<euler_cur.transpose()<<" "<< state_point.pos.transpose()<<" "<<ext_euler.transpose() << " "<<state_point.offset_T_L_I.transpose()<< " " << state_point.vel.transpose() \
-            <<" "<<state_point.bg.transpose()<<" "<<state_point.ba.transpose()<<" "<<state_point.grav<< endl;
+            if (runtime_pos_log && fout_pre.is_open())
+            {
+                fout_pre<<setw(20)<<Measures.lidar_beg_time - first_lidar_time<<" "<<euler_cur.transpose()<<" "<< state_point.pos.transpose()<<" "<<ext_euler.transpose() << " "<<state_point.offset_T_L_I.transpose()<< " " << state_point.vel.transpose() \
+                <<" "<<state_point.bg.transpose()<<" "<<state_point.ba.transpose()<<" "<<state_point.grav<< endl;
+            }
 
             if(0) // If you need to see map point, change to "if(1)"
             {
@@ -1122,11 +1154,34 @@ private:
             t5 = omp_get_wtime();
             
             /******* Publish points *******/
-            if (path_en)                         publish_path(pubPath_);
+            double t_pub_start = omp_get_wtime();
+            if (path_en && pubPath_)             publish_path(pubPath_);
             if (scan_pub_en)      publish_frame_world(pubLaserCloudFull_);
-            if (scan_pub_en && scan_body_pub_en) publish_frame_body(pubLaserCloudFull_body_);
-            if (effect_pub_en) publish_effect_world(pubLaserCloudEffect_);
+            if (scan_pub_en && scan_body_pub_en && pubLaserCloudFull_body_) publish_frame_body(pubLaserCloudFull_body_);
+            if (effect_pub_en && pubLaserCloudEffect_) publish_effect_world(pubLaserCloudEffect_);
             // if (map_pub_en) publish_map(pubLaserCloudMap_);
+            double t_pub_end = omp_get_wtime();
+
+            if (performance_log_en && (++perf_frame_count_ % performance_log_period == 0))
+            {
+                RCLCPP_INFO(
+                    this->get_logger(),
+                    "FastLIO perf frame=%d input=%zu down=%d effective=%d map=%d total=%.2fms imu_down=%.2fms ekf=%.2fms match=%.2fms solve=%.2fms map_inc=%.2fms publish=%.2fms kd_search=%.2fms kd_inc=%.2fms",
+                    perf_frame_count_,
+                    feats_undistort->points.size(),
+                    feats_down_size,
+                    effct_feat_num,
+                    ikdtree.validnum(),
+                    (t_pub_end - t0) * 1000.0,
+                    (t1 - t0) * 1000.0,
+                    (t_update_end - t_update_start) * 1000.0,
+                    match_time * 1000.0,
+                    (solve_time + solve_H_time) * 1000.0,
+                    (t5 - t3) * 1000.0,
+                    (t_pub_end - t_pub_start) * 1000.0,
+                    kdtree_search_time * 1000.0,
+                    kdtree_incremental_time * 1000.0);
+            }
 
             /*** Debug variables ***/
             if (runtime_pos_log)
@@ -1153,16 +1208,19 @@ private:
                 time_log_counter ++;
                 printf("[ mapping ]: time: IMU + Map + Input Downsample: %0.6f ave match: %0.6f ave solve: %0.6f  ave ICP: %0.6f  map incre: %0.6f ave total: %0.6f icp: %0.6f construct H: %0.6f \n",t1-t0,aver_time_match,aver_time_solve,t3-t1,t5-t3,aver_time_consu,aver_time_icp, aver_time_const_H_time);
                 ext_euler = SO3ToEuler(state_point.offset_R_L_I);
-                fout_out << setw(20) << Measures.lidar_beg_time - first_lidar_time << " " << euler_cur.transpose() << " " << state_point.pos.transpose()<< " " << ext_euler.transpose() << " "<<state_point.offset_T_L_I.transpose()<<" "<< state_point.vel.transpose() \
-                <<" "<<state_point.bg.transpose()<<" "<<state_point.ba.transpose()<<" "<<state_point.grav<<" "<<feats_undistort->points.size()<<endl;
-                dump_lio_state_to_log(fp);
+                if (fout_out.is_open())
+                {
+                    fout_out << setw(20) << Measures.lidar_beg_time - first_lidar_time << " " << euler_cur.transpose() << " " << state_point.pos.transpose()<< " " << ext_euler.transpose() << " "<<state_point.offset_T_L_I.transpose()<<" "<< state_point.vel.transpose() \
+                    <<" "<<state_point.bg.transpose()<<" "<<state_point.ba.transpose()<<" "<<state_point.grav<<" "<<feats_undistort->points.size()<<endl;
+                }
+                if (fp != nullptr) dump_lio_state_to_log(fp);
             }
         }
     }
 
     void map_publish_callback()
     {
-        if (map_pub_en) publish_map(pubLaserCloudMap_);
+        if (map_pub_en && pubLaserCloudMap_) publish_map(pubLaserCloudMap_);
     }
 
     void map_save_callback(std_srvs::srv::Trigger::Request::ConstSharedPtr req, std_srvs::srv::Trigger::Response::SharedPtr res)
@@ -1207,12 +1265,13 @@ private:
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr map_save_srv_;
 
     bool effect_pub_en = false, map_pub_en = false;
+    int perf_frame_count_ = 0;
     int effect_feat_num = 0, frame_num = 0;
     double deltaT, deltaR, aver_time_consu = 0, aver_time_icp = 0, aver_time_match = 0, aver_time_incre = 0, aver_time_solve = 0, aver_time_const_H_time = 0;
     bool flg_EKF_converged, EKF_stop_flg = 0;
     double epsi[23] = {0.001};
 
-    FILE *fp;
+    FILE *fp = nullptr;
     ofstream fout_pre, fout_out, fout_dbg;
 };
 
