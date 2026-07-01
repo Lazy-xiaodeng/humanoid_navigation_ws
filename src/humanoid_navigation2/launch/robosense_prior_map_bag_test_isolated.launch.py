@@ -8,6 +8,14 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     use_sim_time = True
     jump_protection_mode = LaunchConfiguration("jump_protection_mode", default="monitor")
+    config_file = LaunchConfiguration(
+        "config_file",
+        default=PathJoinSubstitution([
+            FindPackageShare("robosense_lidar_localization"),
+            "config",
+            "robosense_lidar_localization_bag.yaml",
+        ]),
+    )
 
     robosense = Node(
         package="robosense_lidar_localization",
@@ -16,17 +24,13 @@ def generate_launch_description():
         output="screen",
         parameters=[{
             "use_sim_time": use_sim_time,
-            "config_file": PathJoinSubstitution([
-                FindPackageShare("robosense_lidar_localization"),
-                "config",
-                "robosense_lidar_localization_bag.yaml",
-            ]),
+            "config_file": config_file,
         }],
     )
 
     bridge = Node(
-        package="humanoid_navigation2",
-        executable="prior_map_odom_bridge",
+        package="humanoid_navigation2_cpp_nodes",
+        executable="prior_map_odom_bridge_cpp",
         name="prior_map_odom_bridge",
         output="screen",
         parameters=[{
@@ -86,6 +90,15 @@ def generate_launch_description():
             "jump_protection_mode",
             default_value="monitor",
             description="bag isolated bridge protection mode: off, monitor, or protect",
+        ),
+        DeclareLaunchArgument(
+            "config_file",
+            default_value=PathJoinSubstitution([
+                FindPackageShare("robosense_lidar_localization"),
+                "config",
+                "robosense_lidar_localization_bag.yaml",
+            ]),
+            description="RoboSense lidar_localization YAML for bag replay",
         ),
         robosense,
         TimerAction(period=1.0, actions=[bridge]),

@@ -89,7 +89,7 @@ class NavigationStateManager(Node):
             ('obstacle_clear_front_max_x_m', 0.80),  # 障碍恢复只看机器人近前方，降低墙/玻璃门误判。
             ('obstacle_clear_half_width_m', 0.30),  # 左右各 0.30m；这是状态机 clear 窗口，不是 RPP 碰撞参数。
             ('obstacle_min_wait_before_resume_sec', 2.0),  # 避免刚暂停 1 秒左右就因单帧 clear 误恢复。
-            ('obstacle_clear_required_duration_sec', 2.5),  # 恢复前要求前方连续 clear 的时长。
+            ('obstacle_clear_required_duration_sec', 3.0),  # 恢复前要求前方连续 clear 的时长。
             ('obstacle_clear_required_duration_after_false_resume_sec', 4.0),  # 误恢复后下一次恢复更保守。
             ('obstacle_false_resume_window_sec', 3.0),  # 恢复后很快再次阻塞，视为一次“误恢复”。
             ('obstacle_resume_use_roi', True),

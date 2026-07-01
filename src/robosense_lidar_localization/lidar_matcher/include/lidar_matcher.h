@@ -104,6 +104,7 @@ public:
 protected:
   bool validation();
   void searchPairLoopOMP();
+  void limitValidPairs();
   bool loadConfig(const YAML::Node &config_node);
   bool preprocess(const PointCloudT::Ptr &source_cloud,
                   const pcl::KdTreeFLANN<PointT>::Ptr kd_tree,
@@ -163,7 +164,8 @@ protected:
   double min_angle_thresh_ = 8.; // deg
 
 
-  int max_pair_size_{800};
+  int max_pair_size_{0};
+  double neighbor_search_radius_{0.3};
 };
 
 #ifndef USE_EIGEN_OPTIMIZATION

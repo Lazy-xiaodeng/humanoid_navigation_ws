@@ -104,6 +104,7 @@ private:
   bool is_pub_map_{false};
   // blind_distance_
   double blind_distance_{2.0};
+  double source_voxel_leaf_size_{0.15};
 
   // Per-frame matcher diagnostics are useful offline, but too noisy for real launch.
   bool debug_print_{false};

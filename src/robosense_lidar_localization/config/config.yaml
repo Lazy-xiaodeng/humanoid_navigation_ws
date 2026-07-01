@@ -27,12 +27,28 @@ init_euler: [0.0, 0.0, -0.130823906] # roll, pitch, yaw
 #是否发布点云  debug
 is_pub_cloud: false
 is_pub_map: false
-#输入点云最小点数   
+# 输入点云最少点数。低于该值认为当前雷达帧不可用，避免空帧/异常帧进入匹配。
 input_cloud_size_thr: 1000
+
+# 当前 scan 经过语义分类后的 VoxelGrid 降采样栅格，单位 m。
+# 调小会保留更多 source 点和潜在点对，增强局部几何不足场景下的匹配裕量；
+# 调大会降低 CPU，但更容易因为点对不足触发 LOW_ACCURACY/odom 外推。
+# nav45/nav46 bag 验证中 0.15 比 0.20 有效点对更多且质量指标未变差。
+source_voxel_leaf_size: 0.15
+
+# 匹配残差阈值。残差越大说明 scan 与 prior map 越不一致，超过阈值会认为匹配质量差。
 matching_check_residual_thresh: 0.15
+
+# 有效点对比例阈值。比例过低说明虽然点对数量可能不少，但真正低残差的约束不够。
 matching_check_valid_pair_ratio_thresh: 0.80
+
+# 匹配结果相对 odom/prior 初值允许的 x-y 偏差，单位 m；超过后认为匹配跳变可疑。
 matching_check_prior_xy_thresh: 0.50
+
+# 匹配结果相对 odom/prior 初值允许的 z 偏差，单位 m。
 matching_check_prior_z_thresh: 0.50
+
+# 匹配结果相对 odom/prior 初值允许的 yaw 偏差，单位度。
 matching_check_prior_yaw_thresh_deg: 8.0
 #lidar to vehicle calibration 
 lidar_vehicle_xyz: [0.072, -0.004, 1.215]
@@ -48,7 +64,7 @@ lidar_matcher:
   validation_ave_final_cost_thresh: 0.03 #0.02 # 每点平均cost阈值
 
   # source cloud filter
-  blind_distance: 2.0 # 盲区距离
+  blind_distance: 1.0 # 盲区距离
   leaf_size: 0.1 # VoxelGrid降采样栅格尺寸
   debug_print: false
   # ceres solver options
@@ -56,8 +72,18 @@ lidar_matcher:
   max_num_iterations: 2 #10
 
   # feature
-  min_point_num: 3 # source点在地图中对应的最少点数
-  min_angle: 20 # source点在地图中对应的点集合的法向量之间最大偏差角度，用于判断是否为有效平面特征点
+  # 为 source 点在地图 KD-tree 中找近邻时使用的搜索半径，单位 m。
+  # 原代码硬编码 0.30m；这里保持默认 0.30m，仅改为可配置。
+  # 调大可增加近邻和点对，但可能混入跨结构的错误平面；调小更严格但更容易点对不足。
+  neighbor_search_radius: 0.30
 
-  # max_pair_size
-  max_pair_size: 800 ####最大有效点数
+  # source 点在地图搜索半径内要求的最少近邻点数；少于该值就不生成有效点对。
+  min_point_num: 3
+
+  # 地图近邻点法向量一致性阈值，单位度；越小越严格，越大越容易保留边缘/拐角点对。
+  min_angle: 20
+
+  # 每帧最多送入 solver 的有效点对数，用于限制 CPU 峰值。
+  # <=0 表示不限流，完全保留旧行为；800/1200 可用于 bag 实验验证限流效果。
+  # 当前先设为 0，避免启用限流后改变实机定位行为。
+  max_pair_size: 0

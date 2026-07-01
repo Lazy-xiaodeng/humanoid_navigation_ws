@@ -222,8 +222,12 @@ export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
 export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-$HOME/.config/fastdds_shm.xml}"
 export RMW_FASTRTPS_USE_QOS_FROM_XML="${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
 
-echo "Building workspace..."
-colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+if [ "${SKIP_COLCON_BUILD:-0}" = "1" ]; then
+  echo "SKIP_COLCON_BUILD=1, skip runtime colcon build."
+else
+  echo "Building workspace..."
+  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+fi
 
 if [ ! -f "$WORKSPACE/install/setup.bash" ]; then
   echo "ERROR: $WORKSPACE/install/setup.bash not found after build."
