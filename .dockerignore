@@ -10,8 +10,14 @@ log/
 
 # 调试输出
 debug_output*.txt
+debug_monitor/
 *.gv
 *.pdf
+*.pid
+
+# 离线部署产物（镜像 tar 不能再被 COPY 回镜像）
+deploy/docker_offline/images/
+deploy/docker_offline/docker_debs/
 
 # 文档（不需要打包进镜像）
 *.md
@@ -29,4 +35,5 @@ __pycache__/
 # 大文件/数据集
 *.bag
 *.pcd
+!src/humanoid_navigation2/pcd/*.pcd
 *.xlsx

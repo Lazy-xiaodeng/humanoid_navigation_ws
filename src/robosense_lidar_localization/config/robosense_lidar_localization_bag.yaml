@@ -26,9 +26,12 @@ map_path: /home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall_open3d_grou
 init_position: [0.035185, 0.087588, 0.0]
 init_euler: [0.0, 0.0, -0.130823906]
 
-# Bag 对比实验：把 RoboSense 地图 KD-tree 降采样从正式默认 0.30m 调到 0.10m。
-# 这样地图参与匹配的点更密，但 CPU 和最近邻搜索压力会明显增加。
-map_voxel_leaf_size: 0.10
+# RoboSense 节点加载 prior map 后构建 KD-tree 前的地图体素降采样，单位 m。
+# 0.30 是当前实机主配置和 bag44/nav45/nav46 验证后的推荐值：
+#   - 地图点数和 CPU 压力可控；
+#   - 配合 source_voxel_leaf_size=0.15 时，有效点对裕量明显增加；
+#   - 相比 map=0.10，不会额外放大最近邻搜索和优化耗时。
+map_voxel_leaf_size: 0.30
 
 is_pub_cloud: false
 is_pub_map: false
@@ -37,10 +40,26 @@ odom_cache_topic: "/prior_localization/robosense_input_odom"
 publish_odom_cache: true
 
 input_cloud_size_thr: 1000
+
+# 当前 scan 经过语义分类后的 VoxelGrid 降采样栅格，单位 m。
+# 该值控制离线回放时每帧参与 scan-to-map 的 source 点数量：
+#   - 0.15：比 0.20 保留更多点，nav45/nav46 中有效点对明显更多；
+#   - 0.20：CPU 更轻，但局部几何不足时裕量较小。
+source_voxel_leaf_size: 0.15
+
+# 匹配残差阈值。残差超过该值说明 scan 与 prior map 对齐质量偏差。
 matching_check_residual_thresh: 0.15
+
+# 有效点对比例阈值。比例过低时即使点数够，也认为匹配质量不足。
 matching_check_valid_pair_ratio_thresh: 0.80
+
+# 匹配结果相对 odom/prior 初值允许的 x-y 偏差，单位 m。
 matching_check_prior_xy_thresh: 0.50
+
+# 匹配结果相对 odom/prior 初值允许的 z 偏差，单位 m。
 matching_check_prior_z_thresh: 0.50
+
+# 匹配结果相对 odom/prior 初值允许的 yaw 偏差，单位度。
 matching_check_prior_yaw_thresh_deg: 8.0
 
 # raw/body 非标准轴 -> base_footprint，含义同正式配置。
@@ -48,17 +67,49 @@ lidar_vehicle_xyz: [0.072, -0.004, 1.215]
 lidar_vehicle_rpy: [-1.5707963268, 0.0, 1.5707963268]
 
 lidar_matcher:
+  # 地图最少点数。地图点数低于该值时不进行定位。
   min_map_size: 50000
+
+  # 每帧匹配要求的最少有效点对数。越大越稳，但环境稀疏时更容易无解。
   min_pair_size: 200
+
+  # 外层 scan-to-map 迭代次数。
   iterations: 4
+
+  # 单次匹配验证阈值，越小越严格。
   validation_thresh: 0.2
+
+  # 相邻匹配结果角度变化验证阈值，单位 rad。
   validation_TF_angle_delta_thresh: 1.0
+
+  # 最终平均 cost 阈值；越小越严格。
   validation_ave_final_cost_thresh: 0.03
-  blind_distance: 2.0
+
+  # 雷达近距离盲区，单位 m；小于该距离的点不参与匹配。
+  blind_distance: 1.0
+
+  # 历史兼容参数；当前真正控制 source scan 降采样的是顶层 source_voxel_leaf_size。
   leaf_size: 0.1
+
+  # 是否打印 matcher 内部每帧优化结果。离线诊断时脚本会临时改为 true。
   debug_print: false
+
+  # Ceres 优化线程数。
   num_threads: 2
+
+  # Ceres 每轮最大迭代次数。
   max_num_iterations: 2
+
+  # 为 source 点在地图 KD-tree 中找近邻时使用的搜索半径，单位 m。
+  # 原代码硬编码 0.30m；这里保持默认 0.30m，仅改为可配置。
+  neighbor_search_radius: 0.30
+
+  # source 点在地图搜索半径内要求的最少近邻点数；少于该值就不生成有效点对。
   min_point_num: 3
+
+  # 地图近邻点法向量一致性阈值，单位度；越小越严格。
   min_angle: 20
-  max_pair_size: 800
+
+  # 每帧最多送入 solver 的有效点对数，用于限制 CPU 峰值。
+  # <=0 表示不限流，完全保留旧行为；800/1200 可用于 bag 实验验证限流效果。
+  max_pair_size: 0

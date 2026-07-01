@@ -252,6 +252,53 @@ bool nearestCachedRawOdomPose(double timestamp, Pose &pose_at_t) {
   return true;
 }
 
+bool interpolateCachedRawOdomPose(double timestamp, Pose &pose_at_t) {
+  std::lock_guard<std::mutex> lock(raw_odom_mutex);
+  if (raw_odom_map.size() < 2) {
+    return false;
+  }
+
+  auto next = raw_odom_map.lower_bound(timestamp);
+  if (next == raw_odom_map.end()) {
+    auto last = std::prev(raw_odom_map.end());
+    if (std::fabs(timestamp - last->first) <= registered_cloud_odom_sync_tolerance_sec) {
+      pose_at_t = last->second;
+      pose_at_t.timestamp = timestamp;
+      return true;
+    }
+    return false;
+  }
+
+  if (next == raw_odom_map.begin()) {
+    if (std::fabs(timestamp - next->first) <= registered_cloud_odom_sync_tolerance_sec) {
+      pose_at_t = next->second;
+      pose_at_t.timestamp = timestamp;
+      return true;
+    }
+    return false;
+  }
+
+  if (std::fabs(timestamp - next->first) < 1e-6) {
+    pose_at_t = next->second;
+    pose_at_t.timestamp = timestamp;
+    return true;
+  }
+
+  auto prev = std::prev(next);
+  const double gap = next->first - prev->first;
+  if (gap <= 0.0 || gap > registered_cloud_odom_sync_tolerance_sec) {
+    return false;
+  }
+
+  const double ratio = (timestamp - prev->first) / gap;
+  pose_at_t.timestamp = timestamp;
+  pose_at_t.xyz = (1.0 - ratio) * prev->second.xyz + ratio * next->second.xyz;
+  pose_at_t.q = prev->second.q.slerp(ratio, next->second.q);
+  pose_at_t.q.normalize();
+  pose_at_t.source = prev->second.source;
+  return true;
+}
+
 bool interpolateCachedRelPose(double timestamp, Pose &pose_at_t) {
   std::lock_guard<std::mutex> lock(tf_rel_pose_mutex);
   if (tf_rel_poses_map.size() < 2) {
@@ -312,7 +359,7 @@ Pose convertFastlioCameraOdomToBase(const Pose &camera_body_pose) {
 pcl::PointCloud<RsPointXYZIRT>::Ptr convertRegisteredCloudToBodyCloud(
     const pcl::PointCloud<pcl::PointXYZI> &registered_cloud, double msg_time) {
   Pose camera_body_pose;
-  if (!nearestCachedRawOdomPose(msg_time, camera_body_pose)) {
+  if (!interpolateCachedRawOdomPose(msg_time, camera_body_pose)) {
     static double last_warn_time = 0.0;
     if (msg_time - last_warn_time > 2.0) {
       std::cout << "drop registered cloud without synced /odom: "

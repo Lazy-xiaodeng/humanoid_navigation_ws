@@ -15,6 +15,9 @@ Copyright 2025 RoboSense Technology Co., Ltd
  *****************************************************************************/
  
 #include "lidar_matcher.h"
+#include <Eigen/Eigenvalues>
+#include <algorithm>
+#include <cmath>
 #ifdef USE_ROS_MODE
 #ifdef ROS1
 #include <ros/ros.h>
@@ -27,6 +30,59 @@ Copyright 2025 RoboSense Technology Co., Ltd
 #endif
 
 #endif // only for DEBUGGING
+
+namespace {
+
+double poseYawDeg(const Pose &pose) {
+  return std::atan2(pose.q.toRotationMatrix()(1, 0),
+                    pose.q.toRotationMatrix()(0, 0)) *
+         R2D;
+}
+
+void printPairGeometryStats(const AlignInfo &align_info,
+                            const PointCloudT::Ptr &target_cloud_info,
+                            const std::size_t source_size) {
+  Eigen::Vector3d normal_abs_sum = Eigen::Vector3d::Zero();
+  Eigen::Matrix3d normal_second_moment = Eigen::Matrix3d::Zero();
+  int normal_count = 0;
+
+  for (uint i = 0; i < align_info.valid_pair_num &&
+                   i < target_cloud_info->points.size();
+       ++i) {
+    const auto &target_p = target_cloud_info->points[i];
+    Eigen::Vector3d normal{target_p.normal_x, target_p.normal_y,
+                           target_p.normal_z};
+    if (!normal.allFinite() || normal.norm() < 1e-6) {
+      continue;
+    }
+    normal.normalize();
+    normal_abs_sum += normal.cwiseAbs();
+    normal_second_moment += normal * normal.transpose();
+    ++normal_count;
+  }
+
+  Eigen::Vector3d normal_abs_mean = Eigen::Vector3d::Zero();
+  Eigen::Vector3d normal_eigen = Eigen::Vector3d::Zero();
+  if (normal_count > 0) {
+    normal_abs_mean = normal_abs_sum / normal_count;
+    normal_second_moment /= normal_count;
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eig(normal_second_moment);
+    if (eig.info() == Eigen::Success) {
+      normal_eigen = eig.eigenvalues();
+    }
+  }
+
+  std::cout << "pair_geometry source=" << source_size
+            << " valid_pair=" << align_info.valid_pair_num
+            << " valid_pair_ratio=" << align_info.valid_pair_ratio
+            << " gnd=" << align_info.gnd_size
+            << " non_gnd=" << align_info.non_gnd_size
+            << " scan_non_gnd=" << align_info.scan_non_gnd_size
+            << " normal_abs_mean=" << normal_abs_mean.transpose()
+            << " normal_eigen=" << normal_eigen.transpose() << std::endl;
+}
+
+}  // namespace
 
 /************ utility functions  *********************/
 Pose vec2Pose(Eigen::Matrix<double, 7, 1> &&ret) {
@@ -55,7 +111,8 @@ bool LidarMatcher::preprocess(const PointCloudT::Ptr &origin_source_cloud,
 
   if (organized_source_cloud->points.size() < 800) // TODO //800
   {
-    LERROR << "align : NO_ENOUGH_SOURCE_POINTS" << REND;
+    LERROR << "align : NO_ENOUGH_SOURCE_POINTS: "
+           << organized_source_cloud->points.size() << REND;
     setLidarMatchingDetail(LidarMatchingDetail::kNoEnoughSourcePoints);
     setLidarMatchingStatus(LidarMatchingStatus::kCompleteError);
     return false;
@@ -107,7 +164,8 @@ void LidarMatcher::searchPairLoopOMP() {
  
     std::vector<int> idx;  
     std::vector<float> srqdis;  
-    kd_tree_->radiusSearch(source_p, 0.3, idx, srqdis,min_point_num_);  
+    kd_tree_->radiusSearch(source_p, neighbor_search_radius_, idx, srqdis,
+                           min_point_num_);
     if (idx.size() < min_point_num_) {
       continue;
     }
@@ -167,7 +225,71 @@ void LidarMatcher::searchPairLoopOMP() {
       align_info_.gnd_size++;
     }
   }
+  limitValidPairs();
 }  
+
+void LidarMatcher::limitValidPairs() {
+  if (max_pair_size_ <= 0 ||
+      align_info_.valid_pair_num <= static_cast<uint>(max_pair_size_)) {
+    return;
+  }
+
+  const uint original_pair_num = align_info_.valid_pair_num;
+  const int limited_pair_num = max_pair_size_;
+  const auto original_valid_source_ids = valid_source_id_vec_;
+  const auto original_target_points = target_cloud_info_->points;
+  const auto original_align_source_indices = align_info_.align_source_indices_;
+  const auto original_align_source_rel_indices =
+      align_info_.align_source_rel_indices_;
+
+  valid_source_id_vec_.clear();
+  valid_source_id_vec_.reserve(limited_pair_num);
+  target_cloud_info_->points.clear();
+  target_cloud_info_->points.resize(limited_pair_num);
+  align_info_.align_source_indices_.clear();
+  align_info_.align_source_indices_.reserve(limited_pair_num);
+  align_info_.align_source_rel_indices_.clear();
+  align_info_.align_source_rel_indices_.reserve(limited_pair_num);
+  align_info_.non_gnd_size = 0;
+  align_info_.gnd_size = 0;
+  align_info_.scan_non_gnd_size = 0;
+
+  uint write_index = 0;
+  for (int i = 0; i < limited_pair_num; ++i) {
+    const auto selected_index =
+        static_cast<uint>(std::llround(
+            static_cast<double>(i) * (original_pair_num - 1) /
+            std::max(1, limited_pair_num - 1)));
+    valid_source_id_vec_.push_back(original_valid_source_ids[selected_index]);
+    target_cloud_info_->points[write_index] =
+        original_target_points[selected_index];
+    align_info_.align_source_indices_.push_back(
+        original_align_source_indices[selected_index]);
+    align_info_.align_source_rel_indices_.push_back(
+        original_align_source_rel_indices[selected_index]);
+
+    const auto &source_p =
+        source_cloud_->points[original_valid_source_ids[selected_index]];
+    if (source_p.intensity == 2) {
+      align_info_.non_gnd_size++;
+      if (source_p.curvature != static_cast<int>(source_p.curvature)) {
+        align_info_.scan_non_gnd_size++;
+      }
+    } else if (source_p.intensity < 0) {
+      align_info_.gnd_size++;
+    }
+    ++write_index;
+  }
+
+  align_info_.valid_pair_num = write_index;
+  target_cloud_info_->height = 1;
+  target_cloud_info_->width = write_index;
+  if (debug_print_) {
+    std::cout << "max_pair_limit original=" << original_pair_num
+              << " limited=" << align_info_.valid_pair_num
+              << " max_pair_size=" << max_pair_size_ << std::endl;
+  }
+}
 
 bool LidarMatcher::validation() {
   double TF_score = Eigen::AngleAxisd(delta_pose_.q).angle() * R2D;
@@ -188,7 +310,9 @@ bool LidarMatcher::loadConfig(const YAML::Node &config_node) {
   // source cloud filter
   yamlRead<int>(config_node, "min_map_size", min_map_size_, 80000);
   yamlRead<int>(config_node, "min_pair_size", min_pair_size_, 500);
-  yamlRead<int>(config_node, "max_pair_size", max_pair_size_, 800);
+  yamlRead<int>(config_node, "max_pair_size", max_pair_size_, 0);
+  yamlRead<double>(config_node, "neighbor_search_radius",
+                   neighbor_search_radius_, 0.3);
   yamlRead<double>(config_node, "leaf_size", leaf_size_, 0.5);
   yamlRead<double>(config_node, "z_leaf_size", z_leaf_size_, 0.5);
   yamlRead<int>(config_node, "point_downsample_num", point_downsample_num_, 8);
@@ -227,6 +351,8 @@ bool LidarMatcher::loadConfig(const YAML::Node &config_node) {
   // fool proofing, check validation
   checkParamValidity(min_map_size_, NAME(min_map_size_), 0, 0, 150000);
   checkParamValidity(min_pair_size_, NAME(min_pair_size_), 0, 0, 3000);
+  checkParamValidity(neighbor_search_radius_, NAME(neighbor_search_radius_), 0,
+                     0.01, 5.0);
   checkParamValidity(leaf_size_, NAME(leaf_size_), 0, 0.001, 5.0);
   checkParamValidity(blind_distance_, NAME(blind_distance_), 0, 0.0, 50.0);
   checkParamValidity(blind_distance_max_, NAME(blind_distance_max_), 0, 50.0,
@@ -352,6 +478,8 @@ bool LidarMatcherCeres::addResidualBlocksLoop(
 
   if (debug_print_) {
     std::cout << "valid_pair_num: " << align_info_.valid_pair_num << std::endl;
+    printPairGeometryStats(align_info_, target_cloud_info_,
+                           source_cloud_->points.size());
   }
 
   if (align_info_.valid_pair_num < min_pair_size_) {
@@ -390,6 +518,16 @@ void LidarMatcherCeres::updateTempResult(
 
   delta_pose_ = vec2Pose(solver->getResult());
   total_delta_pose_.updatePose(delta_pose_);
+  if (debug_print_) {
+    std::cout << "iter_delta iter=" << (iter_times + 1)
+              << " delta_xy=" << delta_pose_.xyz.head<2>().norm()
+              << " delta_z=" << std::fabs(delta_pose_.xyz.z())
+              << " delta_yaw=" << std::fabs(poseYawDeg(delta_pose_))
+              << " total_delta_xy=" << total_delta_pose_.xyz.head<2>().norm()
+              << " total_delta_z=" << std::fabs(total_delta_pose_.xyz.z())
+              << " total_delta_yaw=" << std::fabs(poseYawDeg(total_delta_pose_))
+              << std::endl;
+  }
 
   // update init pose and source cloud
   pcl::transformPointCloud(*source_cloud_, *source_cloud_,
@@ -604,6 +742,11 @@ bool LidarMatcherEigen::addResidualBlocksLoopEigen(const std::shared_ptr<EigenSo
   align_info_.valid_pair_ratio =
       (double)align_info_.valid_pair_num / source_cloud_->points.size();
 
+  if (debug_print_) {
+    printPairGeometryStats(align_info_, target_cloud_info_,
+                           source_cloud_->points.size());
+  }
+
   if (align_info_.valid_pair_num < min_pair_size_) {
     LERROR << "align : NO_ENOUGH_POINT_PAIR: " << align_info_.valid_pair_num
            << REND;
@@ -627,6 +770,16 @@ bool LidarMatcherEigen::solveEigen(const std::shared_ptr<EigenSolver<7>> &solver
  void LidarMatcherEigen::updateTempResultEigen(const std::shared_ptr<EigenSolver<7>> &solver,const int &iter_times) {
   delta_pose_ = vec2Pose(solver->getResult());
   total_delta_pose_.updatePose(delta_pose_);
+  if (debug_print_) {
+    std::cout << "iter_delta iter=" << (iter_times + 1)
+              << " delta_xy=" << delta_pose_.xyz.head<2>().norm()
+              << " delta_z=" << std::fabs(delta_pose_.xyz.z())
+              << " delta_yaw=" << std::fabs(poseYawDeg(delta_pose_))
+              << " total_delta_xy=" << total_delta_pose_.xyz.head<2>().norm()
+              << " total_delta_z=" << std::fabs(total_delta_pose_.xyz.z())
+              << " total_delta_yaw=" << std::fabs(poseYawDeg(total_delta_pose_))
+              << std::endl;
+  }
 
   // update init pose and source cloud
   pcl::transformPointCloud(*source_cloud_, *source_cloud_,
