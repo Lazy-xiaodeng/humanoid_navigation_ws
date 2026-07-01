@@ -35,6 +35,9 @@ LidarLocalization::LidarLocalization(const YAML::Node &config_node)
   is_pub_map_ = config_node["is_pub_map"].as<bool>();
   input_cloud_size_thr_ = config_node["input_cloud_size_thr"].as<size_t>();
   blind_distance_ = config_node["lidar_matcher"]["blind_distance"].as<double>();
+  source_voxel_leaf_size_ = config_node_["source_voxel_leaf_size"]
+                                ? config_node_["source_voxel_leaf_size"].as<double>()
+                                : 0.15;
   debug_print_ = config_node_["debug_print"] ? config_node_["debug_print"].as<bool>() : false;
 
   std::vector<double> lidar_vehicle_xyz = config_node_["lidar_vehicle_xyz"].as<std::vector<double>>();
@@ -75,6 +78,7 @@ LidarLocalization::LidarLocalization(const YAML::Node &config_node)
   std::cout << "is_pub_cloud_: " <<is_pub_cloud_ << std::endl;
   std::cout << "input_cloud_size_thr: " << input_cloud_size_thr_ << std::endl;
   std::cout << "blind_distance_: " << blind_distance_ << std::endl;
+  std::cout << "source_voxel_leaf_size_: " << source_voxel_leaf_size_ << std::endl;
   std::cout << "debug_print_: " << debug_print_ << std::endl;
   std::cout << "matching_check_residual_thresh: "
             << MATCHING_CHECK_RESIDUAL_THRESH << std::endl;
@@ -421,7 +425,7 @@ void LidarLocalization::semanticFilter(const PointCloudT::Ptr &undistorted_cloud
     semantic_cloud->points.push_back(pt);
   }
 
-  semantic_cloud = voxelGridFilter(semantic_cloud, 0.2);
+  semantic_cloud = voxelGridFilter(semantic_cloud, source_voxel_leaf_size_);
   semantic_cloud->header = undistorted_cloud->header;
   semantic_cloud->height = 1;
   semantic_cloud->width = semantic_cloud->points.size();

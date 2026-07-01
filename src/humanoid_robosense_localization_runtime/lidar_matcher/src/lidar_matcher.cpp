@@ -15,6 +15,8 @@ Copyright 2025 RoboSense Technology Co., Ltd
  *****************************************************************************/
  
 #include "lidar_matcher.h"
+#include <algorithm>
+#include <cmath>
 #ifdef USE_ROS_MODE
 #ifdef ROS1
 #include <ros/ros.h>
@@ -107,7 +109,8 @@ void LidarMatcher::searchPairLoopOMP() {
  
     std::vector<int> idx;  
     std::vector<float> srqdis;  
-    kd_tree_->radiusSearch(source_p, 0.3, idx, srqdis,min_point_num_);  
+    kd_tree_->radiusSearch(source_p, neighbor_search_radius_, idx, srqdis,
+                           min_point_num_);
     if (idx.size() < min_point_num_) {
       continue;
     }
@@ -167,7 +170,71 @@ void LidarMatcher::searchPairLoopOMP() {
       align_info_.gnd_size++;
     }
   }
+  limitValidPairs();
 }  
+
+void LidarMatcher::limitValidPairs() {
+  if (max_pair_size_ <= 0 ||
+      align_info_.valid_pair_num <= static_cast<uint>(max_pair_size_)) {
+    return;
+  }
+
+  const uint original_pair_num = align_info_.valid_pair_num;
+  const int limited_pair_num = max_pair_size_;
+  const auto original_valid_source_ids = valid_source_id_vec_;
+  const auto original_target_points = target_cloud_info_->points;
+  const auto original_align_source_indices = align_info_.align_source_indices_;
+  const auto original_align_source_rel_indices =
+      align_info_.align_source_rel_indices_;
+
+  valid_source_id_vec_.clear();
+  valid_source_id_vec_.reserve(limited_pair_num);
+  target_cloud_info_->points.clear();
+  target_cloud_info_->points.resize(limited_pair_num);
+  align_info_.align_source_indices_.clear();
+  align_info_.align_source_indices_.reserve(limited_pair_num);
+  align_info_.align_source_rel_indices_.clear();
+  align_info_.align_source_rel_indices_.reserve(limited_pair_num);
+  align_info_.non_gnd_size = 0;
+  align_info_.gnd_size = 0;
+  align_info_.scan_non_gnd_size = 0;
+
+  uint write_index = 0;
+  for (int i = 0; i < limited_pair_num; ++i) {
+    const auto selected_index =
+        static_cast<uint>(std::llround(
+            static_cast<double>(i) * (original_pair_num - 1) /
+            std::max(1, limited_pair_num - 1)));
+    valid_source_id_vec_.push_back(original_valid_source_ids[selected_index]);
+    target_cloud_info_->points[write_index] =
+        original_target_points[selected_index];
+    align_info_.align_source_indices_.push_back(
+        original_align_source_indices[selected_index]);
+    align_info_.align_source_rel_indices_.push_back(
+        original_align_source_rel_indices[selected_index]);
+
+    const auto &source_p =
+        source_cloud_->points[original_valid_source_ids[selected_index]];
+    if (source_p.intensity == 2) {
+      align_info_.non_gnd_size++;
+      if (source_p.curvature != static_cast<int>(source_p.curvature)) {
+        align_info_.scan_non_gnd_size++;
+      }
+    } else if (source_p.intensity < 0) {
+      align_info_.gnd_size++;
+    }
+    ++write_index;
+  }
+
+  align_info_.valid_pair_num = write_index;
+  target_cloud_info_->height = 1;
+  target_cloud_info_->width = write_index;
+  if (debug_print_) {
+    std::cout << "max_pair_limit original=" << original_pair_num
+              << " limited=" << align_info_.valid_pair_num
+              << " max_pair_size=" << max_pair_size_ << std::endl;
+  }
+}
 
 bool LidarMatcher::validation() {
   double TF_score = Eigen::AngleAxisd(delta_pose_.q).angle() * R2D;
@@ -188,7 +255,9 @@ bool LidarMatcher::loadConfig(const YAML::Node &config_node) {
   // source cloud filter
   yamlRead<int>(config_node, "min_map_size", min_map_size_, 80000);
   yamlRead<int>(config_node, "min_pair_size", min_pair_size_, 500);
-  yamlRead<int>(config_node, "max_pair_size", max_pair_size_, 800);
+  yamlRead<int>(config_node, "max_pair_size", max_pair_size_, 0);
+  yamlRead<double>(config_node, "neighbor_search_radius",
+                   neighbor_search_radius_, 0.3);
   yamlRead<double>(config_node, "leaf_size", leaf_size_, 0.5);
   yamlRead<double>(config_node, "z_leaf_size", z_leaf_size_, 0.5);
   yamlRead<int>(config_node, "point_downsample_num", point_downsample_num_, 8);
@@ -227,6 +296,8 @@ bool LidarMatcher::loadConfig(const YAML::Node &config_node) {
   // fool proofing, check validation
   checkParamValidity(min_map_size_, NAME(min_map_size_), 0, 0, 150000);
   checkParamValidity(min_pair_size_, NAME(min_pair_size_), 0, 0, 3000);
+  checkParamValidity(neighbor_search_radius_, NAME(neighbor_search_radius_), 0,
+                     0.01, 5.0);
   checkParamValidity(leaf_size_, NAME(leaf_size_), 0, 0.001, 5.0);
   checkParamValidity(blind_distance_, NAME(blind_distance_), 0, 0.0, 50.0);
   checkParamValidity(blind_distance_max_, NAME(blind_distance_max_), 0, 50.0,
