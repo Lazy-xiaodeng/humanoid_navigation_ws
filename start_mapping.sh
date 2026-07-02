@@ -48,6 +48,33 @@ is_alive() {
   [ -n "$pid" ] && kill -0 "$pid" > /dev/null 2>&1
 }
 
+get_process_group() {
+  local pid="${1:-}"
+  [ -n "$pid" ] || return 1
+  ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ' || true
+}
+
+process_group_has_members() {
+  local pgid="${1:-}"
+  [ -n "$pgid" ] || return 1
+  ps -eo pgid= 2>/dev/null | awk -v target="$pgid" '$1 == target { found = 1 } END { exit found ? 0 : 1 }'
+}
+
+process_target_alive() {
+  local pid="${1:-}"
+  local pgid="${2:-}"
+  if [ -n "$pgid" ]; then
+    process_group_has_members "$pgid"
+  else
+    is_alive "$pid"
+  fi
+}
+
+normalize_command() {
+  local raw_cmd="${1:-}"
+  printf '%s' "$raw_cmd" | tr -d '\r' | xargs | tr '[:upper:]' '[:lower:]'
+}
+
 send_signal_to_process() {
   local signal_name="$1"
   local pid="${2:-}"
@@ -67,37 +94,98 @@ send_signal_to_process() {
   fi
 }
 
+send_signal_to_target() {
+  local signal_name="$1"
+  local pid="${2:-}"
+  local pgid="${3:-}"
+
+  if [ -n "$pgid" ]; then
+    kill "-$signal_name" -- "-$pgid" > /dev/null 2>&1 || true
+  else
+    send_signal_to_process "$signal_name" "$pid"
+  fi
+}
+
 stop_process_int() {
   local name="$1"
   local pid="${2:-}"
   local timeout_sec="${3:-30}"
   local elapsed=0
+  local pgid
+  local wait_pgid=""
+  local self_pgid
 
   if ! is_alive "$pid"; then
     return 0
   fi
 
-  log "Stopping $name with SIGINT (pid=$pid)..."
-  send_signal_to_process INT "$pid"
+  pgid="$(get_process_group "$pid")"
+  self_pgid="$(get_process_group "$$")"
+  if [ -n "$pgid" ] && [ "$pgid" != "$self_pgid" ]; then
+    wait_pgid="$pgid"
+  fi
 
-  while is_alive "$pid" && [ "$elapsed" -lt "$timeout_sec" ]; do
+  log "Stopping $name with SIGINT (pid=$pid)..."
+  send_signal_to_target INT "$pid" "$wait_pgid"
+
+  while process_target_alive "$pid" "$wait_pgid" && [ "$elapsed" -lt "$timeout_sec" ]; do
     sleep 1
     elapsed=$((elapsed + 1))
-    if [ $((elapsed % 5)) -eq 0 ] && is_alive "$pid"; then
+    if [ $((elapsed % 5)) -eq 0 ] && process_target_alive "$pid" "$wait_pgid"; then
       log "RUNNING: waiting for $name to stop (${elapsed}s elapsed, please wait...)"
     fi
   done
 
-  if is_alive "$pid"; then
+  if process_target_alive "$pid" "$wait_pgid"; then
     log "WARN: $name did not exit after ${timeout_sec}s, sending SIGTERM."
-    send_signal_to_process TERM "$pid"
+    send_signal_to_target TERM "$pid" "$wait_pgid"
     sleep 2
   fi
 
-  if is_alive "$pid"; then
+  if process_target_alive "$pid" "$wait_pgid"; then
     log "WARN: $name still alive, sending SIGKILL."
-    send_signal_to_process KILL "$pid"
+    send_signal_to_target KILL "$pid" "$wait_pgid"
     sleep 1
+    if process_target_alive "$pid" "$wait_pgid"; then
+      log "ERROR: $name still has live processes after SIGKILL."
+    fi
+  fi
+}
+
+stop_process_fast() {
+  local name="$1"
+  local pid="${2:-}"
+  local timeout_sec="${3:-5}"
+  local elapsed=0
+  local pgid
+  local wait_pgid=""
+  local self_pgid
+
+  if ! is_alive "$pid"; then
+    return 0
+  fi
+
+  pgid="$(get_process_group "$pid")"
+  self_pgid="$(get_process_group "$$")"
+  if [ -n "$pgid" ] && [ "$pgid" != "$self_pgid" ]; then
+    wait_pgid="$pgid"
+  fi
+
+  log "Stopping $name with SIGTERM (pid=$pid)..."
+  send_signal_to_target TERM "$pid" "$wait_pgid"
+
+  while process_target_alive "$pid" "$wait_pgid" && [ "$elapsed" -lt "$timeout_sec" ]; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  if process_target_alive "$pid" "$wait_pgid"; then
+    log "WARN: $name still alive after ${timeout_sec}s, sending SIGKILL."
+    send_signal_to_target KILL "$pid" "$wait_pgid"
+    sleep 1
+    if process_target_alive "$pid" "$wait_pgid"; then
+      log "ERROR: $name still has live processes after SIGKILL."
+    fi
   fi
 }
 
@@ -405,20 +493,14 @@ abort_mapping() {
 
   log "Abort requested. Stopping mapping without saving final map outputs..."
 
-  # Keep rosbag SIGINT so rosbag metadata is closed cleanly, but do not build
-  # databases or overwrite map files from this aborted run.
-  stop_process_int "rosbag recorder" "$BAG_PID" "$ROSBAG_STOP_TIMEOUT_SEC"
+  log "[abort 1/3] Stopping mapping launch..."
+  stop_process_fast "mapping launch" "$MAPPING_PID" 8
 
-  if is_alive "$PCD_PID"; then
-    log "Stopping PCD saver without Ctrl+C save (pid=$PCD_PID)..."
-    kill -TERM "$PCD_PID" > /dev/null 2>&1 || true
-    sleep 2
-    if is_alive "$PCD_PID"; then
-      kill -KILL "$PCD_PID" > /dev/null 2>&1 || true
-    fi
-  fi
+  log "[abort 2/3] Stopping rosbag recorder..."
+  stop_process_fast "rosbag recorder" "$BAG_PID" 8
 
-  stop_process_int "mapping launch" "$MAPPING_PID" 30
+  log "[abort 3/3] Stopping PCD saver without saving PCD..."
+  stop_process_fast "PCD saver" "$PCD_PID" 5
 
   log "Aborted mapping run. No final map save/check was performed."
   log "Partial bag, if any, is at: $BAG_DIR"
@@ -574,12 +656,13 @@ while is_alive "$MAPPING_PID"; do
   fi
 
   if [ -n "$cmd_source" ]; then
+    user_cmd="$(normalize_command "$user_cmd")"
     case "$user_cmd" in
-      finish|FINISH|done|DONE|q|Q|quit|QUIT|exit|EXIT)
+      finish|done|q|quit|exit)
         log "Finish command received from $cmd_source."
         finish_mapping
         ;;
-      abort|ABORT|cancel|CANCEL|discard|DISCARD)
+      abort|cancel|discard)
         log "Abort command received from $cmd_source."
         abort_mapping
         ;;
