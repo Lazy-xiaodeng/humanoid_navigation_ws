@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""统一 ws 入口下的 C++ APP 网关 WebSocket smoke。
+"""C++ APP 网关 WebSocket smoke。
 
 功能：
 1. 自动选择本机空闲端口，避免和现场 8765 冲突。
-2. 通过 humanoid_websocket websocket_server.launch.py 启动 C++ APP 网关和 C++ 数据整合。
+2. 通过 humanoid_app_gateway_runtime/app_gateway_runtime.launch.py 启动 C++ APP 网关和 C++ 数据整合。
 3. 连接 C++ APP WebSocket，验证 connection_ack、request 转发和 integration response 回发。
 4. 使用独立 ROS_DOMAIN_ID，不影响当前导航/控制系统。
 """
@@ -11,6 +11,7 @@
 import asyncio
 import json
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -23,6 +24,8 @@ from std_msgs.msg import String
 import websockets
 
 WORKSPACE = Path(__file__).resolve().parents[1]
+APP_GATEWAY_EXE = str(WORKSPACE / 'install' / 'humanoid_app_gateway_runtime' / 'lib' / 'humanoid_app_gateway_runtime' / 'app_gateway_node')
+DATA_INTEGRATION_EXE = str(WORKSPACE / 'install' / 'humanoid_app_gateway_runtime' / 'lib' / 'humanoid_app_gateway_runtime' / 'data_integration_node')
 
 
 class Probe(Node):
@@ -37,6 +40,38 @@ def free_port():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(('127.0.0.1', 0))
         return sock.getsockname()[1]
+
+
+def matching_pids(needles):
+    pids = set()
+    proc_root = Path('/proc')
+    for item in proc_root.iterdir():
+        if not item.name.isdigit():
+            continue
+        try:
+            cmdline = (item / 'cmdline').read_bytes().replace(b'\x00', b' ').decode('utf-8', errors='ignore')
+        except (FileNotFoundError, ProcessLookupError, PermissionError):
+            continue
+        if any(needle in cmdline for needle in needles):
+            pids.add(int(item.name))
+    return pids
+
+
+def cleanup_new_runtime_processes(before_pids):
+    after_pids = matching_pids([APP_GATEWAY_EXE, DATA_INTEGRATION_EXE])
+    new_pids = sorted(pid for pid in after_pids - before_pids if pid != os.getpid())
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
+        still_running = []
+        for pid in new_pids:
+            try:
+                os.kill(pid, sig)
+                still_running.append(pid)
+            except ProcessLookupError:
+                pass
+        if not still_running:
+            return
+        new_pids = still_running
+        time.sleep(0.5)
 
 
 def wait_for_port(port, proc, timeout_sec=6.0):
@@ -131,17 +166,15 @@ def main():
     env['ROS_DOMAIN_ID'] = domain
     os.environ['ROS_DOMAIN_ID'] = domain
     cmd = (
+        'unset AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH PYTHONPATH LD_LIBRARY_PATH && '
+        'source /opt/ros/jazzy/setup.bash && '
         f'source {WORKSPACE / "install" / "setup.bash"} && '
-        'ros2 launch humanoid_websocket websocket_server.launch.py '
-        'use_cpp_app_gateway:=true '
-        'cpp_app_websocket_server_enable:=true '
-        'cpp_data_integration_enable:=true '
-        f'cpp_app_websocket_host:=127.0.0.1 cpp_app_websocket_port:={port} '
-        'use_cpp_robot_gateway:=true '
-        'cpp_robot_ws_enable:=false '
-        'cpp_robot_walk_velocity_send_enable:=false '
-        'cpp_robot_motion_execution_enable:=false'
+        'ros2 launch humanoid_app_gateway_runtime app_gateway_runtime.launch.py '
+        'websocket_server_enable:=true '
+        'data_integration_enable:=true '
+        f'websocket_host:=127.0.0.1 websocket_port:={port}'
     )
+    before_runtime_pids = matching_pids([APP_GATEWAY_EXE, DATA_INTEGRATION_EXE])
     proc = subprocess.Popen(
         ['bash', '-lc', cmd],
         cwd=str(WORKSPACE),
@@ -149,6 +182,7 @@ def main():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        start_new_session=True,
     )
     rclpy.init(args=None)
     node = Probe()
@@ -165,11 +199,25 @@ def main():
     finally:
         node.destroy_node()
         rclpy.shutdown()
-        proc.terminate()
+        try:
+            os.killpg(proc.pid, signal.SIGINT)
+        except ProcessLookupError:
+            pass
         try:
             proc.wait(timeout=2)
         except subprocess.TimeoutExpired:
-            proc.kill()
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+        cleanup_new_runtime_processes(before_runtime_pids)
 
 
 if __name__ == '__main__':

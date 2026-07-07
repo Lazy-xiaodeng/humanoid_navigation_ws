@@ -37,7 +37,7 @@
       path_en: false  # 是否发布 /path 轨迹；导航链路当前无人订阅，关闭可减少一点发布开销
       scan_publish_en: true  # 是否发布处理后的实时点云（用于看效果）
       dense_publish_en: true  # 是否发布高密度地图
-      scan_bodyframe_pub_en: false  # 是否发布 /cloud_registered_body；当前无人订阅，关闭不影响 /fast_lio/cloud_registered
+      scan_bodyframe_pub_en: true  # 是否发布 /cloud_registered_body；全局重定位双链路验证需要录制真实 body 点云
       high_frequency_odom_en: false  # 是否发布 /high_frequency_odometry；当前无人订阅，关闭不影响主 /odom
       tf_en: true
 
