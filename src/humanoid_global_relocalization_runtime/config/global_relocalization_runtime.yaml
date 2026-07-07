@@ -1,0 +1,445 @@
+# humanoid_global_relocalization_runtime 全局重定位运行层参数。
+# 本文件用于正式运行态：节点从 LiDAR 点云和先验 PCD 地图中搜索机器人全局位姿，
+# 并输出经过多层门控确认的恢复候选。修改参数后建议先用 rosbag 回放验证，再接入导航恢复状态机。
+
+global_relocalization_node:
+  ros__parameters:
+    # =========================
+    # 输入链路
+    # =========================
+
+    # 点云输入模式。
+    # registered_world：使用 /fast_lio/cloud_registered + /odom，把 Fast-LIO world 点云反变换到 body 后再匹配。
+    # body：使用 /cloud_registered_body，直接读取 Fast-LIO body 点云，链路更短，但需要 Fast-LIO 开启 body 点云发布。
+    # 调成 body 可以减少一次反变换；如果 bag 或实机没有 /cloud_registered_body，应保持 registered_world。
+    input_mode: "registered_world"
+
+    # registered_world 模式下的点云话题。该点云通常位于 Fast-LIO camera_init/raw world 坐标系。
+    # 如果上游 Fast-LIO 改了命名或 launch 做了 remap，需要同步修改这里。
+    registered_world_topic: "/fast_lio/cloud_registered"
+
+    # body 模式下的点云话题。该点云通常位于 Fast-LIO raw body 坐标系。
+    # 开启该模式前必须确认点云轴向和 raw_body_to_base_xyz 外参一致。
+    body_topic: "/cloud_registered_body"
+
+    # Fast-LIO 里程计话题。registered_world 模式必须使用它把 world 点云还原到 raw body。
+    # 同时恢复输出 map->odom 时也需要同一时刻 odom，因此该话题应保持高频、时间戳稳定。
+    odom_topic: "/odom"
+
+    # 点云时间戳与 odom 时间戳允许的最大差值，单位秒。
+    # 调小可避免用错 odom 造成 scan 畸变，但时间同步轻微抖动时会丢帧；调大可提高可用率，但误同步风险上升。
+    odom_time_tolerance_sec: 0.05
+
+    # =========================
+    # 地图配置
+    # =========================
+
+    # 先验 PCD 地图绝对路径。非空时优先使用该路径。
+    # 地图必须与当前机器人所在环境一致；地图越大，构建索引和全局搜索的资源消耗越高。
+    map_path: "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall_open3d_grounded.pcd"
+
+    # 地图目录。map_path 为空且 map_file_name 非空时，会拼接为 map_dir/map_file_name。
+    # 多地图运行时也建议把地图统一放在该目录下，便于后续状态机切换地图。
+    map_dir: "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd"
+
+    # 单地图文件名。只有 map_path 为空时生效。
+    # 调整该项可以在同一目录下切换不同 PCD 地图。
+    map_file_name: "hall_open3d_grounded.pcd"
+
+    # 多地图候选列表。当前运行态默认只使用 map_path；后续接入多地图状态机时可填多个候选。
+    # 列表为空时只加载单张地图；列表非空时会把相对文件名自动拼接到 map_dir。
+    map_candidates: []
+
+    # =========================
+    # 坐标系与输出约束
+    # =========================
+
+    # 是否把 Fast-LIO raw body 轴转换到 ROS base_footprint 标准轴。
+    # 当前 raw body 约定为 x左、y下、z后；base_footprint 约定为 x前、y左、z上。
+    # 正式运行建议保持 true；关闭后会直接用 raw 轴匹配，通常会导致位姿方向错误。
+    convert_raw_body_to_base: true
+
+    # raw body 到 base_footprint 的平移外参，单位 m。
+    # 修改雷达安装位置、body 原点或 base_footprint 原点后必须同步更新；外参错误会带来稳定的平移偏差。
+    raw_body_to_base_xyz: [0.072, -0.004, 1.215]
+
+    # 是否只输出 x/y/yaw 2D 位姿。
+    # 室内导航推荐 true，由 IMU 和地面约束 roll/pitch/z；如果要做坡道、楼层或 6DoF 恢复，可改为 false 后重新验证。
+    force_2d_output: true
+
+    # =========================
+    # 点云预处理
+    # =========================
+
+    # 地图体素降采样尺寸，单位 m。
+    # 调大可降低内存和搜索耗时，但会丢失门框、墙角等细节；调小细节更多，CPU 和内存会上升。
+    map_leaf_size: 0.25
+
+    # 当前 scan 体素降采样尺寸，单位 m。
+    # 调大速度更快但几何约束更弱；调小匹配更稳但每次恢复计算更重。
+    scan_leaf_size: 0.30
+
+    # scan 最小保留距离，单位 m，用于去掉机器人自身、近场噪声和雷达盲区。
+    # 太大可能删掉近处墙角特征；太小可能把机身点带入匹配。
+    min_scan_range: 0.80
+
+    # scan 最大保留距离，单位 m。
+    # 太大容易引入远处稀疏噪点并增加计算；太小会丢失长走廊结构。
+    max_scan_range: 20.0
+
+    # 是否裁剪地图高度。开启后可减少地面/天花板大平面对匹配的干扰。
+    # 如果某些区域主要依赖高处结构区分位置，需要放宽高度范围或关闭。
+    enable_map_z_crop: true
+
+    # 地图高度裁剪下界，单位 m，仅 enable_map_z_crop=true 时生效。
+    map_min_z: -1.0
+
+    # 地图高度裁剪上界，单位 m，仅 enable_map_z_crop=true 时生效。
+    map_max_z: 2.5
+
+    # 是否裁剪当前 scan 高度。开启后可减少地面和天花板平面参与评分。
+    # 若环境需要低矮家具或高处标识作为特征，应调整 scan_min_z/scan_max_z。
+    enable_scan_z_crop: true
+
+    # scan 高度裁剪下界，单位 m，仅 enable_scan_z_crop=true 时生效。
+    scan_min_z: 0.2
+
+    # scan 高度裁剪上界，单位 m，仅 enable_scan_z_crop=true 时生效。
+    scan_max_z: 2.5
+
+    # =========================
+    # 3D-BBS 全局搜索
+    # =========================
+
+    # 3D-BBS 最底层 voxel 分辨率，单位 m。
+    # 调小候选更精细但耗时更高；调大速度更快但更依赖后续 GICP 拉准。
+    bbs_min_level_res: 0.75
+
+    # 3D-BBS 金字塔层数。地图范围越大通常需要更高层数。
+    # 室内单层地图建议 4~6；过高会增加分支层级，过低可能覆盖不足。
+    bbs_max_level: 5
+
+    # voxel 层级倍率。通常保持 2.0。
+    # 增大会让层级更粗，速度可能提升，但评分区分度下降。
+    bbs_voxel_expansion_rate: 2.0
+
+    # 3D-BBS 搜索线程数。
+    # 调大可降低墙钟时间，但会占用更多 CPU；正式导航建议先保持 2，恢复触发时再运行，避免常态抢占导航资源。
+    bbs_num_threads: 2
+
+    # 分数阈值比例。score_threshold=floor(scan_points*该比例)。
+    # 调高更严格、误匹配更少，但遮挡或稀疏 scan 更容易失败；调低更容易出候选，但重复结构风险上升。
+    bbs_score_threshold_percentage: 0.12
+
+    # 搜索超时时间，单位 ms。0 表示不限制。
+    # 上线后建议结合状态机设置非零超时，避免极端点云把恢复线程长时间占住。
+    bbs_timeout_msec: 0
+
+    # x/y/z 搜索范围，单位 m，表示 map 坐标系下 base_footprint 候选范围。
+    # 范围必须覆盖整张可导航地图；范围越大，搜索耗时越高。
+    search_min_xyz: [-35.0, -35.0, -1.0]
+    search_max_xyz: [ 35.0,  35.0,  2.0]
+
+    # roll/pitch/yaw 搜索下界，单位 rad。
+    # 室内带 IMU 重力约束时 roll/pitch 保持小范围，只全范围搜索 yaw。
+    search_min_rpy: [-0.05, -0.05, 0.0]
+
+    # roll/pitch/yaw 搜索上界，单位 rad。yaw=6.283185307 表示整圈搜索。
+    # 如果启动方向有可靠先验，可缩小 yaw 范围提高速度。
+    search_max_rpy: [0.05, 0.05, 6.283185307]
+
+    # 3D-BBS 保留的候选数量。
+    # 调大能让后续多帧/轨迹验证看到更多相似位置，提高困难点召回率；调小更快但容易错过正确候选。
+    top_k: 30
+
+    # =========================
+    # 2D/2.5D BBS 深搜候选召回
+    # =========================
+
+    # 是否启用 2D/2.5D BBS 全图深搜候选召回。
+    # 开启后会额外从多高度层二维距离场中搜索 x/y/yaw 候选，并融合进现有候选池；它不直接发布恢复位姿，仍需通过 GICP、多帧和轨迹门控。
+    # 该功能在 bag46 随机 300 点中证明 top-K 召回很强，但单帧 top1 不安全；正式运行建议由恢复状态机触发运行，并通过 relocalization_min_period_sec 控制频率。
+    enable_bbs2d_recall: true
+
+    # 2D/2.5D BBS 最细二维栅格分辨率，单位 m。
+    # 调小会提高候选平移精度，但全图搜索 CPU 和内存上升；调大会更快，但正确候选可能需要后续 GICP 拉回。
+    bbs2d_base_resolution: 0.20
+
+    # 2D/2.5D BBS 粗到细搜索层级倍率。
+    # 例如 [8,4,2,1] 表示先用 1.6m 网格全图搜索，再逐层细化到 0.2m；层数越多越稳但耗时更高。
+    bbs2d_pyramid_factors: [8, 4, 2, 1]
+
+    # 2D/2.5D BBS yaw 枚举步长，单位 deg。
+    # 调小朝向更准但枚举数量线性增加；调大速度快但容易把正确朝向排到较低分。
+    bbs2d_yaw_step_deg: 5.0
+
+    # 2D/2.5D BBS 高度层配置，格式为 [min0,max0,min1,max1,...]，单位 m。
+    # 多高度层能把低处墙面、中部障碍和高处结构分开评分，减少单一 2D 投影导致的歧义。
+    bbs2d_height_bands: [0.2, 0.8, 0.8, 1.5, 1.5, 2.2]
+
+    # scan 点投到地图二维距离场时允许的最大贴图距离，单位 m。
+    # 调大可容忍地图稀疏和点云噪声，但相似走廊也更容易得高分；调小更严格但遮挡时可能召回变差。
+    bbs2d_distance_tolerance_m: 0.45
+
+    # 2D/2.5D BBS 评分时每隔多少个 scan 点取一个点。
+    # 1 表示使用全部点；调大可以降 CPU，但会降低细节约束，建议只在恢复计算超时时再增大。
+    bbs2d_scan_point_step: 1
+
+    # 2D/2.5D BBS 每一层保留的中间候选数量。
+    # 调大能减少粗层剪掉正确区域的概率，但细化层计算量会上升；当前离线验证推荐 12000。
+    bbs2d_level_keep_candidates: 12000
+
+    # 2D/2.5D BBS 最终输出候选数量。
+    # 该值只影响候选池召回，不代表会发布这么多恢复位姿；后续 GICP 和轨迹门控会继续筛选。
+    bbs2d_top_k: 80
+
+    # 2D/2.5D BBS 最终 NMS 平移阈值，单位 m。
+    # 调大可让候选分布更分散，适合重复区域多假设；调小会保留更多同一盆地附近的重复候选。
+    bbs2d_nms_xy_m: 2.0
+
+    # 2D/2.5D BBS 最终 NMS yaw 阈值，单位 deg。
+    # 调大可保留不同位置的主候选，减少同一位置多朝向刷屏；调小则保留更多朝向假设。
+    bbs2d_nms_yaw_deg: 30.0
+
+    # 候选融合时优先保留多少个原 3D-BBS 候选。
+    # 保留前缀可以避免 2.5D 深搜把原本很准的 3D-BBS top 候选挤掉；调小会更偏向深搜候选。
+    bbs2d_fuse_prefix_3d_candidates: 10
+
+    # 2D/2.5D 候选与已有候选去重的平移阈值，单位 m。
+    # 如果 2.5D 候选与 3D-BBS/Scan Context seed 已经很接近，就只保留先出现的候选，避免重复 GICP。
+    bbs2d_duplicate_xy_gate_m: 0.30
+
+    # 2D/2.5D 候选与已有候选去重的 yaw 阈值，单位 deg。
+    # 过大可能误删不同朝向候选；过小会增加重复候选和精配准耗时。
+    bbs2d_duplicate_yaw_gate_deg: 5.0
+
+    # =========================
+    # 精配准
+    # =========================
+
+    # 精配准方法。gicp 是当前推荐值。
+    # none 仅使用粗搜索；icp 速度快但稳定性较弱；gicp 对 3D LiDAR scan-to-map 更稳；ndt 可作为特定地图的备选。
+    refine_method: "gicp"
+
+    # 是否对 top-K 中多个候选分别精配准后再选择最终位姿。
+    # 开启可救回 top1 错但 topK 中有正确解的情况；关闭速度更快但更容易被重复结构误导。
+    refine_top_k: true
+
+    # 最多精配准候选数量。
+    # 调大提高召回概率但耗时近似线性增加；当前推荐 8，后续恢复状态机可在主动恢复阶段临时加大。
+    max_refine_candidates: 8
+
+    # 精配准最大迭代次数。
+    # 调大可能改善收敛但耗时增加；调小速度快但可能停在粗糙位姿。
+    refine_max_iterations: 25
+
+    # 精配准最大对应距离，单位 m。
+    # 调大更容易从粗候选拉回，但错误候选也可能被拉到相似结构；调小更安全但要求 BBS seed 更准。
+    refine_max_correspondence_distance: 1.5
+
+    # 精配准变换收敛阈值。越小越严格，耗时可能增加。
+    refine_transformation_epsilon: 0.001
+
+    # 精配准欧氏 fitness 收敛阈值。越小越严格，耗时可能增加。
+    refine_euclidean_fitness_epsilon: 0.001
+
+    # NDT 体素分辨率，仅 refine_method=ndt 时生效。
+    ndt_resolution: 1.0
+
+    # NDT 步长，仅 refine_method=ndt 时生效。
+    ndt_step_size: 0.1
+
+    # NDT 外点比例，仅 refine_method=ndt 时生效。
+    ndt_outlier_ratio: 0.55
+
+    # =========================
+    # 多帧确认与恢复门控
+    # =========================
+
+    # 是否启用多帧一致性门控。
+    # 开启后，节点不会只凭单帧结果输出恢复量，而会检查当前候选隐含的 map->odom 是否在历史窗口中稳定出现。
+    enable_temporal_consistency: true
+
+    # 多帧窗口向当前帧之前看多少个搜索结果。
+    # 调大可利用更长历史降低误恢复；调太大响应变慢，也可能混入过旧运动状态。
+    temporal_consistency_window_before: 4
+
+    # 多帧窗口向当前帧之后看多少个搜索结果。实时运行必须保持 0。
+    temporal_consistency_window_after: 0
+
+    # 判断两个隐含 map->odom 属于同一簇的平移阈值，单位 m。
+    temporal_consistency_xy_gate_m: 1.0
+
+    # 判断两个隐含 map->odom 属于同一簇的 yaw 阈值，单位 deg。
+    temporal_consistency_yaw_gate_deg: 12.0
+
+    # 输出恢复候选前，selected candidate 至少需要多少帧历史支持。
+    # 调大更安全但等待更久；调小响应快但重复走廊误恢复风险更高。
+    temporal_consistency_online_min_support_frames: 2
+
+    # 多帧确认后，最终精配准 fitness 允许的最大值。
+    # 值越小越保守；当前 0.12 用于挡住稳定但贴图质量差的重复结构候选。
+    temporal_consistency_online_max_refine_fitness: 0.12
+
+    # 在线节点保留的历史搜索结果数量。
+    # 调大可在定位丢失后使用更长轨迹恢复；内存和后续 trajectory likelihood 计算会增加。
+    temporal_consistency_online_max_history_frames: 30
+
+    # 是否启用单帧极高置信补救。
+    # 只有 selected 候选历史支持不足但精配准 fitness 极低时才可能输出；用于减少刚启动时等待历史帧的时间。
+    single_frame_high_confidence_fallback_enable: true
+
+    # 单帧极高置信补救允许的最大 fitness。
+    # 调低更安全但可救回点更少；调高可能在重复结构里误恢复。
+    single_frame_high_confidence_max_fitness: 0.02
+
+    # 是否启用历史轨迹 scan-map likelihood。
+    # 第一层多帧支持不足或精配质量不足时，会用历史 scan/odom 对候选做更强验证。
+    enable_trajectory_likelihood: true
+
+    # 轨迹 likelihood 最多评估当前帧前多少个候选。
+    # 调大能处理正确解排名靠后的困难点，但恢复计算更重。
+    trajectory_likelihood_max_candidates: 30
+
+    # 轨迹 likelihood 使用的地图占据体素大小，单位 m。
+    trajectory_likelihood_voxel_size: 0.35
+
+    # 轨迹 likelihood 查询地图占据时允许的体素邻域半径。
+    trajectory_likelihood_neighbor_radius: 1
+
+    # 单帧 scan-map overlap 支持阈值。
+    trajectory_likelihood_min_overlap_ratio: 0.18
+
+    # 轨迹候选在历史窗口上的平均 overlap 接受阈值。
+    trajectory_likelihood_min_average_overlap: 0.95
+
+    # 轨迹最佳候选与第二个不同位姿簇的最小 overlap 差值。
+    trajectory_likelihood_min_margin: 0.0015
+
+    # 是否启用“轨迹候选 + 单帧精配准一致”的补救规则。
+    # 用于主动恢复阶段的新视角：当轨迹 overlap 略低，但单帧精配准与轨迹候选高度一致时允许输出。
+    trajectory_single_agreement_fallback_enable: true
+
+    # 单帧一致性补救允许的最大精配准 fitness。
+    trajectory_single_agreement_max_fitness: 0.04
+
+    # 单帧一致性补救要求轨迹候选与单帧最终位姿的最大平移差，单位 m。
+    trajectory_single_agreement_max_xy_m: 1.0
+
+    # 单帧一致性补救要求轨迹候选与单帧最终位姿的最大 yaw 差，单位 deg。
+    trajectory_single_agreement_max_yaw_deg: 3.0
+
+    # 单帧一致性补救允许的最低历史平均 overlap。
+    trajectory_single_agreement_min_overlap: 0.80
+
+    # 单帧一致性补救要求的最低竞争 margin。
+    trajectory_single_agreement_min_margin: 0.005
+
+    # =========================
+    # Scan Context 候选召回
+    # =========================
+
+    # 是否启用 Scan Context 候选召回。
+    # 开启后，系统会用当前 scan 查询 keyframe 描述子数据库，把相似 keyframe 的 map 位姿作为额外 GICP 初值。
+    # 它能提高冷启动和重复结构场景下“正确候选进入精配准池”的概率；代价是需要维护 keyframe 数据库并增加少量匹配计算。
+    enable_scan_context_recall: false
+
+    # Scan Context 描述子数据库路径。
+    # 运行态建议填写建图/离线验证阶段生成的 CSV 文件；文件只保存 keyframe 位姿和描述子，不保存原始点云。
+    # 路径为空时，运行节点无法使用 Scan Context 召回；离线 evaluator 可退回从 bag 临时抽 keyframe 建库。
+    scan_context_database_path: ""
+
+    # Scan Context 描述子数据库保存路径。
+    # 主要给离线 evaluator 使用：从 bag 抽 keyframe 建库后写成 CSV，后续运行态可通过 scan_context_database_path 加载。
+    # 运行节点通常不写该文件，避免在线过程修改建图资产。
+    scan_context_save_database_path: ""
+
+    # keyframe 抽样间隔，单位为点云帧数。
+    # 离线 bag 验证时每隔该数量抽一帧进入描述子数据库；值越小数据库越密、召回更可能成功，但内存和查询耗时增加。
+    # 上线时建议由建图阶段生成稳定 keyframe 数据库，而不是直接从运行 bag 抽样。
+    scan_context_keyframe_stride: 80
+
+    # 描述子查询保留的 top-K keyframe 数量。
+    # 调大能提高正确位置被召回的概率，但会生成更多 GICP 初值，深搜阶段耗时上升。
+    scan_context_top_k: 20
+
+    # 离线验证时排除当前帧前后多少个 cloud index 的 keyframe。
+    # 作用是避免把几乎同一时刻的 scan 放进数据库造成“答案泄漏”；上线使用离线地图 keyframe 时该值主要用于回归测试。
+    scan_context_exclude_index_radius: 120
+
+    # Scan Context 距离环数量。
+    # 调大可保留更细的径向结构，但描述子更稀疏，对噪声更敏感；调小更稳但区分度下降。
+    scan_context_rings: 20
+
+    # Scan Context 方位扇区数量。
+    # 调大 yaw 分辨率更细，shift 估计更准；调小匹配更快但朝向初值更粗。
+    scan_context_sectors: 60
+
+    # 描述子最大使用半径，单位 m。
+    # 调大可利用更远墙面/走廊结构，但也更容易引入远处动态物体和遮挡差异；室内当前推荐 20m。
+    scan_context_max_radius: 20.0
+
+    # 描述子最小使用距离，单位 m。
+    # 用于去掉机器人自身和近距离噪点；过大会损失近处墙角，过小会把机身点编码进去。
+    scan_context_min_range: 0.80
+
+    # 描述子高度裁剪下界，单位 m。
+    # 与 scan 预处理一致，主要去掉地面和低矮噪声。
+    scan_context_min_z: 0.2
+
+    # 描述子高度裁剪上界，单位 m。
+    # 与 scan 预处理一致，主要去掉天花板大片平面。
+    scan_context_max_z: 2.5
+
+    # 是否使用描述子最佳循环移位估计 yaw 初值。
+    # 开启可支持任意朝向冷启动；如果某个雷达/轴系下 shift 符号不稳定，可先关闭并只使用 yaw_offsets 兜底。
+    scan_context_use_shift_yaw: true
+
+    # 在描述子估计 yaw 的基础上额外尝试的角度偏移，单位 deg。
+    # 增加偏移能容忍 shift 量化误差，但每多一个偏移都会多一个 GICP 初值，耗时近似线性增加。
+    scan_context_yaw_offsets_deg: [-10.0, 0.0, 10.0]
+
+    # 融合候选去重的平移阈值，单位 m。
+    # BBS 和 Scan Context 给出接近 seed 时只保留一个，避免重复 GICP 浪费计算。
+    scan_context_duplicate_xy_gate_m: 0.30
+
+    # 融合候选去重的 yaw 阈值，单位 deg。
+    # 过小会保留很多几乎相同朝向的 seed，过大可能误删真正不同朝向候选。
+    scan_context_duplicate_yaw_gate_deg: 5.0
+
+    # =========================
+    # 运行态输出
+    # =========================
+
+    # 是否启用实时重定位搜索。
+    # false：节点只加载配置并保持运行，不订阅点云、不占用搜索 CPU。
+    # true：节点订阅点云并在节流间隔到达时执行全局搜索，输出恢复候选和状态。
+    enable_relocalization: false
+
+    # 两次实时搜索之间的最小间隔，单位秒。
+    # 调大可降低 CPU；调小响应更快但会抢占导航系统资源。正式接入时建议由恢复状态机按需触发。
+    relocalization_min_period_sec: 1.0
+
+    # 候选位姿数组输出话题，类型 geometry_msgs/PoseArray。
+    # 用于恢复状态机或运维工具查看 top-K 位置分布，不建议作为最终恢复量直接使用。
+    candidate_pose_array_topic: "/global_relocalization/candidates"
+
+    # 候选可视化 marker 输出话题，类型 visualization_msgs/MarkerArray。
+    # 仅用于 RViz 和现场运维观察，关闭订阅不会影响恢复结果。
+    candidate_marker_topic: "/global_relocalization/candidate_markers"
+
+    # 当前 scan 按最佳候选对齐到地图后的点云输出话题，类型 sensor_msgs/PointCloud2。
+    # 用于检查匹配质量，不作为导航输入。
+    aligned_cloud_topic: "/global_relocalization/aligned_scan"
+
+    # 确认后的 map->base_footprint 恢复候选输出话题，类型 geometry_msgs/PoseStamped，frame_id=map。
+    # 这是给上层恢复状态机审核的候选位姿；本节点本身不发布 TF。
+    recovery_pose_topic: "/global_relocalization/recovery_pose"
+
+    # 确认后的 map->odom 恢复量输出话题，类型 geometry_msgs/PoseStamped，frame_id=map。
+    # 计算方式为 refined_map_to_base * inverse(current_odom_to_base)，上层审核通过后可用于定位桥恢复。
+    recovery_map_odom_topic: "/global_relocalization/recovery_map_to_odom"
+
+    # 重定位状态输出话题，类型 std_msgs/String。
+    # 状态包含 accepted/rejected、需要等待历史、需要主动采集新视角等原因，供恢复状态机和日志审计使用。
+    recovery_status_topic: "/global_relocalization/recovery_status"

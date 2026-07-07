@@ -1,0 +1,94 @@
+# nav_drift_test 快速冒烟验证配置。
+#
+# 该文件属于 test/ 验证配置，不是功能节点默认配置。
+# 它只抽取 nav_drift_test45 的 1 帧，用一张地图和两个 refine 方法先确认：
+#   - /fast_lio/cloud_registered + /odom 反变换链路能跑通；
+#   - /robot_realpose 能按时间戳匹配；
+#   - metrics/candidates/summary CSV 字段完整；
+#   - none/gicp 两条 refine 路径能正常输出。
+
+global_relocalization_eval:
+  ros__parameters:
+    input_mode: "registered_world"
+    registered_world_topic: "/fast_lio/cloud_registered"
+    body_topic: "/cloud_registered_body"
+    odom_topic: "/odom"
+    single_scan_pcd_path: ""
+    bag_paths:
+      - "/home/ubuntu/nav_drift_test/nav_drift_test45"
+    bag_start_frame_skip: 30
+    max_bag_frames: 1
+    bag_frame_stride: 2500
+    odom_time_tolerance_sec: 0.05
+
+    map_path: ""
+    map_dir: "/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd"
+    map_file_name: "hall_open3d_grounded.pcd"
+    map_candidates:
+      - "hall_open3d_grounded.pcd"
+    output_dir: "/home/ubuntu/software/Todesk/Files/humanoid_ws/.codex_tmp/global_relocalization_nav_drift_smoke_v4_zcrop"
+
+    convert_raw_body_to_base: true
+    raw_body_to_base_xyz: [0.072, -0.004, 1.215]
+    force_2d_output: true
+
+    map_leaf_size: 0.35
+    scan_leaf_size: 0.35
+    min_scan_range: 0.80
+    max_scan_range: 20.0
+    enable_map_z_crop: true
+    map_min_z: 0.2
+    map_max_z: 2.5
+    enable_scan_z_crop: true
+    scan_min_z: 0.2
+    scan_max_z: 2.5
+
+    bbs_min_level_res: 1.0
+    bbs_max_level: 4
+    bbs_voxel_expansion_rate: 2.0
+    bbs_num_threads: 8
+    bbs_score_threshold_percentage: 0.12
+    bbs_timeout_msec: 0
+    search_min_xyz: [-35.0, -35.0, -1.0]
+    search_max_xyz: [ 35.0,  35.0,  2.0]
+    search_min_rpy: [-0.05, -0.05, 0.0]
+    search_max_rpy: [0.05, 0.05, 6.283185307]
+    top_k: 5
+
+    refine_method: "gicp"
+    refine_methods_for_sweep: ["none", "gicp"]
+    refine_top_k: true
+    max_refine_candidates: 3
+    refine_max_iterations: 25
+    refine_max_correspondence_distance: 1.5
+    refine_transformation_epsilon: 0.001
+    refine_euclidean_fitness_epsilon: 0.001
+    ndt_resolution: 1.0
+    ndt_step_size: 0.1
+    ndt_outlier_ratio: 0.55
+    refine_with_gicp: true
+    gicp_max_iterations: 25
+    gicp_max_correspondence_distance: 1.5
+    gicp_transformation_epsilon: 0.001
+
+    reference_pose_xyzrpy: []
+    use_bag_reference_pose: true
+    reference_pose_topic: "/robot_realpose"
+    reference_time_tolerance_sec: 0.05
+    success_translation_thresh: 0.80
+    success_yaw_thresh_deg: 15.0
+
+    save_aligned_cloud: false
+    metrics_csv_name: "global_relocalization_metrics.csv"
+    candidates_csv_name: "global_relocalization_candidates.csv"
+    summary_csv_name: "global_relocalization_summary.csv"
+
+    simulated_relocalization_cases:
+      - name: "arbitrary_start_no_prior"
+        offset_xyzrpy: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    enable_online_search: false
+    online_min_period_sec: 1.0
+    candidate_pose_array_topic: "/global_relocalization/candidates"
+    candidate_marker_topic: "/global_relocalization/candidate_markers"
+    aligned_cloud_topic: "/global_relocalization/aligned_scan"
