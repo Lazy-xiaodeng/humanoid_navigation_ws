@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_REPO_URL="https://github.com/Lazy-xiaodeng/humanoid_navigation_ws.git"
 WORKSPACE="${WORKSPACE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 REPO_URL="${REPO_URL:-$DEFAULT_REPO_URL}"
-BRANCH="${BRANCH:-main}"
+BRANCH="${BRANCH:-c++}"
 ROS_DISTRO="${ROS_DISTRO:-jazzy}"
 APT_DEP_FILE="${APT_DEP_FILE:-$SCRIPT_DIR/apt_dependencies_ubuntu24_jazzy.txt}"
 FASTDDS_TEMPLATE="${FASTDDS_TEMPLATE:-$SCRIPT_DIR/fastdds_shm.xml}"
@@ -69,7 +69,7 @@ Ubuntu/ROS/rosdep mirrors, persistent shell environment, and a Release build.
 Options:
   --workspace PATH       Workspace path. Default: parent of this tools directory.
   --repo URL             Git repository URL for empty workspaces. Default: $DEFAULT_REPO_URL
-  --branch NAME          Git branch for empty/git workspaces. Default: main
+  --branch NAME          Git branch for empty/git workspaces. Default: c++
   --skip-oneapi          Do not install Intel oneAPI packages.
   --skip-rosdep          Skip rosdep install.
   --no-build             Install dependencies only; skip colcon build.
@@ -310,12 +310,20 @@ prepare_workspace() {
     return 0
   fi
 
-  if [ -e "$WORKSPACE" ] && [ -n "$(find "$WORKSPACE" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+  if [ -e "$WORKSPACE" ] && [ -n "$(find "$WORKSPACE" -mindepth 1 -maxdepth 1 ! -name tools -print -quit 2>/dev/null)" ]; then
     die "$WORKSPACE exists but does not look like humanoid_ws. Move it away or pass --workspace."
   fi
 
   mkdir -p "$(dirname "$WORKSPACE")"
-  git clone --branch "$BRANCH" "$REPO_URL" "$WORKSPACE"
+  if [ -e "$WORKSPACE" ] && [ -n "$(find "$WORKSPACE" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+    local tmp_workspace
+    tmp_workspace="$(mktemp -d "$(dirname "$WORKSPACE")/.humanoid_ws_clone.XXXXXX")"
+    git clone --branch "$BRANCH" "$REPO_URL" "$tmp_workspace"
+    cp -a "$tmp_workspace"/. "$WORKSPACE"/
+    rm -rf "$tmp_workspace"
+  else
+    git clone --branch "$BRANCH" "$REPO_URL" "$WORKSPACE"
+  fi
 }
 
 patch_ros_distro_scripts() {

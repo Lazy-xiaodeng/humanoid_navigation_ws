@@ -2,7 +2,10 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_REPO_URL="https://github.com/Lazy-xiaodeng/humanoid_navigation_ws.git"
 WORKSPACE="${WORKSPACE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+REPO_URL="${REPO_URL:-$DEFAULT_REPO_URL}"
+BRANCH="${BRANCH:-c++}"
 ROS_DISTRO="${ROS_DISTRO:-humble}"
 APT_DEP_FILE="${APT_DEP_FILE:-$SCRIPT_DIR/apt_dependencies_ubuntu22_humble_jetson.txt}"
 FASTDDS_TEMPLATE="${FASTDDS_TEMPLATE:-$SCRIPT_DIR/fastdds_shm.xml}"
@@ -14,7 +17,9 @@ RUN_SELF_CHECK=1
 RUN_NAVIGATION=0
 CLEAN_BUILD=0
 CONFIGURE_TUNA_APT=1
-HUMANOID_ENV_FILE="${HUMANOID_ENV_FILE:-$HOME/.config/humanoid_ws_jetson.env}"
+HUMANOID_ENV_FILE="${HUMANOID_ENV_FILE:-}"
+DEFAULT_RMW_IMPLEMENTATION="${DEFAULT_RMW_IMPLEMENTATION:-}"
+DEFAULT_ENABLE_FASTDDS_SHM="${DEFAULT_ENABLE_FASTDDS_SHM:-}"
 
 ROSDEP_SKIP_KEYS=(
   ament_python
@@ -65,6 +70,8 @@ then build the workspace. Supports Jetson/ARM64 and AMD64/x86_64 hosts.
 
 Options:
   --workspace PATH       Workspace path. Default: parent of this tools directory.
+  --repo URL             Git repository URL for empty workspaces. Default: $DEFAULT_REPO_URL
+  --branch NAME          Git branch for empty/git workspaces. Default: c++
   --parallel N           Open3D build parallel workers. Default: 2.
   --skip-open3d          Skip Open3D source-build fallback.
   --skip-rosdep          Skip rosdep install.
@@ -86,6 +93,14 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --workspace)
       WORKSPACE="${2:?--workspace requires a path}"
+      shift 2
+      ;;
+    --repo)
+      REPO_URL="${2:?--repo requires a URL}"
+      shift 2
+      ;;
+    --branch)
+      BRANCH="${2:?--branch requires a branch name}"
       shift 2
       ;;
     --parallel)
@@ -146,9 +161,40 @@ require_target_system() {
   esac
 }
 
+prepare_workspace() {
+  if [ -d "$WORKSPACE/src" ] && [ -f "$WORKSPACE/src/humanoid_bringup/package.xml" ]; then
+    log "Existing humanoid_ws source tree detected; skipping git clone."
+    return 0
+  fi
+
+  if [ -d "$WORKSPACE/.git" ]; then
+    log "Existing git workspace detected; updating $BRANCH from $REPO_URL."
+    cd "$WORKSPACE"
+    git remote set-url origin "$REPO_URL"
+    git fetch origin "$BRANCH"
+    git checkout "$BRANCH"
+    git pull --ff-only origin "$BRANCH"
+    return 0
+  fi
+
+  if [ -e "$WORKSPACE" ] && [ -n "$(find "$WORKSPACE" -mindepth 1 -maxdepth 1 ! -name tools -print -quit 2>/dev/null)" ]; then
+    die "$WORKSPACE exists but does not look like humanoid_ws. Move it away or pass --workspace."
+  fi
+
+  mkdir -p "$(dirname "$WORKSPACE")"
+  log "Cloning $REPO_URL branch $BRANCH into $WORKSPACE."
+  if [ -e "$WORKSPACE" ] && [ -n "$(find "$WORKSPACE" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+    local tmp_workspace
+    tmp_workspace="$(mktemp -d "$(dirname "$WORKSPACE")/.humanoid_ws_clone.XXXXXX")"
+    git clone --branch "$BRANCH" "$REPO_URL" "$tmp_workspace"
+    cp -a "$tmp_workspace"/. "$WORKSPACE"/
+    rm -rf "$tmp_workspace"
+  else
+    git clone --branch "$BRANCH" "$REPO_URL" "$WORKSPACE"
+  fi
+}
+
 require_workspace() {
-  [ -d "$WORKSPACE/src" ] || die "Workspace source directory not found: $WORKSPACE/src"
-  [ -f "$WORKSPACE/src/humanoid_bringup/package.xml" ] || die "This does not look like the humanoid_ws root: $WORKSPACE"
   [ -f "$APT_DEP_FILE" ] || die "Missing apt dependency file: $APT_DEP_FILE"
 }
 
@@ -171,6 +217,44 @@ normalized_arch() {
       uname -m
       ;;
   esac
+}
+
+configure_host_defaults() {
+  local arch
+  arch="$(normalized_arch)"
+
+  if [ -z "$HUMANOID_ENV_FILE" ]; then
+    case "$arch" in
+      aarch64)
+        HUMANOID_ENV_FILE="$HOME/.config/humanoid_ws_jetson.env"
+        ;;
+      x86_64)
+        HUMANOID_ENV_FILE="$HOME/.config/humanoid_ws_humble.env"
+        ;;
+    esac
+  fi
+
+  if [ -z "$DEFAULT_RMW_IMPLEMENTATION" ]; then
+    case "$arch" in
+      aarch64)
+        DEFAULT_RMW_IMPLEMENTATION="rmw_cyclonedds_cpp"
+        ;;
+      x86_64)
+        DEFAULT_RMW_IMPLEMENTATION="rmw_fastrtps_cpp"
+        ;;
+    esac
+  fi
+
+  if [ -z "$DEFAULT_ENABLE_FASTDDS_SHM" ]; then
+    case "$arch" in
+      aarch64)
+        DEFAULT_ENABLE_FASTDDS_SHM="false"
+        ;;
+      x86_64)
+        DEFAULT_ENABLE_FASTDDS_SHM="true"
+        ;;
+    esac
+  fi
 }
 
 configure_tuna_apt_sources() {
@@ -400,8 +484,8 @@ install_workspace_dependencies() {
 
 append_bashrc_block() {
   log "Configuring persistent shell environment"
-  local begin="# >>> humanoid_ws ubuntu22 humble jetson bootstrap >>>"
-  local end="# <<< humanoid_ws ubuntu22 humble jetson bootstrap <<<"
+  local begin="# >>> humanoid_ws ubuntu22 humble bootstrap >>>"
+  local end="# <<< humanoid_ws ubuntu22 humble bootstrap <<<"
   local open3d_dir
   open3d_dir="$(detect_open3d_dir || true)"
   [ -n "$open3d_dir" ] || {
@@ -420,9 +504,15 @@ append_bashrc_block() {
 export HUMANOID_WS="$WORKSPACE"
 export ROS_DISTRO="$ROS_DISTRO"
 export ROS_DOMAIN_ID="\${ROS_DOMAIN_ID:-0}"
-export RMW_IMPLEMENTATION="\${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
-export FASTRTPS_DEFAULT_PROFILES_FILE="\${FASTRTPS_DEFAULT_PROFILES_FILE:-\$HOME/.config/fastdds_shm.xml}"
-export RMW_FASTRTPS_USE_QOS_FROM_XML="\${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
+export RMW_IMPLEMENTATION="\${RMW_IMPLEMENTATION:-$DEFAULT_RMW_IMPLEMENTATION}"
+export ENABLE_FASTDDS_SHM="\${ENABLE_FASTDDS_SHM:-$DEFAULT_ENABLE_FASTDDS_SHM}"
+if [ "\$RMW_IMPLEMENTATION" = "rmw_fastrtps_cpp" ] && [ "\$ENABLE_FASTDDS_SHM" = "true" ]; then
+  export FASTRTPS_DEFAULT_PROFILES_FILE="\${FASTRTPS_DEFAULT_PROFILES_FILE:-\$HOME/.config/fastdds_shm.xml}"
+  export RMW_FASTRTPS_USE_QOS_FROM_XML="\${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
+else
+  unset FASTRTPS_DEFAULT_PROFILES_FILE
+  unset RMW_FASTRTPS_USE_QOS_FROM_XML
+fi
 export Open3D_DIR="\${Open3D_DIR:-$open3d_dir}"
 export LD_LIBRARY_PATH="$open3d_lib_dir:\${LD_LIBRARY_PATH:-}"
 
@@ -476,9 +566,15 @@ build_workspace() {
   cd "$WORKSPACE"
   source_ros_setup
 
-  export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
-  export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-$HOME/.config/fastdds_shm.xml}"
-  export RMW_FASTRTPS_USE_QOS_FROM_XML="${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
+  export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-$DEFAULT_RMW_IMPLEMENTATION}"
+  export ENABLE_FASTDDS_SHM="${ENABLE_FASTDDS_SHM:-$DEFAULT_ENABLE_FASTDDS_SHM}"
+  if [ "$RMW_IMPLEMENTATION" = "rmw_fastrtps_cpp" ] && [ "$ENABLE_FASTDDS_SHM" = "true" ]; then
+    export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-$HOME/.config/fastdds_shm.xml}"
+    export RMW_FASTRTPS_USE_QOS_FROM_XML="${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
+  else
+    unset FASTRTPS_DEFAULT_PROFILES_FILE
+    unset RMW_FASTRTPS_USE_QOS_FROM_XML
+  fi
   export Open3D_DIR="${Open3D_DIR:-$(detect_open3d_dir || true)}"
   [ -n "$Open3D_DIR" ] || die "Open3DConfig.cmake not found. Install libopen3d-dev/python3-open3d or run without --skip-open3d."
   export LD_LIBRARY_PATH="$(open3d_library_dir "$Open3D_DIR"):${LD_LIBRARY_PATH:-}"
@@ -526,12 +622,14 @@ run_navigation_optional() {
 
 main() {
   require_target_system
+  configure_host_defaults
   require_workspace
   require_sudo
   configure_tuna_apt_sources
   configure_ros_apt_source
   install_apt_dependencies
   init_rosdep
+  prepare_workspace
   patch_ros_distro_scripts
   write_fastdds_profile
   install_open3d_aarch64
@@ -542,7 +640,7 @@ main() {
   self_check
   run_navigation_optional
 
-  log "Jetson Humble bootstrap finished."
+  log "Ubuntu 22.04 Humble bootstrap finished."
   log "Workspace: $WORKSPACE"
   log "Next shell: source ~/.bashrc"
   log "Start navigation: cd $WORKSPACE && ./start_navigation.sh"

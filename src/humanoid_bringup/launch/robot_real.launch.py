@@ -20,6 +20,7 @@ def generate_launch_description():
     # 2. 声明参数
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     use_rviz = LaunchConfiguration('rviz', default='false')
+    enable_fastdds_shm = LaunchConfiguration('enable_fastdds_shm', default='true')
     # relocalization_engine 用来选择“一键启动”里的定位链路：
     #   ro / robosense : RoboSense lidar_localization + prior_map_odom_bridge
     #   op / prior     : Open3D prior-map localization + prior_map_odom_bridge
@@ -57,7 +58,10 @@ def generate_launch_description():
     launch_nav2_ro = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_navigation2, 'launch', 'navigation2_robosense_lidar.launch.py')),
-        launch_arguments={'use_sim_time': use_sim_time}.items(),
+        launch_arguments={
+            'use_sim_time': use_sim_time,
+            'enable_fastdds_shm': enable_fastdds_shm,
+        }.items(),
         condition=IfCondition(use_ro)
     )
 
@@ -66,7 +70,10 @@ def generate_launch_description():
     launch_nav2_op = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_navigation2, 'launch', 'navigation2.launch.py')),
-        launch_arguments={'use_sim_time': use_sim_time}.items(),
+        launch_arguments={
+            'use_sim_time': use_sim_time,
+            'enable_fastdds_shm': enable_fastdds_shm,
+        }.items(),
         condition=IfCondition(use_op)
     )
 
@@ -120,6 +127,8 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('rviz', default_value='true', description='Whether to start RViz'),
+        DeclareLaunchArgument('enable_fastdds_shm', default_value='true',
+                              description='Whether child navigation launches should force FastDDS SHM'),
         DeclareLaunchArgument('relocalization_engine', default_value='ro',
                               description='Nav2 stack: ro/robosense (default) | op/prior (Open3D prior-map)'),
 

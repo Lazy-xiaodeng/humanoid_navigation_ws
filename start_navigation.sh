@@ -21,6 +21,24 @@ case "$OPEN3D_ARCH" in
   *) OPEN3D_ARCH_DIR="" ;;
 esac
 
+if [ -z "${ROS_DISTRO:-}" ]; then
+  if [ -f /opt/ros/jazzy/setup.bash ]; then
+    ROS_DISTRO="jazzy"
+  elif [ -f /opt/ros/humble/setup.bash ]; then
+    ROS_DISTRO="humble"
+  else
+    ROS_DISTRO="jazzy"
+  fi
+fi
+export ROS_DISTRO
+
+DEFAULT_RMW_IMPLEMENTATION="rmw_fastrtps_cpp"
+DEFAULT_ENABLE_FASTDDS_SHM="true"
+if [ "$OPEN3D_ARCH_DIR" = "aarch64" ]; then
+  DEFAULT_RMW_IMPLEMENTATION="rmw_cyclonedds_cpp"
+  DEFAULT_ENABLE_FASTDDS_SHM="false"
+fi
+
 if [ -n "$OPEN3D_ARCH_DIR" ] && [ -d "$WORKSPACE/src/humanoid_prior_localization_runtime/third_party/open3d/$OPEN3D_ARCH_DIR/open3d-0.18.0/lib/cmake/Open3D" ]; then
   export Open3D_DIR="${Open3D_DIR:-$WORKSPACE/src/humanoid_prior_localization_runtime/third_party/open3d/$OPEN3D_ARCH_DIR/open3d-0.18.0/lib/cmake/Open3D}"
   export LD_LIBRARY_PATH="$WORKSPACE/src/humanoid_prior_localization_runtime/third_party/open3d/$OPEN3D_ARCH_DIR/open3d-0.18.0/lib:${LD_LIBRARY_PATH:-}"
@@ -220,19 +238,25 @@ cleanup_control_console_simulators() {
 
 cd "$WORKSPACE"
 
-if [ ! -f /opt/ros/jazzy/setup.bash ]; then
-  echo "ERROR: /opt/ros/jazzy/setup.bash not found"
+if [ ! -f "/opt/ros/$ROS_DISTRO/setup.bash" ]; then
+  echo "ERROR: /opt/ros/$ROS_DISTRO/setup.bash not found"
   exit 1
 fi
 
-source /opt/ros/jazzy/setup.bash
+source "/opt/ros/$ROS_DISTRO/setup.bash"
 
 # Keep the parent launch process and every child node on the same DDS profile.
 # Large PointCloud2 topics such as /airy_points need this profile to avoid
 # falling back to slow inter-process transport during navigation startup.
-export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
-export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-$HOME/.config/fastdds_shm.xml}"
-export RMW_FASTRTPS_USE_QOS_FROM_XML="${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
+export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-$DEFAULT_RMW_IMPLEMENTATION}"
+export ENABLE_FASTDDS_SHM="${ENABLE_FASTDDS_SHM:-$DEFAULT_ENABLE_FASTDDS_SHM}"
+if [ "$RMW_IMPLEMENTATION" = "rmw_fastrtps_cpp" ] && [ "$ENABLE_FASTDDS_SHM" = "true" ]; then
+  export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-$HOME/.config/fastdds_shm.xml}"
+  export RMW_FASTRTPS_USE_QOS_FROM_XML="${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
+else
+  unset FASTRTPS_DEFAULT_PROFILES_FILE
+  unset RMW_FASTRTPS_USE_QOS_FROM_XML
+fi
 
 if [ "${SKIP_COLCON_BUILD:-0}" = "1" ]; then
   echo "SKIP_COLCON_BUILD=1, skip runtime colcon build."
@@ -248,9 +272,15 @@ fi
 
 source "$WORKSPACE/install/setup.bash"
 
-export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
-export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-$HOME/.config/fastdds_shm.xml}"
-export RMW_FASTRTPS_USE_QOS_FROM_XML="${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
+export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-$DEFAULT_RMW_IMPLEMENTATION}"
+export ENABLE_FASTDDS_SHM="${ENABLE_FASTDDS_SHM:-$DEFAULT_ENABLE_FASTDDS_SHM}"
+if [ "$RMW_IMPLEMENTATION" = "rmw_fastrtps_cpp" ] && [ "$ENABLE_FASTDDS_SHM" = "true" ]; then
+  export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-$HOME/.config/fastdds_shm.xml}"
+  export RMW_FASTRTPS_USE_QOS_FROM_XML="${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
+else
+  unset FASTRTPS_DEFAULT_PROFILES_FILE
+  unset RMW_FASTRTPS_USE_QOS_FROM_XML
+fi
 
 for required_pkg in humanoid_bringup humanoid_navigation2 humanoid_control_runtime humanoid_route_runtime humanoid_app_gateway_runtime humanoid_robot_gateway_runtime humanoid_expression_runtime; do
   if ! ros2 pkg prefix "$required_pkg" > /dev/null 2>&1; then
@@ -264,7 +294,13 @@ echo "ROS environment loaded from $WORKSPACE/install/setup.bash"
 cleanup_control_console_simulators
 cleanup_old_navigation_processes
 
-nohup ros2 launch humanoid_bringup robot_real.launch.py use_sim_time:=false >> "$LOG_FILE" 2>&1 < /dev/null &
+NAVIGATION_RVIZ="${NAVIGATION_RVIZ:-false}"
+echo "Launching with ROS_DISTRO=$ROS_DISTRO RMW_IMPLEMENTATION=$RMW_IMPLEMENTATION enable_fastdds_shm=$ENABLE_FASTDDS_SHM rviz=$NAVIGATION_RVIZ"
+nohup ros2 launch humanoid_bringup robot_real.launch.py \
+  use_sim_time:=false \
+  enable_fastdds_shm:="$ENABLE_FASTDDS_SHM" \
+  rviz:="$NAVIGATION_RVIZ" \
+  >> "$LOG_FILE" 2>&1 < /dev/null &
 
 NAV_PID=$!
 echo "$NAV_PID" > "$PID_FILE"

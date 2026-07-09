@@ -44,6 +44,24 @@ case "$OPEN3D_ARCH" in
   *) OPEN3D_ARCH_DIR="" ;;
 esac
 
+if [ -z "${ROS_DISTRO:-}" ]; then
+  if [ -f /opt/ros/jazzy/setup.bash ]; then
+    ROS_DISTRO="jazzy"
+  elif [ -f /opt/ros/humble/setup.bash ]; then
+    ROS_DISTRO="humble"
+  else
+    ROS_DISTRO="jazzy"
+  fi
+fi
+export ROS_DISTRO
+
+DEFAULT_RMW_IMPLEMENTATION="rmw_fastrtps_cpp"
+DEFAULT_ENABLE_FASTDDS_SHM="true"
+if [ "$OPEN3D_ARCH_DIR" = "aarch64" ]; then
+  DEFAULT_RMW_IMPLEMENTATION="rmw_cyclonedds_cpp"
+  DEFAULT_ENABLE_FASTDDS_SHM="false"
+fi
+
 if [ -n "$OPEN3D_ARCH_DIR" ] && [ -d "$WORKSPACE/src/humanoid_prior_localization_runtime/third_party/open3d/$OPEN3D_ARCH_DIR/open3d-0.18.0/lib/cmake/Open3D" ]; then
   export Open3D_DIR="${Open3D_DIR:-$WORKSPACE/src/humanoid_prior_localization_runtime/third_party/open3d/$OPEN3D_ARCH_DIR/open3d-0.18.0/lib/cmake/Open3D}"
   export LD_LIBRARY_PATH="$WORKSPACE/src/humanoid_prior_localization_runtime/third_party/open3d/$OPEN3D_ARCH_DIR/open3d-0.18.0/lib:${LD_LIBRARY_PATH:-}"
@@ -206,7 +224,7 @@ stop_process_fast() {
 }
 
 run_ros() {
-  bash -lc "cd '$WORKSPACE' && source /opt/ros/jazzy/setup.bash && source install/setup.bash && $*"
+  bash -lc "cd '$WORKSPACE' && source '/opt/ros/${ROS_DISTRO}/setup.bash' && source install/setup.bash && $*"
 }
 
 run_step() {
@@ -545,8 +563,8 @@ if [ -r /dev/tty ]; then
   fi
 fi
 
-if [ ! -f /opt/ros/jazzy/setup.bash ]; then
-  log "ERROR: /opt/ros/jazzy/setup.bash not found"
+if [ ! -f "/opt/ros/$ROS_DISTRO/setup.bash" ]; then
+  log "ERROR: /opt/ros/$ROS_DISTRO/setup.bash not found"
   exit 1
 fi
 
@@ -555,12 +573,18 @@ if [ ! -f "$WORKSPACE/install/setup.bash" ]; then
   exit 1
 fi
 
-source /opt/ros/jazzy/setup.bash
+source "/opt/ros/$ROS_DISTRO/setup.bash"
 source install/setup.bash
 
-export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
-export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-$HOME/.config/fastdds_shm.xml}"
-export RMW_FASTRTPS_USE_QOS_FROM_XML="${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
+export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-$DEFAULT_RMW_IMPLEMENTATION}"
+export ENABLE_FASTDDS_SHM="${ENABLE_FASTDDS_SHM:-$DEFAULT_ENABLE_FASTDDS_SHM}"
+if [ "$RMW_IMPLEMENTATION" = "rmw_fastrtps_cpp" ] && [ "$ENABLE_FASTDDS_SHM" = "true" ]; then
+  export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-$HOME/.config/fastdds_shm.xml}"
+  export RMW_FASTRTPS_USE_QOS_FROM_XML="${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
+else
+  unset FASTRTPS_DEFAULT_PROFILES_FILE
+  unset RMW_FASTRTPS_USE_QOS_FROM_XML
+fi
 
 log "Starting Humanoid Mapping"
 log "Map name: $MAP_NAME"
