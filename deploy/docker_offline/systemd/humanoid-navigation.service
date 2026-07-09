@@ -1,0 +1,19 @@
+[Unit]
+Description=Humanoid Navigation Docker Service
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/humanoid_deploy
+ExecStart=/home/ubuntu/humanoid_deploy/scripts/run_navigation.sh
+ExecStop=/home/ubuntu/humanoid_deploy/scripts/stop_navigation.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=60
+TimeoutStopSec=40
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,29 @@
+# humanoid_costmap_runtime 清障辅助参考参数。
+# 正式导航通常会同时加载 Nav2 参数文件；本文件用于单独调试。
+
+periodic_clearing_3d_publisher:
+  ros__parameters:
+    # 输入点云话题，用于触发清障点云发布时间。
+    input_points_topic: "/filtered_cloud"
+    # 输出给 Nav2 costmap 的清障点云话题。
+    output_clearing_cloud_topic: "/clearing_cloud"
+    # 清障点云目标坐标系。
+    target_frame: "base_footprint"
+    # 清障角度范围，单位度。
+    angle_min_deg: -180.0
+    angle_max_deg: 180.0
+    # 清障射线角度间隔，单位度。
+    angle_increment_deg: 1.0
+    # 清障距离范围，单位 m。
+    clearing_range_min: 0.30
+    clearing_range_max: 5.0
+    # 清障射线上点的距离间隔，单位 m。
+    clearing_range_step: 0.50
+    # 清障高度层，单位 m。
+    clearing_height_layers: [0.05, 0.30, 0.60]
+    # 最大发布频率，单位 Hz。
+    max_publish_rate_hz: 2.0
+    # 是否打印调试日志。
+    debug: false
+    # 点云 QoS depth。
+    qos_depth: 5

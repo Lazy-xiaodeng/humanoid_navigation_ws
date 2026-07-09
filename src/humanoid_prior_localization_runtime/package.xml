@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>humanoid_prior_localization_runtime</name>
+  <version>0.1.0</version>
+
+  <description>
+    Humanoid robot prior-map localization runtime. It provides Open3D-based
+    point cloud localization and Fast-LIO axis adaptation for the optional OP
+    localization chain.
+  </description>
+
+  <maintainer email="ros@todo.todo">ros</maintainer>
+
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>rclcpp</depend>
+  <depend>rcutils</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>tf2_eigen</depend>
+  <depend>tf2_sensor_msgs</depend>
+  <depend>eigen3_cmake_module</depend>
+  <depend>eigen</depend>
+  <depend>pcl_conversions</depend>
+  <depend>pcl_ros</depend>
+  <depend>cv_bridge</depend>
+  <depend>image_transport</depend>
+  <depend>urdf</depend>
+  <depend>yaml-cpp</depend>
+  <depend>boost</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

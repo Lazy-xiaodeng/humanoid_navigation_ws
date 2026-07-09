@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Bash(COLCON_IGNORE=\"/home/ubuntu/humanoid_ws/debug_monitor/code_backups/20260525_172036_scancontext_global_loc/COLCON_IGNORE\" *)",
+      "Bash(colcon build *)",
+      "Bash(python3)",
+      "Bash(python3 bag_waypoint_analysis.py)",
+      "Bash(python3 bag_final_analysis.py)",
+      "Bash(git commit -m ' *)",
+      "Bash(python3 bag_fusion_validation.py)",
+      "Bash(python3 bag_fusion_validation_v2.py)",
+      "Bash(git reset *)",
+      "Bash(python3 bag_fusion_live_test.py)",
+      "Bash(python3 -c \"import py_compile; py_compile.compile\\('src/humanoid_navigation2/humanoid_navigation2/localization_odom_fusion.py', doraise=True\\); print\\('fusion.py: OK'\\)\")",
+      "Bash(python3 -c \"import py_compile; py_compile.compile\\('src/humanoid_navigation2/launch/navigation2_fusion_sc.launch.py', doraise=True\\); print\\('fusion_sc launch: OK'\\)\")",
+      "Bash(python3 -c \"import py_compile; py_compile.compile\\('src/humanoid_navigation/launch/navigation_fusion_sc.launch.py', doraise=True\\); print\\('APP fusion_sc: OK'\\)\")",
+      "Bash(python3 -c \"import py_compile; py_compile.compile\\('src/humanoid_navigation2/humanoid_navigation2/localization_odom_fusion.py', doraise=True\\); print\\('OK'\\)\")",
+      "Bash(python3 debug_monitor/validate_fusion_fix.py)",
+      "Bash(python3 -m py_compile /home/ubuntu/humanoid_ws/src/humanoid_navigation2/humanoid_navigation2/localization_odom_fusion.py)",
+      "Bash(grep -v 'Traceback\\\\|File \"/\\\\|^\\\\s*$' /home/ubuntu/humanoid_ws/debug_logs/start_navigation_20260526_104121.log)",
+      "Bash(python3 -m py_compile src/humanoid_navigation2/humanoid_navigation2/localization_odom_fusion.py src/humanoid_navigation2/humanoid_navigation2/scancontext_to_initialpose.py src/humanoid_navigation2/launch/navigation2_fusion_sc.launch.py src/humanoid_navigation/humanoid_navigation/navigation_state_manager_fusion.py src/humanoid_navigation/launch/navigation_fusion_sc.launch.py)",
+      "Bash(python3 -c \"import py_compile; py_compile.compile\\('src/humanoid_navigation2/humanoid_navigation2/localization_odom_fusion.py', doraise=True\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('src/humanoid_navigation2/launch/navigation2_fusion_sc.launch.py'\\).read\\(\\)\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('src/humanoid_navigation2/launch/navigation2_fusion.launch.py'\\).read\\(\\)\\)\")",
+      "Bash(python3 -c \"import rich; print\\(rich.__version__\\)\")",
+      "Bash(python3 -c \"from rich.console import Console; from rich.layout import Layout; from rich.live import Live; from rich.panel import Panel; from rich.table import Table; print\\('rich OK'\\)\")",
+      "Bash(python3 -c \"import rclpy; from std_msgs.msg import String; from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped; print\\('rclpy OK'\\)\")",
+      "Bash(python3 -c \"import py_compile; py_compile.compile\\('/home/ubuntu/humanoid_ws/src/humanoid_navigation2/humanoid_navigation2/ndt_fusion_monitor.py', doraise=True\\); print\\('Syntax OK'\\)\")",
+      "Bash(python3 -c \"from std_msgs.msg import Float64; print\\('Float64 OK'\\)\")",
+      "Bash(chmod +x /home/ubuntu/humanoid_ws/src/humanoid_navigation2/humanoid_navigation2/ndt_fusion_monitor.py)",
+      "Bash(awk '{print $NF}')",
+      "Bash(pkill -f \"ros2 launch humanoid_bringup\")",
+      "Bash(pkill -f \"ros2\")"
+    ],
+    "additionalDirectories": [
+      "/home/ubuntu/humanoid_ws/debug_monitor/code_backups/20260525_172036_scancontext_global_loc"
+    ]
+  }
+}

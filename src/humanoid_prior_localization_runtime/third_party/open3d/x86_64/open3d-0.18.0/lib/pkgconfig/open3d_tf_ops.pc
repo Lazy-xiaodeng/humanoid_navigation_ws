@@ -1,0 +1,11 @@
+prefix=${pcfiledir}/../..
+libdir=${prefix}/lib
+includedir=${prefix}/include/
+
+Name: Open3D TensorFlow Ops
+Description: Open3D: A Modern Library for 3D Data Processing. This library contains 3D ML Ops for use with Tensorflow.
+URL: https://www.open3d.org
+Version: 0.18.0
+Requires: Open3D = 0.18.0
+Cflags:
+Libs: -lopen3d_tf_ops

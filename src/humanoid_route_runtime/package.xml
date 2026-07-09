@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>humanoid_route_runtime</name>
+  <version>0.1.0</version>
+  <description>单地图导航状态管理 C++ 运行时，负责 APP 导航命令到 Nav2 执行状态机的衔接。</description>
+  <maintainer email="robot@example.com">humanoid team</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>nav2_msgs</depend>
+  <depend>action_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+
+  <exec_depend>humanoid_navigation2</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

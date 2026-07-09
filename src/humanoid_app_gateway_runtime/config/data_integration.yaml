@@ -1,0 +1,120 @@
+# humanoid_app_gateway_runtime 数据整合参数。
+# 本文件用于配置系统状态、导航状态、单地图点位、定位速度和订阅推送。
+# 正式导航默认启用数据整合链路；离线验证或排查重复推送时可通过 launch 参数关闭。
+# 上游节点：robot_gateway_node、navigation_state_manager、dynamic_waypoints_manager、定位/odom/plan 等系统话题。
+# 下游节点：app_gateway_node，通过 integration 系列话题把数据返回 APP。
+
+data_integration_node:
+  ros__parameters:
+    # 是否启用真实数据整合逻辑；正式导航默认 true。
+    data_integration_enable: true
+
+    # 数据主动推送主循环频率，单位 Hz；线上协议约 10Hz。
+    push_update_rate_hz: 10.0
+
+    # 过期数据清理周期，单位秒。
+    cleanup_interval_sec: 1.0
+
+    # 状态统计日志打印周期，单位秒。
+    monitor_interval_sec: 5.0
+
+    # 是否接入 IMU 到 imu/sensor_data 缓存。
+    # 默认 false：当前 APP 导航页不直接使用 IMU，关闭可减少高频传感器 JSON 转换。
+    # 如果后续诊断页需要订阅 imu/sensor_data，再改为 true。
+    enable_imu_input: false
+
+    # robot_pose 过期时间，单位秒；保持线上协议配置 5 秒，调小会更快判定定位数据过期。
+    robot_pose_ttl_sec: 5.0
+
+    # robot_speed 过期时间，单位秒；保持线上协议配置 1 秒，避免 /odom 断流后 APP 继续显示旧速度。
+    robot_speed_ttl_sec: 1.0
+
+    # odom_raw 过期时间，单位秒；保持线上协议配置 5 秒，主要用于保留原始里程计缓存。
+    odom_raw_ttl_sec: 5.0
+
+    # navigation_status 过期时间，单位秒；保持线上协议配置 10 秒，调小可能导致 APP 更频繁显示状态不可用。
+    navigation_status_ttl_sec: 10.0
+
+    # navigation_path 过期时间，单位秒；保持线上协议配置 30 秒，路径通常低频变化。
+    navigation_path_ttl_sec: 30.0
+
+    # system_status 过期时间，单位秒；保持线上协议配置 60 秒，机器人断连后前端状态会进入不可用。
+    system_status_ttl_sec: 60.0
+
+    # action_result 过期时间，单位秒；保持线上协议配置 30 秒，用于 APP 查询最近动作完成结果。
+    action_result_ttl_sec: 30.0
+
+    # map_status 过期时间，单位秒；Test 单地图链路默认没有地图管理节点，保留缓存项用于兼容旧 APP 请求。
+    map_status_ttl_sec: 15.0
+
+    # map_response 过期时间，单位秒；Test 单地图链路默认没有地图管理命令，保留缓存项用于兼容旧 APP 请求。
+    map_response_ttl_sec: 60.0
+
+    # waypoints_data 过期时间，单位秒；保持线上协议配置 600 秒，点位全量数据低频变化。
+    waypoints_data_ttl_sec: 600.0
+
+    # system_exception 过期时间，单位秒；保持线上协议配置 120 秒，异常事件保留一段时间供前端查看。
+    system_exception_ttl_sec: 120.0
+
+    # sensor_data 过期时间，单位秒；保持线上协议配置 2 秒，传感器类数据实时性要求更高。
+    sensor_data_ttl_sec: 2.0
+
+    # 机器人原始状态输入话题。
+    robot_status_raw_topic: "/robot_status_raw"
+
+    # 机器人真实位姿输入话题。
+    robot_realpose_topic: "/robot_realpose"
+
+    # odom 输入话题。
+    odom_topic: "/odom"
+
+    # IMU 输入话题；用于缓存 imu/sensor_data，供诊断或 APP 订阅传感器数据。
+    imu_topic: "/imu"
+
+    # 全局路径输入话题。
+    navigation_path_topic: "/plan"
+
+    # 导航状态输入话题。
+    navigation_status_topic: "/navigation/status"
+
+    # 导航确认输入话题。
+    navigation_acknowledgments_topic: "/navigation/acknowledgments"
+
+    # 地图响应输入话题。
+    map_response_topic: "/map/response"
+
+    # 地图状态输入话题。
+    map_status_topic: "/map/status"
+
+    # 点位库输入话题。
+    waypoints_data_topic: "/navigation/waypoints_data"
+
+    # 定位恢复状态输入话题。
+    localization_recovery_status_topic: "/localization/recovery_status"
+
+    # 机器人动作结果输入话题。
+    robot_action_result_topic: "/robot/action_result"
+
+    # 动作库更新通知输入话题。
+    gesture_list_updated_topic: "/system/gesture_list_updated"
+
+    # 上半身动作库 YAML 路径；为空时自动从 humanoid_expression_runtime/config/gestures_app.yaml 查找。
+    gesture_list_yaml_path: ""
+
+    # 面部表情库 YAML 路径；为空时自动从 humanoid_expression_runtime/config/facial_gestures.yaml 查找。
+    facial_gesture_list_yaml_path: ""
+
+    # APP 数据请求输入话题。
+    data_requests_topic: "/websocket/data_requests"
+
+    # APP 订阅请求输入话题。
+    data_subscriptions_topic: "/websocket/data_subscriptions"
+
+    # 数据响应输出话题。
+    integration_data_responses_topic: "/integration/data_responses"
+
+    # 主动推送输出话题。
+    integration_push_messages_topic: "/integration/push_messages"
+
+    # 订阅响应输出话题。
+    integration_subscription_responses_topic: "/integration/subscription_responses"

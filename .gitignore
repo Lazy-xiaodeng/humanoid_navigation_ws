@@ -1,0 +1,37 @@
+# ROS 2 编译生成文件夹
+build/
+install/
+log/
+
+# Python 环境
+*.pyc
+__pycache__/
+
+# 个人或临时生成的文件 (根据你的图片我加上了这些)
+*.pcd
+
+# 一键启动脚本运行时文件和调试日志
+.start_navigation.pid
+debug_logs/
+
+# 本地临时备份和调试快照
+start_navigation_bak.sh
+debug_monitor/code_backups/
+workspace_archive/debug_monitor/code_backups/
+workspace_archive/backups/
+workspace_archive/runtime_logs/
+workspace_archive/debug_outputs/
+workspace_archive/debug_monitor/**/*.json
+workspace_archive/debug_monitor/**/*.jsonl
+workspace_archive/debug_monitor/**/*.csv
+workspace_archive/debug_monitor/**/*.log
+workspace_archive/debug_monitor/**/*.txt
+workspace_archive/debug_monitor/**/*.png
+workspace_archive/debug_monitor/**/ros_logs/
+debug_output*.txt
+frames_*.gv
+frames_*.pdf
+rviz_*.png
+.claude/settings.local.json
+deploy/docker_offline/docker_debs/
+deploy/docker_offline/images/

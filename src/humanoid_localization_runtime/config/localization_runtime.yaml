@@ -1,0 +1,65 @@
+# humanoid_localization_runtime 定位运行层参考参数。
+# 当前正式导航 launch 里仍以内联参数为准；本文件用于单独调试和后续参数收敛。
+
+prior_map_odom_bridge:
+  ros__parameters:
+    # 全局地图坐标系；由外部定位输出。
+    map_frame: "map"
+    # 局部里程计坐标系；通常来自 Fast-LIO。
+    odom_frame: "odom"
+    # 外部定位消息对应的机器人坐标系。
+    localized_frame: "base_footprint"
+    # PoseStamped 定位输入话题，兼容历史定位输入。
+    prior_pose_topic: "/prior_localization/pose"
+    # PoseWithCovarianceStamped 定位输入话题，RViz initialpose 也会转发到这里。
+    prior_pose_with_covariance_topic: "/prior_localization/pose_with_covariance"
+    # Odometry 定位输入话题，RoboSense 定位链路主要使用它。
+    prior_odom_topic: "/prior_localization/odom"
+    # map->odom 发布频率，单位 Hz。
+    publish_rate: 30.0
+    # 是否只保留 x/y/yaw，忽略 z/roll/pitch。
+    force_2d: true
+
+dynamic_map_ground_publisher:
+  ros__parameters:
+    # 父坐标系；发布 map_ground 时为 map。
+    parent_frame: "map"
+    # 参考机器人坐标系，用于估算当前地面高度。
+    base_frame: "base_footprint"
+    # 输出地面坐标系。
+    child_frame: "map_ground"
+    # 发布频率，单位 Hz。
+    publish_rate: 30.0
+
+dynamic_odom_ground_publisher:
+  ros__parameters:
+    # 父坐标系；发布 odom_ground 时为 odom。
+    parent_frame: "odom"
+    # 参考机器人坐标系。
+    base_frame: "base_footprint"
+    # 输出地面坐标系。
+    child_frame: "odom_ground"
+    # 发布频率，单位 Hz。
+    publish_rate: 30.0
+
+robot_realpose_publisher:
+  ros__parameters:
+    # 输出真实位姿使用的全局坐标系。
+    global_frame: "map_ground"
+    # 机器人底盘坐标系。
+    base_frame: "base_footprint"
+    # 发布频率，单位 Hz。
+    publish_rate: 10.0
+
+rviz_initialpose_adapter:
+  ros__parameters:
+    # RViz 2D Pose Estimate 输入话题。
+    input_topic: "/initialpose"
+    # 转发给定位桥的 PoseWithCovarianceStamped 话题。
+    bridge_pose_topic: "/prior_localization/pose_with_covariance"
+    # 转发给 RoboSense 定位内部状态的手动初始位姿话题。
+    robosense_pose_topic: "/prior_localization/manual_initialpose"
+    # RViz 使用的地面地图坐标系。
+    map_ground_frame: "map_ground"
+    # 定位桥使用的地图坐标系。
+    map_frame: "map"

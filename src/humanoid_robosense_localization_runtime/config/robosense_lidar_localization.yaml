@@ -1,0 +1,239 @@
+# RoboSense lidar_localization 接入当前导航工程的主配置。
+#
+# 数据流：
+#   Fast-LIO /odom + /fast_lio/cloud_registered
+#       -> robosense_lidar_localization
+#       -> /prior_localization/robosense_odom
+#       -> prior_map_odom_bridge
+#       -> map->odom TF
+#
+# 坐标约定：
+#   本配置让 RoboSense 节点输出 map->base_footprint 的 Odometry 候选位姿。
+#   map->odom 仍由 prior_map_odom_bridge 独占发布，避免多个定位节点抢同一条 TF。
+
+# =========================
+# 输入话题
+# =========================
+
+# Fast-LIO 配准后的点云。节点用它和 prior map 做 scan-to-map 匹配。
+lidar_topic: "/fast_lio/cloud_registered"
+
+# Fast-LIO 原始里程计。节点用它给匹配提供初值，并生成 bridge 所需的 odom cache。
+rel_pose_topic: "/odom"
+
+# 人工重定位/手动纠偏输入。RViz 的 2D Pose Estimate 会先经适配节点从
+# map_ground 转成 map，再发布到这里，供 RoboSense 更新内部先验。
+abs_pose_topic: "/prior_localization/manual_initialpose"
+
+# =========================
+# Fast-LIO 坐标转换
+# =========================
+
+# true：把 Fast-LIO 发布的 raw odom 转成导航使用的 base_footprint 坐标。
+# 当前 bag 和实机链路里的 /odom 并不是直接 map/odom->base_footprint 语义，
+# 所以这里必须保持 true。
+convert_fastlio_odom_to_base: true
+
+# true：把 /fast_lio/cloud_registered 从 Fast-LIO/body 相关坐标转到匹配期望坐标。
+# 和上面的 odom 转换配套使用。
+convert_registered_cloud_to_body: true
+
+# 点云和 odom 做时间同步时允许的最大时间差，单位秒。
+# 太小会丢帧，太大可能用错 odom 初值；当前按 bag 回放观察取 0.15s。
+registered_cloud_odom_sync_tolerance_sec: 0.15
+
+# Fast-LIO odom 中 camera/body 轴到中间坐标的静态变换，xyz 单位 m。
+fastlio_odom_camera_xyz: [0.0, 0.0, 0.0]
+
+# Fast-LIO odom 中 camera/body 轴到中间坐标的静态变换，四元数顺序 xyzw。
+fastlio_odom_camera_quat_xyzw: [-0.5, -0.5, 0.5, 0.5]
+
+# Fast-LIO body 到导航 base_footprint 的平移，xyz 单位 m。
+fastlio_body_base_xyz: [0.004, 1.215, 0.072]
+
+# Fast-LIO body 到导航 base_footprint 的旋转，四元数顺序 xyzw。
+fastlio_body_base_quat_xyzw: [0.5, 0.5, -0.5, 0.5]
+
+# =========================
+# TF 与输出坐标系
+# =========================
+
+# false：RoboSense 节点只发布全局位姿候选，不直接发布 map->odom。
+# 必须保持 false，否则会和 prior_map_odom_bridge 抢 TF。
+publish_map_to_odom_tf: false
+
+# 全局地图坐标系。
+map_frame_id: "map"
+
+# Fast-LIO/轮速局部里程计坐标系。
+odom_frame_id: "odom"
+
+# 导航统一使用的机器人底盘坐标系。
+base_frame_id: "base_footprint"
+
+# odom cache 在节点内部保留多久，单位秒；bridge 按位姿时间戳查同一时刻 odom。
+tf_odom_cache_duration_sec: 5.0
+
+# odom 插值允许的最大相邻帧间隔，单位秒；超过后认为 odom 时间不连续。
+tf_max_interpolation_gap_sec: 0.25
+
+# =========================
+# 地图与初始位姿
+# =========================
+
+# prior map 点云路径。当前先复用 Open3D 已验证的 grounded 地图，不重新建图。
+map_path: ~/humanoid_ws/src/humanoid_navigation2/pcd/hall_open3d_grounded.pcd
+
+# 匹配初始位置，单位 m，对应 map 下的 x/y/z。
+# 如果实机初始点变化很大，先改这里或后续增加服务/话题方式注入初值。
+init_position: [0.035185, 0.087588, 0.0]
+
+# 匹配初始姿态，单位 rad，对应 roll/pitch/yaw。
+init_euler: [0.0, 0.0, -0.130823906]
+
+# RoboSense 节点加载 prior map 后构建 KD-tree 前的地图体素降采样，单位 m。
+# 当前按 bag44/nav45/nav46 验证后的推荐值保持 0.30；
+# 配合 source_voxel_leaf_size=0.15 增加 source 点对裕量，同时避免 map=0.10 带来的 CPU 压力。
+map_voxel_leaf_size: 0.30
+
+# =========================
+# 调试输出
+# =========================
+
+# 是否发布当前参与匹配的点云。调试时可开，实机长期运行建议 false。
+is_pub_cloud: false
+
+# 是否发布地图点云。地图很大，打开会增加带宽和 RViz 压力。
+is_pub_map: false
+
+# 输出给 bridge 的全局定位 Odometry。语义：header.frame_id=map, pose=map->base_footprint。
+pose_topic: "/prior_localization/robosense_odom"
+
+# 输出给 bridge 的原始 odom 缓存。bridge 用它按同一时间戳计算 map->odom。
+odom_cache_topic: "/prior_localization/robosense_input_odom"
+
+# true：发布 odom_cache_topic；接入 navigation2_robosense_lidar.launch.py 时必须开启。
+publish_odom_cache: true
+
+# 是否打印每帧 scan-to-map 调试信息。
+# false：实机默认，避免每帧刷 lidar timestamp / semantic size / match_score / solver time。
+# true：离线调参时临时打开。
+debug_print: false
+
+# =========================
+# 匹配健康检查
+# =========================
+
+# 输入点云最少点数。低于该值认为点云不可用，避免空帧/异常帧参与匹配。
+input_cloud_size_thr: 1000
+
+# 当前 scan 经过语义分类后的 VoxelGrid 降采样栅格，单位 m。
+# 这个参数直接决定每帧送进 scan-to-map 匹配的 source 点数量：
+#   - 调小：保留更多近处/边缘/墙面点，通常能增加有效点对，降低 NO_ENOUGH_POINT_PAIR 风险；
+#   - 调大：点数更少，CPU 更轻，但局部几何不足时更容易退化成 odom 外推。
+# 2026-06-30 的 nav45/nav46 bag 对比中，0.15 相比 0.20 明显提高有效点对，
+# prior_delta 和 no-pair 指标未变差，因此主配置先采用 0.15。
+source_voxel_leaf_size: 0.15
+
+# 匹配残差阈值，越小越严格；残差过大说明当前 scan 和地图对不上。
+matching_check_residual_thresh: 0.15
+
+# 有效点对比例阈值，越大越严格；用于过滤匹配点对太少的结果。
+matching_check_valid_pair_ratio_thresh: 0.80
+
+# 相对 prior/odom 初值允许的 x-y 偏差，单位 m；超过后认为匹配结果可疑。
+matching_check_prior_xy_thresh: 0.50
+
+# 相对 prior/odom 初值允许的 z 偏差，单位 m。
+matching_check_prior_z_thresh: 0.50
+
+# 相对 prior/odom 初值允许的 yaw 偏差，单位度。
+matching_check_prior_yaw_thresh_deg: 8.0
+
+# =========================
+# 非标准 Fast-LIO/body 轴 -> 导航 base_footprint 轴
+# =========================
+#
+# 注意：这里的名字沿用 RoboSense 原源码里的 lidar_vehicle_*，但在当前接入链路中
+# 它不是“标准 ROS LiDAR 坐标系 -> base”的物理安装标定。
+#
+# 当前输入给定位器的点云来自 /fast_lio/cloud_registered，节点会先根据 /odom
+# 把 registered/world 点云转回 Fast-LIO raw body 轴：
+#   raw/body: x 左、y 下、z 后
+#   ROS base_footprint: x 前、y 左、z 上
+#
+# 下面这组 T_base_lidar 实际表达的是：
+#   p_base_footprint = R(raw_body_to_base) * p_raw_body + t(raw_body_origin_in_base)
+#
+# 它和 navigation2_robosense_lidar.launch.py 里的静态 TF:
+#   body -> base_footprint
+#     translation = [0.004, 1.215, 0.072]
+#     quaternion  = [0.5, 0.5, -0.5, 0.5]
+# 是同一件事的逆向表达：
+#   raw/body 原点在 base_footprint 下的位置 = [0.072, -0.004, 1.215]
+#
+# 因此不要按“雷达是非标准坐标系，所以这里必须写标准 LiDAR 外参”来理解。
+# 真正要校准时，应以 TF body->base_footprint、地图 grounded 原点和 ro 输出轨迹闭环一致性为准。
+lidar_vehicle_xyz: [0.072, -0.004, 1.215]
+
+# raw/body 到 base_footprint 的旋转，单位 rad，顺序 roll/pitch/yaw。
+# 该旋转完成 raw x左/y下/z后 -> ROS x前/y左/z上的轴变换。
+lidar_vehicle_rpy: [-1.5707963268, 0.0, 1.5707963268]
+
+# =========================
+# scan-to-map 优化器参数
+# =========================
+lidar_matcher:
+  # 地图最少点数。地图点数低于该值时不进行定位。
+  min_map_size: 50000
+
+  # 每帧匹配要求的最少有效点对数。越大越稳，但环境稀疏时更容易无解。
+  min_pair_size: 200
+
+  # 外层迭代次数。
+  iterations: 4
+
+  # 单次匹配验证阈值，越小越严格。
+  validation_thresh: 0.2
+
+  # 相邻匹配结果角度变化验证阈值，单位 rad。
+  validation_TF_angle_delta_thresh: 1.0
+
+  # 最终平均 cost 阈值；越小越严格。
+  validation_ave_final_cost_thresh: 0.03
+
+  # 雷达近距离盲区，单位 m；小于该距离的点不参与匹配。
+  blind_distance: 1.0
+
+  # 输入点云 VoxelGrid 降采样栅格，单位 m。
+  leaf_size: 0.2
+
+  # 是否打印 matcher 内部每帧优化结果。实机默认关闭，避免控制台刷屏。
+  debug_print: false
+
+  # Ceres 优化线程数。
+  num_threads: 2
+
+  # Ceres 每轮最大迭代次数。
+  max_num_iterations: 2
+
+  # 为 source 点在地图 KD-tree 中找近邻时使用的搜索半径，单位 m。
+  # 原代码这里硬编码为 0.30m，现在改为可配置；默认仍保持 0.30m，避免改变匹配几何范围。
+  # 调大：更容易找到足够地图近邻，点对数可能增加，但也更容易混入跨墙/跨物体的错误平面；
+  # 调小：点对更局部、更严格，但在稀疏地图或开阔/贴墙场景下更容易点对不足。
+  neighbor_search_radius: 0.30
+
+  # 判断一个 source 点是否具备可用地图平面特征时，邻域内要求的最少地图点数。
+  # 该值和 neighbor_search_radius 配合使用：半径内点数少于该值时，这个 source 点不会生成有效点对。
+  min_point_num: 3
+
+  # 地图近邻点法向量的一致性阈值，单位度。
+  # 半径内任意两点法向量差异超过该阈值时，会认为局部平面不稳定并丢弃该点对。
+  # 调小会更严格，减少错误点对；调大更宽松，点对更多但可能混入边缘/拐角处的退化约束。
+  min_angle: 20
+
+  # 每帧最多送入 solver 优化的有效点对数，用于限制 CPU 峰值和单帧延迟。
+  #   <= 0：不限流，保留当前帧找到的全部有效点对，等价于旧行为；
+  #   800/1200：启用限流，点对过多时做确定性均匀采样，避免简单取前 N 个造成方向偏置。
+  # 当前先设为 0，表示“代码具备限流能力，但实机默认不改变定位行为”。
+  max_pair_size: 0

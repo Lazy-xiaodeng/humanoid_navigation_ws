@@ -1,0 +1,32 @@
+# humanoid_control_runtime 控制层参数。
+# 本工作区是单地图版本：点位只保存到 data/dynamic_waypoints.json，不启用多地图 registry。
+# 该节点负责单地图点位管理，保持 APP 点位命令、导航命令和 ROS 话题协议稳定。
+
+dynamic_waypoints_manager_cpp:
+  ros__parameters:
+    # 是否启用点位持久化；true 表示 set/update/delete/clear 后写入 JSON 文件。
+    data_storage.enabled: true
+
+    # 当前 Test 工作区单文件点位库路径，必须保持和 Python 版一致。
+    data_storage.file_path: "~/humanoid_ws/data/dynamic_waypoints.json"
+
+    # APP 点位管理命令输入话题。
+    app_waypoint_command_topic: "/app/waypoint_command"
+
+    # APP 导航控制命令输入话题。
+    app_navigation_command_topic: "/app/navigation_command"
+
+    # 转发给导航状态管理器的请求话题。
+    navigation_requests_topic: "/navigation/requests"
+
+    # 点位数据和点位响应输出话题。
+    navigation_waypoints_data_topic: "/navigation/waypoints_data"
+
+    # 导航状态管理器 ack 输入话题。
+    navigation_acknowledgments_topic: "/navigation/acknowledgments"
+
+    # 启动后初始点位重复发布次数，用于照顾后启动订阅者。
+    initial_waypoints_publish_max: 5
+
+    # 初始点位重复发布间隔，单位秒。
+    initial_waypoints_publish_interval_sec: 1.0

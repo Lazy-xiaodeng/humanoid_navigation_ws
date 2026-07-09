@@ -1,0 +1,9 @@
+<class_libraries>
+  <library path="humanoid_decay_obstacle_layer">
+    <class
+      type="humanoid_decay_obstacle_layer::DecayObstacleLayer"
+      base_class_type="nav2_costmap_2d::Layer">
+      <description>Marks point-cloud obstacles and removes cells after a configurable time-to-live.</description>
+    </class>
+  </library>
+</class_libraries>

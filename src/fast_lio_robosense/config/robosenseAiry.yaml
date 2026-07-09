@@ -1,0 +1,53 @@
+/**:
+  ros__parameters:
+    common:
+      lid_topic: "/airy_points"
+      imu_topic: "/airy_imu"  # /mavros/imu/data /ouster/imu /imu/data
+      time_sync_en: false      # ONLY turn on when external time synchronization is really not possible
+      time_offset_lidar_to_imu: 0.0   # 只有精确标定出 LiDAR->IMU 时间偏移时才填非 0；该值不受 time_sync_en 影响
+
+    preprocess:
+      lidar_type: 5  # 1 for Livox serials LiDAR, 2 for Velodyne LiDAR, 3 for ouster LiDAR, 5 for RoboSense Airy
+      scan_line: 96  #激光扫描线数
+      timestamp_unit: 0  # 0-second, 1-milisecond, 2-microsecond, 3-nanosecond.
+      blind: 0.2    #近距离盲区（米）
+
+    mapping:
+      max_search_dist_surf: 1.0  # default: 5
+      num_sub_cloud: 1 # This is int, should be fine
+      acc_cov: 0.01      # IMU 加速度过程噪声；不要按静态 std^2 直接填，需结合运动测试调参
+      gyr_cov: 0.001     # IMU 角速度过程噪声；过小会让滤波器过度相信 IMU
+      b_acc_cov: 0.0001  #IMU 零偏漂移协方差
+      b_gyr_cov: 0.0001
+      fov_degree: 120.0  #雷达水平视场角
+      det_range: 60.0  #最大探测距离（米）
+      extrinsic_est_en: false  # true: enable the online estimation of IMU-LiDAR extrinsic
+      gravity_align: true     # 当前 fast_lio_robosense 代码未读取此参数；重力初始化始终由静止 IMU 均值完成
+      extrinsic_T: [0.004250, 0.004180, -0.004460]
+      extrinsic_R: [0.001474, -0.999996, -0.002458,
+                    -0.999998, -0.001470, -0.001425,
+                    0.001422, 0.002460, -0.999996]
+      # extrinsic_T: [0.0, 0.0, 0.0]
+      # extrinsic_R: [0.0, 1.0, 0.0,
+      #               -1.0, 0.0, 0.0,
+      #               0.0, 0.0, -1.0]
+      
+
+    publish:
+      path_en: false  # 是否发布 /path 轨迹；导航链路当前无人订阅，关闭可减少一点发布开销
+      scan_publish_en: true  # 是否发布处理后的实时点云（用于看效果）
+      dense_publish_en: true  # 是否发布高密度地图
+      scan_bodyframe_pub_en: true  # 是否发布 /cloud_registered_body；全局重定位双链路验证需要录制真实 body 点云
+      high_frequency_odom_en: false  # 是否发布 /high_frequency_odometry；当前无人订阅，关闭不影响主 /odom
+      tf_en: true
+
+    debug:
+      log_point_size: false  # 是否每帧打印 FastLIO 预处理后点数；正常运行建议关闭，避免终端/日志 IO 开销
+      log_imu_process: false  # 是否每帧打印 IMU 去畸变时间范围；正常运行建议关闭
+      performance_log_en: true  # 是否定期打印 FastLIO 分阶段耗时；用于定位 CPU 热点，开销很低
+      performance_log_period: 20  # 每多少帧输出一次性能统计，10Hz 下 20 表示约 2 秒一次
+      
+    pcd_save:
+      pcd_save_en: false  #关机时是否自动把地图保存成 .pcd 文件
+      interval: -1  # how many LiDAR frames saved in each pcd file;
+                    # -1 : all frames will be saved in ONE pcd file, may lead to memory crash when having too much frames.

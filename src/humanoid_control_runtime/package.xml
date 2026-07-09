@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>humanoid_control_runtime</name>
+  <version>0.1.0</version>
+  <description>Single-map C++ runtime for waypoint management in the current humanoid navigation chain.</description>
+  <maintainer email="ros@example.com">ROS User</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

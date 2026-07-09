@@ -1,0 +1,81 @@
+# humanoid_robot_gateway_runtime 机器人本体网关参数。
+# 本文件用于配置机器人本体 WebSocket、速度命令、动作控制、状态发布和动作库同步。
+# 正式导航启动默认连接机器人本体 WebSocket，并允许速度下发和 APP 动作执行，便于实机导航联调。
+# 上游节点：Nav2/controller 的 /cmd_vel、APP 网关的 /app/robot_control，以及机器人本体 WebSocket 服务。
+# 下游节点：data_integration_node、navigation_state_manager、APP 事件链路和动作库热重载链路。
+
+robot_gateway_node:
+  ros__parameters:
+    # 是否启用真实机器人本体 WebSocket 连接；完整导航默认 true，离线测试时可覆盖为 false。
+    robot_ws_enable: true
+
+    # 机器人本体 WebSocket 地址；线上协议默认 ws://10.192.1.2:5000。
+    robot_ws_server: "ws://10.192.1.2:5000"
+
+    # 断线重连间隔，单位秒。
+    reconnect_interval_sec: 5.0
+
+    # 单次命令等待响应超时时间，单位秒。
+    command_timeout_sec: 5.0
+
+    # 兜底机器人 accid；连接机器人后会被首条机器人回包动态覆盖。
+    # Test 工作区保留原运行链路默认值，避免机器人暂未回传 accid 时控制命令无法组包。
+    fallback_accid: "HU_D04_01_289"
+
+    # 兜底机器人 sn；通常为空，连接机器人后从原始消息中学习。
+    fallback_sn: ""
+
+    # 是否允许真实发送 /cmd_vel 到机器人本体；正式导航联调默认打开。
+    walk_velocity_send_enable: true
+
+    # 行走速度发送频率，单位 Hz；线上协议 walk_command_loop 实际按 50Hz 定频发送。
+    walk_velocity_send_rate_hz: 50.0
+
+    # cmd_vel 超时时间，单位秒；超时后应发送零速度保护。
+    cmd_vel_timeout_sec: 0.5
+
+    # 是否允许真实执行 APP 上半身动作；正式导航联调默认打开。
+    motion_execution_enable: true
+
+    # 执行动作前是否允许自动切换到 Menu 模式；正式联调默认打开，动作结束后会按配置切回 Walk。
+    motion_allow_enter_menu: true
+
+    # 动作完成后是否允许自动切回 Walk 模式；正式联调默认打开。
+    motion_allow_return_walk: true
+
+    # 动作完成默认等待超时时间，单位秒；保持线上协议 default_motion_timeout。
+    motion_default_timeout_sec: 25.0
+
+    # 从动作库解析到动作预期时长后，额外增加的安全缓冲时间，单位秒。
+    motion_timeout_buffer_sec: 8.0
+
+    # 动作完成等待的最大超时时间，单位秒，避免异常动作名导致无限等待。
+    motion_max_timeout_sec: 90.0
+
+    # 是否启用动作库同步；连接机器人后拉取动作库并更新 gestures.yaml，正式联调默认打开。
+    gesture_sync_enable: true
+
+    # 动作库 YAML 写入路径；留空时自动定位 humanoid_expression_runtime/config/gestures.yaml。
+    # 只有 gesture_sync_enable=true 且 robot_ws_enable=true 时才会写入。
+    gestures_yaml_path: ""
+
+    # 连接机器人后延迟多少秒再拉取动作库，避免刚连接时身份和状态消息还未稳定。
+    gesture_sync_delay_sec: 2.0
+
+    # 机器人原始状态输出话题。
+    robot_status_raw_topic: "/robot_status_raw"
+
+    # 机器人遥控/摇杆输出话题。
+    joy_raw_topic: "/joy_raw"
+
+    # 动作执行结果输出话题。
+    robot_action_result_topic: "/robot/action_result"
+
+    # 动作库更新通知输出话题。
+    gesture_list_updated_topic: "/system/gesture_list_updated"
+
+    # 速度命令输入话题。
+    cmd_vel_topic: "/cmd_vel"
+
+    # APP 机器人控制命令输入话题。
+    app_robot_control_topic: "/app/robot_control"

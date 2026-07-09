@@ -1,0 +1,88 @@
+# humanoid_route_runtime 单地图导航状态管理参数
+# 本文件配置 Test 工作区单地图导航状态管理运行语义。
+# 注意：这里不包含 Todesk 工作区的多地图、路线任务、地图上下文逻辑。
+
+navigation_state_manager_cpp:
+  ros__parameters:
+    # 是否使用仿真时钟；真实机器人保持 false。
+    use_sim_time: false
+
+    # 判断到达目标附近的距离容差，单位米。主要用于状态展示和恢复判断，Nav2 到达仍以 action 结果为准。
+    position_tolerance: 0.15
+
+    # 判断目标朝向的角度容差，单位弧度。当前状态机保留参数，实际到达以 Nav2 action 为准。
+    orientation_tolerance: 0.3
+
+    # 单个路点最大执行时间，超过后进入导航失败/可恢复失败流程，单位秒。
+    waypoint_timeout: 300.0
+
+    # /navigation/status 周期状态发布频率，单位 Hz。
+    status_publish_rate: 2.0
+
+    # 路点没有指定 frame_id 时使用的默认坐标系。
+    default_frame_id: "map"
+
+    # Fast-LIO /odom 位姿不直接用于导航状态位姿，优先通过 map->base_footprint TF 读取标准机器人位姿。
+    map_frame: "map"
+    base_frame: "base_footprint"
+    pose_tf_timeout_sec: 0.05
+
+    # 机器人底层必须回到 Walk 且未执行动作后才允许启动导航。
+    require_walk_mode_for_navigation: true
+    robot_status_timeout: 2.0
+    pending_navigation_timeout: 90.0
+
+    # prior-map 定位健康状态话题。ACCEPTED 表示新 TF 被接受；REJECTED/PENDING 可继续使用 last good TF。
+    localization_health_status_topic: "/localization/prior_map_odom_bridge_status"
+    localization_health_timeout_sec: 3.0
+    localization_allow_start_with_last_good_tf: true
+    localization_last_good_tf_max_age_sec: 0.0
+
+    # 定位恢复联动事件。默认不因恢复流程主动暂停，但保留状态联动和回包字段。
+    auto_pause_on_localization_recovery: false
+    localization_stop_hold_sec: 2.0
+    localization_resume_settle_sec: 1.0
+    localization_auto_resume_require_recovery_done: true
+    localization_resume_stable_frames: 3
+    localization_recovery_status_topic: "/localization/recovery_status"
+    localization_recovery_request_topic: "/localization/recovery_requests"
+    request_localization_recovery_on_nav_failure: false
+    request_navigation_context_recovery_on_localization_failure: false
+    localization_recovery_request_cooldown_sec: 20.0
+    localization_recovery_prior_radius_m: 10.0
+    localization_context_recovery_request_cooldown_sec: 4.0
+    localization_context_prior_radius_m: 5.0
+    localization_context_prior_max_previous_age_sec: 300.0
+    localization_context_prior_min_segment_length_m: 0.2
+    localization_resume_reverse_enabled: true
+    localization_resume_reverse_max_distance_m: 2.0
+    localization_resume_reverse_rear_angle_deg: 70.0
+    reverse_navigation_bt_xml: ""
+
+    # 障碍等待恢复：Nav2/RPP 失败或速度长时间停滞后，暂停当前 goal，等待 costmap/ROI clear 后自动恢复。
+    obstacle_wait_enable: true
+    obstacle_block_timeout: 4.0
+    velocity_threshold: 0.10
+    blockage_pose_delta_deadzone: 0.10
+    blockage_recovery_velocity_threshold: 0.15
+    blockage_recovery_confirm_sec: 1.0
+    obstacle_wait_push_interval_sec: 4.0
+    obstacle_clear_required_frames: 5
+    obstacle_clear_check_rate_hz: 5.0
+    obstacle_clear_cost_threshold: 100
+    obstacle_clear_front_min_x_m: 0.15
+    obstacle_clear_front_max_x_m: 0.80
+    obstacle_clear_half_width_m: 0.30
+    obstacle_min_wait_before_resume_sec: 2.0
+    obstacle_clear_required_duration_sec: 3.0
+    obstacle_clear_required_duration_after_false_resume_sec: 4.0
+    obstacle_false_resume_window_sec: 3.0
+    obstacle_resume_use_roi: true
+    obstacle_roi_has_obstacle_topic: "/front_obstacle/has_obstacle"
+    obstacle_roi_timeout_sec: 1.0
+    obstacle_roi_required_clear_frames: 3
+    local_costmap_topic: "/local_costmap/costmap"
+    obstacle_block_near_goal_distance: 0.7
+
+    # 导航失败策略：pause_on_failed=进入可恢复失败；abort_all=直接失败重置；skip_failed_continue=跳过失败点继续。
+    navigation_failure_policy: "pause_on_failed"

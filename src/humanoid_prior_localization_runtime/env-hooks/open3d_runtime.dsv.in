@@ -1,0 +1,2 @@
+set-if-unset;Open3D_DIR;@OPEN3D_RUNTIME_RELATIVE_DIR@/lib/cmake/Open3D
+prepend-non-duplicate-if-exists;LD_LIBRARY_PATH;@OPEN3D_RUNTIME_RELATIVE_DIR@/lib
