@@ -7,6 +7,7 @@ WORKSPACE="${WORKSPACE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 REPO_URL="${REPO_URL:-$DEFAULT_REPO_URL}"
 BRANCH="${BRANCH:-c++}"
 ROS_DISTRO="${ROS_DISTRO:-jazzy}"
+PARALLEL_WORKERS="${PARALLEL_WORKERS:-2}"
 APT_DEP_FILE="${APT_DEP_FILE:-$SCRIPT_DIR/apt_dependencies_ubuntu24_jazzy.txt}"
 FASTDDS_TEMPLATE="${FASTDDS_TEMPLATE:-$SCRIPT_DIR/fastdds_shm.xml}"
 HUMANOID_ENV_FILE="${HUMANOID_ENV_FILE:-$HOME/.config/humanoid_ws_jazzy.env}"
@@ -70,6 +71,7 @@ Options:
   --workspace PATH       Workspace path. Default: parent of this tools directory.
   --repo URL             Git repository URL for empty workspaces. Default: $DEFAULT_REPO_URL
   --branch NAME          Git branch for empty/git workspaces. Default: c++
+  --parallel N           Colcon build parallel workers. Default: 2.
   --skip-oneapi          Do not install Intel oneAPI packages.
   --skip-rosdep          Skip rosdep install.
   --no-build             Install dependencies only; skip colcon build.
@@ -83,6 +85,7 @@ Examples:
   cd ~/humanoid_ws
   bash tools/bootstrap_ubuntu24_jazzy.sh
   bash tools/bootstrap_ubuntu24_jazzy.sh --clean-build --skip-oneapi
+  bash tools/bootstrap_ubuntu24_jazzy.sh --clean-build --parallel 1
 USAGE
 }
 
@@ -98,6 +101,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --branch)
       BRANCH="${2:?--branch requires a branch name}"
+      shift 2
+      ;;
+    --parallel)
+      PARALLEL_WORKERS="${2:?--parallel requires a number}"
       shift 2
       ;;
     --skip-oneapi)
@@ -480,10 +487,12 @@ build_workspace() {
     return 0
   }
 
-  log "Building workspace: colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release"
+  log "Building workspace: colcon build --symlink-install --parallel-workers $PARALLEL_WORKERS --cmake-args -DCMAKE_BUILD_TYPE=Release"
   cd "$WORKSPACE"
   source_ros_setup
 
+  export CMAKE_BUILD_PARALLEL_LEVEL="$PARALLEL_WORKERS"
+  export MAKEFLAGS="-j$PARALLEL_WORKERS"
   export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
   export FASTRTPS_DEFAULT_PROFILES_FILE="${FASTRTPS_DEFAULT_PROFILES_FILE:-$HOME/.config/fastdds_shm.xml}"
   export RMW_FASTRTPS_USE_QOS_FROM_XML="${RMW_FASTRTPS_USE_QOS_FROM_XML:-1}"
@@ -496,7 +505,7 @@ build_workspace() {
     rm -rf build install log
   fi
 
-  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+  colcon build --symlink-install --parallel-workers "$PARALLEL_WORKERS" --cmake-args -DCMAKE_BUILD_TYPE=Release
 }
 
 self_check() {

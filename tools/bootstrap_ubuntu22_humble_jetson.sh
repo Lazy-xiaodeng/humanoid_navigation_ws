@@ -72,7 +72,7 @@ Options:
   --workspace PATH       Workspace path. Default: parent of this tools directory.
   --repo URL             Git repository URL for empty workspaces. Default: $DEFAULT_REPO_URL
   --branch NAME          Git branch for empty/git workspaces. Default: c++
-  --parallel N           Open3D build parallel workers. Default: 2.
+  --parallel N           Open3D and colcon build parallel workers. Default: 2.
   --skip-open3d          Skip Open3D source-build fallback.
   --skip-rosdep          Skip rosdep install.
   --no-build             Install dependencies only; skip colcon build.
@@ -562,10 +562,12 @@ build_workspace() {
     return 0
   }
 
-  log "Building workspace: colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release"
+  log "Building workspace: colcon build --symlink-install --parallel-workers $PARALLEL_WORKERS --cmake-args -DCMAKE_BUILD_TYPE=Release"
   cd "$WORKSPACE"
   source_ros_setup
 
+  export CMAKE_BUILD_PARALLEL_LEVEL="$PARALLEL_WORKERS"
+  export MAKEFLAGS="-j$PARALLEL_WORKERS"
   export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-$DEFAULT_RMW_IMPLEMENTATION}"
   export ENABLE_FASTDDS_SHM="${ENABLE_FASTDDS_SHM:-$DEFAULT_ENABLE_FASTDDS_SHM}"
   if [ "$RMW_IMPLEMENTATION" = "rmw_fastrtps_cpp" ] && [ "$ENABLE_FASTDDS_SHM" = "true" ]; then
@@ -584,7 +586,7 @@ build_workspace() {
     rm -rf build install log
   fi
 
-  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+  colcon build --symlink-install --parallel-workers "$PARALLEL_WORKERS" --cmake-args -DCMAKE_BUILD_TYPE=Release
 }
 
 self_check() {
