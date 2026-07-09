@@ -123,9 +123,14 @@ install(DIRECTORY include/
 install(DIRECTORY
   config
   launch
-  kernels
   DESTINATION share/${PROJECT_NAME}
 )
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/kernels")
+  install(DIRECTORY kernels
+    DESTINATION share/${PROJECT_NAME}
+  )
+endif()
 
 ament_export_include_directories(include)
 ament_export_dependencies(

@@ -628,7 +628,11 @@ main() {
   configure_tuna_apt_sources
   configure_ros_apt_source
   install_apt_dependencies
-  init_rosdep
+  if [ "$RUN_ROSDEP" -eq 1 ]; then
+    init_rosdep
+  else
+    log "Skipping rosdep initialization"
+  fi
   prepare_workspace
   patch_ros_distro_scripts
   write_fastdds_profile

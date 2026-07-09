@@ -5,7 +5,9 @@
 #include <stdexcept>
 
 #include "angles/angles.h"
-#if __has_include("behaviortree_cpp/bt_factory.h")
+#if defined(HUMANOID_BT_FORCE_V3)
+#include "behaviortree_cpp_v3/bt_factory.h"
+#elif __has_include("behaviortree_cpp/bt_factory.h")
 #include "behaviortree_cpp/bt_factory.h"
 #elif __has_include("behaviortree_cpp_v3/bt_factory.h")
 #include "behaviortree_cpp_v3/bt_factory.h"

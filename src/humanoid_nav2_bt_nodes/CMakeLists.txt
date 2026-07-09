@@ -7,12 +7,19 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(angles REQUIRED)
-find_package(behaviortree_cpp QUIET)
-if(behaviortree_cpp_FOUND)
-  set(BTCPP_DEP behaviortree_cpp)
-else()
+if("$ENV{ROS_DISTRO}" STREQUAL "humble")
   find_package(behaviortree_cpp_v3 REQUIRED)
   set(BTCPP_DEP behaviortree_cpp_v3)
+  set(BTCPP_IS_V3 TRUE)
+else()
+  find_package(behaviortree_cpp QUIET)
+  if(behaviortree_cpp_FOUND)
+    set(BTCPP_DEP behaviortree_cpp)
+  else()
+    find_package(behaviortree_cpp_v3 REQUIRED)
+    set(BTCPP_DEP behaviortree_cpp_v3)
+    set(BTCPP_IS_V3 TRUE)
+  endif()
 endif()
 find_package(geometry_msgs REQUIRED)
 find_package(nav2_behavior_tree REQUIRED)
@@ -35,6 +42,9 @@ target_include_directories(${PROJECT_NAME}
 
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 target_compile_definitions(${PROJECT_NAME} PRIVATE BT_PLUGIN_EXPORT)
+if(BTCPP_IS_V3)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE HUMANOID_BT_FORCE_V3)
+endif()
 
 ament_target_dependencies(${PROJECT_NAME}
   angles

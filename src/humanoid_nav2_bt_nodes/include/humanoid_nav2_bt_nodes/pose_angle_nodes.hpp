@@ -8,7 +8,10 @@
 #include <string>
 #include <type_traits>
 
-#if __has_include("behaviortree_cpp/action_node.h")
+#if defined(HUMANOID_BT_FORCE_V3)
+#include "behaviortree_cpp_v3/action_node.h"
+#define HUMANOID_BT_HAS_JSON_EXPORT 0
+#elif __has_include("behaviortree_cpp/action_node.h")
 #include "behaviortree_cpp/action_node.h"
 #define HUMANOID_BT_HAS_JSON_EXPORT 1
 #elif __has_include("behaviortree_cpp_v3/action_node.h")
