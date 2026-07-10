@@ -18,9 +18,11 @@ Copyright 2025 RoboSense Technology Co., Ltd
 #include <pcl_conversions/pcl_conversions.h>
 #include <cmath>
 #include <cstdint>
+#include <iomanip>
 #include <limits>
 #include <map>
 #include <mutex>
+#include <sstream>
 #include <string>
 
 #ifdef ROS1 
@@ -35,6 +37,7 @@ Copyright 2025 RoboSense Technology Co., Ltd
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <nav_msgs/msg/odometry.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 #endif
 
@@ -46,6 +49,7 @@ ros::Publisher lidar_pose_pub;
 #ifdef ROS2 
 rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr lidar_pose_pub;
 rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_cache_pub;
+rclcpp::Publisher<std_msgs::msg::String>::SharedPtr localization_status_pub;
 std::shared_ptr<tf2_ros::TransformBroadcaster> map_odom_tf_broadcaster;
 #endif
 
@@ -66,6 +70,7 @@ bool publish_odom_cache = true;
 std::string pose_topic = "/prior_localization/robosense_odom";
 std::string odom_cache_topic = "/prior_localization/robosense_input_odom";
 std::string abs_pose_topic = "/prior_localization/manual_initialpose";
+std::string status_topic = "/prior_localization/robosense_status";
 Eigen::Vector3d fastlio_odom_camera_xyz = Eigen::Vector3d::Zero();
 Eigen::Quaterniond fastlio_odom_camera_q(0.5, -0.5, -0.5, 0.5);
 Eigen::Vector3d fastlio_body_base_xyz(0.004, 1.215, 0.072);
@@ -104,6 +109,56 @@ Eigen::Quaterniond loadQuatXyzw(const YAML::Node &node,
   q.normalize();
   return q;
 }
+
+const char *statusName(STATUS status) {
+  switch (status) {
+  case STATUS::IDLE:
+    return "IDLE";
+  case STATUS::LOW_ACCURACY:
+    return "LOW_ACCURACY";
+  case STATUS::NORMAL:
+    return "NORMAL";
+  case STATUS::LOST:
+    return "LOST";
+  case STATUS::NO_ENOUGH_MAP:
+    return "NO_ENOUGH_MAP";
+  case STATUS::LOW_ACCURACY_RPZ:
+    return "LOW_ACCURACY_RPZ";
+  }
+  return "UNKNOWN";
+}
+
+#ifdef ROS2
+void publishLocalizationStatus(const Pose *pose, const std::string &event) {
+  if (!localization_status_pub) {
+    return;
+  }
+
+  const std::string status =
+      pose ? std::string(statusName(pose->status_code)) : "UNKNOWN";
+  const std::string source = pose ? pose->source : "";
+  const double stamp = pose ? pose->timestamp : rclcpp::Clock().now().seconds();
+  const double x = pose ? pose->xyz.x() : 0.0;
+  const double y = pose ? pose->xyz.y() : 0.0;
+  const double z = pose ? pose->xyz.z() : 0.0;
+  const int status_code = pose ? static_cast<int>(pose->status_code) : -1;
+
+  std_msgs::msg::String msg;
+  std::ostringstream oss;
+  oss << "{"
+      << "\"event\":\"" << event << "\","
+      << "\"status\":\"" << status << "\","
+      << "\"status_code\":" << status_code << ","
+      << "\"source\":\"" << source << "\","
+      << "\"stamp\":" << std::fixed << std::setprecision(6) << stamp << ","
+      << "\"x\":" << std::setprecision(4) << x << ","
+      << "\"y\":" << std::setprecision(4) << y << ","
+      << "\"z\":" << std::setprecision(4) << z
+      << "}";
+  msg.data = oss.str();
+  localization_status_pub->publish(msg);
+}
+#endif
 
 void loadNodeConfig(const YAML::Node &config_node) {
   if (config_node["publish_map_to_odom_tf"]) {
@@ -146,6 +201,9 @@ void loadNodeConfig(const YAML::Node &config_node) {
   }
   if (config_node["abs_pose_topic"]) {
     abs_pose_topic = config_node["abs_pose_topic"].as<std::string>();
+  }
+  if (config_node["status_topic"]) {
+    status_topic = config_node["status_topic"].as<std::string>();
   }
   if (config_node["publish_odom_cache"]) {
     publish_odom_cache = config_node["publish_odom_cache"].as<bool>();
@@ -366,6 +424,9 @@ pcl::PointCloud<RsPointXYZIRT>::Ptr convertRegisteredCloudToBodyCloud(
     if (msg_time - last_warn_time > 2.0) {
       std::cout << "drop registered cloud without synced /odom: "
                 << std::fixed << msg_time << std::endl;
+#ifdef ROS2
+      publishLocalizationStatus(nullptr, "drop_registered_cloud_without_synced_odom");
+#endif
       last_warn_time = msg_time;
     }
     return nullptr;
@@ -552,6 +613,7 @@ void absPoseCallback(
   }
   pose.setStatus(STATUS::LOW_ACCURACY);
   lidar_localization_ptr->setManualPose(pose);
+  publishLocalizationStatus(&pose, "manual_initialpose_applied");
 
   RCLCPP_INFO(
       rclcpp::get_logger("robosense_lidar_localization_node"),
@@ -679,6 +741,8 @@ int main(int argc, char **argv) {
   lidar_pose_pub = nh->create_publisher<nav_msgs::msg::Odometry>(pose_topic, 10);
   odom_cache_pub =
       nh->create_publisher<nav_msgs::msg::Odometry>(odom_cache_topic, 100);
+  localization_status_pub =
+      nh->create_publisher<std_msgs::msg::String>(status_topic, 10);
   map_odom_tf_broadcaster =
       std::make_shared<tf2_ros::TransformBroadcaster>(nh);
   auto pose_func = [&](const Pose &pose) {
@@ -698,6 +762,7 @@ int main(int argc, char **argv) {
     odom.pose.pose.orientation.z = pose.q.z();
     odom.pose.pose.orientation.w = pose.q.w();
     lidar_pose_pub->publish(odom);
+    publishLocalizationStatus(&pose, "pose_update");
     publishMapToOdomTf(pose);
   };
   lidar_localization_ptr->registerCallback(pose_func);
@@ -717,6 +782,7 @@ int main(int argc, char **argv) {
   executor.remove_node(nh);
   map_odom_tf_broadcaster.reset();
   lidar_pose_pub.reset();
+  localization_status_pub.reset();
   lidar_localization_ptr.reset();
   nh.reset();
   if (rclcpp::ok()) {

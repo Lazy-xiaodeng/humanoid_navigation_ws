@@ -53,6 +53,8 @@ setup(
             'imu_transformer = humanoid_navigation2.imu_transformer:main',
             'pcd_converter = humanoid_navigation2.pcd_converter:main',
             'check_map_quality = humanoid_navigation2.check_map_quality:main',
+            'wait_for_localization_trust = humanoid_navigation2.wait_for_localization_trust:main',
+            'localization_trust_supervisor = humanoid_navigation2.localization_trust_supervisor:main',
         ],
     },
 )

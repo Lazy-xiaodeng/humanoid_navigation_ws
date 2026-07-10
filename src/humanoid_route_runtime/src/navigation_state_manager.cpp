@@ -670,6 +670,30 @@ private:
   {
     const double now = now_seconds();
     const std::string text = trim_copy(msg->data);
+
+    if (!text.empty() && text.front() == '{') {
+      rapidjson::Document payload;
+      payload.Parse(text.c_str());
+      if (!payload.HasParseError() && payload.IsObject()) {
+        const bool pose_initialized = read_bool_member(payload, "pose_initialized", false);
+        const bool pose_trusted = read_bool_member(payload, "pose_trusted", false);
+        const bool can_start_navigation = read_bool_member(payload, "can_start_navigation", false);
+        localization_.state = read_string_member(payload, "state", "unknown");
+        localization_.text = read_string_member(payload, "reason", "");
+        localization_.last_status_time = now;
+        localization_.has_last_good_tf = pose_initialized || localization_.has_last_good_tf;
+        if (pose_trusted && can_start_navigation) {
+          localization_.healthy = true;
+          localization_.last_good_tf_time = now;
+          ++localization_.resume_stable_count;
+        } else {
+          localization_.healthy = false;
+          localization_.resume_stable_count = 0;
+        }
+        return;
+      }
+    }
+
     const std::string state = text.substr(0, text.find(' '));
     localization_.state = state.empty() ? "UNKNOWN" : state;
     localization_.text = text;

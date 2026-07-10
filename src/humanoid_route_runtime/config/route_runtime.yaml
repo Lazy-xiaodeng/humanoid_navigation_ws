@@ -113,8 +113,8 @@ navigation_state_manager_cpp:
     # 定位恢复需要连续健康帧数。
     localization_resume_stable_frames: 3
 
-    # prior-map 定位健康状态话题。
-    localization_health_status_topic: "/localization/prior_map_odom_bridge_status"
+    # 可信定位状态话题，由 localization_trust_supervisor 汇总 bridge/RO/全局重定位后发布。
+    localization_health_status_topic: "/localization/trust_status"
 
     # 地图状态话题；用于确认当前地图是否 ready。
     map_status_topic: "/map/status"
@@ -122,8 +122,8 @@ navigation_state_manager_cpp:
     # 定位健康状态超时时间，单位秒。
     localization_health_timeout_sec: 3.0
 
-    # 当前候选定位 rejected/pending 时，如果已有 last good TF，是否允许继续按 odom 推进。
-    localization_allow_start_with_last_good_tf: true
+    # 任务启动必须依赖可信定位；不再只因为存在 last good TF 就允许启动。
+    localization_allow_start_with_last_good_tf: false
 
     # last good TF 最大年龄，单位秒；0 表示不限制年龄。
     localization_last_good_tf_max_age_sec: 0.0

@@ -386,6 +386,8 @@ def generate_launch_description():
             'accept_zero_stamp': True,
             # 启动后允许第一帧定位直接初始化 map->odom。
             'allow_initial_pose': True,
+            # 原点附近初始 TF 只作为 seed，后续必须由定位可信度监督层确认。
+            'origin_seed_radius': 0.30,
             # 使用 ro 发布的 odom cache，按定位时间戳插值 odom->base。
             'use_odom_cache': True,
             # ro 发布给 bridge 的 odom cache 话题。
@@ -461,6 +463,37 @@ def generate_launch_description():
         prior_map_odom_bridge_params,
     )
 
+    localization_trust_supervisor_node = Node(
+        package='humanoid_navigation2',
+        executable='localization_trust_supervisor',
+        name='localization_trust_supervisor',
+        output='screen',
+        parameters=[{
+            # bridge 接受/拒绝 map->odom 的状态。
+            'bridge_status_topic': '/localization/prior_map_odom_bridge_status',
+            # RoboSense scan-to-map 的结构化健康状态。
+            'robosense_status_topic': '/prior_localization/robosense_status',
+            # 后续全局重定位层接入时复用该状态入口。
+            'global_status_topic': '/global_relocalization/status',
+            # 给 Nav2 启动门控、路线任务层和 APP 监控使用的可信定位状态。
+            'trust_status_topic': '/localization/trust_status',
+            # 原点附近配置初值不直接作为可信定位。
+            'origin_seed_radius': 0.30,
+            # RO-only 冷启动只允许非常小的初始 map->odom；更大位姿必须走全局重定位/人工确认。
+            'ro_only_startup_max_map_odom_norm': 0.35,
+            # 恢复期间一旦 bridge 观察到 large jump，必须等全局重定位/人工确认后再放行导航。
+            'require_global_after_large_jump_hold': True,
+            # 连续 5 帧 RO 正常匹配后，才把定位升级为可导航。
+            'ro_verified_required_frames': 5,
+            # bridge 和 RO 状态都必须保持新鲜。
+            'bridge_status_timeout_sec': 3.0,
+            'robosense_status_timeout_sec': 3.0,
+            # 2Hz 足够给任务门控和 APP 展示使用。
+            'publish_rate': 2.0,
+            'use_sim_time': use_sim_time,
+        }],
+    )
+
     rviz_initialpose_adapter_node = nav2_cpp_node(
         'rviz_initialpose_adapter',
         'rviz_initialpose_adapter',
@@ -502,20 +535,16 @@ def generate_launch_description():
     )
 
     localization_ready_gate = Node(
-        package='humanoid_localization_runtime',
-        executable='wait_for_tf',
-        name='wait_for_localization_tf',
+        package='humanoid_navigation2',
+        executable='wait_for_localization_trust',
+        name='wait_for_localization_trust',
         parameters=[{
-            # 等待 Nav2 使用的全局地面坐标系。
-            'target_frame': 'map_ground',
-            # 等待机器人底盘坐标系。
-            'source_frame': 'base_footprint',
-            # 0 表示一直等到 TF 就绪。
+            # 0 表示一直等到定位可信。
             'timeout_sec': 0.0,
-            # 查询间隔，单位秒。
-            'poll_period': 0.2,
-            # 连续成功次数，避免 TF 瞬时可用就启动 Nav2。
-            'stable_count': 3,
+            # 周期性输出当前阻塞原因。
+            'poll_log_period_sec': 3.0,
+            # 可信定位状态话题。
+            'trust_status_topic': '/localization/trust_status',
             'use_sim_time': use_sim_time,
         }],
         output='screen',
@@ -654,6 +683,7 @@ def generate_launch_description():
         map_server_lifecycle,
         TimerAction(period=4.5, actions=[robosense_lidar_localization_node]),
         TimerAction(period=5.5, actions=[prior_map_odom_bridge_cpp_node]),
+        TimerAction(period=5.7, actions=[localization_trust_supervisor_node]),
         TimerAction(period=5.8, actions=[rviz_initialpose_adapter_node]),
         TimerAction(period=7.5, actions=[robot_realpose_publisher]),
         periodic_clearing_3d_node,

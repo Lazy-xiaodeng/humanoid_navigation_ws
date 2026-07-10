@@ -139,10 +139,10 @@ struct RouteRuntimeConfig
   double pending_navigation_timeout{90.0};
   double obstacle_block_near_goal_distance{0.7};
   int localization_resume_stable_frames{3};
-  std::string localization_health_status_topic{"/localization/prior_map_odom_bridge_status"};
+  std::string localization_health_status_topic{"/localization/trust_status"};
   std::string map_status_topic{"/map/status"};
   double localization_health_timeout_sec{3.0};
-  bool localization_allow_start_with_last_good_tf{true};
+  bool localization_allow_start_with_last_good_tf{false};
   double localization_last_good_tf_max_age_sec{0.0};
   double route_task_first_task_reached_tolerance_m{0.4};
   double route_task_transit_passed_tolerance_m{0.5};

@@ -112,6 +112,9 @@ pose_topic: "/prior_localization/robosense_odom"
 # 输出给 bridge 的原始 odom 缓存。bridge 用它按同一时间戳计算 map->odom。
 odom_cache_topic: "/prior_localization/robosense_input_odom"
 
+# 输出给定位可信度监督层的结构化状态。
+status_topic: "/prior_localization/robosense_status"
+
 # true：发布 odom_cache_topic；接入 navigation2_robosense_lidar.launch.py 时必须开启。
 publish_odom_cache: true
 

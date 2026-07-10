@@ -59,16 +59,22 @@ struct Pose {
     switch (status_code) {
     case STATUS::IDLE:
       status = "IDLE";
+      break;
     case STATUS::LOW_ACCURACY:
       status = "LOW_ACCURACY";
+      break;
     case STATUS::LOST:
       status = "LOST";
+      break;
     case STATUS::NORMAL:
       status = "NORMAL";
+      break;
     case STATUS::NO_ENOUGH_MAP:
       status = "NO_ENOUGH_MAP";
+      break;
     case STATUS::LOW_ACCURACY_RPZ:
       status = "LOW_ACCURACY_RPZ";
+      break;
     }
   }
 

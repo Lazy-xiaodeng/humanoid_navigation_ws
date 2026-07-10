@@ -17,6 +17,7 @@ elseif(ROS_VERSION STREQUAL 2)
     geometry_msgs
     sensor_msgs
     nav_msgs
+    std_msgs
     tf2_ros
   )
 

@@ -190,11 +190,15 @@ void LidarLocalization::addLidarData(const pcl::PointCloud<RsPointXYZIRT>::Ptr &
       init_lidar_pose.xyz = init_position_;
       init_lidar_pose.q = init_orientation_;
       init_lidar_pose.timestamp = lidar_time;
+      init_lidar_pose.source = "configured_initial_pose";
       bool ret_align =
           lidar_matcher_->align(semantic_cloud, kdtree_ptr_, map_cloud_ptr_,
                                 init_lidar_pose, result_pose, lidar_time);
       if (!ret_align) {
         result_pose = init_lidar_pose;
+        result_pose.source = "configured_initial_pose_unverified";
+      } else {
+        result_pose.source = "ro_initial_alignment";
       }
       if (debug_print_) {
         std::cout << "init_lidar_pose: \n" << result_pose.transform() << std::endl;
@@ -250,11 +254,13 @@ void LidarLocalization::addLidarData(const pcl::PointCloud<RsPointXYZIRT>::Ptr &
         }
         if (ret_align && ret_score && valid_pair_score && prior_score) {
           status_ = STATUS::NORMAL;
+          result_pose.source = "ro_normal_match";
           result_pose.setStatus(status_);
           last_lidar_pose_ = result_pose;
         } else {
           status_ = STATUS::LOW_ACCURACY;
           result_pose = init_pose;
+          result_pose.source = "ro_low_accuracy_prediction";
           result_pose.setStatus(status_);
           last_lidar_pose_ = result_pose;
         }

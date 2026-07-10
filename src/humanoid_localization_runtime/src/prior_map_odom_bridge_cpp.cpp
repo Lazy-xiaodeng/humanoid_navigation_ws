@@ -165,6 +165,7 @@ public:
     pose_timeout_sec_ = declare_parameter<double>("pose_timeout_sec", 0.8);
     accept_zero_stamp_ = declare_parameter<bool>("accept_zero_stamp", true);
     allow_initial_pose_ = declare_parameter<bool>("allow_initial_pose", true);
+    origin_seed_radius_ = declare_parameter<double>("origin_seed_radius", 0.30);
 
     use_odom_cache_ = declare_parameter<bool>("use_odom_cache", true);
     odom_cache_topic_ = declare_parameter<std::string>(
@@ -855,7 +856,11 @@ private:
     last_accept_time_ = now();
     const double xy = std::hypot(candidate(0, 3), candidate(1, 3));
     const double yaw = yaw_from_matrix(candidate);
-    publish_status("ACCEPTED " + reason + " map_odom_xy_norm=" + fixed3(xy) + " yaw=" + fixed3(yaw));
+    std::string status_reason = reason;
+    if (reason == "initial_pose" && xy <= origin_seed_radius_) {
+      status_reason += " origin_seeded=true origin_seed_radius=" + fixed3(origin_seed_radius_);
+    }
+    publish_status("ACCEPTED " + status_reason + " map_odom_xy_norm=" + fixed3(xy) + " yaw=" + fixed3(yaw));
   }
 
   void publish_last_tf()
@@ -938,6 +943,7 @@ private:
   double publish_rate_{30.0};
   double tf_lookup_timeout_sec_{0.08};
   double pose_timeout_sec_{0.8};
+  double origin_seed_radius_{0.30};
   double odom_cache_duration_sec_{5.0};
   double odom_interpolation_max_gap_sec_{0.25};
   double odom_lookup_tolerance_sec_{0.03};
