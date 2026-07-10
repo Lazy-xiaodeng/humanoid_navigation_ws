@@ -1,6 +1,6 @@
 # humanoid_global_relocalization_runtime 全局重定位运行层参数。
 # 本文件用于正式运行态：节点从 LiDAR 点云和先验 PCD 地图中搜索机器人全局位姿，
-# 并输出经过多层门控确认的恢复候选。修改参数后建议先用 rosbag 回放验证，再接入导航恢复状态机。
+# 并输出经过多层门控确认的恢复候选。修改参数后建议先完成参数复核，再接入导航恢复状态机。
 
 global_relocalization_node:
   ros__parameters:
@@ -11,7 +11,7 @@ global_relocalization_node:
     # 点云输入模式。
     # registered_world：使用 /fast_lio/cloud_registered + /odom，把 Fast-LIO world 点云反变换到 body 后再匹配。
     # body：使用 /cloud_registered_body，直接读取 Fast-LIO body 点云，链路更短，但需要 Fast-LIO 开启 body 点云发布。
-    # 调成 body 可以减少一次反变换；如果 bag 或实机没有 /cloud_registered_body，应保持 registered_world。
+    # 调成 body 可以减少一次反变换；如果现场系统没有 /cloud_registered_body，应保持 registered_world。
     input_mode: "registered_world"
 
     # registered_world 模式下的点云话题。该点云通常位于 Fast-LIO camera_init/raw world 坐标系。
@@ -64,7 +64,7 @@ global_relocalization_node:
     raw_body_to_base_xyz: [0.072, -0.004, 1.215]
 
     # 是否只输出 x/y/yaw 2D 位姿。
-    # 室内导航推荐 true，由 IMU 和地面约束 roll/pitch/z；如果要做坡道、楼层或 6DoF 恢复，可改为 false 后重新验证。
+    # 室内导航推荐 true，由 IMU 和地面约束 roll/pitch/z；如果要做坡道、楼层或 6DoF 恢复，可改为 false 后重新复核。
     force_2d_output: true
 
     # =========================
@@ -149,7 +149,7 @@ global_relocalization_node:
     search_max_rpy: [0.05, 0.05, 6.283185307]
 
     # 3D-BBS 保留的候选数量。
-    # 调大能让后续多帧/轨迹验证看到更多相似位置，提高困难点召回率；调小更快但容易错过正确候选。
+    # 调大能让后续多帧/轨迹确认看到更多相似位置，提高困难点召回率；调小更快但容易错过正确候选。
     top_k: 30
 
     # =========================
@@ -157,9 +157,9 @@ global_relocalization_node:
     # =========================
 
     # 是否启用 2D/2.5D BBS 全图深搜候选召回。
-    # 开启后会额外从多高度层二维距离场中搜索 x/y/yaw 候选，并融合进现有候选池；它不直接发布恢复位姿，仍需通过 GICP、多帧和轨迹门控。
-    # 该功能在 bag46 随机 300 点中证明 top-K 召回很强，但单帧 top1 不安全；正式运行建议由恢复状态机触发运行，并通过 relocalization_min_period_sec 控制频率。
-    enable_bbs2d_recall: true
+    # 当前正式默认层采用轻量组合：3D-BBS + GICP top8 + temporal/trajectory。
+    # 2.5D 不常开；只有没有 Scan Context DB、需要兜底召回时再临时打开，否则会显著增加日常恢复耗时。
+    enable_bbs2d_recall: false
 
     # 2D/2.5D BBS 最细二维栅格分辨率，单位 m。
     # 调小会提高候选平移精度，但全图搜索 CPU 和内存上升；调大会更快，但正确候选可能需要后续 GICP 拉回。
@@ -186,7 +186,7 @@ global_relocalization_node:
     bbs2d_scan_point_step: 1
 
     # 2D/2.5D BBS 每一层保留的中间候选数量。
-    # 调大能减少粗层剪掉正确区域的概率，但细化层计算量会上升；当前离线验证推荐 12000。
+    # 调大能减少粗层剪掉正确区域的概率，但细化层计算量会上升；当前正式默认保留 12000。
     bbs2d_level_keep_candidates: 12000
 
     # 2D/2.5D BBS 最终输出候选数量。
@@ -294,7 +294,7 @@ global_relocalization_node:
     single_frame_high_confidence_max_fitness: 0.02
 
     # 是否启用历史轨迹 scan-map likelihood。
-    # 第一层多帧支持不足或精配质量不足时，会用历史 scan/odom 对候选做更强验证。
+    # 第一层多帧支持不足或精配质量不足时，会用历史 scan/odom 对候选做更强确认。
     enable_trajectory_likelihood: true
 
     # 轨迹 likelihood 最多评估当前帧前多少个候选。
@@ -345,27 +345,13 @@ global_relocalization_node:
     enable_scan_context_recall: false
 
     # Scan Context 描述子数据库路径。
-    # 运行态建议填写建图/离线验证阶段生成的 CSV 文件；文件只保存 keyframe 位姿和描述子，不保存原始点云。
-    # 路径为空时，运行节点无法使用 Scan Context 召回；离线 evaluator 可退回从 bag 临时抽 keyframe 建库。
+    # 运行态建议填写建图流程生成的 CSV 文件；文件只保存 keyframe 位姿和描述子，不保存原始点云。
+    # 路径为空时，运行节点无法使用 Scan Context 召回，精度层也会自动退回默认恢复链路。
     scan_context_database_path: ""
-
-    # Scan Context 描述子数据库保存路径。
-    # 主要给离线 evaluator 使用：从 bag 抽 keyframe 建库后写成 CSV，后续运行态可通过 scan_context_database_path 加载。
-    # 运行节点通常不写该文件，避免在线过程修改建图资产。
-    scan_context_save_database_path: ""
-
-    # keyframe 抽样间隔，单位为点云帧数。
-    # 离线 bag 验证时每隔该数量抽一帧进入描述子数据库；值越小数据库越密、召回更可能成功，但内存和查询耗时增加。
-    # 上线时建议由建图阶段生成稳定 keyframe 数据库，而不是直接从运行 bag 抽样。
-    scan_context_keyframe_stride: 80
 
     # 描述子查询保留的 top-K keyframe 数量。
     # 调大能提高正确位置被召回的概率，但会生成更多 GICP 初值，深搜阶段耗时上升。
     scan_context_top_k: 20
-
-    # 离线验证时排除当前帧前后多少个 cloud index 的 keyframe。
-    # 作用是避免把几乎同一时刻的 scan 放进数据库造成“答案泄漏”；上线使用离线地图 keyframe 时该值主要用于回归测试。
-    scan_context_exclude_index_radius: 120
 
     # Scan Context 距离环数量。
     # 调大可保留更细的径向结构，但描述子更稀疏，对噪声更敏感；调小更稳但区分度下降。
@@ -408,13 +394,84 @@ global_relocalization_node:
     scan_context_duplicate_yaw_gate_deg: 5.0
 
     # =========================
+    # 分层恢复策略
+    # =========================
+
+    # 是否启用高精度恢复层。
+    # 默认恢复层始终先跑：3D-BBS + GICP top8 + temporal/trajectory。
+    # 当默认层拒绝，或出现弱接受 risk_score>=阈值时，精度层短窗口介入：Scan Context DB + scan0.25 + GICP top30。
+    enable_precision_recovery_layer: true
+
+    # 默认层 reject 时是否允许触发精度层。
+    # 冷启动建议开启；如果上层状态机已经单独控制恢复阶段，也可以关闭此项，只保留弱接受复核。
+    precision_layer_trigger_on_default_reject: true
+
+    # 默认层 temporal 本来准备接受、但内部质量信号偏弱时，是否先进入精度层复核而不是立刻发布。
+    # 这是当前正式策略的关键开关，用于拦住默认层误接受。
+    precision_layer_trigger_on_weak_accept: true
+
+    # 默认层连续多少次没有发布 recovery 后，下一轮开始允许精度层介入。
+    # 当前功能包没有直接感知“冷启动/已定位后丢失”的上层状态，因此正式包内取 1，优先保证冷启动成功率。
+    # 后续接入恢复状态机后，可在已定位丢失场景由上层节流到连续 2 帧再触发。
+    precision_layer_min_default_reject_frames: 1
+
+    # 触发后连续允许精度层尝试的搜索轮数。
+    # 若任一轮通过 temporal/trajectory 发布成功，会立即清零；若仍失败，则等待后续默认层再次累计拒绝。
+    precision_layer_attempt_frames: 3
+
+    # 两次精度层尝试之间的最小间隔，单位秒。
+    # 用于限制 Scan Context + top30 GICP 的 CPU 峰值；需要更快恢复时可调小。
+    precision_layer_cooldown_sec: 5.0
+
+    # 精度层单独使用的 scan voxel leaf，单位 m。
+    # 当前正式推荐 0.25，在精度/耗时之间更稳，且不改变默认层预处理参数。
+    precision_layer_scan_leaf_size: 0.25
+
+    # 精度层候选精配预算。
+    # 当前正式推荐 top30；默认层仍使用 refine_max_candidates，避免日常恢复过重。
+    precision_layer_max_refine_candidates: 30
+
+    # 精度层是否使用 Scan Context 召回。
+    # 该层没有数据库时会自动失效，仍保留默认层流程。
+    precision_layer_enable_scan_context_recall: true
+
+    # 精度层 Scan Context 数据库路径。
+    # 留空时复用 scan_context_database_path；正式上线建议填写建图阶段产出的稳定数据库。
+    precision_layer_scan_context_database_path: ""
+
+    # 精度层是否叠加 2D/2.5D BBS。
+    # 叠加 2.5D 会显著增加耗时，且当前默认由 Scan Context DB 承担精度层召回，因此默认关闭。
+    precision_layer_enable_bbs2d_recall: false
+
+    # 弱接受复核的风险阈值。
+    # risk>=3 是精度优先正式默认值；调大可降低精度层触发率，调小会更保守但更耗资源。
+    precision_layer_trigger_risk_score: 3
+
+    # risk score 组成：support 低、selected rank 靠后、refine fitness 偏高、selected 与 best-supported seed 分歧大。
+    # 运行态使用 selected 和 best-supported seed 的位姿分歧衡量候选歧义，不依赖外部参考位姿。
+    precision_layer_risk_weak_support_frames: 3
+    precision_layer_risk_bad_support_frames: 2
+    precision_layer_risk_weak_selected_rank: 5
+    precision_layer_risk_bad_selected_rank: 7
+    precision_layer_risk_weak_refine_fitness: 0.035
+    precision_layer_risk_bad_refine_fitness: 0.045
+    # selected 与 best-supported seed 的平移分歧弱风险阈值，单位 m。
+    precision_layer_risk_weak_seed_disagreement_xy_m: 0.50
+    # selected 与 best-supported seed 的平移分歧高风险阈值，单位 m。
+    precision_layer_risk_bad_seed_disagreement_xy_m: 0.80
+    # selected 与 best-supported seed 的 yaw 分歧弱风险阈值，单位 deg。
+    precision_layer_risk_weak_seed_disagreement_yaw_deg: 4.0
+    # selected 与 best-supported seed 的 yaw 分歧高风险阈值，单位 deg。
+    precision_layer_risk_bad_seed_disagreement_yaw_deg: 6.0
+
+    # =========================
     # 运行态输出
     # =========================
 
     # 是否启用实时重定位搜索。
     # false：节点只加载配置并保持运行，不订阅点云、不占用搜索 CPU。
     # true：节点订阅点云并在节流间隔到达时执行全局搜索，输出恢复候选和状态。
-    enable_relocalization: false
+    enable_relocalization: true
 
     # 两次实时搜索之间的最小间隔，单位秒。
     # 调大可降低 CPU；调小响应更快但会抢占导航系统资源。正式接入时建议由恢复状态机按需触发。

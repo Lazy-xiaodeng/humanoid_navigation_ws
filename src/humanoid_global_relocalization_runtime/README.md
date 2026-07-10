@@ -6,9 +6,35 @@
 
 当前节点默认不直接发布 `map -> odom` TF，也不直接注入 `initialpose`。它会发布 `recovery_pose`、`recovery_map_to_odom` 和 `recovery_status`，由后续恢复状态机或定位桥审核后再决定是否真正改写导航闭环。这样可以把“搜索候选”和“改变机器人定位状态”分成两个清晰边界。
 
+## 正式集成入口
+
+正式系统集成使用 [relocalization_runtime.yaml](/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_global_relocalization_runtime/config/relocalization_runtime.yaml)。这份配置只保留在线运行需要的参数，默认 `enable_relocalization=true`，适合由恢复状态机按需启动或放在低频恢复通道中运行。
+
+离线 bag 回归、CSV 统计、参数扫描使用 [relocalization_validation.yaml](/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_global_relocalization_runtime/config/relocalization_validation.yaml) 或 `test/` 下脚本生成的临时 YAML。当前 `config/` 目录只保留这两份固定入口：一份正式运行，一份测试验证。
+
+上线时建议只把这些接口接入上层系统：
+
+- 输入：`/fast_lio/cloud_registered`、`/odom`，或确认轴系后的 `/cloud_registered_body`。
+- 输出：`/global_relocalization/recovery_pose`、`/global_relocalization/recovery_map_to_odom`、`/global_relocalization/recovery_status`。
+- 运维观察：`/global_relocalization/candidates`、`/global_relocalization/candidate_markers`、`/global_relocalization/aligned_scan`。
+
+不要让导航栈直接消费 `/global_relocalization/candidates`，也不要把本节点输出自动等同于 TF 重置。恢复状态机应先检查 `recovery_status` 中的 `state`、`refined_converged`、`refined_fitness`、`selected_support`、`trajectory_*` 字段，再决定是否应用 `recovery_map_to_odom`。
+
+当前正式运行模板默认启用的核心链路是：
+
+```text
+3D-BBS global search
+  + GICP top8 refinement
+  + temporal map->odom support gate
+  + trajectory likelihood fallback
+  + precision recovery layer on reject / weak-accept risk
+```
+
+正式默认层不常开 2.5D。高精度层在默认层拒绝或弱接受风险分 `precision_layer_trigger_risk_score` 达标时介入，使用 `Scan Context DB + scan0.25 + GICP top30` 做复核。Scan Context 在默认层仍关闭；只有当部署地图已经有稳定的 descriptor/keyframe 数据库时，才填写 `precision_layer_scan_context_database_path` 或全局 `scan_context_database_path`。
+
 ## 上下游关系
 
-上游输入分为两种模式，由 [global_relocalization_runtime.yaml](/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_global_relocalization_runtime/config/global_relocalization_runtime.yaml) 参数选择：
+上游输入分为两种模式，由 [relocalization_runtime.yaml](/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_global_relocalization_runtime/config/relocalization_runtime.yaml) 参数选择：
 
 - `registered_world`：订阅 `/fast_lio/cloud_registered` 和 `/odom`。点云位于 Fast-LIO 的 `camera_init` raw world 坐标系，需要用同一时刻 `/odom` 反变换回 raw body。
 - `body`：订阅 `/cloud_registered_body`。点云位于 Fast-LIO raw body 坐标系，不需要反算 odom，但仍需要转换到 ROS 标准 `base_footprint`。
@@ -96,7 +122,7 @@ vendored CPU 后端已经扩展出 `set_top_k()`、`get_top_poses()` 和 `get_to
 
 在 selected 支持帧不足且 trajectory 也没有安全发布时，节点还提供一个很窄的 `single_frame_high_confidence_fallback`：只有当前单帧精配准 fitness 低于 `single_frame_high_confidence_max_fitness` 才会接受。它用于补救“单帧已经非常贴图、只是历史支持还没攒够”的冷启动点；重复走廊里 fitness 较高或候选歧义明显的帧仍会被拒绝，等待长历史或主动恢复新视角。
 
-新增的 Scan Context 召回模块位于 `scan_context.hpp/.cpp`。离线 evaluator 可通过 `enable_scan_context_recall=true` 从 bag 中按 `scan_context_keyframe_stride` 抽 keyframe 建描述子库，查询当前 scan 的 top-K 相似 keyframe，并把这些 keyframe 位姿转成额外 GICP seed。该能力不直接替代 3D-BBS，而是作为二阶段深搜候选补充：第一阶段仍建议使用当前较轻的 `scan_leaf_size=0.30 + max_refine_candidates=8`；当第一阶段不够高置信时，再启用 `scan_leaf_size=0.25 + max_refine_candidates=30 + Scan Context top-K`。bag46 回归中，这个组合把随机 100 点主口径 `0.3m/5deg` 从 `92/100` 提升到 `98/100`，把边角困难 100 点从 `82/100` 提升到约 `90~91/100`。当前 C++ 验证版会临时缓存 keyframe 点云消息建库，峰值内存约 1.3GB；上线前应改为建图阶段离线生成轻量 descriptor/keyframe 文件，运行时只加载描述子和 keyframe 位姿。
+新增的 Scan Context 召回模块位于 `scan_context.hpp/.cpp`。离线 evaluator 可通过 `enable_scan_context_recall=true` 从 bag 中按 `scan_context_keyframe_stride` 抽 keyframe 建描述子库，查询当前 scan 的 top-K 相似 keyframe，并把这些 keyframe 位姿转成额外 GICP seed。该能力不直接替代 3D-BBS，而是作为高精度恢复层候选补充：第一阶段使用当前较轻的 `scan_leaf_size=0.30 + max_refine_candidates=8`；当默认层拒绝或弱接受风险分达到阈值时，再启用 `scan_leaf_size=0.25 + max_refine_candidates=30 + Scan Context top-K`。bag46 回归中，`risk>=3` 触发精度层复核可把 174 个综合样本的 `0.3m/5deg` 恢复成功从轻默认单独的 `150/174` 提升到 `165/174`，误接受从 `9` 降到 `5`。当前 C++ 验证版会临时缓存 keyframe 点云消息建库，峰值内存约 1.3GB；上线前应改为建图阶段离线生成轻量 descriptor/keyframe 文件，运行时只加载描述子和 keyframe 位姿。
 
 STD/BTC 三角描述子方向已新增离线验证脚本 `test/run_triangle_descriptor_validation.py`。该脚本不是 HKU-MARS STD/BTC 的完整移植，而是先用“关键点三角边长直方图 + keyframe seed + yaw 多假设 + GICP”验证三角几何指纹能否作为第三阶段兜底。bag46 hard52 对照中，Scan Context DB 版主阈值 `0.3m/5deg` 为 `32/52`，当前简化三角描述子为 `30/52`，两者 union 为 `33/52`：它额外救回 `5878` 这一帧，但会错过 `3301/29762/35520` 三个 Scan Context 已成功帧。因此当前结论是：简化三角直方图不适合替代 Scan Context 或直接进入主链路；完整 STD/BTC 若要继续尝试，应重点移植其稳定关键点、局部二进制描述和描述子匹配后的几何一致性验证，而不是只用全局三角边长直方图。
 
@@ -145,7 +171,7 @@ source /opt/ros/jazzy/setup.bash
 colcon build --packages-select humanoid_global_relocalization_runtime
 ```
 
-正式运行态配置使用 `config/global_relocalization_runtime.yaml`，安装后的 share 目录只包含运行态 YAML、launch 和 README。bag 回归、资源统计和参数扫描工具保留在源码 `test/` 目录中，用于上线前复测，不作为运行态安装接口。
+正式运行态配置使用 `config/relocalization_runtime.yaml`，测试验证配置使用 `config/relocalization_validation.yaml`。安装后的 share 目录只包含这两份 YAML、launch 和 README；bag 回归、资源统计和参数扫描工具保留在源码 `test/` 目录中，用于上线前复测，不作为运行态安装接口。
 
 扫描当前机器上的 bag 话题能力时，可使用源码中的辅助脚本：
 
@@ -368,7 +394,7 @@ python3 src/humanoid_global_relocalization_runtime/test/run_validation_gates.py
 
 无 `/robot_realpose` 的 4 个 registered_world bag 不能计算准确率，但已通过 `extra_registered_world_no_reference_smoke.yaml` 做链路冒烟验证：7 个抽样帧、3 类模拟场景，共 21 行全部 `localized=1`。这部分只证明输入链路、BBS 搜索、GICP 精配准和资源统计可以跑通，不纳入最终成功率。
 
-当前推荐运行配置已经同步到 `config/global_relocalization_runtime.yaml`，核心参数为：
+当前推荐运行配置已经同步到 `config/relocalization_runtime.yaml`，核心参数为：
 
 ```text
 map: hall_open3d_grounded.pcd
@@ -505,7 +531,7 @@ test/nav_drift_registered_world_extended_cpp_temporal.yaml
 - Area Graph/可见性门控方向已新增离线验证脚本 `test/run_area_visibility_gate_validation.py`。该脚本不重新召回候选，而是读取现有 `bag46 hard52` 三角描述子 + GICP 候选明细，把当前 scan 按每个候选位姿投到地图里，计算端点贴图比例、射线提前撞墙比例和候选站位是否落入障碍。完整 hard52 结果表明，硬门控不适合直接用于自动恢复：例如 `endpoint_near>=0.45` 且 `wall_cross<=0.30` 只接受 `5/52`，其中 `0.3m/5deg` 成功 `3/5`，大量正确候选被地图墙体厚度、稠密障碍点和动态残留误伤。改成软重排序后有小幅收益：原三角描述子/GICP 选点为 `0.2m/3deg 25/52`、`0.3m/5deg 30/52`、`0.5m/10deg 37/52`，加入端点贴图奖励和穿墙比例惩罚后提升到 `28/52`、`36/52`、`45/52`，median 误差为 `0.113m / 1.490deg`，但最大错误仍有 `36.315m / 174.689deg`。该离线脚本全候选评估耗时 `92.08s`、平均 CPU `1.27` 核、峰值 RSS `443.9MB`。因此该方向建议作为候选软排序和诊断特征接入，不建议作为单独的硬接受/拒绝条件；站位清空检查当前只保留诊断，不参与默认排序。
 - 2D/2.5D BBS 全图搜索方向已新增离线验证脚本 `test/run_bbs_2p5d_validation.py`。该脚本从全局 PCD 地图生成多高度层二维占据距离场，按 `x/y/yaw` 在整个地图上做多分辨率分支搜索，最终对 top 候选做空间/角度 NMS、禁穿墙/站位清空重排序和 Open3D GICP 精修。对 `bag46 hard52` 全量 52 点的最终配置为：`base_resolution=0.20m`、高度层 `0.2:0.8/0.8:1.5/1.5:2.2`、yaw 步长 `5deg`、最终 yaw 加密 `2.5deg`、每层保留 `12000` 候选、最终 NMS `2.0m/30deg`、GICP 精修 top16。直接自动接受结果为 `0.2m/3deg 12/52`、`0.3m/5deg 18/52`、`0.5m/10deg 26/52`，median 约 `2.214m / 5.840deg`，说明它不能单独作为最终重定位发布器；但 top16 候选池 oracle 非常强：seed 口径为 `25/52`、`39/52`、`52/52`，GICP 后为 `29/52`、`37/52`、`52/52`。全量耗时 `123.31s`，平均 CPU `1.69` 核，峰值 RSS `444.4MB`，单帧 median 大约 `2.2s~2.4s`。结论是：BBS_2.5D 是目前最有价值的“全图兜底候选召回层”，尤其适合静止冷启动/定位丢失时给 trajectory likelihood 或主动新视角模块提供多假设；但不能只按单帧分数直接发布 initialpose，否则重复走廊仍会误接受。
 - BBS_2.5D 又在 `nav_drift_test46` 上做了三组随机 100 点压测，点位来自 `/fast_lio/cloud_registered` 与 `/robot_realpose` 精确同步抽样，结果目录为 `.codex_tmp/bbs_2p5d_random_sets/rand100_seed20260707~20260709`。把最终单帧选中的候选当作“静止冷启动直接发布”时，300 点总成功率为 `0.2m/3deg 101/300`、`0.3m/5deg 112/300`、`0.5m/10deg 114/300`，全部样本 median 误差为 `7.987m / 26.288deg`；这说明单帧 top1 仍然不能安全直发。成功样本自身很准，三组 `0.3m/5deg` 成功样本 median 约 `0.053m~0.069m / 0.150deg~0.280deg`，问题主要是重复结构下会选到远处相似区域。若把 BBS_2.5D 作为“定位丢失恢复候选池”而不是直接发布器，top16 候选池在 300 点中的 oracle 为：seed 口径 `0.2m/3deg 178/300`、`0.3m/5deg 266/300`、`0.5m/10deg 300/300`，GICP 后 `0.2m/3deg 266/300`、`0.3m/5deg 292/300`、`0.5m/10deg 300/300`。资源开销为 median total `2030.9ms`、median BBS `1141.0ms`、峰值 RSS `444.9MB`，三次整包平均 CPU 约 `1.88~2.00` 核。当前上线含义是：BBS_2.5D 应作为恢复层深搜兜底，为后续多帧轨迹似然、主动新视角或状态机确认提供 top-K 多假设；冷启动静止场景也必须经过候选确认后再发布 `initialpose/map->odom`，不能单靠单帧分数自动接受。
-- 2D/2.5D BBS 已接入 C++ 运行态候选池，新增核心文件为 `include/humanoid_global_relocalization_runtime/bbs2d_search.hpp` 和 `src/bbs2d_search.cpp`。运行态参数位于 `config/global_relocalization_runtime.yaml` 的“2D/2.5D BBS 深搜候选召回”段，默认 `enable_bbs2d_recall: false`，避免常态每帧占用额外 CPU；打开后流程为：3D-BBS 先给基础候选，Scan Context 按原逻辑补充 keyframe seed，最后 2.5D BBS 追加深搜候选。追加后的候选统一进入 `BbsResult.candidates`，继续由 GICP、`selected_support`、trajectory likelihood 和主动新视角门控确认，不会绕过安全发布逻辑。临时 1 帧 smoke 使用 `.codex_tmp/bbs2d_online_integration_smoke.yaml` 打开 2.5D，输出 `.codex_tmp/bbs2d_online_integration_smoke`，结果为 `localized=1`、融合候选 `17` 个、`search_ms=2344.98`、`total_ms=3054.77`、RSS `272.6MB`；该 smoke 无 `/robot_realpose` 同步参考，因此只验证链路跑通和候选融合，不计入准确率结论。
+- 2D/2.5D BBS 已接入 C++ 运行态候选池，新增核心文件为 `include/humanoid_global_relocalization_runtime/bbs2d_search.hpp` 和 `src/bbs2d_search.cpp`。运行态参数位于 `config/relocalization_runtime.yaml` 的“2D/2.5D BBS 深搜候选召回”段，正式默认 `enable_bbs2d_recall: false`；它保留为没有 Scan Context DB 时的兜底召回层，不作为日常默认层。打开后流程为：3D-BBS 先给基础候选，Scan Context 按原逻辑补充 keyframe seed，最后 2.5D BBS 追加深搜候选。追加后的候选统一进入 `BbsResult.candidates`，继续由 GICP、`selected_support`、trajectory likelihood 和主动新视角门控确认，不会绕过安全发布逻辑。临时 1 帧 smoke 使用 `.codex_tmp/bbs2d_online_integration_smoke.yaml` 打开 2.5D，输出 `.codex_tmp/bbs2d_online_integration_smoke`，结果为 `localized=1`、融合候选 `17` 个、`search_ms=2344.98`、`total_ms=3054.77`、RSS `272.6MB`；该 smoke 无 `/robot_realpose` 同步参考，因此只验证链路跑通和候选融合，不计入准确率结论。
 - SpectralGV 官方仓库已拉取到 `.codex_tmp/upstream_spectral_mcl/SpectralGV`，并新增 `test/run_spectral_gv_validation.py`。该脚本保留官方 SpectralGV 的核心流程：局部特征最近邻匹配、空间一致性 adjacency graph、power iteration 主特征向量和 spectral consistency score；为了完整跑我们自己的 bag，局部特征使用 Open3D FPFH 生成。候选 keyframe 已从 `nav_drift_test46` exact 导出到 `.codex_tmp/spectral_gv/candidate_keyframes.csv`，覆盖三角候选 CSV 中出现的 `287` 个唯一 keyframe。对 `bag46 hard52` 的完整验证结果为：同候选池 `weight=0` 基线 `0.2m/3deg 24/52`、`0.3m/5deg 28/52`、`0.5m/10deg 35/52`；加入 SpectralGV 软重排序后最佳为 `27/52`、`31/52`、`39/52`，median `0.118m / 2.041deg`，最大错误仍为 `25.168m / 171.284deg`。全量 `1040` 个 target-keyframe pair 耗时约 `25.97s`，平均 CPU `2.05` 核，峰值 RSS `582.6MB`。`sgv_distance_threshold` 在 `0.35/0.55/0.80/1.10` 上 sweep 后严格和实用口径都没有继续突破，只在可救回口径偶尔提升到 `40/52`。结论是：SpectralGV + FPFH 能带来小幅候选重排序收益，但无法解决当前主要重复走廊/墙角歧义；若未来要继续这个方向，应换成官方论文依赖的学习型局部特征，而不是继续调 FPFH。
 - MCL-DLF 官方仓库已拉取到 `.codex_tmp/upstream_spectral_mcl/mcl-dlf`，完整 DLF 分支当前不能在本机直接运行。官方入口 `main.py` 依赖 `MinkowskiEngine` 和 `MinkUNeXt` 权重；本机环境为 Python `3.12.3`、torch `2.11.0+cpu`、无 `nvidia-smi/nvcc`，仓库内也没有 `.pth/.pt/.ckpt` 权重文件。尝试安装 `MinkowskiEngine==0.5.4` 的 CPU-only 临时构建时，先后遇到 build isolation 看不到 torch、PEP668 保护、以及 Python 3.12 下缺少 `numpy.distutils` 的构建阻塞；即使用 `.codex_tmp/minkowski_build_deps` 临时加入 `numpy==1.26.4`，Python 3.12 仍无法导入 `numpy.distutils`。因此这不是数据适配失败，而是官方完整 DLF 运行环境不满足。MCL-DLF 的思想仍值得保留：用 keyframe 拓扑粒子 MCL 做多假设，再用深度局部特征 fine localization；但要完整验证，需要单独准备 Python 3.9/3.10、MinkowskiEngine 可编译环境、CUDA 或明确 CPU 补丁、以及用我们机器人 bag 训练/获得 MinkUNeXt 权重。
 

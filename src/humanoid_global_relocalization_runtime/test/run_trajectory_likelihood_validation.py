@@ -105,6 +105,12 @@ def build_eval_config(
     p["max_refine_candidates"] = args.max_refine_candidates
     p["refine_method"] = "gicp"
     p["refine_methods_for_sweep"] = ["gicp"]
+    p["simulated_relocalization_cases"] = [
+        {
+            "name": "arbitrary_start_no_prior",
+            "offset_xyzrpy": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        }
+    ]
     p["enable_temporal_consistency"] = True
     p["enable_trajectory_likelihood"] = True
     p["temporal_consistency_window_before"] = history_count
@@ -405,7 +411,7 @@ def main() -> int:
         return 2
 
     sample_indices, target_by_index = build_sample_indices(targets, args.history_offsets)
-    template = yaml.safe_load((workspace / "src/humanoid_global_relocalization_runtime/config/global_relocalization_eval.yaml").read_text(encoding="utf-8"))
+    template = yaml.safe_load((workspace / "src/humanoid_global_relocalization_runtime/config/relocalization_validation.yaml").read_text(encoding="utf-8"))
     history_count = max(0, len([offset for offset in args.history_offsets if offset > 0]))
     future_count = max(0, len([offset for offset in args.history_offsets if offset < 0]))
 

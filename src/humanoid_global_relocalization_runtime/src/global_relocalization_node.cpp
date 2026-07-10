@@ -101,7 +101,7 @@ Eigen::Matrix4d constrain_to_2d_if_needed(const Eigen::Matrix4d & pose, const Fr
     return pose;
   }
 
-  // 与离线 evaluator 保持一致：室内导航只输出 x/y/yaw，z/roll/pitch 归零。
+  // 与评估工具保持同一位姿约束：室内导航只输出 x/y/yaw，z/roll/pitch 归零。
   const double yaw = yaw_from_matrix(pose);
   Eigen::Matrix4d constrained = Eigen::Matrix4d::Identity();
   constrained(0, 0) = std::cos(yaw);
@@ -193,7 +193,7 @@ struct VoxelKeyHash
 {
   std::size_t operator()(const VoxelKey & key) const
   {
-    // 与离线 evaluator 相同：用三个大质数混合体素坐标，降低相邻体素落到同一桶的概率。
+    // 用三个大质数混合体素坐标，降低相邻体素落到同一桶的概率。
     const std::size_t hx = static_cast<std::size_t>(key.x * 73856093);
     const std::size_t hy = static_cast<std::size_t>(key.y * 19349663);
     const std::size_t hz = static_cast<std::size_t>(key.z * 83492791);
@@ -295,7 +295,7 @@ public:
   {
     config_file_ = declare_parameter<std::string>(
       "config_file",
-      "src/humanoid_global_relocalization_runtime/config/global_relocalization_runtime.yaml");
+      "src/humanoid_global_relocalization_runtime/config/relocalization_runtime.yaml");
 
     try {
       config_ = load_config_file(config_file_);
@@ -368,7 +368,7 @@ private:
   bool build_map_index()
   {
     try {
-      // 运行态与离线回归工具使用同一套地图预处理和 3D-BBS 参数，保证参数语义一致。
+      // 运行态与评估工具使用同一套地图预处理和 3D-BBS 参数，保证参数语义一致。
       CloudPtr raw_map = load_pcd_xyz(config_.input.map_path);
       map_cloud_ = preprocess_map_cloud(raw_map, config_.preprocess);
       const auto map_points = cloud_to_eigen_points(map_cloud_);
@@ -383,16 +383,25 @@ private:
       if (config_.scan_context.enable && !config_.scan_context.database_path.empty()) {
         scan_context_database_ = load_scan_context_database(config_.scan_context.database_path);
       }
+      if (config_.precision_recovery.enable &&
+        config_.precision_recovery.enable_scan_context_recall &&
+        !config_.precision_recovery.scan_context_database_path.empty())
+      {
+        precision_scan_context_database_ =
+          load_scan_context_database(config_.precision_recovery.scan_context_database_path);
+      }
       const auto build_ms =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 
       RCLCPP_INFO(
         get_logger(),
-        "built global relocalization map index: map_points=%zu occupancy_voxels=%zu scan_context_entries=%zu bbs2d=%s build_ms=%.3f",
+        "built global relocalization map index: map_points=%zu occupancy_voxels=%zu scan_context_entries=%zu precision_scan_context_entries=%zu bbs2d=%s precision_layer=%s build_ms=%.3f",
         map_cloud_->size(),
         map_occupancy_.size(),
         scan_context_database_.size(),
+        precision_scan_context_database_.size(),
         config_.bbs2d.enable ? "enabled" : "disabled",
+        config_.precision_recovery.enable ? "enabled" : "disabled",
         build_ms);
       return true;
     } catch (const std::exception & exc) {
@@ -548,6 +557,187 @@ private:
       fused_refined.candidate_rank);
   }
 
+  bool precision_layer_available() const
+  {
+    return config_.precision_recovery.enable &&
+           config_.precision_recovery.enable_scan_context_recall &&
+           !precision_scan_context_database_.empty();
+  }
+
+  bool should_run_precision_layer(const rclcpp::Time & now) const
+  {
+    if (!precision_layer_available()) {
+      return false;
+    }
+    if (precision_attempts_remaining_ <= 0) {
+      return false;
+    }
+    if (last_precision_layer_time_.nanoseconds() != 0) {
+      const double dt = (now - last_precision_layer_time_).seconds();
+      if (dt < std::max(0.0, config_.precision_recovery.cooldown_sec)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void update_precision_layer_state(bool recovery_published, bool precision_layer_used)
+  {
+    if (!precision_layer_available()) {
+      return;
+    }
+    if (recovery_published) {
+      default_reject_streak_ = 0;
+      precision_attempts_remaining_ = 0;
+      return;
+    }
+
+    ++default_reject_streak_;
+    if (precision_layer_used) {
+      precision_attempts_remaining_ = std::max(0, precision_attempts_remaining_ - 1);
+      return;
+    }
+
+    if (!config_.precision_recovery.trigger_on_default_reject) {
+      return;
+    }
+
+    const int trigger_rejects = std::max(1, config_.precision_recovery.min_default_reject_frames);
+    if (default_reject_streak_ >= trigger_rejects) {
+      precision_attempts_remaining_ =
+        std::max(precision_attempts_remaining_, std::max(1, config_.precision_recovery.attempt_frames));
+    }
+  }
+
+  void arm_precision_layer_attempts()
+  {
+    if (!precision_layer_available()) {
+      return;
+    }
+    precision_attempts_remaining_ =
+      std::max(precision_attempts_remaining_, std::max(1, config_.precision_recovery.attempt_frames));
+  }
+
+  void fuse_precision_layer_candidates_for_online(const CloudPtr & base_scan, BbsResult & result)
+  {
+    if (!precision_layer_available() || !base_scan || base_scan->empty()) {
+      return;
+    }
+
+    PreprocessConfig precision_preprocess = config_.preprocess;
+    precision_preprocess.scan_leaf_size = config_.precision_recovery.scan_leaf_size;
+    CloudPtr precision_scan_cloud = preprocess_scan_cloud(base_scan, precision_preprocess);
+    if (!precision_scan_cloud || precision_scan_cloud->empty()) {
+      return;
+    }
+
+    BbsResult precision_result = bbs_->localize(cloud_to_eigen_points(precision_scan_cloud));
+    if (!precision_result.localized || precision_result.candidates.empty()) {
+      return;
+    }
+
+    RefineConfig precision_refine = config_.refine;
+    precision_refine.max_refine_candidates =
+      std::max(1, config_.precision_recovery.max_refine_candidates);
+    ScanContextConfig precision_scan_context = config_.scan_context;
+    precision_scan_context.enable = true;
+    precision_scan_context.database_path = config_.precision_recovery.scan_context_database_path;
+
+    CloudPtr scan_ptr(new Cloud(*precision_scan_cloud));
+    RefineOutput primary_refined =
+      refine_candidates(map_cloud_, scan_ptr, precision_result.candidates, precision_refine);
+    if (!primary_refined.converged ||
+      primary_refined.fitness_score > config_.temporal.single_frame_high_confidence_max_fitness)
+    {
+      const ScanContextDescriptor query =
+        compute_scan_context_descriptor(precision_scan_cloud, precision_scan_context);
+      const auto matches =
+        query_scan_context_database(query, precision_scan_context_database_, -1, precision_scan_context);
+
+      std::vector<BbsCandidate> precision_fused;
+      const int refine_budget = std::max(1, precision_refine.max_refine_candidates);
+      const int bbs_prefix = std::min<int>(
+        static_cast<int>(precision_result.candidates.size()),
+        std::max(1, refine_budget / 3));
+      for (int i = 0; i < bbs_prefix; ++i) {
+        precision_fused.push_back(precision_result.candidates[static_cast<std::size_t>(i)]);
+      }
+      for (const auto & match : matches) {
+        for (const double yaw_offset_deg : precision_scan_context.yaw_offsets_deg) {
+          const Eigen::Matrix4d seed_pose =
+            apply_scan_context_yaw_shift(
+            match.map_to_base, match.shift, yaw_offset_deg, precision_scan_context);
+          if (is_duplicate_candidate(precision_fused, seed_pose, precision_scan_context)) {
+            continue;
+          }
+          BbsCandidate candidate;
+          candidate.pose = seed_pose;
+          candidate.score = -match.rank;
+          candidate.score_ratio = std::max(0.0, 1.0 - match.distance);
+          precision_fused.push_back(candidate);
+        }
+      }
+      for (int i = bbs_prefix; i < static_cast<int>(precision_result.candidates.size()); ++i) {
+        const auto & candidate = precision_result.candidates[static_cast<std::size_t>(i)];
+        if (!is_duplicate_candidate(precision_fused, candidate.pose, precision_scan_context)) {
+          precision_fused.push_back(candidate);
+        }
+      }
+      if (!precision_fused.empty()) {
+        RefineOutput fused_refined =
+          refine_candidates(map_cloud_, scan_ptr, precision_fused, precision_refine);
+        move_candidate_to_front(precision_fused, fused_refined.candidate_rank);
+        primary_refined = fused_refined;
+        precision_result.candidates = std::move(precision_fused);
+      }
+    } else {
+      move_candidate_to_front(precision_result.candidates, primary_refined.candidate_rank);
+    }
+
+    if (config_.precision_recovery.enable_bbs2d_recall && bbs2d_) {
+      const BbsResult deep_result =
+        bbs2d_->localize(cloud_to_eigen_points(precision_scan_cloud), config_.bbs);
+      for (const auto & candidate : deep_result.candidates) {
+        if (!is_duplicate_bbs2d_candidate(precision_result.candidates, candidate.pose, config_.bbs2d)) {
+          precision_result.candidates.push_back(candidate);
+        }
+      }
+      precision_result.search_ms += deep_result.search_ms;
+    }
+
+    std::vector<BbsCandidate> merged;
+    merged.reserve(result.candidates.size() + precision_result.candidates.size());
+    for (const auto & candidate : result.candidates) {
+      if (!is_duplicate_candidate(merged, candidate.pose, precision_scan_context)) {
+        merged.push_back(candidate);
+      }
+    }
+    for (const auto & candidate : precision_result.candidates) {
+      if (!is_duplicate_candidate(merged, candidate.pose, precision_scan_context)) {
+        merged.push_back(candidate);
+      }
+    }
+    if (merged.empty()) {
+      return;
+    }
+
+    RefineOutput merged_refined = refine_candidates(map_cloud_, scan_ptr, merged, precision_refine);
+    move_candidate_to_front(merged, merged_refined.candidate_rank);
+    result.candidates = std::move(merged);
+    result.localized = true;
+    result.search_ms += precision_result.search_ms;
+    last_precision_layer_time_ = this->now();
+    RCLCPP_INFO(
+      get_logger(),
+      "precision recovery layer fused candidates=%zu precision_candidates=%zu fitness=%.6f selected_rank=%d remaining_attempts=%d reject_streak=%d",
+      result.candidates.size(),
+      precision_result.candidates.size(),
+      merged_refined.fitness_score,
+      merged_refined.candidate_rank,
+      precision_attempts_remaining_,
+      default_reject_streak_);
+  }
+
   void handle_cloud(sensor_msgs::msg::PointCloud2::SharedPtr msg)
   {
     if (!bbs_) {
@@ -589,16 +779,25 @@ private:
     auto result = bbs_->localize(scan_points);
     fuse_scan_context_candidates_for_online(scan_cloud, result);
     fuse_bbs2d_candidates_for_online(scan_points, result);
+    const bool precision_layer_used = should_run_precision_layer(now);
+    if (precision_layer_used) {
+      fuse_precision_layer_candidates_for_online(base_scan, result);
+    }
 
     publish_runtime_outputs(*msg, *scan_cloud, result);
-    update_temporal_verifier(*msg, *scan_cloud, result, synced_odom);
+    const bool recovery_published =
+      update_temporal_verifier(*msg, *scan_cloud, result, synced_odom, precision_layer_used);
+    update_precision_layer_state(recovery_published, precision_layer_used);
     RCLCPP_INFO(
       get_logger(),
-      "relocalization localized=%s candidates=%zu search_ms=%.3f scan_points=%zu",
+      "relocalization localized=%s candidates=%zu search_ms=%.3f scan_points=%zu precision_layer=%s reject_streak=%d precision_attempts_remaining=%d",
       result.localized ? "true" : "false",
       result.candidates.size(),
       result.search_ms,
-      scan_cloud->size());
+      scan_cloud->size(),
+      precision_layer_used ? "used" : "idle",
+      default_reject_streak_,
+      precision_attempts_remaining_);
   }
 
   TemporalFrameInput make_temporal_frame(
@@ -610,7 +809,7 @@ private:
     // recovery pose 只允许发布 selected/top-1 自身也稳定的候选；best_seed_rank 只作为审计字段。
     TemporalFrameInput frame;
     frame.map_path = config_.input.map_path;
-    frame.bag_path = "online";
+    frame.bag_path = "runtime";
     frame.stamp_sec = stamp_to_sec(source_msg.header.stamp);
     frame.refine_method = RefineMethod::None;
     frame.input_mode = config_.input.mode;
@@ -638,14 +837,75 @@ private:
     return result.candidates[static_cast<std::size_t>(rank - 1)].pose;
   }
 
-  void update_temporal_verifier(
+  int precision_acceptance_risk_score(
+    const TemporalConsistencyResult & current,
+    const RefineOutput & refined,
+    const BbsResult & result) const
+  {
+    const auto & risk = config_.precision_recovery;
+    int score = 0;
+
+    if (current.selected_support_frames <= risk.bad_support_frames) {
+      score += 2;
+    } else if (current.selected_support_frames <= risk.weak_support_frames) {
+      score += 1;
+    }
+
+    if (current.selected_rank >= risk.bad_selected_rank) {
+      score += 2;
+    } else if (current.selected_rank >= risk.weak_selected_rank) {
+      score += 1;
+    }
+
+    if (refined.fitness_score >= risk.bad_refine_fitness) {
+      score += 2;
+    } else if (refined.fitness_score >= risk.weak_refine_fitness) {
+      score += 1;
+    }
+
+    const auto selected_pose = candidate_pose_by_rank(result, current.selected_rank);
+    const auto best_seed_pose = candidate_pose_by_rank(result, current.best_seed_rank);
+    if (selected_pose && best_seed_pose) {
+      const double seed_xy = pose_xy_distance(*selected_pose, *best_seed_pose);
+      const double seed_yaw = pose_yaw_distance_deg(*selected_pose, *best_seed_pose);
+      if (seed_xy >= risk.bad_seed_disagreement_xy_m) {
+        score += 2;
+      } else if (seed_xy >= risk.weak_seed_disagreement_xy_m) {
+        score += 1;
+      }
+      if (seed_yaw >= risk.bad_seed_disagreement_yaw_deg) {
+        score += 2;
+      } else if (seed_yaw >= risk.weak_seed_disagreement_yaw_deg) {
+        score += 1;
+      }
+    }
+
+    return score;
+  }
+
+  bool should_review_with_precision_layer(
+    const TemporalConsistencyResult & current,
+    const RefineOutput & refined,
+    const BbsResult & result,
+    bool precision_layer_used,
+    int & risk_score) const
+  {
+    risk_score = precision_acceptance_risk_score(current, refined, result);
+    return precision_layer_available() &&
+           config_.precision_recovery.trigger_on_weak_accept &&
+           !precision_layer_used &&
+           risk_score >= std::max(1, config_.precision_recovery.trigger_risk_score);
+  }
+
+  bool update_temporal_verifier(
     const sensor_msgs::msg::PointCloud2 & source_msg,
     const Cloud & scan_cloud,
     const BbsResult & result,
-    const std::optional<nav_msgs::msg::Odometry> & synced_odom)
+    const std::optional<nav_msgs::msg::Odometry> & synced_odom,
+    bool precision_layer_used)
   {
     if (!config_.temporal.enable || !result.localized || result.candidates.empty()) {
-      return;
+      return false;
     }
     if (!synced_odom) {
       RCLCPP_WARN_THROTTLE(
@@ -653,7 +913,7 @@ private:
         *get_clock(),
         3000,
         "temporal verifier skipped because synced odom is unavailable");
-      return;
+      return false;
     }
 
     temporal_window_.push_back(make_temporal_frame(source_msg, result, *synced_odom));
@@ -669,7 +929,7 @@ private:
     online_config.window_after = 0;
     const auto results = analyze_temporal_consistency(frames, online_config);
     if (results.empty()) {
-      return;
+      return false;
     }
 
     const auto current_stamp = stamp_to_sec(source_msg.header.stamp);
@@ -680,19 +940,19 @@ private:
         return std::abs(item.stamp_sec - current_stamp) < 1e-6;
       });
     if (current == results.rend()) {
-      return;
+      return false;
     }
 
     if (current->selected_support_frames < std::max(1, config_.temporal.online_min_support_frames)) {
       const auto trajectory_attempt =
         try_publish_trajectory_recovery(source_msg, result, *synced_odom, std::nullopt);
       if (trajectory_attempt.published) {
-        return;
+        return true;
       }
       const bool single_frame_published =
         try_publish_single_frame_high_confidence(source_msg, scan_cloud, result, *synced_odom, *current);
       if (single_frame_published) {
-        return;
+        return true;
       }
       publish_recovery_status(
         source_msg.header.stamp,
@@ -715,12 +975,12 @@ private:
         current->selected_rank,
         current->selected_support_frames,
         config_.temporal.online_min_support_frames);
-      return;
+      return false;
     }
 
     const auto coarse_pose = candidate_pose_by_rank(result, current->selected_rank);
     if (!coarse_pose) {
-      return;
+      return false;
     }
 
     BbsCandidate seed_candidate;
@@ -735,7 +995,7 @@ private:
       const auto trajectory_attempt =
         try_publish_trajectory_recovery(source_msg, result, *synced_odom, refined);
       if (trajectory_attempt.published) {
-        return;
+        return true;
       }
       publish_recovery_status(
         source_msg.header.stamp,
@@ -759,7 +1019,7 @@ private:
         refined.fitness_score,
         config_.temporal.online_max_refine_fitness,
         refined.converged ? "true" : "false");
-      return;
+      return false;
     }
 
     const Eigen::Matrix4d log_publish_pose =
@@ -768,6 +1028,36 @@ private:
       raw_odom_pose_to_base_axis_pose(pose_to_matrix(synced_odom->pose.pose));
     const Eigen::Matrix4d log_map_to_odom =
       constrain_to_2d_if_needed(log_publish_pose * log_odom_to_base.inverse(), config_.frames);
+
+    int acceptance_risk_score = 0;
+    if (should_review_with_precision_layer(
+        *current, refined, result, precision_layer_used, acceptance_risk_score))
+    {
+      arm_precision_layer_attempts();
+      publish_recovery_status(
+        source_msg.header.stamp,
+        "reject_precision_layer_risk_review_required",
+        current->best_seed_rank,
+        current->best_support_frames,
+        current->selected_rank,
+        current->selected_support_frames,
+        log_map_to_odom(0, 3),
+        log_map_to_odom(1, 3),
+        yaw_from_matrix(log_map_to_odom) * 180.0 / M_PI,
+        refined.converged,
+        refined.fitness_score);
+      RCLCPP_INFO(
+        get_logger(),
+        "temporal selected candidate deferred for precision review: risk=%d threshold=%d selected_rank=%d selected_support=%d best_rank=%d best_support=%d fitness=%.6f",
+        acceptance_risk_score,
+        std::max(1, config_.precision_recovery.trigger_risk_score),
+        current->selected_rank,
+        current->selected_support_frames,
+        current->best_seed_rank,
+        current->best_support_frames,
+        refined.fitness_score);
+      return false;
+    }
 
     publish_recovery_outputs(
       source_msg,
@@ -794,6 +1084,7 @@ private:
       refined.converged ? "true" : "false",
       refined.fitness_score,
       refined.elapsed_ms);
+    return true;
   }
 
   bool try_publish_single_frame_high_confidence(
@@ -1286,7 +1577,10 @@ private:
          << " map_odom_y=" << map_odom_y
          << " map_odom_yaw_deg=" << map_odom_yaw_deg
          << " refined_converged=" << (refined_converged ? "true" : "false")
-         << " refined_fitness=" << refined_fitness;
+         << " refined_fitness=" << refined_fitness
+         << " precision_layer_available=" << (precision_layer_available() ? "true" : "false")
+         << " default_reject_streak=" << default_reject_streak_
+         << " precision_attempts_remaining=" << precision_attempts_remaining_;
     if (trajectory_attempt && trajectory_attempt->attempted) {
       text << " trajectory_attempted=true"
            << " recovery_hint=" << trajectory_attempt->hint
@@ -1384,9 +1678,13 @@ private:
   CloudPtr map_cloud_;
   OccupancySet map_occupancy_;
   std::vector<ScanContextEntry> scan_context_database_;
+  std::vector<ScanContextEntry> precision_scan_context_database_;
   std::unique_ptr<SimpleBbs3d> bbs_;
   std::unique_ptr<Bbs2dSearch> bbs2d_;
   rclcpp::Time last_search_time_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time last_precision_layer_time_{0, 0, RCL_ROS_TIME};
+  int default_reject_streak_{0};
+  int precision_attempts_remaining_{0};
 
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;

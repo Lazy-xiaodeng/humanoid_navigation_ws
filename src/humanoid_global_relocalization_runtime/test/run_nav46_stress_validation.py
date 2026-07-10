@@ -342,7 +342,7 @@ def write_dict_csv(path: Path, rows: list[dict[str, str]], fieldnames: list[str]
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run larger nav46 stress validation for both input modes.")
     parser.add_argument("--workspace", type=Path, default=repo_root_from_script(), help="humanoid_ws 工作空间")
-    parser.add_argument("--template", type=Path, default=None, help="参数模板 YAML，默认使用 config/global_relocalization_eval.yaml")
+    parser.add_argument("--template", type=Path, default=None, help="参数模板 YAML，默认使用 config/relocalization_validation.yaml")
     parser.add_argument("--frames", type=int, default=60, help="每路输入从 bag46 抽样多少帧")
     parser.add_argument("--stride", type=int, default=600, help="抽样帧间隔；600 约等于每 60 秒取一帧")
     parser.add_argument("--skip", type=int, default=100, help="bag 开头跳过多少帧点云")
@@ -362,7 +362,7 @@ def main() -> int:
     args = parser.parse_args()
 
     workspace = args.workspace.resolve()
-    template_path = args.template or workspace / "src/humanoid_global_relocalization_runtime/config/global_relocalization_eval.yaml"
+    template_path = args.template or workspace / "src/humanoid_global_relocalization_runtime/config/relocalization_validation.yaml"
     template = load_yaml(template_path)
     modes = ["body", "registered_world"] if args.mode == "both" else [args.mode]
 

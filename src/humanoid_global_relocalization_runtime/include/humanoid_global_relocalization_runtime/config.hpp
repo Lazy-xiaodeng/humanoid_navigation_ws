@@ -10,7 +10,7 @@
  *
  * 设计说明：
  *   - 这些结构只描述运行层核心需要的参数，不直接依赖 ROS 参数服务器。
- *   - 在线节点和离线回归工具复用同一份配置结构，防止同名参数含义不一致。
+ *   - 运行节点和评估工具复用同一份配置结构，防止同名参数含义不一致。
  *   - 任何新增参数都应先加到这里，再加到 YAML，并在 YAML 中补充中文说明。
  */
 
@@ -205,6 +205,32 @@ struct ScanContextConfig
   double duplicate_yaw_gate_deg{5.0};
 };
 
+struct PrecisionRecoveryConfig
+{
+  bool enable{false};
+  bool trigger_on_default_reject{true};
+  bool trigger_on_weak_accept{true};
+  int min_default_reject_frames{2};
+  int attempt_frames{3};
+  double cooldown_sec{5.0};
+  double scan_leaf_size{0.25};
+  int max_refine_candidates{30};
+  bool enable_scan_context_recall{true};
+  bool enable_bbs2d_recall{false};
+  std::string scan_context_database_path;
+  int trigger_risk_score{3};
+  int weak_support_frames{3};
+  int bad_support_frames{2};
+  int weak_selected_rank{5};
+  int bad_selected_rank{7};
+  double weak_refine_fitness{0.035};
+  double bad_refine_fitness{0.045};
+  double weak_seed_disagreement_xy_m{0.50};
+  double bad_seed_disagreement_xy_m{0.80};
+  double weak_seed_disagreement_yaw_deg{4.0};
+  double bad_seed_disagreement_yaw_deg{6.0};
+};
+
 struct EvaluationScenario
 {
   std::string name{"arbitrary_start_no_prior"};
@@ -235,6 +261,7 @@ struct RuntimeConfig
   EvaluationConfig evaluation;
   TemporalConsistencyConfig temporal;
   ScanContextConfig scan_context;
+  PrecisionRecoveryConfig precision_recovery;
   std::vector<EvaluationScenario> scenarios;
   RuntimeOutputConfig output;
 };

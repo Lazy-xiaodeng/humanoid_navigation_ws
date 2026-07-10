@@ -83,6 +83,7 @@ ament_target_dependencies(global_relocalization_node ${COMMON_DEPS})
 
 install(TARGETS
   global_relocalization_core
+  global_relocalization_offline_eval
   global_relocalization_node
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -93,7 +94,9 @@ install(DIRECTORY include/
   DESTINATION include
 )
 
-install(FILES config/global_relocalization_runtime.yaml
+install(FILES
+  config/relocalization_runtime.yaml
+  config/relocalization_validation.yaml
   DESTINATION share/${PROJECT_NAME}/config
 )
 

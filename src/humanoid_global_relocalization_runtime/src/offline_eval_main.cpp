@@ -8,7 +8,7 @@
  *
  * 使用方式：
  *   ros2 run humanoid_global_relocalization_runtime global_relocalization_offline_eval \
- *     --config src/humanoid_global_relocalization_runtime/config/global_relocalization_eval.yaml
+ *     --config src/humanoid_global_relocalization_runtime/config/relocalization_validation.yaml
  */
 
 #include <iostream>
@@ -35,7 +35,7 @@ std::string parse_config_path(int argc, char ** argv)
       return argv[i + 1];
     }
   }
-  return "src/humanoid_global_relocalization_runtime/config/global_relocalization_eval.yaml";
+  return "src/humanoid_global_relocalization_runtime/config/relocalization_validation.yaml";
 }
 
 }  // namespace

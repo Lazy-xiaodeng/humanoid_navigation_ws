@@ -323,7 +323,7 @@ def check_artifact_matrix(workspace: Path, artifacts_root: Path, failures: list[
         workspace / "src/humanoid_global_relocalization_runtime/CMakeLists.txt",
         workspace / "src/humanoid_global_relocalization_runtime/package.xml",
         workspace / "src/humanoid_global_relocalization_runtime/README.md",
-        workspace / "src/humanoid_global_relocalization_runtime/config/global_relocalization_runtime.yaml",
+        workspace / "src/humanoid_global_relocalization_runtime/config/relocalization_runtime.yaml",
         workspace / "src/humanoid_global_relocalization_runtime/launch/global_relocalization_runtime.launch.py",
         workspace / "src/humanoid_global_relocalization_runtime/test/check_documentation_contract.py",
         workspace / "src/humanoid_global_relocalization_runtime/test/check_goal_evidence.py",

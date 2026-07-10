@@ -2,8 +2,11 @@
 # -*- coding: utf-8 -*-
 """启动 humanoid_global_relocalization_runtime 全局重定位运行层节点。
 
-该 launch 用于单独启动全局重定位运行层。节点会按参数决定是否实时搜索；
-默认只输出恢复候选和恢复状态，不直接发布 TF，也不直接改写定位桥。
+文件作用：
+  作为系统集成入口启动全局重定位运行层。
+
+该 launch 用于系统集成。默认使用 relocalization_runtime.yaml，节点只输出恢复候选
+和恢复状态，不直接发布 TF，也不直接改写定位桥。
 """
 
 from launch import LaunchDescription
@@ -22,9 +25,9 @@ def generate_launch_description():
             default_value=PathJoinSubstitution([
                 FindPackageShare('humanoid_global_relocalization_runtime'),
                 'config',
-                'global_relocalization_runtime.yaml',
+                'relocalization_runtime.yaml',
             ]),
-            description='全局重定位运行层 YAML 配置文件。',
+            description='全局重定位运行层 YAML 配置文件。默认使用正式运行模板。',
         ),
         Node(
             package='humanoid_global_relocalization_runtime',

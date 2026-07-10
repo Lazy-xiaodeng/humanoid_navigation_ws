@@ -545,7 +545,7 @@ def main() -> int:
     workspace = args.workspace.resolve()
     waypoint_path = (workspace / args.waypoints).resolve() if not args.waypoints.is_absolute() else args.waypoints
     bag_path = args.bag.resolve()
-    template_path = args.template or workspace / "src/humanoid_global_relocalization_runtime/config/global_relocalization_eval.yaml"
+    template_path = args.template or workspace / "src/humanoid_global_relocalization_runtime/config/relocalization_validation.yaml"
     template = load_template(template_path)
     modes = ["body", "registered_world"] if args.mode == "both" else [args.mode]
 

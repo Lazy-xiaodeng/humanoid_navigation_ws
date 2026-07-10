@@ -50,7 +50,7 @@ def main() -> int:
     required_files = [
         install_root / "lib/libglobal_relocalization_core.a",
         install_root / "lib/libcpu_bbs3d.so",
-        install_root / "share/humanoid_global_relocalization_runtime/config/global_relocalization_runtime.yaml",
+        install_root / "share/humanoid_global_relocalization_runtime/config/relocalization_runtime.yaml",
         install_root / "share/humanoid_global_relocalization_runtime/launch/global_relocalization_runtime.launch.py",
         install_root / "share/humanoid_global_relocalization_runtime/README.md",
         build_root / "libglobal_relocalization_core.a",

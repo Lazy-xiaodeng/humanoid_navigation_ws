@@ -233,7 +233,7 @@ def has_cpp_build_artifacts(workspace: Path) -> tuple[bool, str]:
         install_root / "lib/humanoid_global_relocalization_runtime/global_relocalization_node",
         install_root / "lib/libglobal_relocalization_core.a",
         install_root / "lib/libcpu_bbs3d.so",
-        install_root / "share/humanoid_global_relocalization_runtime/config/global_relocalization_runtime.yaml",
+        install_root / "share/humanoid_global_relocalization_runtime/config/relocalization_runtime.yaml",
         install_root / "share/humanoid_global_relocalization_runtime/launch/global_relocalization_runtime.launch.py",
         build_root / "global_relocalization_node",
         build_root / "global_relocalization_offline_eval",
@@ -525,9 +525,9 @@ def check_goal_evidence(workspace: Path) -> list[EvidenceItem]:
     ))
     results.append(item(
         "main_yaml_documented",
-        (package / "config/global_relocalization_runtime.yaml").exists()
+        (package / "config/relocalization_runtime.yaml").exists()
         and (package / "test/check_documentation_contract.py").exists(),
-        str(package / "config/global_relocalization_runtime.yaml"),
+        str(package / "config/relocalization_runtime.yaml"),
         "主运行 YAML 有中文参数说明，并由 check_documentation_contract.py 门禁检查。",
     ))
     results.append(item(

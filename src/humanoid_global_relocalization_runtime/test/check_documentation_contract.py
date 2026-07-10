@@ -88,7 +88,7 @@ def has_recent_chinese_comment(lines: list[str], line_number: int, window: int =
 
 def check_main_yaml(package_dir: Path, failures: list[str]) -> None:
     """检查主 YAML 是否保留每个关键参数附近的中文说明。"""
-    path = package_dir / "config/global_relocalization_runtime.yaml"
+    path = package_dir / "config/relocalization_runtime.yaml"
     text = read_text(path)
     lines = text.splitlines()
     params = yaml_parameter_lines(text)

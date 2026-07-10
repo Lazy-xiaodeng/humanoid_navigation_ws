@@ -23,7 +23,7 @@ namespace
 YAML::Node parameter_root(const YAML::Node & root)
 {
   // ROS 2 参数 YAML 通常是 node_name.ros__parameters 两层结构。运行态主配置使用
-  // global_relocalization_node；旧回归配置可能仍使用 global_relocalization_eval，因此这里兼容两者。
+  // global_relocalization_node；评估配置可能使用 global_relocalization_eval，因此这里兼容两者。
   if (root["global_relocalization_node"] && root["global_relocalization_node"]["ros__parameters"]) {
     return root["global_relocalization_node"]["ros__parameters"];
   }
@@ -72,8 +72,8 @@ Eigen::Matrix4d rpy_to_matrix(const Eigen::Vector3d & xyz, const Eigen::Vector3d
 
 EvaluationScenario read_scenario(const YAML::Node & node, std::size_t index)
 {
-  // 场景配置用于离线报告里模拟“当前定位先验已经跳错/完全不可用”的状态。
-  // 3D-BBS 全局搜索不使用这个先验，因此这里不改变算法输入，只把偏差写进 CSV 供统计筛选。
+  // 场景配置用于评估不同恢复入口状态。3D-BBS 全局搜索不使用这个先验，
+  // 因此这里不改变算法输入，只把偏差写进指标供统计筛选。
   EvaluationScenario scenario;
   scenario.name = read_value<std::string>(
     node, "name", "scenario_" + std::to_string(index));
@@ -481,6 +481,108 @@ RuntimeConfig load_config_file(const std::string & path)
   config.scan_context.duplicate_yaw_gate_deg =
     read_value<double>(p, "scan_context_duplicate_yaw_gate_deg", config.scan_context.duplicate_yaw_gate_deg);
 
+  config.precision_recovery.enable =
+    read_value<bool>(p, "enable_precision_recovery_layer", config.precision_recovery.enable);
+  config.precision_recovery.trigger_on_default_reject =
+    read_value<bool>(
+    p,
+    "precision_layer_trigger_on_default_reject",
+    config.precision_recovery.trigger_on_default_reject);
+  config.precision_recovery.trigger_on_weak_accept =
+    read_value<bool>(
+    p,
+    "precision_layer_trigger_on_weak_accept",
+    config.precision_recovery.trigger_on_weak_accept);
+  config.precision_recovery.min_default_reject_frames =
+    read_value<int>(
+    p,
+    "precision_layer_min_default_reject_frames",
+    config.precision_recovery.min_default_reject_frames);
+  config.precision_recovery.attempt_frames =
+    read_value<int>(p, "precision_layer_attempt_frames", config.precision_recovery.attempt_frames);
+  config.precision_recovery.cooldown_sec =
+    read_value<double>(p, "precision_layer_cooldown_sec", config.precision_recovery.cooldown_sec);
+  config.precision_recovery.scan_leaf_size =
+    read_value<double>(p, "precision_layer_scan_leaf_size", config.precision_recovery.scan_leaf_size);
+  config.precision_recovery.max_refine_candidates =
+    read_value<int>(
+    p,
+    "precision_layer_max_refine_candidates",
+    config.precision_recovery.max_refine_candidates);
+  config.precision_recovery.enable_scan_context_recall =
+    read_value<bool>(
+    p,
+    "precision_layer_enable_scan_context_recall",
+    config.precision_recovery.enable_scan_context_recall);
+  config.precision_recovery.enable_bbs2d_recall =
+    read_value<bool>(
+    p,
+    "precision_layer_enable_bbs2d_recall",
+    config.precision_recovery.enable_bbs2d_recall);
+  config.precision_recovery.scan_context_database_path =
+    read_value<std::string>(
+    p,
+    "precision_layer_scan_context_database_path",
+    config.precision_recovery.scan_context_database_path);
+  config.precision_recovery.trigger_risk_score =
+    read_value<int>(
+    p,
+    "precision_layer_trigger_risk_score",
+    config.precision_recovery.trigger_risk_score);
+  config.precision_recovery.weak_support_frames =
+    read_value<int>(
+    p,
+    "precision_layer_risk_weak_support_frames",
+    config.precision_recovery.weak_support_frames);
+  config.precision_recovery.bad_support_frames =
+    read_value<int>(
+    p,
+    "precision_layer_risk_bad_support_frames",
+    config.precision_recovery.bad_support_frames);
+  config.precision_recovery.weak_selected_rank =
+    read_value<int>(
+    p,
+    "precision_layer_risk_weak_selected_rank",
+    config.precision_recovery.weak_selected_rank);
+  config.precision_recovery.bad_selected_rank =
+    read_value<int>(
+    p,
+    "precision_layer_risk_bad_selected_rank",
+    config.precision_recovery.bad_selected_rank);
+  config.precision_recovery.weak_refine_fitness =
+    read_value<double>(
+    p,
+    "precision_layer_risk_weak_refine_fitness",
+    config.precision_recovery.weak_refine_fitness);
+  config.precision_recovery.bad_refine_fitness =
+    read_value<double>(
+    p,
+    "precision_layer_risk_bad_refine_fitness",
+    config.precision_recovery.bad_refine_fitness);
+  config.precision_recovery.weak_seed_disagreement_xy_m =
+    read_value<double>(
+    p,
+    "precision_layer_risk_weak_seed_disagreement_xy_m",
+    config.precision_recovery.weak_seed_disagreement_xy_m);
+  config.precision_recovery.bad_seed_disagreement_xy_m =
+    read_value<double>(
+    p,
+    "precision_layer_risk_bad_seed_disagreement_xy_m",
+    config.precision_recovery.bad_seed_disagreement_xy_m);
+  config.precision_recovery.weak_seed_disagreement_yaw_deg =
+    read_value<double>(
+    p,
+    "precision_layer_risk_weak_seed_disagreement_yaw_deg",
+    config.precision_recovery.weak_seed_disagreement_yaw_deg);
+  config.precision_recovery.bad_seed_disagreement_yaw_deg =
+    read_value<double>(
+    p,
+    "precision_layer_risk_bad_seed_disagreement_yaw_deg",
+    config.precision_recovery.bad_seed_disagreement_yaw_deg);
+  if (config.precision_recovery.scan_context_database_path.empty()) {
+    config.precision_recovery.scan_context_database_path = config.scan_context.database_path;
+  }
+
   if (p["simulated_relocalization_cases"]) {
     config.scenarios.clear();
     const auto cases = p["simulated_relocalization_cases"];
@@ -492,7 +594,7 @@ RuntimeConfig load_config_file(const std::string & path)
     }
   }
   if (config.scenarios.empty()) {
-    // 即使 YAML 没有配置场景，也保留一个“任意点启动/无可靠先验”的默认场景，保证 CSV 字段稳定。
+    // 即使配置没有提供场景，也保留一个“任意点启动/无可靠先验”的默认场景，保证指标字段稳定。
     config.scenarios.push_back(EvaluationScenario{});
   }
 
