@@ -167,6 +167,9 @@ private:
     declare_parameter<std::string>("map_status_topic", config_.map_status_topic);
     declare_parameter<double>("localization_health_timeout_sec", config_.localization_health_timeout_sec);
     declare_parameter<bool>(
+      "localization_auto_pause_on_recovery_required",
+      config_.localization_auto_pause_on_recovery_required);
+    declare_parameter<bool>(
       "localization_allow_start_with_last_good_tf", config_.localization_allow_start_with_last_good_tf);
     declare_parameter<double>(
       "localization_last_good_tf_max_age_sec", config_.localization_last_good_tf_max_age_sec);
@@ -257,6 +260,8 @@ private:
       get_parameter("localization_health_status_topic").as_string();
     config_.map_status_topic = get_parameter("map_status_topic").as_string();
     config_.localization_health_timeout_sec = get_parameter("localization_health_timeout_sec").as_double();
+    config_.localization_auto_pause_on_recovery_required =
+      get_parameter("localization_auto_pause_on_recovery_required").as_bool();
     config_.localization_allow_start_with_last_good_tf =
       get_parameter("localization_allow_start_with_last_good_tf").as_bool();
     config_.localization_last_good_tf_max_age_sec =
@@ -342,6 +347,7 @@ private:
       500ms,
       [this]() {
         check_localization_timeout();
+        process_localization_recovery_state();
         check_route_task_feedback_timeout();
       });
     pending_navigation_timer_ = create_wall_timer(
@@ -678,8 +684,11 @@ private:
         const bool pose_initialized = read_bool_member(payload, "pose_initialized", false);
         const bool pose_trusted = read_bool_member(payload, "pose_trusted", false);
         const bool can_start_navigation = read_bool_member(payload, "can_start_navigation", false);
+        const bool recovery_required = read_bool_member(payload, "localization_recovery_required", false) ||
+          read_bool_member(payload, "recovery_requires_global_relocalization", false);
         localization_.state = read_string_member(payload, "state", "unknown");
         localization_.text = read_string_member(payload, "reason", "");
+        localization_.recovery_required = recovery_required;
         localization_.last_status_time = now;
         localization_.has_last_good_tf = pose_initialized || localization_.has_last_good_tf;
         if (pose_trusted && can_start_navigation) {
@@ -690,6 +699,7 @@ private:
           localization_.healthy = false;
           localization_.resume_stable_count = 0;
         }
+        process_localization_recovery_state();
         return;
       }
     }
@@ -697,6 +707,7 @@ private:
     const std::string state = text.substr(0, text.find(' '));
     localization_.state = state.empty() ? "UNKNOWN" : state;
     localization_.text = text;
+    localization_.recovery_required = false;
     localization_.last_status_time = now;
 
     if (localization_.state == "ACCEPTED") {
@@ -714,6 +725,7 @@ private:
 
     localization_.healthy = false;
     localization_.resume_stable_count = 0;
+    process_localization_recovery_state();
   }
 
   void on_map_status(const std_msgs::msg::String::ConstSharedPtr msg)
@@ -1064,7 +1076,8 @@ private:
     add_front_obstacle_stats(
       status, "front_obstacle_stats", allocator, last_obstacle_wait_decision_,
       obstacle_wait_manager_.active() && last_obstacle_wait_decision_.front_blocked);
-    status.AddMember("localization_auto_paused", false, allocator);
+    status.AddMember("localization_auto_paused", route_.localization_auto_paused, allocator);
+    status.AddMember("localization_recovery_started_at", route_.localization_recovery_started_at, allocator);
     status.AddMember("roi_obstacle_has_obstacle", environment_.latest_roi_has_obstacle, allocator);
     status.AddMember("roi_obstacle_age_sec",
       environment_.latest_roi_stamp > 0.0 ? now - environment_.latest_roi_stamp : -1.0, allocator);
@@ -1083,6 +1096,7 @@ private:
       "state", rapidjson::Value(localization_.state.c_str(), allocator).Move(), allocator);
     localization_health.AddMember(
       "text", rapidjson::Value(localization_.text.c_str(), allocator).Move(), allocator);
+    localization_health.AddMember("recovery_required", localization_.recovery_required, allocator);
     localization_health.AddMember("stamp_sec", localization_.last_status_time, allocator);
     localization_health.AddMember(
       "age_sec", localization_.last_status_time > 0.0 ? now - localization_.last_status_time : -1.0, allocator);
@@ -2294,6 +2308,158 @@ private:
       reason.c_str());
     enter_obstacle_wait_state(reason);
     return true;
+  }
+
+  bool localization_recovery_required() const
+  {
+    if (localization_.recovery_required) {
+      return true;
+    }
+    if (localization_.state == "recovery_requires_global_relocalization") {
+      return true;
+    }
+    if (localization_.state == "bridge_holding_last_good_tf" &&
+      localization_.text.find("large_jump") != std::string::npos)
+    {
+      return true;
+    }
+    return false;
+  }
+
+  bool should_enter_localization_recovery_pause() const
+  {
+    if (!config_.localization_auto_pause_on_recovery_required || route_.localization_auto_paused) {
+      return false;
+    }
+    if (!route_.active || !route_.active_segment.has_value()) {
+      return false;
+    }
+    if (route_.current_state != NavigationState::Executing) {
+      return false;
+    }
+    if (obstacle_wait_manager_.active() || route_.pause_source == "obstacle_wait") {
+      return false;
+    }
+    return localization_recovery_required();
+  }
+
+  void enter_localization_recovery_wait_state()
+  {
+    const double now = now_seconds();
+    const std::string reason =
+      "定位发生大跳变，已暂停导航并等待全局重定位确认: " + localization_.state + " " + localization_.text;
+    cancel_active_route_goal();
+    route_.current_state = NavigationState::Paused;
+    route_.detailed_state = "LOCALIZATION_RECOVERY_WAITING";
+    route_.pause_source = "localization_recovery";
+    route_.pause_reason = reason;
+    route_.resume_mode = "auto";
+    route_.localization_auto_paused = true;
+    route_.localization_recovery_started_at = now;
+    reset_block_detection();
+    nav2_blockage_suppression_nodes_.clear();
+    publish_zero_cmd_vel();
+
+    rapidjson::Document event;
+    event.SetObject();
+    auto & allocator = event.GetAllocator();
+    event.AddMember("pause_source", "localization_recovery", allocator);
+    event.AddMember("reason", rapidjson::Value(reason.c_str(), allocator).Move(), allocator);
+    event.AddMember("resume_mode", "auto", allocator);
+    event.AddMember("localization_state", rapidjson::Value(localization_.state.c_str(), allocator).Move(), allocator);
+    event.AddMember("localization_text", rapidjson::Value(localization_.text.c_str(), allocator).Move(), allocator);
+    event.AddMember("resume_stable_count", localization_.resume_stable_count, allocator);
+    event.AddMember("resume_required_frames", config_.localization_resume_stable_frames, allocator);
+    event.AddMember("pause_time", now, allocator);
+    event.AddMember(
+      "task_session_id", rapidjson::Value(route_.task_session_id.c_str(), allocator).Move(), allocator);
+    event.AddMember("route_id", rapidjson::Value(route_.route_id.c_str(), allocator).Move(), allocator);
+    event.AddMember(
+      "current_target_task_id",
+      rapidjson::Value(route_.current_target_task_id.c_str(), allocator).Move(),
+      allocator);
+    if (route_.active_segment.has_value()) {
+      event.AddMember(
+        "segment_id", rapidjson::Value(route_.active_segment->segment_id.c_str(), allocator).Move(),
+        allocator);
+    }
+    publish_status_update("navigation_paused", event);
+    send_acknowledgment("navigation_paused", "success", reason, &event);
+  }
+
+  void process_localization_recovery_state()
+  {
+    if (should_enter_localization_recovery_pause()) {
+      enter_localization_recovery_wait_state();
+      return;
+    }
+    if (!route_.localization_auto_paused) {
+      return;
+    }
+    if (!route_.active || !route_.active_segment.has_value() || route_.pause_source != "localization_recovery") {
+      route_.localization_auto_paused = false;
+      route_.localization_recovery_started_at = 0.0;
+      return;
+    }
+    if (localization_recovery_required()) {
+      return;
+    }
+    const int required_frames = std::max(1, config_.localization_resume_stable_frames);
+    if (!localization_.healthy || localization_.resume_stable_count < required_frames) {
+      return;
+    }
+    resume_from_localization_recovery_wait();
+  }
+
+  void resume_from_localization_recovery_wait()
+  {
+    if (!route_.active || !route_.active_segment.has_value()) {
+      route_.localization_auto_paused = false;
+      route_.localization_recovery_started_at = 0.0;
+      return;
+    }
+    const double now = now_seconds();
+    const double paused_duration =
+      route_.localization_recovery_started_at > 0.0 ? now - route_.localization_recovery_started_at : 0.0;
+
+    route_.current_state = NavigationState::Executing;
+    route_.detailed_state = "EXECUTING";
+    route_.pause_source.clear();
+    route_.pause_reason.clear();
+    route_.resume_mode.clear();
+    route_.localization_auto_paused = false;
+    route_.localization_recovery_started_at = 0.0;
+
+    rapidjson::Document event;
+    event.SetObject();
+    auto & allocator = event.GetAllocator();
+    event.AddMember("resume_source", "localization_recovery", allocator);
+    event.AddMember("resume_reason", "localization_trusted_auto_resume", allocator);
+    event.AddMember("localization_state", rapidjson::Value(localization_.state.c_str(), allocator).Move(), allocator);
+    event.AddMember("localization_text", rapidjson::Value(localization_.text.c_str(), allocator).Move(), allocator);
+    event.AddMember("resume_stable_count", localization_.resume_stable_count, allocator);
+    event.AddMember("resume_required_frames", std::max(1, config_.localization_resume_stable_frames), allocator);
+    event.AddMember("pause_duration_actual", paused_duration, allocator);
+    event.AddMember(
+      "task_session_id", rapidjson::Value(route_.task_session_id.c_str(), allocator).Move(), allocator);
+    event.AddMember("route_id", rapidjson::Value(route_.route_id.c_str(), allocator).Move(), allocator);
+    event.AddMember(
+      "current_target_task_id",
+      rapidjson::Value(route_.current_target_task_id.c_str(), allocator).Move(),
+      allocator);
+    if (route_.active_segment.has_value()) {
+      event.AddMember(
+        "segment_id", rapidjson::Value(route_.active_segment->segment_id.c_str(), allocator).Move(),
+        allocator);
+    }
+    publish_status_update("navigation_resumed", event);
+    send_acknowledgment("navigation_resumed", "success", "定位已恢复可信，导航自动恢复", &event);
+
+    if (!start_active_segment_navigation("localization_trusted_auto_resume")) {
+      handle_route_task_navigation_failed(
+        "localization trusted auto resume failed",
+        "localization_auto_resume_failed");
+    }
   }
 
   void handle_obstacle_block_timeout(const double block_duration)

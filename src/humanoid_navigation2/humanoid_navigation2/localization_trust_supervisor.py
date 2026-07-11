@@ -91,6 +91,7 @@ class LocalizationTrustSupervisor(Node):
         self.origin_seeded = False
         self.startup_requires_global_relocalization = False
         self.recovery_requires_global_relocalization = False
+        self.recovery_trigger = ""
         self.bridge_accept_kind = ""
         self.ro_verified_count = 0
         self.state = "waiting_initial_pose"
@@ -132,6 +133,7 @@ class LocalizationTrustSupervisor(Node):
             and "large_jump" in text
         ):
             self.recovery_requires_global_relocalization = True
+            self.recovery_trigger = text
 
         if kind == "ACCEPTED":
             self.pose_initialized = True
@@ -175,6 +177,7 @@ class LocalizationTrustSupervisor(Node):
         if self._source_is_global_or_manual(source):
             self.startup_requires_global_relocalization = False
             self.recovery_requires_global_relocalization = False
+            self.recovery_trigger = ""
 
         self.evaluate()
 
@@ -191,6 +194,7 @@ class LocalizationTrustSupervisor(Node):
         if state in ("succeeded", "success", "accepted", "trusted", "localized"):
             self.startup_requires_global_relocalization = False
             self.recovery_requires_global_relocalization = False
+            self.recovery_trigger = ""
         self.evaluate()
 
     def _accepted_kind(self, text: str) -> str:
@@ -309,6 +313,8 @@ class LocalizationTrustSupervisor(Node):
                 "origin_seeded": self.origin_seeded,
                 "startup_requires_global_relocalization": self.startup_requires_global_relocalization,
                 "recovery_requires_global_relocalization": self.recovery_requires_global_relocalization,
+                "localization_recovery_required": self.recovery_requires_global_relocalization,
+                "recovery_trigger": self.recovery_trigger,
                 "ro_only_startup_max_map_odom_norm": self.ro_only_startup_max_map_odom_norm,
                 "require_global_after_large_jump_hold": self.require_global_after_large_jump_hold,
                 "bridge_accept_kind": self.bridge_accept_kind,

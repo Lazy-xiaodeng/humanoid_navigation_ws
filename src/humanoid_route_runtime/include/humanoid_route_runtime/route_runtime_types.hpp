@@ -142,6 +142,7 @@ struct RouteRuntimeConfig
   std::string localization_health_status_topic{"/localization/trust_status"};
   std::string map_status_topic{"/map/status"};
   double localization_health_timeout_sec{3.0};
+  bool localization_auto_pause_on_recovery_required{true};
   bool localization_allow_start_with_last_good_tf{false};
   double localization_last_good_tf_max_age_sec{0.0};
   double route_task_first_task_reached_tolerance_m{0.4};
@@ -183,6 +184,7 @@ struct LocalizationRuntimeState
 {
   bool healthy{false};
   bool has_last_good_tf{false};
+  bool recovery_required{false};
   int resume_stable_count{0};
   double last_good_tf_time{0.0};
   double last_status_time{0.0};
@@ -284,6 +286,8 @@ struct RouteTaskRuntimeState
   std::string pause_source;
   std::string pause_reason;
   std::string resume_mode;
+  bool localization_auto_paused{false};
+  double localization_recovery_started_at{0.0};
 
   // route task 专属运行态。它们只服务新路线任务，不再兼容旧单点/多点 APP 命令。
   bool active{false};
