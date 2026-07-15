@@ -117,10 +117,28 @@ SupportStats support_for_seed(
   // 以当前帧某个候选作为 seed，检查前后窗口中每一帧 top-K 是否存在相近的 map->odom。
   // support_frames 关心“有多少帧支持这个假设”，support_count 当前等同于支持帧数，
   // 后续如果允许每帧多个簇内候选，也可以扩展为候选总数。
-  const int begin = std::max(0, frame_index - std::max(0, config.window_before));
-  const int end = std::min<int>(
+  int begin = std::max(0, frame_index - std::max(0, config.window_before));
+  int end = std::min<int>(
     static_cast<int>(frames.size()),
     frame_index + std::max(0, config.window_after) + 1);
+  if (config.reset_gap_sec > 0.0) {
+    for (int i = frame_index; i > begin; --i) {
+      if (frames[static_cast<std::size_t>(i)].frame.stamp_sec -
+        frames[static_cast<std::size_t>(i - 1)].frame.stamp_sec > config.reset_gap_sec)
+      {
+        begin = i;
+        break;
+      }
+    }
+    for (int i = frame_index + 1; i < end; ++i) {
+      if (frames[static_cast<std::size_t>(i)].frame.stamp_sec -
+        frames[static_cast<std::size_t>(i - 1)].frame.stamp_sec > config.reset_gap_sec)
+      {
+        end = i;
+        break;
+      }
+    }
+  }
 
   std::vector<double> supporting_best_ranks;
   int support_frames = 0;

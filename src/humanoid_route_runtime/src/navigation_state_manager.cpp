@@ -398,9 +398,12 @@ private:
     }
 
     if (is_route_task_command(command_type)) {
+      if (command_type == "stop_route_task" && cancel_pending_navigation(command_type, *command_data)) {
+        return;
+      }
       const std::string block_reason = build_start_block_reason();
       if (command_type == "start_route_task" && !block_reason.empty() &&
-        defer_navigation_start_if_robot_not_ready(request, *command_data, block_reason))
+        defer_navigation_start_if_not_ready(request, *command_data, block_reason))
       {
         return;
       }
@@ -1770,6 +1773,34 @@ private:
     return start_active_segment_final_pose_navigation("ROUTE_TASK_FINAL_ALIGNING");
   }
 
+  std::vector<std::string> remaining_active_segment_execution_waypoint_ids() const
+  {
+    std::vector<std::string> remaining;
+    if (!route_.active_segment.has_value()) {
+      return remaining;
+    }
+    const auto & segment = route_.active_segment.value();
+    for (const auto & waypoint_id : segment.execution_waypoint_ids) {
+      const bool already_passed = std::find(
+        segment.passed_transit_waypoint_ids.begin(),
+        segment.passed_transit_waypoint_ids.end(),
+        waypoint_id) != segment.passed_transit_waypoint_ids.end();
+      if (!already_passed) {
+        remaining.push_back(waypoint_id);
+      }
+    }
+    return remaining;
+  }
+
+  bool is_active_segment_transit(const std::string & waypoint_id) const
+  {
+    if (!route_.active_segment.has_value()) {
+      return false;
+    }
+    const auto & transit_ids = route_.active_segment->transit_waypoint_ids;
+    return std::find(transit_ids.begin(), transit_ids.end(), waypoint_id) != transit_ids.end();
+  }
+
   bool start_active_segment_navigation(const std::string & reason)
   {
     if (!config_.route_task_nav2_execution_enable) {
@@ -1785,7 +1816,15 @@ private:
       route_.active_segment->segment_goal_generation = route_.current_goal_generation;
       return complete_active_segment_without_navigation();
     }
-    if (route_.active_segment->transit_waypoint_ids.empty()) {
+    if (reason != "start_route_task" && reason != "next_segment") {
+      // 恢复或重试前使用最新可信位姿补记已经越过的 transit，进度只前进不回退。
+      resolve_transit_progress_from_pose();
+    }
+    const auto execution_waypoint_ids = remaining_active_segment_execution_waypoint_ids();
+    const bool has_remaining_transit = std::any_of(
+      execution_waypoint_ids.begin(), execution_waypoint_ids.end(),
+      [this](const std::string & waypoint_id) {return is_active_segment_transit(waypoint_id);});
+    if (!has_remaining_transit) {
       return start_active_segment_final_pose_navigation("ROUTE_TASK_FINAL_POSE_NAVIGATING");
     }
 
@@ -1796,7 +1835,7 @@ private:
     }
 
     NavigateThroughPoses::Goal goal;
-    for (const auto & waypoint_id : route_.active_segment->execution_waypoint_ids) {
+    for (const auto & waypoint_id : execution_waypoint_ids) {
       auto pose = route_waypoint_to_pose_stamped(waypoint_id);
       if (!pose.has_value()) {
         handle_route_task_navigation_failed(
@@ -1819,6 +1858,7 @@ private:
     route_.navigation_mode = "route_task";
     route_.navigation_start_time = now_seconds();
     route_task_last_feedback_time_ = now_seconds();
+    route_goal_execution_waypoint_ids_ = execution_waypoint_ids;
     if (route_goal_reject_retry_segment_id_ != route_.active_segment->segment_id) {
       route_goal_reject_retry_segment_id_ = route_.active_segment->segment_id;
       route_goal_reject_retry_deadline_ =
@@ -1846,15 +1886,17 @@ private:
     try {
       nav2_controller_.async_send_navigate_through_poses_goal(goal, options);
     } catch (const std::exception & exc) {
+      route_goal_execution_waypoint_ids_.clear();
       handle_route_task_navigation_failed(
         std::string("NavigateThroughPoses send goal failed: ") + exc.what(), "send_goal_failed");
       return false;
     }
 
     RCLCPP_INFO(
-      get_logger(), "route task through segment started: reason=%s, segment_id=%s, target=%s, generation=%ld",
+      get_logger(),
+      "route task through segment started: reason=%s, segment_id=%s, target=%s, generation=%ld, remaining=%zu",
       reason.c_str(), route_.active_segment->segment_id.c_str(), route_.current_target_task_id.c_str(),
-      static_cast<long>(generation));
+      static_cast<long>(generation), execution_waypoint_ids.size());
     return true;
   }
 
@@ -1863,6 +1905,7 @@ private:
     cancel_route_goal_retry_timer();
     route_task_last_feedback_time_ = 0.0;
     route_.current_goal_generation = -1;
+    route_goal_execution_waypoint_ids_.clear();
     nav2_controller_.cancel_active_goals();
   }
 
@@ -1876,6 +1919,7 @@ private:
 
   bool start_active_segment_final_pose_navigation(const std::string & detailed_state)
   {
+    route_goal_execution_waypoint_ids_.clear();
     const RouteWaypoint * target_task = find_route_waypoint_by_id(route_.current_target_task_id);
     if (target_task == nullptr) {
       handle_route_task_navigation_failed("target task missing", "target_task_missing");
@@ -2051,18 +2095,19 @@ private:
       return;
     }
     auto & segment = route_.active_segment.value();
-    if (segment.execution_waypoint_ids.empty() || segment.transit_waypoint_ids.empty()) {
+    if (route_goal_execution_waypoint_ids_.empty() || segment.transit_waypoint_ids.empty()) {
       return;
     }
 
-    const int execution_count = static_cast<int>(segment.execution_waypoint_ids.size());
-    const int transit_count = static_cast<int>(segment.transit_waypoint_ids.size());
+    const int execution_count = static_cast<int>(route_goal_execution_waypoint_ids_.size());
     const int normalized_remaining = std::max(0, poses_remaining);
     const int passed_pose_count =
       std::max(0, std::min(execution_count, execution_count - normalized_remaining));
-    const int passed_transit_count = std::min(passed_pose_count, transit_count);
-    for (int index = 0; index < passed_transit_count; ++index) {
-      mark_transit_passed(segment.transit_waypoint_ids[static_cast<std::size_t>(index)]);
+    for (int index = 0; index < passed_pose_count; ++index) {
+      const auto & waypoint_id = route_goal_execution_waypoint_ids_[static_cast<std::size_t>(index)];
+      if (is_active_segment_transit(waypoint_id)) {
+        mark_transit_passed(waypoint_id);
+      }
     }
   }
 
@@ -2205,15 +2250,23 @@ private:
     const int64_t generation,
     const int64_t version)
   {
-    nav2_controller_.clear_through_goal_handle();
-    route_task_last_feedback_time_ = 0.0;
     if (version != route_.route_task_version || generation != route_.current_goal_generation) {
       return;
     }
+    nav2_controller_.clear_through_goal_handle();
+    route_task_last_feedback_time_ = 0.0;
     if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
+      const auto completed_goal_ids = route_goal_execution_waypoint_ids_;
+      for (const auto & waypoint_id : completed_goal_ids) {
+        if (is_active_segment_transit(waypoint_id)) {
+          mark_transit_passed(waypoint_id);
+        }
+      }
+      route_goal_execution_waypoint_ids_.clear();
       start_active_segment_final_pose_navigation("ROUTE_TASK_FINAL_ALIGNING");
       return;
     }
+    route_goal_execution_waypoint_ids_.clear();
     if (result.code == rclcpp_action::ResultCode::CANCELED) {
       if (obstacle_wait_manager_.active()) {
         return;
@@ -2244,10 +2297,10 @@ private:
     const int64_t generation,
     const int64_t version)
   {
-    nav2_controller_.clear_final_pose_goal_handle();
     if (version != route_.route_task_version || generation != route_.current_goal_generation) {
       return;
     }
+    nav2_controller_.clear_final_pose_goal_handle();
     if (result.code == rclcpp_action::ResultCode::CANCELED) {
       if (obstacle_wait_manager_.active()) {
         return;
@@ -2481,10 +2534,7 @@ private:
     last_obstacle_wait_decision_ = ObstacleWaitDecision{};
     last_obstacle_wait_decision_.active = true;
     last_obstacle_wait_decision_.wait_duration_sec = block_duration;
-    cancel_route_goal_retry_timer();
-    route_task_last_feedback_time_ = 0.0;
-    route_.current_goal_generation = -1;
-    nav2_controller_.cancel_active_goals();
+    cancel_active_route_goal();
     route_.current_state = NavigationState::Paused;
     route_.detailed_state = "OBSTACLE_WAITING";
     route_.pause_source = "obstacle_wait";
@@ -2759,24 +2809,28 @@ private:
     return status_unavailable || can_defer;
   }
 
-  bool defer_navigation_start_if_robot_not_ready(
+  bool defer_navigation_start_if_not_ready(
     const rapidjson::Value & request,
     const rapidjson::Value & command_data,
     const std::string & block_reason)
   {
     const double now = now_seconds();
     const auto robot_reason = gatekeeper_.robot_start_block_reason(config_, robot_, now);
-    if (!robot_reason.has_value()) {
-      return false;
-    }
-    if (!can_defer_for_robot_state(now)) {
+    const auto localization_reason =
+      gatekeeper_.localization_start_block_reason(config_, localization_, now);
+    const bool waiting_for_robot = robot_reason.has_value() && can_defer_for_robot_state(now);
+    const bool waiting_for_localization = localization_reason.has_value();
+    if (!waiting_for_robot && !waiting_for_localization) {
       return false;
     }
 
     route_.pending_navigation_active = true;
     route_.pending_navigation_created_at = now;
     route_.pending_navigation_request_json = json_to_string(request);
-    if (robot_.last_update <= 0.0 || now - robot_.last_update > config_.robot_status_timeout) {
+    if (waiting_for_localization) {
+      route_.pending_navigation_reason =
+        block_reason + "。已缓存导航请求，等待定位恢复可信后自动开始导航。";
+    } else if (robot_.last_update <= 0.0 || now - robot_.last_update > config_.robot_status_timeout) {
       route_.pending_navigation_reason =
         block_reason + "。已缓存导航请求，等待底层状态恢复并确认 Walk 后再开始导航。";
     } else if (robot_.motion_busy) {
@@ -2803,6 +2857,51 @@ private:
     return true;
   }
 
+  bool cancel_pending_navigation(
+    const std::string & command_type,
+    const rapidjson::Value & command_data)
+  {
+    if (!route_.pending_navigation_active || route_.current_state != NavigationState::Idle) {
+      return false;
+    }
+
+    rapidjson::Document pending_request;
+    pending_request.Parse(route_.pending_navigation_request_json.c_str());
+    if (pending_request.HasParseError() || !pending_request.IsObject() ||
+      !pending_request.HasMember("command_data") || !pending_request["command_data"].IsObject())
+    {
+      return false;
+    }
+    const auto & pending_data = pending_request["command_data"];
+    const std::string pending_session = read_route_task_id_member(pending_data, "task_session_id");
+    const std::string pending_route = read_route_task_id_member(pending_data, "route_id");
+    const std::string requested_session = read_route_task_id_member(command_data, "task_session_id");
+    const std::string requested_route = read_route_task_id_member(command_data, "route_id");
+    if ((!requested_session.empty() && requested_session != pending_session) ||
+      (!requested_route.empty() && requested_route != pending_route))
+    {
+      return false;
+    }
+
+    route_.pending_navigation_active = false;
+    route_.pending_navigation_reason.clear();
+    route_.pending_navigation_request_json.clear();
+
+    rapidjson::Document event;
+    event.SetObject();
+    auto & allocator = event.GetAllocator();
+    event.AddMember("reason", "上层已终止等待定位恢复的导航请求", allocator);
+    event.AddMember("command_type", rapidjson::Value(command_type.c_str(), allocator).Move(), allocator);
+    event.AddMember(
+      "task_session_id", rapidjson::Value(pending_session.c_str(), allocator).Move(), allocator);
+    event.AddMember("route_id", rapidjson::Value(pending_route.c_str(), allocator).Move(), allocator);
+    publish_status_update("navigation_pending_cancelled", event);
+    send_route_task_ack(
+      command_type, "success", "待执行路线任务已终止", command_data,
+      "pending_route_task_stopped");
+    return true;
+  }
+
   void check_localization_timeout()
   {
     gatekeeper_.update_localization_timeout(config_, localization_, now_seconds());
@@ -2815,6 +2914,9 @@ private:
     }
     try_execute_pending_navigation();
     if (!route_.pending_navigation_active) {
+      return;
+    }
+    if (config_.pending_navigation_timeout <= 0.0) {
       return;
     }
     const double now = now_seconds();
@@ -2882,7 +2984,7 @@ private:
     route_.pending_navigation_reason.clear();
     route_.pending_navigation_request_json.clear();
 
-    send_acknowledgment("navigation_pending", "success", "机器人状态已就绪，开始执行待启动导航");
+    send_acknowledgment("navigation_pending", "success", "启动条件已就绪，开始执行待启动导航");
     auto msg = std::make_shared<std_msgs::msg::String>();
     msg->data = request_json;
     on_navigation_request(msg);
@@ -2938,6 +3040,7 @@ private:
   int route_goal_reject_retry_count_{0};
   std::string route_goal_reject_retry_segment_id_;
   double route_task_last_feedback_time_{0.0};
+  std::vector<std::string> route_goal_execution_waypoint_ids_;
   std::string last_route_task_failure_message_;
   std::string last_route_task_failure_code_;
   rclcpp::TimerBase::SharedPtr route_goal_retry_timer_;

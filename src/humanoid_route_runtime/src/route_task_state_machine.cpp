@@ -90,6 +90,8 @@ void RouteTaskStateMachine::reset_route_task_state(RouteTaskRuntimeState & route
   route.pause_source.clear();
   route.pause_reason.clear();
   route.resume_mode.clear();
+  route.localization_auto_paused = false;
+  route.localization_recovery_started_at = 0.0;
 }
 
 RouteTaskCommandResult RouteTaskStateMachine::handle_start_route_task(

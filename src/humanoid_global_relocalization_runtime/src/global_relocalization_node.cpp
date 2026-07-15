@@ -50,6 +50,7 @@
 #include "humanoid_global_relocalization_runtime/point_cloud_adapter.hpp"
 #include "humanoid_global_relocalization_runtime/refiner.hpp"
 #include "humanoid_global_relocalization_runtime/scan_context.hpp"
+#include "humanoid_global_relocalization_runtime/solid.hpp"
 #include "humanoid_global_relocalization_runtime/simple_bbs3d.hpp"
 #include "humanoid_global_relocalization_runtime/temporal_consistency.hpp"
 
@@ -157,6 +158,21 @@ bool is_duplicate_bbs2d_candidate(
 {
   // Bbs2dSearch 内部已经做过大范围 NMS；这里用较小阈值只剔除与已有候选几乎重合的 seed。
   // 这样可以保留不同区域的多假设，又不会让 GICP 和轨迹验证重复处理同一个位置。
+  for (const auto & candidate : candidates) {
+    if (pose_xy_distance(candidate.pose, pose) <= config.duplicate_xy_gate_m &&
+      pose_yaw_distance_deg(candidate.pose, pose) <= config.duplicate_yaw_gate_deg)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool is_duplicate_solid_candidate(
+  const std::vector<BbsCandidate> & candidates,
+  const Eigen::Matrix4d & pose,
+  const SolidConfig & config)
+{
   for (const auto & candidate : candidates) {
     if (pose_xy_distance(candidate.pose, pose) <= config.duplicate_xy_gate_m &&
       pose_yaw_distance_deg(candidate.pose, pose) <= config.duplicate_yaw_gate_deg)
@@ -383,6 +399,9 @@ private:
       if (config_.scan_context.enable && !config_.scan_context.database_path.empty()) {
         scan_context_database_ = load_scan_context_database(config_.scan_context.database_path);
       }
+      if (config_.solid.enable && !config_.solid.database_path.empty()) {
+        solid_database_ = load_solid_database(config_.solid.database_path);
+      }
       if (config_.precision_recovery.enable &&
         config_.precision_recovery.enable_scan_context_recall &&
         !config_.precision_recovery.scan_context_database_path.empty())
@@ -395,10 +414,11 @@ private:
 
       RCLCPP_INFO(
         get_logger(),
-        "built global relocalization map index: map_points=%zu occupancy_voxels=%zu scan_context_entries=%zu precision_scan_context_entries=%zu bbs2d=%s precision_layer=%s build_ms=%.3f",
+        "built global relocalization map index: map_points=%zu occupancy_voxels=%zu scan_context_entries=%zu solid_entries=%zu precision_scan_context_entries=%zu bbs2d=%s precision_layer=%s build_ms=%.3f",
         map_cloud_->size(),
         map_occupancy_.size(),
         scan_context_database_.size(),
+        solid_database_.size(),
         precision_scan_context_database_.size(),
         config_.bbs2d.enable ? "enabled" : "disabled",
         config_.precision_recovery.enable ? "enabled" : "disabled",
@@ -555,6 +575,82 @@ private:
       primary_refined.fitness_score,
       fused_refined.fitness_score,
       fused_refined.candidate_rank);
+  }
+
+  void fuse_solid_candidates_for_online(const CloudPtr & scan_cloud, BbsResult & result)
+  {
+    if (!config_.solid.enable || solid_database_.empty() || !scan_cloud || scan_cloud->empty()) {
+      return;
+    }
+    const auto descriptor = compute_solid_descriptor(scan_cloud, config_.solid);
+    const auto matches = query_solid_database(descriptor, solid_database_, -1, config_.solid);
+    const CloudPtr registration_scan = prepare_solid_registration_cloud(scan_cloud, config_.solid);
+    RefineConfig solid_refine = config_.refine;
+    solid_refine.max_iterations = config_.solid.registration_max_iterations;
+    solid_refine.max_correspondence_distance = config_.solid.registration_max_correspondence_m;
+    if (matches.empty()) {
+      return;
+    }
+    std::vector<BbsCandidate> fused;
+    fused.reserve(result.candidates.size() + matches.size());
+    const int prefix = std::min<int>(
+      std::max(0, config_.solid.bbs_prefix_candidates), static_cast<int>(result.candidates.size()));
+    for (int i = 0; i < prefix; ++i) {
+      fused.push_back(result.candidates[static_cast<std::size_t>(i)]);
+    }
+    std::vector<std::pair<double, BbsCandidate>> solid_candidates;
+    solid_candidates.reserve(matches.size());
+    for (const auto & match : matches) {
+      const auto entry = std::find_if(
+        solid_database_.begin(), solid_database_.end(), [&](const SolidEntry & value) {
+          return value.cloud_index == match.cloud_index && value.source_id == match.source_id;
+        });
+      if (entry == solid_database_.end() || !entry->cloud || entry->cloud->empty()) {
+        continue;
+      }
+      BbsCandidate relative_seed;
+      relative_seed.pose = apply_solid_heading(Eigen::Matrix4d::Identity(), match.relative_yaw_deg);
+      const RefineOutput relative = refine_single_candidate(
+        entry->cloud, registration_scan, relative_seed, match.rank, solid_refine);
+      result.search_ms += relative.elapsed_ms;
+      if (!relative.converged) {
+        continue;
+      }
+      BbsCandidate candidate;
+      candidate.pose = entry->map_to_base * relative.pose;
+      candidate.score = -match.rank;
+      candidate.score_ratio = match.similarity;
+      candidate.pre_refined = true;
+      candidate.refinement_fitness = relative.fitness_score;
+      candidate.selection_score = relative.fitness_score;
+      const double official_score =
+        (1.0 - match.similarity) + 0.25 * std::sqrt(std::max(0.0, relative.fitness_score));
+      solid_candidates.emplace_back(official_score, std::move(candidate));
+    }
+    std::sort(solid_candidates.begin(), solid_candidates.end(), [](const auto & lhs, const auto & rhs) {
+      return lhs.first < rhs.first;
+    });
+    bool first_solid_candidate = true;
+    for (const auto & [score, source_candidate] : solid_candidates) {
+      (void)score;
+      BbsCandidate candidate = source_candidate;
+      candidate.solid_primary = first_solid_candidate;
+      if (!is_duplicate_solid_candidate(fused, candidate.pose, config_.solid)) {
+        fused.push_back(candidate);
+        first_solid_candidate = false;
+      }
+    }
+    for (std::size_t i = static_cast<std::size_t>(prefix); i < result.candidates.size(); ++i) {
+      if (!is_duplicate_solid_candidate(fused, result.candidates[i].pose, config_.solid)) {
+        fused.push_back(result.candidates[i]);
+      }
+    }
+    if (!fused.empty()) {
+      result.candidates = std::move(fused);
+      result.localized = true;
+    }
+    RCLCPP_INFO(
+      get_logger(), "SOLiD recall fused candidates=%zu matches=%zu", result.candidates.size(), matches.size());
   }
 
   bool precision_layer_available() const
@@ -777,6 +873,7 @@ private:
     CloudPtr scan_cloud = preprocess_scan_cloud(base_scan, config_.preprocess);
     const auto scan_points = cloud_to_eigen_points(scan_cloud);
     auto result = bbs_->localize(scan_points);
+    fuse_solid_candidates_for_online(base_scan, result);
     fuse_scan_context_candidates_for_online(scan_cloud, result);
     fuse_bbs2d_candidates_for_online(scan_points, result);
     const bool precision_layer_used = should_run_precision_layer(now);
@@ -991,7 +1088,14 @@ private:
     const RefineOutput refined =
       refine_single_candidate(map_cloud_, scan_ptr, seed_candidate, current->selected_rank, config_.refine);
 
-    if (!refined.converged || refined.fitness_score > config_.temporal.online_max_refine_fitness) {
+    const auto & selected_source =
+      result.candidates[static_cast<std::size_t>(current->selected_rank - 1)];
+    const double fitness_limit =
+      config_.temporal.solid_primary_relaxed_gate_enable && selected_source.solid_primary ?
+      config_.temporal.solid_primary_max_refine_fitness :
+      config_.temporal.online_max_refine_fitness;
+
+    if (!refined.converged || refined.fitness_score > fitness_limit) {
       const auto trajectory_attempt =
         try_publish_trajectory_recovery(source_msg, result, *synced_odom, refined);
       if (trajectory_attempt.published) {
@@ -1017,7 +1121,7 @@ private:
         current->selected_rank,
         current->selected_support_frames,
         refined.fitness_score,
-        config_.temporal.online_max_refine_fitness,
+        fitness_limit,
         refined.converged ? "true" : "false");
       return false;
     }
@@ -1112,8 +1216,10 @@ private:
     CloudPtr scan_ptr(new Cloud(scan_cloud));
     RefineOutput refined =
       refine_single_candidate(map_cloud_, scan_ptr, seed_candidate, current.selected_rank, config_.refine);
-    if (!refined.converged ||
-      refined.fitness_score > config_.temporal.single_frame_high_confidence_max_fitness)
+    const bool high_confidence_ok =
+      config_.temporal.single_frame_high_confidence_fallback_enable && refined.converged &&
+      refined.fitness_score <= config_.temporal.single_frame_high_confidence_max_fitness;
+    if (!high_confidence_ok)
     {
       return false;
     }
@@ -1678,6 +1784,7 @@ private:
   CloudPtr map_cloud_;
   OccupancySet map_occupancy_;
   std::vector<ScanContextEntry> scan_context_database_;
+  std::vector<SolidEntry> solid_database_;
   std::vector<ScanContextEntry> precision_scan_context_database_;
   std::unique_ptr<SimpleBbs3d> bbs_;
   std::unique_ptr<Bbs2dSearch> bbs2d_;

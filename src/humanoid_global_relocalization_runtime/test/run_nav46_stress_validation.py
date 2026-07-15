@@ -97,9 +97,41 @@ def make_random_indices(
     return sorted(rng.sample(population, sample_count))
 
 
+def make_random_burst_indices(
+    bag_path: Path,
+    mode: str,
+    center_count: int,
+    radius: int,
+    seed: int,
+    min_index: int,
+    max_index: int | None,
+) -> list[int]:
+    """生成互不重叠的随机连续帧组，用于验证静止多帧确认。"""
+    topic = "/cloud_registered_body" if mode == "body" else "/fast_lio/cloud_registered"
+    total = topic_message_count(bag_path, topic)
+    begin = max(radius, min_index)
+    end = min(total - radius - 1, max_index if max_index is not None else total - radius - 1)
+    if begin > end:
+        raise RuntimeError(f"invalid burst range [{begin}, {end}] for topic {topic} total={total}")
+    rng = random.Random(seed)
+    candidates = list(range(begin, end + 1))
+    rng.shuffle(candidates)
+    centers: list[int] = []
+    min_separation = radius * 2 + 1
+    for candidate in candidates:
+        if all(abs(candidate - selected) >= min_separation for selected in centers):
+            centers.append(candidate)
+            if len(centers) >= center_count:
+                break
+    if len(centers) < center_count:
+        raise RuntimeError(f"only found {len(centers)} non-overlapping burst centers, requested {center_count}")
+    return sorted(index for center in centers for index in range(center - radius, center + radius + 1))
+
+
 def build_case_config(
     template: dict[str, Any],
     workspace: Path,
+    bag_path: Path,
     mode: str,
     frames: int,
     stride: int,
@@ -111,10 +143,8 @@ def build_case_config(
     config = yaml.safe_load(yaml.safe_dump(template, allow_unicode=True, sort_keys=False))
     p = params(config)
 
-    # 这里固定使用 bag46，因为它同时包含真实 /cloud_registered_body、/fast_lio/cloud_registered、
-    # /odom 和 /robot_realpose，能对两路输入做同一时间轴的公平对照。
     p["input_mode"] = mode
-    p["bag_paths"] = ["/home/ubuntu/nav_drift_test/nav_drift_test46"]
+    p["bag_paths"] = [str(bag_path)]
     p["bag_start_frame_skip"] = skip
     p["max_bag_frames"] = len(sample_indices) if sample_indices else frames
     p["bag_frame_stride"] = stride
@@ -128,7 +158,7 @@ def build_case_config(
     # 当前推荐低负载参数：保持 0.30m scan 体素，不使用已证明有误接受风险的 0.40m。
     p["scan_leaf_size"] = 0.30
     p["bbs_num_threads"] = 2
-    p["max_refine_candidates"] = 8
+    p["max_refine_candidates"] = 20 if p.get("enable_solid_recall", False) else 8
     p["refine_method"] = "gicp"
     p["refine_methods_for_sweep"] = ["gicp"]
 
@@ -342,6 +372,7 @@ def write_dict_csv(path: Path, rows: list[dict[str, str]], fieldnames: list[str]
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run larger nav46 stress validation for both input modes.")
     parser.add_argument("--workspace", type=Path, default=repo_root_from_script(), help="humanoid_ws 工作空间")
+    parser.add_argument("--bag", type=Path, default=Path("/home/ubuntu/nav_drift_test/nav_drift_test46"), help="验证 bag 路径")
     parser.add_argument("--template", type=Path, default=None, help="参数模板 YAML，默认使用 config/relocalization_validation.yaml")
     parser.add_argument("--frames", type=int, default=60, help="每路输入从 bag46 抽样多少帧")
     parser.add_argument("--stride", type=int, default=600, help="抽样帧间隔；600 约等于每 60 秒取一帧")
@@ -356,9 +387,28 @@ def main() -> int:
     )
     parser.add_argument("--keep-existing", action="store_true", help="运行前不删除已有 output_dir")
     parser.add_argument("--random-count", type=int, default=0, help="大于 0 时随机抽取该数量的点云帧")
+    parser.add_argument("--random-burst-centers", type=int, default=0, help="随机抽取若干连续帧组的中心数量")
+    parser.add_argument("--burst-radius", type=int, default=1, help="连续帧组向中心前后扩展的帧数，1 表示每组3帧")
     parser.add_argument("--seed", type=int, default=46, help="随机抽样种子，保证失败点可复现")
     parser.add_argument("--random-min-index", type=int, default=100, help="随机抽样最小点云帧序号，默认避开 bag 开头")
     parser.add_argument("--random-max-index", type=int, default=None, help="随机抽样最大点云帧序号，默认到该话题末尾")
+    parser.add_argument("--disable-solid", action="store_true", help="关闭 SOLiD，用于相同随机点的 A/B 对照")
+    parser.add_argument("--sample-index", action="append", type=int, default=[], help="显式指定待测点云帧序号")
+    parser.add_argument("--solid-keyframe-stride", type=int, default=None, help="覆盖 SOLiD 建库关键帧间隔")
+    parser.add_argument("--solid-database-path", type=Path, default=None, help="使用预生成 SOLiD 数据库")
+    parser.add_argument("--solid-top-k-per-source", type=int, default=None, help="覆盖每个数据库来源的召回配额")
+    parser.add_argument("--solid-save-database-path", type=Path, default=None, help="保存评估过程生成的 SOLiD 数据库")
+    parser.add_argument("--sample-indices-csv", type=Path, default=None, help="从 targets.csv 的 cloud_index 读取测试帧")
+    parser.add_argument("--single-frame-fitness", type=float, default=None, help="启用单帧高置信补救并覆盖 fitness 门槛")
+    parser.add_argument("--temporal-reset-gap-sec", type=float, default=None, help="超过该时间间隔时清空 temporal 历史")
+    parser.add_argument("--trajectory-refine", action="store_true", help="启用 trajectory top-N 精配准裁决")
+    parser.add_argument("--trajectory-refine-top-n", type=int, default=5, help="trajectory 精配准候选数")
+    parser.add_argument("--trajectory-refine-fitness", type=float, default=0.012, help="trajectory 精配准 fitness 门槛")
+    parser.add_argument("--trajectory-refine-margin", type=float, default=0.005, help="trajectory 最优与次优 fitness margin")
+    parser.add_argument("--trajectory-refine-cluster", action="store_true", help="按精配准收敛位姿聚类后计算不同簇 margin")
+    parser.add_argument("--trajectory-refine-cluster-xy", type=float, default=0.10, help="精配准收敛簇位置半径（米）")
+    parser.add_argument("--trajectory-refine-cluster-yaw", type=float, default=2.0, help="精配准收敛簇航向半径（度）")
+    parser.add_argument("--trajectory-refine-min-cluster-size", type=int, default=2, help="最优收敛簇最少候选数")
     args = parser.parse_args()
 
     workspace = args.workspace.resolve()
@@ -372,9 +422,24 @@ def main() -> int:
     problems: list[dict[str, str]] = []
 
     for mode in modes:
-        bag_path = Path("/home/ubuntu/nav_drift_test/nav_drift_test46")
+        bag_path = args.bag.resolve()
         sample_indices: list[int] | None = None
-        if args.random_count > 0:
+        if args.sample_indices_csv is not None:
+            with args.sample_indices_csv.open(newline="", encoding="utf-8") as stream:
+                sample_indices = sorted({int(row["cloud_index"]) for row in csv.DictReader(stream)})
+        elif args.sample_index:
+            sample_indices = sorted(set(args.sample_index))
+        elif args.random_burst_centers > 0:
+            sample_indices = make_random_burst_indices(
+                bag_path,
+                mode,
+                args.random_burst_centers,
+                max(0, args.burst_radius),
+                args.seed,
+                args.random_min_index,
+                args.random_max_index,
+            )
+        elif args.random_count > 0:
             sample_indices = make_random_indices(
                 bag_path,
                 mode,
@@ -384,11 +449,31 @@ def main() -> int:
                 args.random_max_index,
             )
         sample_label = (
-            f"rand{len(sample_indices)}_seed{args.seed}"
+            (f"csv_{args.sample_indices_csv.parent.name}_{args.sample_indices_csv.stem}" if args.sample_indices_csv is not None else
+            (f"indices_{'_'.join(str(value) for value in sample_indices)}" if args.sample_index else
+            (f"burst{args.random_burst_centers}x{args.burst_radius * 2 + 1}_seed{args.seed}" if args.random_burst_centers > 0 else
+            f"rand{len(sample_indices)}_seed{args.seed}")))
             if sample_indices
             else f"{args.frames}f_s{args.stride}_skip{args.skip}"
         )
-        label = f"nav46_{mode}_{sample_label}"
+        bag_suffix = bag_path.name.removeprefix("nav_drift_test")
+        label = f"nav{bag_suffix}_{mode}_{sample_label}"
+        if args.disable_solid:
+            label += "_solid_off"
+        if args.solid_keyframe_stride is not None:
+            label += f"_solid_stride{args.solid_keyframe_stride}"
+        if args.solid_database_path is not None:
+            label += "_solid_external_db"
+        if args.solid_top_k_per_source is not None:
+            label += f"_quota{args.solid_top_k_per_source}"
+        if args.single_frame_fitness is not None:
+            label += f"_sf{int(round(args.single_frame_fitness * 1000)):03d}"
+        if args.temporal_reset_gap_sec is not None:
+            label += f"_reset{int(round(args.temporal_reset_gap_sec * 1000)):04d}ms"
+        if args.trajectory_refine:
+            label += f"_trajref{args.trajectory_refine_top_n}"
+            if args.trajectory_refine_cluster:
+                label += f"_cluster{args.trajectory_refine_cluster_xy:g}m_{args.trajectory_refine_cluster_yaw:g}deg_n{args.trajectory_refine_min_cluster_size}"
         output_dir = output_root / label
         config_path = config_root / f"{label}.yaml"
         if args.run and not args.keep_existing and output_dir.exists():
@@ -398,6 +483,7 @@ def main() -> int:
         config = build_case_config(
             template,
             workspace,
+            bag_path,
             mode,
             args.frames,
             args.stride,
@@ -405,6 +491,31 @@ def main() -> int:
             output_dir,
             sample_indices,
         )
+        if args.disable_solid:
+            params(config)["enable_solid_recall"] = False
+            params(config)["max_refine_candidates"] = 8
+        if args.solid_keyframe_stride is not None:
+            params(config)["solid_keyframe_stride"] = args.solid_keyframe_stride
+        if args.solid_database_path is not None:
+            params(config)["solid_database_path"] = str(args.solid_database_path.resolve())
+        if args.solid_top_k_per_source is not None:
+            params(config)["solid_top_k_per_source"] = args.solid_top_k_per_source
+        if args.solid_save_database_path is not None:
+            params(config)["solid_save_database_path"] = str(args.solid_save_database_path.resolve())
+        if args.single_frame_fitness is not None:
+            params(config)["single_frame_high_confidence_fallback_enable"] = True
+            params(config)["single_frame_high_confidence_max_fitness"] = args.single_frame_fitness
+        if args.temporal_reset_gap_sec is not None:
+            params(config)["temporal_consistency_reset_gap_sec"] = args.temporal_reset_gap_sec
+        if args.trajectory_refine:
+            params(config)["trajectory_refine_enable"] = True
+            params(config)["trajectory_refine_top_n"] = args.trajectory_refine_top_n
+            params(config)["trajectory_refine_max_fitness"] = args.trajectory_refine_fitness
+            params(config)["trajectory_refine_min_fitness_margin"] = args.trajectory_refine_margin
+            params(config)["trajectory_refine_cluster_enable"] = args.trajectory_refine_cluster
+            params(config)["trajectory_refine_cluster_xy_m"] = args.trajectory_refine_cluster_xy
+            params(config)["trajectory_refine_cluster_yaw_deg"] = args.trajectory_refine_cluster_yaw
+            params(config)["trajectory_refine_min_cluster_size"] = args.trajectory_refine_min_cluster_size
         dump_generated_yaml(
             config_path,
             config,

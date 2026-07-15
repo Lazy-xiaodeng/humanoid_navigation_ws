@@ -38,6 +38,10 @@ struct BbsCandidate
   Eigen::Matrix4d pose{Eigen::Matrix4d::Identity()};
   int score{0};
   double score_ratio{0.0};
+  bool pre_refined{false};
+  bool solid_primary{false};
+  double refinement_fitness{0.0};
+  double selection_score{0.0};
 };
 
 struct BbsResult

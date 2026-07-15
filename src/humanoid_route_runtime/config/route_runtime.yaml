@@ -105,7 +105,8 @@ navigation_state_manager_cpp:
     robot_status_timeout: 2.0
 
     # 等待定位/Nav2 就绪的 pending 导航请求最长保留时间，单位秒。
-    pending_navigation_timeout: 90.0
+    # 0 表示不自动丢弃待执行请求；由上层 stop_route_task 明确终止。
+    pending_navigation_timeout: 0.0
 
     # 距离目标小于该值时，阻塞失败会更谨慎处理，避免临近终点误报。
     obstacle_block_near_goal_distance: 0.7

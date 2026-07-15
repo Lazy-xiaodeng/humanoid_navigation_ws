@@ -134,6 +134,8 @@ class LocalizationTrustSupervisor(Node):
         ):
             self.recovery_requires_global_relocalization = True
             self.recovery_trigger = text
+            # 跳变前的 RO 健康帧不能用于恢复后的重新放行。
+            self.ro_verified_count = 0
 
         if kind == "ACCEPTED":
             self.pose_initialized = True
@@ -144,7 +146,7 @@ class LocalizationTrustSupervisor(Node):
                     or xy_norm <= self.origin_seed_radius
                 )
                 if (
-                    xy_norm > self.ro_only_startup_max_map_odom_norm
+                    (self.origin_seeded or xy_norm > self.ro_only_startup_max_map_odom_norm)
                     and not self._latest_source_is_global_or_manual()
                 ):
                     self.startup_requires_global_relocalization = True
@@ -195,6 +197,8 @@ class LocalizationTrustSupervisor(Node):
             self.startup_requires_global_relocalization = False
             self.recovery_requires_global_relocalization = False
             self.recovery_trigger = ""
+            # 全局结果只提供新的粗定位，仍需等待 RO 用新初值重新稳定匹配。
+            self.ro_verified_count = 0
         self.evaluate()
 
     def _accepted_kind(self, text: str) -> str:

@@ -369,6 +369,8 @@ RuntimeConfig load_config_file(const std::string & path)
     read_value<int>(p, "temporal_consistency_window_before", config.temporal.window_before);
   config.temporal.window_after =
     read_value<int>(p, "temporal_consistency_window_after", config.temporal.window_after);
+  config.temporal.reset_gap_sec =
+    read_value<double>(p, "temporal_consistency_reset_gap_sec", config.temporal.reset_gap_sec);
   config.temporal.xy_gate_m =
     read_value<double>(p, "temporal_consistency_xy_gate_m", config.temporal.xy_gate_m);
   config.temporal.yaw_gate_deg =
@@ -377,6 +379,10 @@ RuntimeConfig load_config_file(const std::string & path)
     read_value<int>(p, "temporal_consistency_online_min_support_frames", config.temporal.online_min_support_frames);
   config.temporal.online_max_refine_fitness =
     read_value<double>(p, "temporal_consistency_online_max_refine_fitness", config.temporal.online_max_refine_fitness);
+  config.temporal.solid_primary_relaxed_gate_enable = read_value<bool>(
+    p, "solid_primary_relaxed_gate_enable", config.temporal.solid_primary_relaxed_gate_enable);
+  config.temporal.solid_primary_max_refine_fitness = read_value<double>(
+    p, "solid_primary_max_refine_fitness", config.temporal.solid_primary_max_refine_fitness);
   config.temporal.online_max_history_frames =
     read_value<int>(p, "temporal_consistency_online_max_history_frames", config.temporal.online_max_history_frames);
   config.temporal.single_frame_high_confidence_fallback_enable =
@@ -446,6 +452,14 @@ RuntimeConfig load_config_file(const std::string & path)
     read_value<double>(p, "trajectory_refine_max_fitness", config.temporal.trajectory_refine_max_fitness);
   config.temporal.trajectory_refine_min_fitness_margin =
     read_value<double>(p, "trajectory_refine_min_fitness_margin", config.temporal.trajectory_refine_min_fitness_margin);
+  config.temporal.trajectory_refine_cluster_enable =
+    read_value<bool>(p, "trajectory_refine_cluster_enable", config.temporal.trajectory_refine_cluster_enable);
+  config.temporal.trajectory_refine_cluster_xy_m =
+    read_value<double>(p, "trajectory_refine_cluster_xy_m", config.temporal.trajectory_refine_cluster_xy_m);
+  config.temporal.trajectory_refine_cluster_yaw_deg =
+    read_value<double>(p, "trajectory_refine_cluster_yaw_deg", config.temporal.trajectory_refine_cluster_yaw_deg);
+  config.temporal.trajectory_refine_min_cluster_size =
+    read_value<int>(p, "trajectory_refine_min_cluster_size", config.temporal.trajectory_refine_min_cluster_size);
 
   config.scan_context.enable =
     read_value<bool>(p, "enable_scan_context_recall", config.scan_context.enable);
@@ -480,6 +494,44 @@ RuntimeConfig load_config_file(const std::string & path)
     read_value<double>(p, "scan_context_duplicate_xy_gate_m", config.scan_context.duplicate_xy_gate_m);
   config.scan_context.duplicate_yaw_gate_deg =
     read_value<double>(p, "scan_context_duplicate_yaw_gate_deg", config.scan_context.duplicate_yaw_gate_deg);
+
+  config.solid.enable = read_value<bool>(p, "enable_solid_recall", config.solid.enable);
+  config.solid.database_path =
+    read_value<std::string>(p, "solid_database_path", config.solid.database_path);
+  config.solid.save_database_path =
+    read_value<std::string>(p, "solid_save_database_path", config.solid.save_database_path);
+  config.solid.keyframe_stride =
+    read_value<int>(p, "solid_keyframe_stride", config.solid.keyframe_stride);
+  config.solid.top_k = read_value<int>(p, "solid_top_k", config.solid.top_k);
+  config.solid.top_k_per_source =
+    read_value<int>(p, "solid_top_k_per_source", config.solid.top_k_per_source);
+  config.solid.exclude_index_radius =
+    read_value<int>(p, "solid_exclude_index_radius", config.solid.exclude_index_radius);
+  config.solid.ranges = read_value<int>(p, "solid_ranges", config.solid.ranges);
+  config.solid.angles = read_value<int>(p, "solid_angles", config.solid.angles);
+  config.solid.heights = read_value<int>(p, "solid_heights", config.solid.heights);
+  config.solid.min_range = read_value<double>(p, "solid_min_range", config.solid.min_range);
+  config.solid.max_range = read_value<double>(p, "solid_max_range", config.solid.max_range);
+  config.solid.fov_down_deg =
+    read_value<double>(p, "solid_fov_down_deg", config.solid.fov_down_deg);
+  config.solid.fov_up_deg = read_value<double>(p, "solid_fov_up_deg", config.solid.fov_up_deg);
+  config.solid.sensor_height =
+    read_value<double>(p, "solid_sensor_height", config.solid.sensor_height);
+  config.solid.voxel_size = read_value<double>(p, "solid_voxel_size", config.solid.voxel_size);
+  config.solid.registration_voxel_size =
+    read_value<double>(p, "solid_registration_voxel_size", config.solid.registration_voxel_size);
+  config.solid.registration_max_correspondence_m = read_value<double>(
+    p, "solid_registration_max_correspondence_m", config.solid.registration_max_correspondence_m);
+  config.solid.registration_max_iterations = read_value<int>(
+    p, "solid_registration_max_iterations", config.solid.registration_max_iterations);
+  config.solid.similarity_min =
+    read_value<double>(p, "solid_similarity_min", config.solid.similarity_min);
+  config.solid.bbs_prefix_candidates =
+    read_value<int>(p, "solid_bbs_prefix_candidates", config.solid.bbs_prefix_candidates);
+  config.solid.duplicate_xy_gate_m =
+    read_value<double>(p, "solid_duplicate_xy_gate_m", config.solid.duplicate_xy_gate_m);
+  config.solid.duplicate_yaw_gate_deg =
+    read_value<double>(p, "solid_duplicate_yaw_gate_deg", config.solid.duplicate_yaw_gate_deg);
 
   config.precision_recovery.enable =
     read_value<bool>(p, "enable_precision_recovery_layer", config.precision_recovery.enable);

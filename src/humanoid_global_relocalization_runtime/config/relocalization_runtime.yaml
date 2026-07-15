@@ -226,8 +226,8 @@ global_relocalization_node:
     refine_top_k: true
 
     # 最多精配准候选数量。
-    # 调大提高召回概率但耗时近似线性增加；当前推荐 8，后续恢复状态机可在主动恢复阶段临时加大。
-    max_refine_candidates: 8
+    # SOLiD 开启时使用 20，覆盖 3 个 BBS 前缀和主要 SOLiD 候选；代价是恢复阶段计算量增加。
+    max_refine_candidates: 20
 
     # 精配准最大迭代次数。
     # 调大可能改善收敛但耗时增加；调小速度快但可能停在粗糙位姿。
@@ -268,30 +268,34 @@ global_relocalization_node:
     temporal_consistency_window_after: 0
 
     # 判断两个隐含 map->odom 属于同一簇的平移阈值，单位 m。
-    temporal_consistency_xy_gate_m: 1.0
+    temporal_consistency_xy_gate_m: 0.30
 
     # 判断两个隐含 map->odom 属于同一簇的 yaw 阈值，单位 deg。
-    temporal_consistency_yaw_gate_deg: 12.0
+    temporal_consistency_yaw_gate_deg: 5.0
 
     # 输出恢复候选前，selected candidate 至少需要多少帧历史支持。
     # 调大更安全但等待更久；调小响应快但重复走廊误恢复风险更高。
     temporal_consistency_online_min_support_frames: 2
 
     # 多帧确认后，最终精配准 fitness 允许的最大值。
-    # 值越小越保守；当前 0.12 用于挡住稳定但贴图质量差的重复结构候选。
-    temporal_consistency_online_max_refine_fitness: 0.12
+    # 全量严格回放中 0.012 为零误接受冻结值；调大虽然提高发布率，但会重新放行稳定错误候选。
+    temporal_consistency_online_max_refine_fitness: 0.012
+
+    # 仅对每帧SOLiD官方组合分第一名且已有多帧支持的候选启用受限放宽。
+    solid_primary_relaxed_gate_enable: true
+    solid_primary_max_refine_fitness: 0.022
 
     # 在线节点保留的历史搜索结果数量。
     # 调大可在定位丢失后使用更长轨迹恢复；内存和后续 trajectory likelihood 计算会增加。
     temporal_consistency_online_max_history_frames: 30
 
     # 是否启用单帧极高置信补救。
-    # 只有 selected 候选历史支持不足但精配准 fitness 极低时才可能输出；用于减少刚启动时等待历史帧的时间。
-    single_frame_high_confidence_fallback_enable: true
+    # 精度优先配置关闭该兜底，任何候选都必须经过多帧或轨迹确认。
+    single_frame_high_confidence_fallback_enable: false
 
     # 单帧极高置信补救允许的最大 fitness。
     # 调低更安全但可救回点更少；调高可能在重复结构里误恢复。
-    single_frame_high_confidence_max_fitness: 0.02
+    single_frame_high_confidence_max_fitness: 0.012
 
     # 是否启用历史轨迹 scan-map likelihood。
     # 第一层多帧支持不足或精配质量不足时，会用历史 scan/odom 对候选做更强确认。
@@ -321,7 +325,7 @@ global_relocalization_node:
     trajectory_single_agreement_fallback_enable: true
 
     # 单帧一致性补救允许的最大精配准 fitness。
-    trajectory_single_agreement_max_fitness: 0.04
+    trajectory_single_agreement_max_fitness: 0.012
 
     # 单帧一致性补救要求轨迹候选与单帧最终位姿的最大平移差，单位 m。
     trajectory_single_agreement_max_xy_m: 1.0
@@ -392,6 +396,47 @@ global_relocalization_node:
     # 融合候选去重的 yaw 阈值，单位 deg。
     # 过小会保留很多几乎相同朝向的 seed，过大可能误删真正不同朝向候选。
     scan_context_duplicate_yaw_gate_deg: 5.0
+
+    # =========================
+    # SOLiD 高精度候选召回
+    # =========================
+
+    # SOLiD 只提供候选，不能直接发布；候选仍需经过 GICP、temporal 和 trajectory 门控。
+    # 数据库未配置时自动退回原有 3D-BBS/Scan Context 链路。
+    enable_solid_recall: true
+    solid_database_path: ""
+    solid_top_k: 20
+
+    # 多批次数据库按来源保留的候选配额，防止某一历史批次挤掉当前地图批次。
+    solid_top_k_per_source: 8
+    solid_ranges: 40
+    solid_angles: 60
+    solid_heights: 32
+    solid_min_range: 0.80
+    solid_max_range: 20.0
+
+    # 描述子使用的垂直视场范围，单位 deg，与离线完整算法验证参数一致。
+    solid_fov_down_deg: -35.0
+    solid_fov_up_deg: 35.0
+
+    # 雷达相对 base 的安装高度，单位 m；计算仰角前用于恢复传感器中心坐标。
+    solid_sensor_height: 1.215
+
+    # SOLiD 描述子输入点云体素大小，单位 m。
+    solid_voxel_size: 0.40
+
+    # SOLiD 关键帧相对 GICP 使用更细点云；这不会改变主地图和 3D-BBS 预处理分辨率。
+    solid_registration_voxel_size: 0.20
+    solid_registration_max_correspondence_m: 2.0
+    solid_registration_max_iterations: 30
+
+    # 仅过滤明显不相似的召回，不作为发布门槛，禁止为提高召回率盲目调低。
+    solid_similarity_min: 0.90
+
+    # 融合顺序保留前三个 3D-BBS 候选，再插入 SOLiD top20，余下 BBS 候选随后补入。
+    solid_bbs_prefix_candidates: 3
+    solid_duplicate_xy_gate_m: 0.20
+    solid_duplicate_yaw_gate_deg: 5.0
 
     # =========================
     # 分层恢复策略

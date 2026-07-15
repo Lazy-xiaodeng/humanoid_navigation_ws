@@ -43,6 +43,7 @@ add_library(global_relocalization_core
   src/refiner.cpp
   src/resource_monitor.cpp
   src/scan_context.cpp
+  src/solid.cpp
   src/simple_bbs3d.cpp
   src/temporal_consistency.cpp
   src/evaluator.cpp
@@ -81,10 +82,17 @@ add_executable(global_relocalization_node
 target_link_libraries(global_relocalization_node global_relocalization_core)
 ament_target_dependencies(global_relocalization_node ${COMMON_DEPS})
 
+add_executable(solid_database_builder
+  src/solid_database_builder_main.cpp
+)
+target_link_libraries(solid_database_builder global_relocalization_core)
+ament_target_dependencies(solid_database_builder ${COMMON_DEPS})
+
 install(TARGETS
   global_relocalization_core
   global_relocalization_offline_eval
   global_relocalization_node
+  solid_database_builder
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}

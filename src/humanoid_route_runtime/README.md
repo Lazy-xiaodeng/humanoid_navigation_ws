@@ -19,6 +19,8 @@
 - 可以通过 `NavigateThroughPoses` 执行 transit 段，通过 `NavigateToPose` 执行最终 task 对齐；该能力由 `route_task.nav2_execution_enable` 控制，便于分阶段验证。
 - 可以处理 jump 重规划、goal rejected 重试、feedback 超时、暂停/恢复/停止、节点退出清理。
 - 可以在机器人状态未就绪时缓存 start 请求，等待 Walk 和定位/地图就绪后自动启动。
+- 定位未可信时保留完整 start 请求；上层可用 `stop_route_task` 撤销，否则定位可信后自动启动。
+- 行走中定位大跳变会取消当前 goal 并停车；恢复后只重发当前 active segment 的剩余 transit 和目标 task。
 - 可以根据 Nav2 失败、速度停滞、BT 日志、costmap 和 ROI 进入障碍等待，并在前方 clear 后自动恢复。
 
 当前已接入导航层分阶段启动链路，并保留运行开关。仍可通过运行开关选择正式链路，只有显式打开

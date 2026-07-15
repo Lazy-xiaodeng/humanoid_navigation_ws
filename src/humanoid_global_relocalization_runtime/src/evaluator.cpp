@@ -36,6 +36,7 @@
 #include "humanoid_global_relocalization_runtime/point_cloud_adapter.hpp"
 #include "humanoid_global_relocalization_runtime/refiner.hpp"
 #include "humanoid_global_relocalization_runtime/scan_context.hpp"
+#include "humanoid_global_relocalization_runtime/solid.hpp"
 #include "humanoid_global_relocalization_runtime/temporal_consistency.hpp"
 
 namespace humanoid_global_relocalization
@@ -139,6 +140,7 @@ struct LoadedBag
   std::string error;
   BagData data;
   std::vector<ScanContextEntry> scan_context_database;
+  std::vector<SolidEntry> solid_database;
 };
 
 struct EvaluationRecord
@@ -343,10 +345,12 @@ BagData read_bag_data(const RuntimeConfig & config, const std::string & bag_path
       config.input,
       sample_indices);
     const bool scan_context_keyframe =
-      config.scan_context.enable &&
-      config.scan_context.database_path.empty() &&
+      (config.scan_context.enable && config.scan_context.database_path.empty() &&
       config.scan_context.keyframe_stride > 0 &&
-      cloud_seen % std::max(1, config.scan_context.keyframe_stride) == 0;
+      cloud_seen % std::max(1, config.scan_context.keyframe_stride) == 0) ||
+      (config.solid.enable && config.solid.database_path.empty() &&
+      config.solid.keyframe_stride > 0 &&
+      cloud_seen % std::max(1, config.solid.keyframe_stride) == 0);
 
     // 抽帧在读取阶段执行，避免把大型点云全部留在内存里。既支持旧的 skip/stride 顺序抽样，
     // 也支持 bag_sample_frame_indices 指定的随机帧序号，用于更真实地覆盖任意启动位置。
@@ -582,6 +586,45 @@ std::vector<ScanContextEntry> build_scan_context_database(
   return database;
 }
 
+std::vector<SolidEntry> build_solid_database(const RuntimeConfig & config, const BagData & data)
+{
+  if (!config.solid.database_path.empty()) {
+    return load_solid_database(config.solid.database_path);
+  }
+  std::vector<SolidEntry> database;
+  if (!config.solid.enable || data.scan_context_keyframes.empty()) {
+    return database;
+  }
+  database.reserve(data.scan_context_keyframes.size());
+  for (const auto & sample : data.scan_context_keyframes) {
+    std::optional<nav_msgs::msg::Odometry> odom;
+    CloudPtr base_scan;
+    if (config.input.mode == InputMode::RegisteredWorld) {
+      odom = nearest_odom(data.odoms, sample.stamp_sec, config.input.odom_time_tolerance_sec);
+      if (!odom) {
+        continue;
+      }
+      base_scan = registered_world_to_base_scan(sample.cloud_msg, *odom, config);
+    } else {
+      base_scan = body_msg_to_base_scan(sample.cloud_msg, config);
+    }
+    const auto reference = nearest_reference_pose(
+      data.reference_poses, sample.bag_time_sec, config.evaluation.reference_time_tolerance_sec);
+    if (!reference) {
+      continue;
+    }
+    SolidEntry entry;
+    entry.cloud_index = sample.frame_index;
+    entry.source_id = sample.bag_path;
+    entry.map_to_base = force_2d_pose_if_needed(pose_to_matrix(reference->pose_msg.pose.pose), config.frames);
+    entry.descriptor = compute_solid_descriptor(base_scan, config.solid);
+    entry.cloud = prepare_solid_registration_cloud(base_scan, config.solid);
+    database.push_back(std::move(entry));
+  }
+  save_solid_database(config.solid.save_database_path, database);
+  return database;
+}
+
 double pose_xy_distance(const Eigen::Matrix4d & lhs, const Eigen::Matrix4d & rhs)
 {
   return std::hypot(lhs(0, 3) - rhs(0, 3), lhs(1, 3) - rhs(1, 3));
@@ -728,6 +771,94 @@ void fuse_scan_context_candidates(
   }
 }
 
+bool is_duplicate_solid_candidate(
+  const std::vector<BbsCandidate> & candidates, const Eigen::Matrix4d & pose, const SolidConfig & config)
+{
+  for (const auto & candidate : candidates) {
+    if (pose_xy_distance(candidate.pose, pose) <= config.duplicate_xy_gate_m &&
+      pose_yaw_distance_deg(candidate.pose, pose) <= config.duplicate_yaw_gate_deg)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+void fuse_solid_candidates(
+  const RuntimeConfig & config,
+  const CloudPtr & scan_cloud,
+  int current_cloud_index,
+  const std::vector<SolidEntry> * database,
+  BbsResult & result)
+{
+  if (!config.solid.enable || !database || database->empty() || !scan_cloud || scan_cloud->empty()) {
+    return;
+  }
+  const auto query = compute_solid_descriptor(scan_cloud, config.solid);
+  const auto matches = query_solid_database(query, *database, current_cloud_index, config.solid);
+  const CloudPtr registration_scan = prepare_solid_registration_cloud(scan_cloud, config.solid);
+  RefineConfig solid_refine = config.refine;
+  solid_refine.max_iterations = config.solid.registration_max_iterations;
+  solid_refine.max_correspondence_distance = config.solid.registration_max_correspondence_m;
+  std::vector<BbsCandidate> fused;
+  fused.reserve(result.candidates.size() + matches.size());
+  const int prefix = std::min<int>(
+    std::max(0, config.solid.bbs_prefix_candidates), static_cast<int>(result.candidates.size()));
+  for (int i = 0; i < prefix; ++i) {
+    fused.push_back(result.candidates[static_cast<std::size_t>(i)]);
+  }
+  std::vector<std::pair<double, BbsCandidate>> solid_candidates;
+  solid_candidates.reserve(matches.size());
+  for (const auto & match : matches) {
+    const auto entry = std::find_if(database->begin(), database->end(), [&](const SolidEntry & value) {
+      return value.cloud_index == match.cloud_index && value.source_id == match.source_id;
+    });
+    if (entry == database->end() || !entry->cloud || entry->cloud->empty()) {
+      continue;
+    }
+    BbsCandidate relative_seed;
+    relative_seed.pose = apply_solid_heading(Eigen::Matrix4d::Identity(), match.relative_yaw_deg);
+    const RefineOutput relative = refine_single_candidate(
+      entry->cloud, registration_scan, relative_seed, match.rank, solid_refine);
+    result.search_ms += relative.elapsed_ms;
+    if (!relative.converged) {
+      continue;
+    }
+    BbsCandidate candidate;
+    candidate.pose = entry->map_to_base * relative.pose;
+    candidate.score = -match.rank;
+    candidate.score_ratio = match.similarity;
+    candidate.pre_refined = true;
+    candidate.refinement_fitness = relative.fitness_score;
+    candidate.selection_score = relative.fitness_score;
+    const double official_score =
+      (1.0 - match.similarity) + 0.25 * std::sqrt(std::max(0.0, relative.fitness_score));
+    solid_candidates.emplace_back(official_score, std::move(candidate));
+  }
+  std::sort(solid_candidates.begin(), solid_candidates.end(), [](const auto & lhs, const auto & rhs) {
+    return lhs.first < rhs.first;
+  });
+  bool first_solid_candidate = true;
+  for (const auto & [score, source_candidate] : solid_candidates) {
+    (void)score;
+    BbsCandidate candidate = source_candidate;
+    candidate.solid_primary = first_solid_candidate;
+    if (!is_duplicate_solid_candidate(fused, candidate.pose, config.solid)) {
+      fused.push_back(candidate);
+      first_solid_candidate = false;
+    }
+  }
+  for (std::size_t i = static_cast<std::size_t>(prefix); i < result.candidates.size(); ++i) {
+    if (!is_duplicate_solid_candidate(fused, result.candidates[i].pose, config.solid)) {
+      fused.push_back(result.candidates[i]);
+    }
+  }
+  if (!fused.empty()) {
+    result.candidates = std::move(fused);
+    result.localized = true;
+  }
+}
+
 EvaluationSummary evaluate_scan_with_built_map(
   const RuntimeConfig & config,
   const CloudPtr & map_cloud,
@@ -743,6 +874,7 @@ EvaluationSummary evaluate_scan_with_built_map(
   const std::optional<Eigen::Matrix4d> & reference_pose,
   const std::string & reference_source,
   const std::vector<ScanContextEntry> * scan_context_database = nullptr,
+  const std::vector<SolidEntry> * solid_database = nullptr,
   CloudPtr * preprocessed_scan_out = nullptr)
 {
   EvaluationSummary summary;
@@ -765,6 +897,7 @@ EvaluationSummary evaluate_scan_with_built_map(
   summary.bbs_result = bbs.localize(scan_points);
   summary.bbs_result.build_index_ms = build_index_ms;
   fuse_bbs2d_candidates(config, scan_points, bbs2d, summary.bbs_result);
+  fuse_solid_candidates(config, base_scan, bag_frame_index, solid_database, summary.bbs_result);
   if (!summary.bbs_result.localized) {
     summary.message = message_prefix + (summary.bbs_result.timed_out ? " 3D-BBS timed out" : " 3D-BBS did not find candidate");
     summary.total_ms = elapsed_ms(total_start, std::chrono::steady_clock::now());
@@ -1199,35 +1332,44 @@ void append_temporal_decision_csv(
       if (!refined.converged) {
         decision = "reject";
         reason = "refine_not_converged";
-      } else if (refined.fitness_score > config.temporal.online_max_refine_fitness) {
-        decision = "reject";
-        reason = "refine_fitness_above_threshold";
+      } else {
+        const double fitness_limit =
+          config.temporal.solid_primary_relaxed_gate_enable && selected_candidate->solid_primary ?
+          config.temporal.solid_primary_max_refine_fitness :
+          config.temporal.online_max_refine_fitness;
+        if (refined.fitness_score > fitness_limit) {
+          decision = "reject";
+          reason = "refine_fitness_above_threshold";
+        } else if (selected_candidate->solid_primary &&
+          fitness_limit > config.temporal.online_max_refine_fitness)
+        {
+          reason = "solid_primary_support_ok";
+        }
       }
-    } else if (
-      !support_ok &&
-      config.temporal.single_frame_high_confidence_fallback_enable &&
-      record.summary.bbs_result.localized &&
-      record.summary.refined_candidate_rank > 0 &&
-      record.summary.refine_fitness_score >= 0.0 &&
-      record.summary.refine_fitness_score <= config.temporal.single_frame_high_confidence_max_fitness)
+    } else if (!support_ok && record.summary.bbs_result.localized &&
+      record.summary.refined_candidate_rank > 0 && record.summary.refine_fitness_score >= 0.0)
     {
-      // 这个分支只接受“单帧已经非常贴图”的结果，用来补救 support=1 的过度保守拒绝。
-      // 它不放宽重复结构里的普通单帧结果：fitness 稍高时仍会继续交给 trajectory/active-view。
-      decision = "accept";
-      reason = "single_frame_high_confidence";
-      refined.converged = true;
-      refined.fitness_score = record.summary.refine_fitness_score;
-      refined.elapsed_ms = record.summary.refine_ms;
-      refined.candidate_rank = record.summary.refined_candidate_rank;
-      refined.pose = record.summary.final_pose;
-      refined_pose = force_2d_pose_if_needed(record.summary.final_pose, record.frames);
-      if (record.summary.has_reference_pose) {
-        const auto error = pose_error_against_reference(refined_pose, record.summary.reference_pose);
-        refined_trans_error = error.first;
-        refined_yaw_error = error.second;
-        refined_success =
-          refined_trans_error <= record.evaluation.success_translation_thresh &&
-          refined_yaw_error <= record.evaluation.success_yaw_thresh_deg;
+      const bool high_confidence_ok =
+        config.temporal.single_frame_high_confidence_fallback_enable &&
+        record.summary.refine_fitness_score <=
+        config.temporal.single_frame_high_confidence_max_fitness;
+      if (high_confidence_ok) {
+        decision = "accept";
+        reason = "single_frame_high_confidence";
+        refined.converged = true;
+        refined.fitness_score = record.summary.refine_fitness_score;
+        refined.elapsed_ms = record.summary.refine_ms;
+        refined.candidate_rank = record.summary.refined_candidate_rank;
+        refined.pose = record.summary.final_pose;
+        refined_pose = force_2d_pose_if_needed(record.summary.final_pose, record.frames);
+        if (record.summary.has_reference_pose) {
+          const auto error = pose_error_against_reference(refined_pose, record.summary.reference_pose);
+          refined_trans_error = error.first;
+          refined_yaw_error = error.second;
+          refined_success =
+            refined_trans_error <= record.evaluation.success_translation_thresh &&
+            refined_yaw_error <= record.evaluation.success_yaw_thresh_deg;
+        }
       }
     } else if (support_ok && !selected_candidate) {
       reason = "selected_rank_not_found";
@@ -1299,8 +1441,10 @@ void append_trajectory_likelihood_csv(
       << "single_agreement_xy_m,single_agreement_yaw_deg,single_agreement_fallback,"
       << "candidate_score,candidate_score_ratio,candidate_x_m,candidate_y_m,candidate_z_m,candidate_yaw_deg,"
       << "candidate_translation_error_m,candidate_yaw_error_deg,"
-      << "selected_by_refine,refined_converged,refined_fitness,refined_fitness_margin,refined_ms,"
+      << "selected_by_refine,refined_converged,refined_fitness,refined_fitness_margin,"
+      << "refined_cluster_count,refined_best_cluster_size,refined_second_cluster_fitness,refined_ms,"
       << "refined_x_m,refined_y_m,refined_z_m,refined_yaw_deg,"
+      << "refined_map_odom_x_m,refined_map_odom_y_m,refined_map_odom_yaw_deg,"
       << "refined_translation_error_m,refined_yaw_error_deg,"
       << "voxel_size,neighbor_radius,min_overlap_ratio,min_average_overlap,min_margin,message\n";
   }
@@ -1356,10 +1500,28 @@ void append_trajectory_likelihood_csv(
         continue;
       }
 
-      const int begin = std::max(0, center_pos - std::max(0, config.temporal.window_before));
-      const int end = std::min<int>(
+      int begin = std::max(0, center_pos - std::max(0, config.temporal.window_before));
+      int end = std::min<int>(
         static_cast<int>(indices.size()),
         center_pos + std::max(0, config.temporal.window_after) + 1);
+      if (config.temporal.reset_gap_sec > 0.0) {
+        for (int i = center_pos; i > begin; --i) {
+          const auto & current = records[indices[static_cast<std::size_t>(i)]];
+          const auto & previous = records[indices[static_cast<std::size_t>(i - 1)]];
+          if (current.summary.stamp_sec - previous.summary.stamp_sec > config.temporal.reset_gap_sec) {
+            begin = i;
+            break;
+          }
+        }
+        for (int i = center_pos + 1; i < end; ++i) {
+          const auto & current = records[indices[static_cast<std::size_t>(i)]];
+          const auto & previous = records[indices[static_cast<std::size_t>(i - 1)]];
+          if (current.summary.stamp_sec - previous.summary.stamp_sec > config.temporal.reset_gap_sec) {
+            end = i;
+            break;
+          }
+        }
+      }
       const int window_frames = std::max(0, end - begin);
 
       struct CandidateLikelihood
@@ -1564,12 +1726,72 @@ void append_trajectory_likelihood_csv(
           return std::make_tuple(-left_fitness, -lhs.seed_rank) >
                  std::make_tuple(-right_fitness, -rhs.seed_rank);
         });
-      const int refined_best_seed_rank = refined_likelihoods.empty() ? 0 : refined_likelihoods.front().seed_rank;
+
+      struct RefinedCluster
+      {
+        std::size_t representative_index{0};
+        int size{0};
+        double best_fitness{std::numeric_limits<double>::infinity()};
+      };
+      std::vector<RefinedCluster> refined_clusters;
+      if (config.temporal.trajectory_refine_cluster_enable) {
+        std::vector<int> cluster_ids(refined_likelihoods.size(), -1);
+        for (std::size_t i = 0; i < refined_likelihoods.size(); ++i) {
+          if (cluster_ids[i] >= 0 || !refined_likelihoods[i].output.converged) {
+            continue;
+          }
+          const int cluster_id = static_cast<int>(refined_clusters.size());
+          std::vector<std::size_t> pending{i};
+          cluster_ids[i] = cluster_id;
+          RefinedCluster cluster;
+          cluster.representative_index = i;
+          while (!pending.empty()) {
+            const std::size_t member_index = pending.back();
+            pending.pop_back();
+            ++cluster.size;
+            const auto & member = refined_likelihoods[member_index].output;
+            if (member.fitness_score < cluster.best_fitness) {
+              cluster.best_fitness = member.fitness_score;
+              cluster.representative_index = member_index;
+            }
+            for (std::size_t j = 0; j < refined_likelihoods.size(); ++j) {
+              if (cluster_ids[j] >= 0 || !refined_likelihoods[j].output.converged) {
+                continue;
+              }
+              const auto & candidate = refined_likelihoods[j].output;
+              const double dx = member.pose(0, 3) - candidate.pose(0, 3);
+              const double dy = member.pose(1, 3) - candidate.pose(1, 3);
+              const double yaw_delta_deg =
+                std::abs(normalize_angle(yaw_from_matrix(member.pose) - yaw_from_matrix(candidate.pose))) *
+                180.0 / M_PI;
+              if (std::hypot(dx, dy) <= config.temporal.trajectory_refine_cluster_xy_m &&
+                yaw_delta_deg <= config.temporal.trajectory_refine_cluster_yaw_deg)
+              {
+                cluster_ids[j] = cluster_id;
+                pending.push_back(j);
+              }
+            }
+          }
+          refined_clusters.push_back(cluster);
+        }
+        std::sort(
+          refined_clusters.begin(), refined_clusters.end(),
+          [](const RefinedCluster & lhs, const RefinedCluster & rhs) {
+            return lhs.best_fitness < rhs.best_fitness;
+          });
+      }
+
+      const std::size_t refined_best_index =
+        !refined_clusters.empty() ? refined_clusters.front().representative_index : 0;
+      const int refined_best_seed_rank = refined_likelihoods.empty() ? 0 :
+        refined_likelihoods[refined_best_index].seed_rank;
       const double refined_best_fitness =
         refined_likelihoods.empty() ? std::numeric_limits<double>::infinity() :
-        refined_likelihoods.front().output.fitness_score;
+        refined_likelihoods[refined_best_index].output.fitness_score;
       const double refined_second_fitness =
-        refined_likelihoods.size() > 1 ?
+        config.temporal.trajectory_refine_cluster_enable && refined_clusters.size() > 1 ?
+        refined_clusters[1].best_fitness :
+        !config.temporal.trajectory_refine_cluster_enable && refined_likelihoods.size() > 1 ?
         refined_likelihoods[1].output.fitness_score :
         std::numeric_limits<double>::infinity();
       const double refined_fitness_margin =
@@ -1578,9 +1800,13 @@ void append_trajectory_likelihood_csv(
         std::numeric_limits<double>::infinity();
       const bool refined_accept =
         !refined_likelihoods.empty() &&
-        refined_likelihoods.front().output.converged &&
+        refined_likelihoods[refined_best_index].output.converged &&
         refined_best_fitness <= config.temporal.trajectory_refine_max_fitness &&
-        refined_fitness_margin >= config.temporal.trajectory_refine_min_fitness_margin;
+        refined_fitness_margin >= config.temporal.trajectory_refine_min_fitness_margin &&
+        (!config.temporal.trajectory_refine_cluster_enable ||
+        refined_clusters.front().size >= std::max(1, config.temporal.trajectory_refine_min_cluster_size));
+      const int refined_cluster_count = static_cast<int>(refined_clusters.size());
+      const int refined_best_cluster_size = refined_clusters.empty() ? 0 : refined_clusters.front().size;
 
       for (const auto & likelihood : likelihoods) {
         const bool selected_by_single_frame =
@@ -1600,6 +1826,10 @@ void append_trajectory_likelihood_csv(
           std::pair<double, double>{-1.0, -1.0};
         const Eigen::Matrix4d refined_pose =
           refined_output ? refined_output->pose : Eigen::Matrix4d::Identity();
+        Eigen::Matrix4d refined_map_to_odom{Eigen::Matrix4d::Identity()};
+        if (refined_output) {
+          refined_map_to_odom = refined_pose * center.summary.odom_to_base_pose.inverse();
+        }
         const auto refined_error =
           refined_output && center.summary.has_reference_pose ?
           pose_error_against_reference(refined_pose, center.summary.reference_pose) :
@@ -1638,11 +1868,17 @@ void append_trajectory_likelihood_csv(
             << (refined_output && refined_output->converged ? 1 : 0) << ","
             << (refined_output ? refined_output->fitness_score : -1.0) << ","
             << refined_fitness_margin << ","
+            << refined_cluster_count << ","
+            << refined_best_cluster_size << ","
+            << refined_second_fitness << ","
             << (refined_output ? refined_output->elapsed_ms : 0.0) << ","
             << (refined_output ? refined_pose(0, 3) : -1.0) << ","
             << (refined_output ? refined_pose(1, 3) : -1.0) << ","
             << (refined_output ? refined_pose(2, 3) : -1.0) << ","
             << (refined_output ? rad_to_deg(yaw_from_matrix(refined_pose)) : -1.0) << ","
+            << (refined_output ? refined_map_to_odom(0, 3) : -1.0) << ","
+            << (refined_output ? refined_map_to_odom(1, 3) : -1.0) << ","
+            << (refined_output ? rad_to_deg(yaw_from_matrix(refined_map_to_odom)) : -1.0) << ","
             << refined_error.first << ","
             << refined_error.second << ","
             << voxel_size << ","
@@ -1739,6 +1975,7 @@ std::vector<EvaluationSummary> run_bag_evaluation(const RuntimeConfig & config)
     try {
       loaded.data = read_bag_data(config, bag_path);
       loaded.scan_context_database = build_scan_context_database(config, loaded.data);
+      loaded.solid_database = build_solid_database(config, loaded.data);
       loaded.ok = true;
     } catch (const std::exception & exc) {
       loaded.ok = false;
@@ -1856,6 +2093,7 @@ std::vector<EvaluationSummary> run_bag_evaluation(const RuntimeConfig & config)
             reference_pose,
             reference_source,
             &loaded.scan_context_database,
+            &loaded.solid_database,
             &preprocessed_scan);
           if (synced_odom) {
             summary.has_odom_pose = true;

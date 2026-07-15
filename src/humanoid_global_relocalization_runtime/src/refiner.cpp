@@ -43,8 +43,16 @@ RefineOutput refine_single_candidate(
   output.pose = candidate.pose;
   output.candidate_rank = rank;
 
+  if (candidate.pre_refined) {
+    output.fitness_score = candidate.refinement_fitness;
+    output.selection_score = candidate.selection_score;
+    output.converged = std::isfinite(candidate.refinement_fitness);
+    return output;
+  }
+
   if (config.method == RefineMethod::None) {
     output.fitness_score = 0.0;
+    output.selection_score = 0.0;
     output.converged = true;
     return output;
   }
@@ -101,6 +109,7 @@ RefineOutput refine_single_candidate(
   }
 
   output.elapsed_ms = elapsed_ms(start, std::chrono::steady_clock::now());
+  output.selection_score = output.fitness_score;
   return output;
 }
 
@@ -122,6 +131,7 @@ RefineOutput refine_candidates(
   best.pose = candidates.front().pose;
   best.candidate_rank = 1;
   best.fitness_score = std::numeric_limits<double>::infinity();
+  best.selection_score = std::numeric_limits<double>::infinity();
 
   // 对 top-K 前若干候选分别 refine，然后按 fitness score 重新挑最终位姿。
   // 这一步能暴露“BBS top-1 被重复结构骗了，但 top-K 中有正确解”的情况。
@@ -135,7 +145,7 @@ RefineOutput refine_candidates(
       best = current;
       break;
     }
-    if (current.converged && current.fitness_score < best.fitness_score) {
+    if (current.converged && current.selection_score < best.selection_score) {
       best = current;
     }
   }

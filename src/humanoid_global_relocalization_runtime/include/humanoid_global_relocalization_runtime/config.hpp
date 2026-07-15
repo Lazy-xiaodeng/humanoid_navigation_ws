@@ -141,8 +141,8 @@ struct EvaluationConfig
   bool enable_reference_sanity_check{true};
   double reference_max_abs_xy_m{100.0};
   double reference_max_abs_z_m{10.0};
-  double success_translation_thresh{0.50};
-  double success_yaw_thresh_deg{10.0};
+  double success_translation_thresh{0.20};
+  double success_yaw_thresh_deg{5.0};
   bool save_aligned_cloud{true};
   std::string metrics_csv_name{"global_relocalization_metrics.csv"};
   std::string candidates_csv_name{"global_relocalization_candidates.csv"};
@@ -159,13 +159,16 @@ struct TemporalConsistencyConfig
   std::string trajectory_likelihood_csv_name{"global_relocalization_trajectory_likelihood.csv"};
   int window_before{4};
   int window_after{0};
-  double xy_gate_m{1.0};
-  double yaw_gate_deg{12.0};
+  double reset_gap_sec{0.0};
+  double xy_gate_m{0.30};
+  double yaw_gate_deg{5.0};
   int online_min_support_frames{2};
-  double online_max_refine_fitness{0.12};
+  double online_max_refine_fitness{0.012};
+  bool solid_primary_relaxed_gate_enable{true};
+  double solid_primary_max_refine_fitness{0.022};
   int online_max_history_frames{10};
-  bool single_frame_high_confidence_fallback_enable{true};
-  double single_frame_high_confidence_max_fitness{0.02};
+  bool single_frame_high_confidence_fallback_enable{false};
+  double single_frame_high_confidence_max_fitness{0.012};
   int trajectory_max_candidates{30};
   std::vector<int> trajectory_center_frame_indices;
   double trajectory_voxel_size{0.35};
@@ -174,15 +177,19 @@ struct TemporalConsistencyConfig
   double trajectory_min_average_overlap{0.95};
   double trajectory_min_margin{0.03};
   bool trajectory_single_agreement_fallback_enable{true};
-  double trajectory_single_agreement_max_fitness{0.04};
+  double trajectory_single_agreement_max_fitness{0.012};
   double trajectory_single_agreement_max_xy_m{1.0};
   double trajectory_single_agreement_max_yaw_deg{3.0};
   double trajectory_single_agreement_min_overlap{0.80};
   double trajectory_single_agreement_min_margin{0.005};
   bool trajectory_refine_enable{false};
   int trajectory_refine_top_n{5};
-  double trajectory_refine_max_fitness{0.12};
+  double trajectory_refine_max_fitness{0.012};
   double trajectory_refine_min_fitness_margin{0.005};
+  bool trajectory_refine_cluster_enable{false};
+  double trajectory_refine_cluster_xy_m{0.10};
+  double trajectory_refine_cluster_yaw_deg{2.0};
+  int trajectory_refine_min_cluster_size{2};
 };
 
 struct ScanContextConfig
@@ -202,6 +209,33 @@ struct ScanContextConfig
   bool use_shift_yaw{true};
   std::vector<double> yaw_offsets_deg{-10.0, 0.0, 10.0};
   double duplicate_xy_gate_m{0.30};
+  double duplicate_yaw_gate_deg{5.0};
+};
+
+struct SolidConfig
+{
+  bool enable{false};
+  std::string database_path;
+  std::string save_database_path;
+  int keyframe_stride{80};
+  int top_k{20};
+  int top_k_per_source{8};
+  int exclude_index_radius{120};
+  int ranges{40};
+  int angles{60};
+  int heights{32};
+  double min_range{0.80};
+  double max_range{20.0};
+  double fov_down_deg{-35.0};
+  double fov_up_deg{35.0};
+  double sensor_height{1.215};
+  double voxel_size{0.40};
+  double registration_voxel_size{0.20};
+  double registration_max_correspondence_m{2.0};
+  int registration_max_iterations{30};
+  double similarity_min{0.90};
+  int bbs_prefix_candidates{3};
+  double duplicate_xy_gate_m{0.20};
   double duplicate_yaw_gate_deg{5.0};
 };
 
@@ -261,6 +295,7 @@ struct RuntimeConfig
   EvaluationConfig evaluation;
   TemporalConsistencyConfig temporal;
   ScanContextConfig scan_context;
+  SolidConfig solid;
   PrecisionRecoveryConfig precision_recovery;
   std::vector<EvaluationScenario> scenarios;
   RuntimeOutputConfig output;

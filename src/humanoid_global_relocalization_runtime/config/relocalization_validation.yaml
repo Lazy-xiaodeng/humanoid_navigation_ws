@@ -223,7 +223,7 @@ global_relocalization_eval:
     # 调大可提升重复结构场景找回正确解的概率，但 refine_ms 会明显增加。
     # nav_drift_test46 资源 sweep 中 8 个候选配合 2 个 BBS 线程仍保持 temporal accepted 27/27 成功，
     # 因此第一版推荐 8；若新场景召回不足，再优先回到 10 或 20。
-    max_refine_candidates: 8
+    max_refine_candidates: 20
 
     # ICP/GICP/NDT 共用最大迭代次数。调大可能改善收敛，但耗时增加。
     refine_max_iterations: 25
@@ -297,10 +297,10 @@ global_relocalization_eval:
     reference_max_abs_z_m: 10.0
 
     # 成功判定平移阈值，单位 m。仅配置参考位姿时生效。
-    success_translation_thresh: 0.80
+    success_translation_thresh: 0.20
 
     # 成功判定 yaw 阈值，单位 deg。仅配置参考位姿时生效。
-    success_yaw_thresh_deg: 15.0
+    success_yaw_thresh_deg: 5.0
 
     # 是否保存对齐后的 scan PCD。开启便于可视化检查，关闭可减少磁盘写入。
     save_aligned_cloud: false
@@ -367,12 +367,12 @@ global_relocalization_eval:
     # 判断两个候选隐含 map->odom 是否属于同一时序簇的平移阈值，单位 m。
     # 调大：更容易聚成稳定簇，但相邻重复走廊可能被误认为同一簇。
     # 调小：更严格，能减少误聚类，但 odom 噪声、点云遮挡或粗搜索量化误差可能让真实簇断开。
-    temporal_consistency_xy_gate_m: 1.0
+    temporal_consistency_xy_gate_m: 0.30
 
     # 判断两个候选隐含 map->odom 是否属于同一时序簇的 yaw 阈值，单位 deg。
     # 调大：能容忍角度抖动，但可能把相反方向或相似拐角合并。
     # 调小：角度一致性更严格，但 yaw 粗搜索量化较大时可能漏掉真实支持帧。
-    temporal_consistency_yaw_gate_deg: 12.0
+    temporal_consistency_yaw_gate_deg: 5.0
 
     # 在线 debug 节点发布 verified_candidate 前要求 selected candidate 的最小支持帧数。
     # 例如设置为 2 表示当前最终候选对应的隐含 map->odom 假设至少要在当前/历史窗口的 2 帧候选中出现，
@@ -386,9 +386,11 @@ global_relocalization_eval:
 
     # 在线/离线 decision 接受 verified 候选前允许的最大精配准 fitness。
     # selected_support 只能说明候选在多帧中稳定，不能证明它一定贴合地图几何；fitness 用来挡住“稳定但错误”的重复结构簇。
-    # nav46 随机 80 点中，support>=2 单独会出现 1 个 false accept；增加 fitness<=0.12 后两路均为 false_accept=0。
+    # 全量严格回放中 0.012 为零误接受冻结值；旧 0.12 会放行稳定错误候选。
     # 调小会更保守、拒绝更多边界帧；调大响应更积极，但重复走廊里误恢复风险会上升。
-    temporal_consistency_online_max_refine_fitness: 0.12
+    temporal_consistency_online_max_refine_fitness: 0.012
+    solid_primary_relaxed_gate_enable: true
+    solid_primary_max_refine_fitness: 0.022
 
     # 在线 debug 节点保留多少次历史全局搜索结果用于时序一致性判断。
     # 调大可以跨更长时间积累候选簇，更容易打破长走廊/重复转角歧义；但内存和计算会增加，且过旧候选可能不再代表当前状态。
@@ -402,14 +404,14 @@ global_relocalization_eval:
     # 这个规则只用于救回“几何已经很确定但历史支持不足”的点，例如 bag46 点位 5/10；
     # 它不会降低主时序门槛，也不会放宽 trajectory likelihood，重复走廊里 fitness 较高的候选仍会被拒绝并等待主动恢复。
     # 调成 false 会回到纯 support/trajectory 策略，误接受风险最低，但冷启动响应会更保守。
-    single_frame_high_confidence_fallback_enable: true
+    single_frame_high_confidence_fallback_enable: false
 
     # 单帧极高置信兜底允许的最大精配准 fitness。
     # 调低：只接受非常贴图的单帧结果，安全性更高，但可救回点更少。
     # 调高：能救更多 support=1 的点，但如果接近已知错误单帧 fitness，就可能在重复结构里误接受。
     # bag46 随机 80 点里，fitness<=0.04 的单帧结果没有误接受，第一个已知明显错误约为 0.04757；
-    # 为了先追求稳定，默认取更保守的 0.02，当前能救回动态点位 5/10，同时保持点位 8 这种歧义帧拒绝。
-    single_frame_high_confidence_max_fitness: 0.02
+    # 精度优先配置关闭单帧兜底；该数值仅保留为禁用分支的安全上限。
+    single_frame_high_confidence_max_fitness: 0.012
 
     # 轨迹 likelihood 最多评估当前帧 top-K 中前多少个候选。
     # 调大：正确候选即使排名靠后也有机会被历史轨迹找回，但每个候选都要对历史 scan 计算 overlap，CPU 近似线性增加。
@@ -464,7 +466,7 @@ global_relocalization_eval:
     # 单帧高置信补救规则允许的最大单帧 refine fitness。
     # 调低：只有 scan 与地图非常贴合时才允许补救，误接受风险更低；调高：能救更多弱几何点，但重复结构里错误 GICP 也可能被放行。
     # nav46 随机 80 中所有单帧明显错误点 fitness 都高于 0.04，而最后一个可救回点约为 0.025~0.031，因此当前取 0.04。
-    trajectory_single_agreement_max_fitness: 0.04
+    trajectory_single_agreement_max_fitness: 0.012
 
     # 单帧高置信补救规则要求轨迹候选与单帧最终位姿的最大平移差，单位 m。
     # 调小：更强调两个独立证据必须落在同一位置；调大：能容忍更大 scan/odom 噪声，但会增加错误候选贴近单帧误匹配的风险。
@@ -546,6 +548,31 @@ global_relocalization_eval:
     # BBS/Scan Context 融合候选去重 yaw 阈值，单位 deg。
     scan_context_duplicate_yaw_gate_deg: 5.0
 
+    # SOLiD 完整候选召回。测试配置可从同一批关键帧生成数据库并保存，查询帧附近关键帧会被排除。
+    enable_solid_recall: true
+    solid_database_path: ""
+    solid_save_database_path: ""
+    solid_keyframe_stride: 200
+    solid_exclude_index_radius: 120
+    solid_top_k: 20
+    solid_top_k_per_source: 8
+    solid_ranges: 40
+    solid_angles: 60
+    solid_heights: 32
+    solid_min_range: 0.80
+    solid_max_range: 20.0
+    solid_fov_down_deg: -35.0
+    solid_fov_up_deg: 35.0
+    solid_sensor_height: 1.215
+    solid_voxel_size: 0.40
+    solid_registration_voxel_size: 0.20
+    solid_registration_max_correspondence_m: 2.0
+    solid_registration_max_iterations: 30
+    solid_similarity_min: 0.90
+    solid_bbs_prefix_candidates: 3
+    solid_duplicate_xy_gate_m: 0.20
+    solid_duplicate_yaw_gate_deg: 5.0
+
     # 是否对轨迹 likelihood 排名前 N 的候选做二次精配准。
     # 开启后，系统会把轨迹候选推到当前帧后再做一次 GICP/ICP/NDT refine，并把 refined_fitness/refined pose 写入 CSV。
     # 注意：bag44 hard case 证明错误重复结构也可能得到很低 GICP fitness，因此该开关默认只建议作为离线诊断，
@@ -560,7 +587,7 @@ global_relocalization_eval:
     # 轨迹候选二次精配准允许接受的最大 fitness。
     # 该值越小越严格，可以挡住“overlap 很高但精配准贴图质量差”的重复结构误匹配；
     # 但过小会拒绝遮挡、稀疏或地图局部不一致的正确恢复。
-    trajectory_refine_max_fitness: 0.12
+    trajectory_refine_max_fitness: 0.012
 
     # 二次精配准最佳候选与第二名 fitness 的最小差值。
     # fitness 越小越好，因此这里比较 second_best_fitness - best_fitness。

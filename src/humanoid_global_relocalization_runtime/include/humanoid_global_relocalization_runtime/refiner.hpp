@@ -30,6 +30,7 @@ struct RefineOutput
   Eigen::Matrix4d pose{Eigen::Matrix4d::Identity()};
   int candidate_rank{0};
   double fitness_score{0.0};
+  double selection_score{0.0};
   double elapsed_ms{0.0};
   bool converged{false};
 };
