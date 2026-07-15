@@ -8,9 +8,8 @@ RoboSense lidar_localization 导航启动文件。
       -> Nav2
 
 说明：
-  - 本文件只保留当前 ro 链路实际使用的节点。
-  - Open3D、旧 NDT、HDL、ScanContext 的未使用节点不在本文件中定义。
-  - 当前按测试要求：大跳保护为 monitor，SpinToPose 旋转冻结保护关闭。
+  - RoboSense 负责局部精匹配，全局重定位只在可信度监督层请求时运行。
+  - 恢复协调器审核全局候选后同步更新 bridge 与 RoboSense 初值。
 """
 
 import os
@@ -35,6 +34,9 @@ from launch_ros.actions import Node
 def generate_launch_description():
     pkg_nav2 = get_package_share_directory('humanoid_navigation2')
     pkg_obstacle_runtime = get_package_share_directory('humanoid_obstacle_runtime')
+    pkg_global_relocalization = get_package_share_directory(
+        'humanoid_global_relocalization_runtime'
+    )
 
     default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params.yaml')
     default_bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_xy_then_yaw.xml')
@@ -43,6 +45,9 @@ def generate_launch_description():
     default_robosense_config_file = (
         '/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_robosense_localization_runtime/config/'
         'robosense_lidar_localization.yaml'
+    )
+    default_global_relocalization_config_file = os.path.join(
+        pkg_global_relocalization, 'config', 'relocalization_runtime.yaml'
     )
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
@@ -53,6 +58,13 @@ def generate_launch_description():
     enable_rslidar = LaunchConfiguration('enable_rslidar', default='true')
     enable_periodic_clearing = LaunchConfiguration('enable_periodic_clearing', default='true')
     enable_roi_obstacle_detector = LaunchConfiguration('enable_roi_obstacle_detector', default='true')
+    enable_global_relocalization = LaunchConfiguration(
+        'enable_global_relocalization', default='true'
+    )
+    global_relocalization_config_file = LaunchConfiguration(
+        'global_relocalization_config_file',
+        default=default_global_relocalization_config_file,
+    )
     roi_obstacle_params_file = LaunchConfiguration(
         'roi_obstacle_params_file',
         default=default_roi_obstacle_params_file,
@@ -456,6 +468,9 @@ def generate_launch_description():
             'force_2d': True,
             # force_2d 时固定 z 值。
             'force_z': 0.0,
+            # 恢复协调器审核后的 map->odom 显式输入。
+            'global_recovery_map_to_odom_topic': '/localization/global_recovery_map_to_odom',
+            'global_recovery_timeout_sec': 2.5,
         }
     prior_map_odom_bridge_cpp_node = nav2_cpp_node(
         'prior_map_odom_bridge_cpp',
@@ -473,8 +488,8 @@ def generate_launch_description():
             'bridge_status_topic': '/localization/prior_map_odom_bridge_status',
             # RoboSense scan-to-map 的结构化健康状态。
             'robosense_status_topic': '/prior_localization/robosense_status',
-            # 后续全局重定位层接入时复用该状态入口。
-            'global_status_topic': '/global_relocalization/status',
+            # 全局重定位统一 JSON 状态入口。
+            'global_status_topic': '/global_relocalization/recovery_status',
             # 给 Nav2 启动门控、路线任务层和 APP 监控使用的可信定位状态。
             'trust_status_topic': '/localization/trust_status',
             # 原点附近配置初值不直接作为可信定位。
@@ -491,6 +506,40 @@ def generate_launch_description():
             # 2Hz 足够给任务门控和 APP 展示使用。
             'publish_rate': 2.0,
             'use_sim_time': use_sim_time,
+        }],
+    )
+
+    global_relocalization_node = Node(
+        package='humanoid_global_relocalization_runtime',
+        executable='global_relocalization_node',
+        name='global_relocalization_node',
+        output='screen',
+        condition=IfCondition(enable_global_relocalization),
+        parameters=[{
+            'config_file': global_relocalization_config_file,
+            'use_sim_time': use_sim_time,
+        }],
+    )
+
+    global_relocalization_coordinator_node = Node(
+        package='humanoid_localization_runtime',
+        executable='global_relocalization_coordinator',
+        name='global_relocalization_coordinator',
+        output='screen',
+        condition=IfCondition(enable_global_relocalization),
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'auto_trigger': True,
+            # 只有完整导航入口显式允许应用；协调器程序自身仍以 dry-run 为安全默认值。
+            'dry_run': False,
+            'auto_apply': True,
+            'attempt_timeout_sec': 30.0,
+            'apply_timeout_sec': 5.0,
+            'max_attempts': 3,
+            'retry_backoff_sec': 2.0,
+            'map_registry_path': (
+                '/home/ubuntu/software/Todesk/Files/humanoid_ws/data/maps/map_registry.json'
+            ),
         }],
     )
 
@@ -669,6 +718,8 @@ def generate_launch_description():
         DeclareLaunchArgument('robosense_config_file', default_value=default_robosense_config_file, description='RoboSense 定位配置 YAML'),
         DeclareLaunchArgument('enable_fastdds_shm', default_value='true', description='是否设置 FastDDS 共享内存环境变量'),
         DeclareLaunchArgument('enable_rslidar', default_value='true', description='是否启动真实 RoboSense 雷达驱动；bag 回放验证时可设为 false'),
+        DeclareLaunchArgument('enable_global_relocalization', default_value='true', description='是否启动按需全局重定位闭环'),
+        DeclareLaunchArgument('global_relocalization_config_file', default_value=default_global_relocalization_config_file, description='全局重定位正式参数文件'),
         *fastdds_env_setup,
         rslidar_node,
         fast_lio_node,
@@ -684,7 +735,9 @@ def generate_launch_description():
         TimerAction(period=4.5, actions=[robosense_lidar_localization_node]),
         TimerAction(period=5.5, actions=[prior_map_odom_bridge_cpp_node]),
         TimerAction(period=5.7, actions=[localization_trust_supervisor_node]),
-        TimerAction(period=5.8, actions=[rviz_initialpose_adapter_node]),
+        TimerAction(period=5.8, actions=[global_relocalization_node]),
+        TimerAction(period=6.0, actions=[global_relocalization_coordinator_node]),
+        TimerAction(period=6.1, actions=[rviz_initialpose_adapter_node]),
         TimerAction(period=7.5, actions=[robot_realpose_publisher]),
         periodic_clearing_3d_node,
         localization_ready_gate,

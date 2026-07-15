@@ -155,6 +155,9 @@ public:
     prior_pose_with_covariance_topic_ = declare_parameter<std::string>(
       "prior_pose_with_covariance_topic", "/prior_localization/pose_with_covariance");
     prior_odom_topic_ = declare_parameter<std::string>("prior_odom_topic", "/prior_localization/odom");
+    global_recovery_map_to_odom_topic_ = declare_parameter<std::string>(
+      "global_recovery_map_to_odom_topic", "/localization/global_recovery_map_to_odom");
+    global_recovery_timeout_sec_ = declare_parameter<double>("global_recovery_timeout_sec", 2.5);
     confidence_topic_ = declare_parameter<std::string>("confidence_topic", "/prior_localization/confidence");
     require_confidence_ = declare_parameter<bool>("require_confidence", false);
     min_confidence_ = declare_parameter<double>("min_confidence", 0.5);
@@ -232,6 +235,11 @@ public:
       prior_odom_topic_, 10,
       [this](nav_msgs::msg::Odometry::SharedPtr msg) {
         handle_candidate_pose(msg->header, msg->pose.pose);
+      });
+    global_recovery_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
+      global_recovery_map_to_odom_topic_, 10,
+      [this](geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+        handle_global_recovery_map_to_odom(*msg);
       });
     odom_cache_sub_ = create_subscription<nav_msgs::msg::Odometry>(
       odom_cache_topic_, 100,
@@ -559,6 +567,29 @@ private:
     Matrix4 candidate = map_to_localized * odom_to_localized->inverse();
     candidate = apply_output_constraints(candidate);
     evaluate_candidate(candidate);
+  }
+
+  void handle_global_recovery_map_to_odom(const geometry_msgs::msg::PoseStamped & msg)
+  {
+    if (!msg.header.frame_id.empty() && msg.header.frame_id != map_frame_) {
+      publish_status(
+        "REJECTED global_recovery_wrong_frame frame_id=" + msg.header.frame_id +
+        " expected=" + map_frame_);
+      return;
+    }
+    if (!is_zero_stamp(msg.header.stamp)) {
+      const rclcpp::Time stamp(msg.header.stamp, get_clock()->get_clock_type());
+      const double age = (now() - stamp).seconds();
+      if (age < -0.2 || age > global_recovery_timeout_sec_) {
+        publish_status("REJECTED global_recovery_stale age=" + fixed3(age) + "s");
+        return;
+      }
+    }
+    Matrix4 candidate = apply_output_constraints(pose_to_matrix(msg.pose));
+    pending_large_candidate_.reset();
+    pending_large_count_ = 0;
+    large_jump_hold_start_time_.reset();
+    accept_candidate(candidate, "global_recovery");
   }
 
   bool confidence_is_acceptable()
@@ -920,6 +951,7 @@ private:
   std::string prior_pose_topic_;
   std::string prior_pose_with_covariance_topic_;
   std::string prior_odom_topic_;
+  std::string global_recovery_map_to_odom_topic_;
   std::string confidence_topic_;
   std::string odom_cache_topic_;
   std::string jump_protection_mode_;
@@ -943,6 +975,7 @@ private:
   double publish_rate_{30.0};
   double tf_lookup_timeout_sec_{0.08};
   double pose_timeout_sec_{0.8};
+  double global_recovery_timeout_sec_{2.5};
   double origin_seed_radius_{0.30};
   double odom_cache_duration_sec_{5.0};
   double odom_interpolation_max_gap_sec_{0.25};
@@ -980,6 +1013,7 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr pose_cov_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr global_recovery_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_cache_sub_;
   rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr confidence_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr navigation_status_sub_;

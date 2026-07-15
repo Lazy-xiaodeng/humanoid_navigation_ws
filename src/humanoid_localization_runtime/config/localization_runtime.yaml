@@ -15,6 +15,9 @@ prior_map_odom_bridge:
     prior_pose_with_covariance_topic: "/prior_localization/pose_with_covariance"
     # Odometry 定位输入话题，RoboSense 定位链路主要使用它。
     prior_odom_topic: "/prior_localization/odom"
+    # 恢复协调器已经审核并计算完成的 map->odom。
+    global_recovery_map_to_odom_topic: "/localization/global_recovery_map_to_odom"
+    global_recovery_timeout_sec: 2.5
     # map->odom 发布频率，单位 Hz。
     publish_rate: 30.0
     # 是否只保留 x/y/yaw，忽略 z/roll/pitch。
@@ -63,3 +66,19 @@ rviz_initialpose_adapter:
     map_ground_frame: "map_ground"
     # 定位桥使用的地图坐标系。
     map_frame: "map"
+
+global_relocalization_coordinator:
+  ros__parameters:
+    auto_trigger: true
+    # 正式运行配置：严格关联通过后同时交给 bridge 与 RO，随后仍需 RO 连续健康确认。
+    dry_run: false
+    auto_apply: true
+    attempt_timeout_sec: 30.0
+    apply_timeout_sec: 5.0
+    max_attempts: 3
+    retry_backoff_sec: 2.0
+    candidate_stamp_tolerance_sec: 0.03
+    candidate_max_receipt_age_sec: 2.0
+    navigation_status_topic: "/navigation/status"
+    map_assets_json: '{}'
+    map_registry_path: "/home/ubuntu/software/Todesk/Files/humanoid_ws/data/maps/map_registry.json"

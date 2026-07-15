@@ -36,7 +36,8 @@ def _json_or_text(data: str) -> Dict[str, Any]:
         payload = json.loads(data)
         return payload if isinstance(payload, dict) else {"raw": data}
     except json.JSONDecodeError:
-        return {"raw": data}
+        fields = _parse_key_values(data)
+        return {**fields, "raw": data}
 
 
 class LocalizationTrustSupervisor(Node):
@@ -52,7 +53,7 @@ class LocalizationTrustSupervisor(Node):
             "robosense_status_topic", "/prior_localization/robosense_status"
         ).value
         self.global_status_topic = self.declare_parameter(
-            "global_status_topic", "/global_relocalization/status"
+            "global_status_topic", "/global_relocalization/recovery_status"
         ).value
         self.trust_status_topic = self.declare_parameter(
             "trust_status_topic", "/localization/trust_status"
@@ -140,6 +141,11 @@ class LocalizationTrustSupervisor(Node):
         if kind == "ACCEPTED":
             self.pose_initialized = True
             self.bridge_accept_kind = self._accepted_kind(text)
+            if self.bridge_accept_kind == "global_recovery":
+                self.startup_requires_global_relocalization = False
+                self.recovery_requires_global_relocalization = False
+                self.recovery_trigger = ""
+                self.ro_verified_count = 0
             if self.bridge_accept_kind == "initial_pose":
                 self.origin_seeded = (
                     fields.get("origin_seeded", "").lower() == "true"
@@ -193,15 +199,13 @@ class LocalizationTrustSupervisor(Node):
             "stamp_sec": now,
         }
         state = str(payload.get("state", payload.get("status", ""))).lower()
-        if state in ("succeeded", "success", "accepted", "trusted", "localized"):
-            self.startup_requires_global_relocalization = False
-            self.recovery_requires_global_relocalization = False
-            self.recovery_trigger = ""
-            # 全局结果只提供新的粗定位，仍需等待 RO 用新初值重新稳定匹配。
-            self.ro_verified_count = 0
+        # 算法 accepted 只是恢复候选，不等于定位已经被 bridge/RO 接管。
+        # 只有 bridge 明确报告 ACCEPTED global_recovery 后才清除恢复要求。
         self.evaluate()
 
     def _accepted_kind(self, text: str) -> str:
+        if "global_recovery" in text:
+            return "global_recovery"
         if "initial_pose" in text:
             return "initial_pose"
         if "small_correction" in text:

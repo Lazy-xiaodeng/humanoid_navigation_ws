@@ -275,7 +275,9 @@ struct EvaluationScenario
 struct RuntimeOutputConfig
 {
   bool enable_relocalization{false};
+  bool on_demand_mode{false};
   double relocalization_min_period_sec{1.0};
+  std::string request_topic{"/global_relocalization/request"};
   std::string candidate_pose_array_topic{"/global_relocalization/candidates"};
   std::string candidate_marker_topic{"/global_relocalization/candidate_markers"};
   std::string aligned_cloud_topic{"/global_relocalization/aligned_scan"};

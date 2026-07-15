@@ -617,6 +617,10 @@ global_relocalization_eval:
     # true：在线节点会按 input_mode 订阅点云，执行 3D-BBS，并发布 RViz/debug 候选；仍然不会发布 TF 或 initialpose。
     enable_online_search: false
 
+    # 独立验证不依赖系统恢复协调器。
+    on_demand_mode: false
+    relocalization_request_topic: "/global_relocalization/request"
+
     # 在线搜索最小间隔，单位秒。
     # 调大可以降低 CPU 占用；调小能更频繁看到候选变化，但 3D-BBS 是重计算，实机上要谨慎。
     online_min_period_sec: 1.0

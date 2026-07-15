@@ -26,6 +26,7 @@
 #include <chrono>
 #include <cmath>
 #include <deque>
+#include <iomanip>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -42,6 +43,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
+#include <yaml-cpp/yaml.h>
 
 #include "rclcpp/rclcpp.hpp"
 
@@ -58,6 +60,40 @@ namespace humanoid_global_relocalization
 {
 namespace
 {
+
+std::string json_escape(const std::string & value)
+{
+  std::ostringstream escaped;
+  for (const unsigned char c : value) {
+    switch (c) {
+      case '"': escaped << "\\\""; break;
+      case '\\': escaped << "\\\\"; break;
+      case '\b': escaped << "\\b"; break;
+      case '\f': escaped << "\\f"; break;
+      case '\n': escaped << "\\n"; break;
+      case '\r': escaped << "\\r"; break;
+      case '\t': escaped << "\\t"; break;
+      default:
+        if (c < 0x20) {
+          escaped << "\\u" << std::hex << std::setw(4) << std::setfill('0')
+                  << static_cast<int>(c) << std::dec << std::setfill(' ');
+        } else {
+          escaped << static_cast<char>(c);
+        }
+    }
+  }
+  return escaped.str();
+}
+
+std::string json_number(double value)
+{
+  if (!std::isfinite(value)) {
+    return "null";
+  }
+  std::ostringstream text;
+  text << std::setprecision(12) << value;
+  return text.str();
+}
 
 double stamp_to_sec(const builtin_interfaces::msg::Time & stamp)
 {
@@ -339,6 +375,10 @@ public:
       config_.output.recovery_map_odom_topic, rclcpp::QoS(1).transient_local());
     recovery_status_pub_ = create_publisher<std_msgs::msg::String>(
       config_.output.recovery_status_topic, rclcpp::QoS(1).transient_local());
+    request_sub_ = create_subscription<std_msgs::msg::String>(
+      config_.output.request_topic,
+      rclcpp::QoS(10),
+      [this](std_msgs::msg::String::SharedPtr msg) {handle_relocalization_request(msg->data);});
 
     if (!config_.output.enable_relocalization) {
       RCLCPP_INFO(
@@ -350,6 +390,9 @@ public:
     if (!build_map_index()) {
       return;
     }
+
+    search_active_ = !config_.output.on_demand_mode;
+    publish_control_status(search_active_ ? "searching" : "idle", "node_ready");
 
     // registered_world 模式需要缓存 /odom，用点云时间戳找最近位姿做 raw world -> raw body。
     if (config_.input.mode == InputMode::RegisteredWorld || config_.temporal.enable) {
@@ -381,9 +424,154 @@ public:
   }
 
 private:
+  void reset_attempt_state()
+  {
+    temporal_window_.clear();
+    scan_window_.clear();
+    default_reject_streak_ = 0;
+    precision_attempts_remaining_ = 0;
+    last_search_time_ = rclcpp::Time(0, 0, get_clock()->get_clock_type());
+    last_precision_layer_time_ = rclcpp::Time(0, 0, get_clock()->get_clock_type());
+  }
+
+  void publish_control_status(const std::string & state, const std::string & reason)
+  {
+    if (!recovery_status_pub_) {
+      return;
+    }
+    std_msgs::msg::String status;
+    std::ostringstream text;
+    text << "{\"protocol_version\":1"
+         << ",\"event_type\":\"global_relocalization_control\""
+         << ",\"attempt_id\":\"" << json_escape(active_attempt_id_) << "\""
+         << ",\"map_id\":\"" << json_escape(active_map_id_) << "\""
+         << ",\"stamp_sec\":" << json_number(now().seconds())
+         << ",\"state\":\"" << json_escape(state) << "\""
+         << ",\"reason\":\"" << json_escape(reason) << "\""
+         << ",\"search_active\":" << (search_active_ ? "true" : "false")
+         << ",\"map_path\":\"" << json_escape(config_.input.map_path) << "\""
+         << ",\"scan_context_entries\":" << scan_context_database_.size()
+         << ",\"solid_entries\":" << solid_database_.size()
+         << ",\"precision_scan_context_entries\":" << precision_scan_context_database_.size()
+         << ",\"degraded_recall\":"
+         << ((scan_context_database_.empty() && solid_database_.empty()) ? "true" : "false")
+         << "}";
+    status.data = text.str();
+    recovery_status_pub_->publish(status);
+  }
+
+  void handle_relocalization_request(const std::string & data)
+  {
+    try {
+      const YAML::Node request = YAML::Load(data);
+      if (!request.IsMap()) {
+        publish_control_status("rejected", "request_not_object");
+        return;
+      }
+      const std::string command = request["command"] ? request["command"].as<std::string>() : "";
+      const std::string attempt_id = request["attempt_id"] ? request["attempt_id"].as<std::string>() : "";
+      const std::string map_id = request["map_id"] ? request["map_id"].as<std::string>() : "";
+      if (command == "start") {
+        if (attempt_id.empty() || map_id.empty()) {
+          publish_control_status("rejected", "missing_attempt_id_or_map_id");
+          return;
+        }
+        const std::string previous_attempt_id = active_attempt_id_;
+        const std::string previous_map_id = active_map_id_;
+        active_attempt_id_ = attempt_id;
+        search_active_ = false;
+        std::string asset_error;
+        if (!activate_requested_map_assets(request, map_id, asset_error)) {
+          publish_control_status("rejected", asset_error);
+          active_attempt_id_ = previous_attempt_id;
+          active_map_id_ = previous_map_id;
+          return;
+        }
+        active_map_id_ = map_id;
+        reset_attempt_state();
+        search_active_ = true;
+        publish_control_status("searching", "request_started");
+        return;
+      }
+      if (command == "cancel") {
+        if (!attempt_id.empty() && active_attempt_id_ != attempt_id) {
+          publish_control_status("rejected", "cancel_attempt_mismatch");
+          return;
+        }
+        search_active_ = !config_.output.on_demand_mode;
+        reset_attempt_state();
+        publish_control_status("cancelled", "request_cancelled");
+        if (config_.output.on_demand_mode) {
+          active_attempt_id_.clear();
+        }
+        return;
+      }
+      publish_control_status("rejected", "unknown_command");
+    } catch (const std::exception & exc) {
+      publish_control_status("rejected", std::string("request_parse_error:") + exc.what());
+    }
+  }
+
+  bool activate_requested_map_assets(
+    const YAML::Node & request, const std::string & map_id, std::string & error)
+  {
+    const std::string requested_map_path =
+      request["map_path"] ? request["map_path"].as<std::string>() : "";
+    const std::string requested_sc_path = request["scan_context_database_path"] ?
+      request["scan_context_database_path"].as<std::string>() : "";
+    const std::string requested_solid_path = request["solid_database_path"] ?
+      request["solid_database_path"].as<std::string>() : "";
+
+    if (requested_map_path.empty()) {
+      if (active_map_id_ != "unassigned" && active_map_id_ != map_id) {
+        error = "map_assets_missing_for_requested_map";
+        return false;
+      }
+      return true;
+    }
+
+    const bool assets_changed =
+      requested_map_path != config_.input.map_path ||
+      requested_sc_path != config_.scan_context.database_path ||
+      requested_solid_path != config_.solid.database_path;
+    if (!assets_changed) {
+      return true;
+    }
+
+    const std::string old_map_path = config_.input.map_path;
+    const std::string old_sc_path = config_.scan_context.database_path;
+    const std::string old_precision_sc_path = config_.precision_recovery.scan_context_database_path;
+    const std::string old_solid_path = config_.solid.database_path;
+    const bool old_sc_enable = config_.scan_context.enable;
+    const bool old_solid_enable = config_.solid.enable;
+
+    config_.input.map_path = requested_map_path;
+    config_.scan_context.database_path = requested_sc_path;
+    config_.scan_context.enable = !requested_sc_path.empty();
+    config_.precision_recovery.scan_context_database_path = requested_sc_path;
+    config_.solid.database_path = requested_solid_path;
+    config_.solid.enable = !requested_solid_path.empty();
+    if (build_map_index()) {
+      return true;
+    }
+
+    config_.input.map_path = old_map_path;
+    config_.scan_context.database_path = old_sc_path;
+    config_.scan_context.enable = old_sc_enable;
+    config_.precision_recovery.scan_context_database_path = old_precision_sc_path;
+    config_.solid.database_path = old_solid_path;
+    config_.solid.enable = old_solid_enable;
+    (void)build_map_index();
+    error = "map_assets_load_failed";
+    return false;
+  }
+
   bool build_map_index()
   {
     try {
+      scan_context_database_.clear();
+      solid_database_.clear();
+      precision_scan_context_database_.clear();
       // 运行态与评估工具使用同一套地图预处理和 3D-BBS 参数，保证参数语义一致。
       CloudPtr raw_map = load_pcd_xyz(config_.input.map_path);
       map_cloud_ = preprocess_map_cloud(raw_map, config_.preprocess);
@@ -836,7 +1024,7 @@ private:
 
   void handle_cloud(sensor_msgs::msg::PointCloud2::SharedPtr msg)
   {
-    if (!bbs_) {
+    if (!bbs_ || !search_active_) {
       return;
     }
 
@@ -1668,43 +1856,47 @@ private:
     double refined_fitness,
     const TrajectoryRecoveryAttempt * trajectory_attempt = nullptr)
   {
-    // 状态话题是给后续 bridge/nav 接入前审计用的轻量文本，不参与自动恢复动作。
+    // 所有恢复状态使用同一 JSON 契约；位姿应用仍由上层恢复协调器负责。
     std_msgs::msg::String status;
     std::ostringstream text;
-    text << "stamp=" << stamp_to_sec(stamp)
-         << " state=" << state
-         << " input_mode=" << to_string(config_.input.mode)
-         << " best_rank=" << best_rank
-         << " best_support=" << best_support
-         << " selected_rank=" << selected_rank
-         << " selected_support=" << selected_support
-         << " min_support=" << config_.temporal.online_min_support_frames
-         << " map_odom_x=" << map_odom_x
-         << " map_odom_y=" << map_odom_y
-         << " map_odom_yaw_deg=" << map_odom_yaw_deg
-         << " refined_converged=" << (refined_converged ? "true" : "false")
-         << " refined_fitness=" << refined_fitness
-         << " precision_layer_available=" << (precision_layer_available() ? "true" : "false")
-         << " default_reject_streak=" << default_reject_streak_
-         << " precision_attempts_remaining=" << precision_attempts_remaining_;
+    text << "{\"protocol_version\":1"
+         << ",\"event_type\":\"global_relocalization_result\""
+         << ",\"attempt_id\":\"" << json_escape(active_attempt_id_) << "\""
+         << ",\"map_id\":\"" << json_escape(active_map_id_) << "\""
+         << ",\"stamp_sec\":" << json_number(stamp_to_sec(stamp))
+         << ",\"state\":\"" << json_escape(state) << "\""
+         << ",\"input_mode\":\"" << json_escape(to_string(config_.input.mode)) << "\""
+         << ",\"best_rank\":" << best_rank
+         << ",\"best_support\":" << best_support
+         << ",\"selected_rank\":" << selected_rank
+         << ",\"selected_support\":" << selected_support
+         << ",\"min_support\":" << config_.temporal.online_min_support_frames
+         << ",\"map_odom_x\":" << json_number(map_odom_x)
+         << ",\"map_odom_y\":" << json_number(map_odom_y)
+         << ",\"map_odom_yaw_deg\":" << json_number(map_odom_yaw_deg)
+         << ",\"refined_converged\":" << (refined_converged ? "true" : "false")
+         << ",\"refined_fitness\":" << json_number(refined_fitness)
+         << ",\"precision_layer_available\":" << (precision_layer_available() ? "true" : "false")
+         << ",\"default_reject_streak\":" << default_reject_streak_
+         << ",\"precision_attempts_remaining\":" << precision_attempts_remaining_;
     if (trajectory_attempt && trajectory_attempt->attempted) {
-      text << " trajectory_attempted=true"
-           << " recovery_hint=" << trajectory_attempt->hint
-           << " trajectory_seed=" << trajectory_attempt->seed_rank
-           << " trajectory_rank=" << trajectory_attempt->candidate_rank
-           << " trajectory_support=" << trajectory_attempt->support_frames
-           << " trajectory_min_support=" << trajectory_attempt->min_support_frames
-           << " trajectory_average_overlap=" << trajectory_attempt->average_overlap
-           << " trajectory_margin=" << trajectory_attempt->margin
-           << " trajectory_single_agree_xy=" << trajectory_attempt->single_agreement_xy
-           << " trajectory_single_agree_yaw=" << trajectory_attempt->single_agreement_yaw
-           << " trajectory_single_refined=" << (trajectory_attempt->single_refined ? "true" : "false")
-           << " trajectory_single_converged=" << (trajectory_attempt->single_refine_converged ? "true" : "false")
-           << " trajectory_single_fitness=" << trajectory_attempt->single_refine_fitness;
+      text << ",\"trajectory_attempted\":true"
+           << ",\"recovery_hint\":\"" << json_escape(trajectory_attempt->hint) << "\""
+           << ",\"trajectory_seed\":" << trajectory_attempt->seed_rank
+           << ",\"trajectory_rank\":" << trajectory_attempt->candidate_rank
+           << ",\"trajectory_support\":" << trajectory_attempt->support_frames
+           << ",\"trajectory_min_support\":" << trajectory_attempt->min_support_frames
+           << ",\"trajectory_average_overlap\":" << json_number(trajectory_attempt->average_overlap)
+           << ",\"trajectory_margin\":" << json_number(trajectory_attempt->margin)
+           << ",\"trajectory_single_agree_xy\":" << json_number(trajectory_attempt->single_agreement_xy)
+           << ",\"trajectory_single_agree_yaw\":" << json_number(trajectory_attempt->single_agreement_yaw)
+           << ",\"trajectory_single_refined\":" << (trajectory_attempt->single_refined ? "true" : "false")
+           << ",\"trajectory_single_converged\":" << (trajectory_attempt->single_refine_converged ? "true" : "false")
+           << ",\"trajectory_single_fitness\":" << json_number(trajectory_attempt->single_refine_fitness);
     } else {
-      text << " trajectory_attempted=false"
-           << " recovery_hint=none";
+      text << ",\"trajectory_attempted\":false,\"recovery_hint\":\"none\"";
     }
+    text << "}";
     status.data = text.str();
     recovery_status_pub_->publish(status);
   }
@@ -1792,9 +1984,13 @@ private:
   rclcpp::Time last_precision_layer_time_{0, 0, RCL_ROS_TIME};
   int default_reject_streak_{0};
   int precision_attempts_remaining_{0};
+  bool search_active_{false};
+  std::string active_attempt_id_{"continuous"};
+  std::string active_map_id_{"unassigned"};
 
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr request_sub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr candidate_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr recovery_pose_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr recovery_map_odom_pub_;

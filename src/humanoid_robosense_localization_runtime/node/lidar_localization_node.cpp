@@ -70,6 +70,8 @@ bool publish_odom_cache = true;
 std::string pose_topic = "/prior_localization/robosense_odom";
 std::string odom_cache_topic = "/prior_localization/robosense_input_odom";
 std::string abs_pose_topic = "/prior_localization/manual_initialpose";
+std::string global_relocalization_pose_topic =
+    "/prior_localization/global_relocalization_pose";
 std::string status_topic = "/prior_localization/robosense_status";
 Eigen::Vector3d fastlio_odom_camera_xyz = Eigen::Vector3d::Zero();
 Eigen::Quaterniond fastlio_odom_camera_q(0.5, -0.5, -0.5, 0.5);
@@ -201,6 +203,10 @@ void loadNodeConfig(const YAML::Node &config_node) {
   }
   if (config_node["abs_pose_topic"]) {
     abs_pose_topic = config_node["abs_pose_topic"].as<std::string>();
+  }
+  if (config_node["global_relocalization_pose_topic"]) {
+    global_relocalization_pose_topic =
+        config_node["global_relocalization_pose_topic"].as<std::string>();
   }
   if (config_node["status_topic"]) {
     status_topic = config_node["status_topic"].as<std::string>();
@@ -499,7 +505,8 @@ Pose odom2pose(const nav_msgs::msg::Odometry::SharedPtr &odom) {
 
 #ifdef ROS2
 Pose poseMsgToPose(
-    const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr &msg) {
+    const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr &msg,
+    const std::string &source) {
   Pose pose;
   pose.timestamp =
       msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
@@ -510,7 +517,7 @@ Pose poseMsgToPose(
   pose.q.z() = msg->pose.pose.orientation.z;
   pose.q.w() = msg->pose.pose.orientation.w;
   pose.q.normalize();
-  pose.source = "manual_initialpose";
+  pose.source = source;
   return pose;
 }
 #endif
@@ -607,7 +614,7 @@ void absPoseCallback(
     return;
   }
 
-  Pose pose = poseMsgToPose(msg);
+  Pose pose = poseMsgToPose(msg, "manual_initialpose");
   if (pose.timestamp <= 0.0) {
     pose.timestamp = rclcpp::Clock().now().seconds();
   }
@@ -619,6 +626,31 @@ void absPoseCallback(
       rclcpp::get_logger("robosense_lidar_localization_node"),
       "applied manual initial pose on %s: x=%.3f y=%.3f z=%.3f",
       abs_pose_topic.c_str(), pose.xyz.x(), pose.xyz.y(), pose.xyz.z());
+}
+
+void globalRelocalizationPoseCallback(
+    const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg) {
+  if (!lidar_localization_ptr) {
+    return;
+  }
+  if (!msg->header.frame_id.empty() && msg->header.frame_id != map_frame_id) {
+    RCLCPP_WARN(
+        rclcpp::get_logger("robosense_lidar_localization_node"),
+        "ignore global relocalization pose in frame %s, expected %s",
+        msg->header.frame_id.c_str(), map_frame_id.c_str());
+    return;
+  }
+  Pose pose = poseMsgToPose(msg, "global_relocalization");
+  if (pose.timestamp <= 0.0) {
+    pose.timestamp = rclcpp::Clock().now().seconds();
+  }
+  pose.setStatus(STATUS::LOW_ACCURACY);
+  lidar_localization_ptr->setManualPose(pose);
+  publishLocalizationStatus(&pose, "global_relocalization_pose_applied");
+  RCLCPP_INFO(
+      rclcpp::get_logger("robosense_lidar_localization_node"),
+      "applied global relocalization pose on %s: x=%.3f y=%.3f z=%.3f",
+      global_relocalization_pose_topic.c_str(), pose.xyz.x(), pose.xyz.y(), pose.xyz.z());
 }
 #endif
 
@@ -775,6 +807,9 @@ int main(int argc, char **argv) {
   auto abs_pose_sub =
       nh->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
           abs_pose_topic, 10, absPoseCallback);
+  auto global_relocalization_pose_sub =
+      nh->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+          global_relocalization_pose_topic, 10, globalRelocalizationPoseCallback);
 
   rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 2);
   executor.add_node(nh);

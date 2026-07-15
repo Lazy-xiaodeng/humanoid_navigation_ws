@@ -58,6 +58,13 @@ def generate_launch_description():
         ),
         Node(
             package='humanoid_localization_runtime',
+            executable='global_relocalization_coordinator',
+            name='global_relocalization_coordinator',
+            output='screen',
+            parameters=[config_file, {'use_sim_time': use_sim_time}],
+        ),
+        Node(
+            package='humanoid_localization_runtime',
             executable='robot_realpose_publisher',
             name='robot_realpose_publisher',
             output='screen',

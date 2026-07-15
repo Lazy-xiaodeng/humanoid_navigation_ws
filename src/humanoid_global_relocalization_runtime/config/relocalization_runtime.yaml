@@ -518,6 +518,12 @@ global_relocalization_node:
     # true：节点订阅点云并在节流间隔到达时执行全局搜索，输出恢复候选和状态。
     enable_relocalization: true
 
+    # 正式运行由恢复协调器按需启动搜索；空闲时保留索引但不处理点云。
+    on_demand_mode: true
+
+    # 恢复协调器发送 start/cancel JSON 请求的话题。
+    relocalization_request_topic: "/global_relocalization/request"
+
     # 两次实时搜索之间的最小间隔，单位秒。
     # 调大可降低 CPU；调小响应更快但会抢占导航系统资源。正式接入时建议由恢复状态机按需触发。
     relocalization_min_period_sec: 1.0

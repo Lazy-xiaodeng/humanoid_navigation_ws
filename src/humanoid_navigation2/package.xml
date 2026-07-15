@@ -52,6 +52,7 @@
   <depend>humanoid_nav2_bt_nodes</depend>
   <depend>humanoid_prior_localization_runtime</depend>
   <depend>humanoid_robosense_localization_runtime</depend>
+  <depend>humanoid_global_relocalization_runtime</depend>
 
   <!-- ===== 测试 ===== -->
   <test_depend>ament_copyright</test_depend>

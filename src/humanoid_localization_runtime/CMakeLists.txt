@@ -13,6 +13,7 @@ find_package(Eigen3 REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclpy REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
@@ -59,9 +60,20 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  scripts/global_relocalization_coordinator.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME global_relocalization_coordinator
+)
+
 install(FILES
   README.md
   DESTINATION share/${PROJECT_NAME}
+)
+
+install(DIRECTORY test/
+  DESTINATION share/${PROJECT_NAME}/test
+  FILES_MATCHING PATTERN "*.py"
 )
 
 ament_package()

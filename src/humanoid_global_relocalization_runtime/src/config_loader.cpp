@@ -652,8 +652,12 @@ RuntimeConfig load_config_file(const std::string & path)
 
   config.output.enable_relocalization =
     read_value<bool>(p, "enable_relocalization", config.output.enable_relocalization);
+  config.output.on_demand_mode =
+    read_value<bool>(p, "on_demand_mode", config.output.on_demand_mode);
   config.output.relocalization_min_period_sec =
     read_value<double>(p, "relocalization_min_period_sec", config.output.relocalization_min_period_sec);
+  config.output.request_topic =
+    read_value<std::string>(p, "relocalization_request_topic", config.output.request_topic);
   config.output.candidate_pose_array_topic =
     read_value<std::string>(p, "candidate_pose_array_topic", config.output.candidate_pose_array_topic);
   config.output.candidate_marker_topic =
