@@ -11,6 +11,7 @@ from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from rclpy.time import Time
 from std_msgs.msg import Bool, String
+from std_srvs.srv import SetBool
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Odometry, Path, OccupancyGrid
 from nav2_msgs.action import NavigateToPose
@@ -274,6 +275,11 @@ class NavigationStateManager(Node):
         self.pending_navigation_request = None
         self.pending_navigation_created_at = 0.0
         self.pending_navigation_reason = ""
+        # WS 动作执行互锁：只自动恢复由本互锁主动暂停的导航任务。
+        self.robot_action_interlock_active = False
+        self.robot_action_interlock_paused_navigation = False
+        self.robot_action_resume_pending = False
+        self.robot_action_interlock_started_at = 0.0
         self.nav2_blockage_suppression_nodes = set()
         self.distance_remaining = float('inf')
         self.estimated_time_remaining = 0.0
@@ -399,6 +405,12 @@ class NavigationStateManager(Node):
 
         self.robot_status_sub = self.create_subscription(
             String, '/robot_status_raw', self.robot_status_callback, 10
+        )
+
+        self.robot_action_interlock_service = self.create_service(
+            SetBool,
+            '/navigation/robot_action_interlock',
+            self.robot_action_interlock_callback,
         )
         
         self.nav2_behavior_log_sub = self.create_subscription(BehaviorTreeLog,'/behavior_tree_log',self.nav2_log_callback,10)
@@ -636,6 +648,12 @@ class NavigationStateManager(Node):
 
         # 待启动导航检查定时器
         self.create_timer(0.2, self.try_execute_pending_navigation)
+
+        # 动作完成释放服务时只登记恢复请求，避免在服务回调里等待 Nav2 action server。
+        self.create_timer(0.1, self.try_resume_after_robot_action)
+
+        # 动作切换 Menu 前后持续压零速度，覆盖 Nav2 异步取消窗口。
+        self.create_timer(0.033, self.enforce_robot_action_stop)
 
         # 定位恢复后自动继续未完成导航
         self.create_timer(0.5, self.try_resume_after_localization_recovery)
@@ -1003,6 +1021,144 @@ class NavigationStateManager(Node):
         except Exception as e:
             self.get_logger().error(f'❌ 处理机器人控制状态错误: {e}')
 
+    def robot_action_interlock_callback(self, request, response):
+        """动作执行前暂停活动导航，动作结束且回到 Walk 后登记自动恢复。"""
+        if request.data:
+            if self.robot_action_interlock_active:
+                response.success = True
+                response.message = "导航动作互锁已启用"
+                return response
+
+            self.robot_action_interlock_active = True
+            self.robot_action_interlock_started_at = time.time()
+            self.robot_action_resume_pending = False
+            self.robot_action_interlock_paused_navigation = (
+                self.current_state in (NavigationState.EXECUTING, NavigationState.PLANNING)
+                and self.current_waypoint is not None
+            )
+
+            if self.robot_action_interlock_paused_navigation:
+                self.current_state = NavigationState.PAUSED
+                self.current_detailed_state = "ROBOT_ACTION_PAUSED"
+                self.pause_time = time.time()
+                self.pause_duration_limit = 0
+                self.current_pause_source = "robot_action"
+                self.current_pause_reason = "机器人执行动作，导航已自动暂停"
+                self.current_resume_mode = "auto"
+                self.clear_obstacle_wait_state()
+                self.reset_block_detection()
+                if self.current_goal_handle:
+                    self.cancel_navigation()
+                # 连续补几帧零速度，缩短取消 Nav2 goal 的异步窗口。
+                for _ in range(3):
+                    self.publish_zero_cmd_vel()
+
+                event_data = self.build_pause_event_data(
+                    pause_source="robot_action",
+                    reason=self.current_pause_reason,
+                    resume_mode="auto",
+                    extra_data={"action_interlock_active": True},
+                )
+                self.publish_status_update("navigation_paused", event_data)
+                self.send_acknowledgment(
+                    "navigation_auto_paused",
+                    "success",
+                    "收到机器人动作，已暂停导航并保存当前任务",
+                    event_data,
+                )
+                response.message = "活动导航已暂停并保存，允许执行机器人动作"
+                self.get_logger().info("机器人动作互锁已暂停当前导航")
+            else:
+                # 原本就是手动暂停/障碍等待/定位恢复时，不取得自动恢复所有权。
+                response.message = "当前无可由动作互锁暂停的活动导航，允许执行机器人动作"
+
+            response.success = True
+            return response
+
+        if not self.robot_action_interlock_active:
+            response.success = True
+            response.message = "导航动作互锁已释放"
+            return response
+
+        self.robot_action_interlock_active = False
+        should_resume = (
+            self.robot_action_interlock_paused_navigation
+            and self.current_state == NavigationState.PAUSED
+            and self.current_pause_source == "robot_action"
+            and self.current_waypoint is not None
+        )
+        self.robot_action_resume_pending = should_resume
+        if not should_resume:
+            self.robot_action_interlock_paused_navigation = False
+            self.robot_action_interlock_started_at = 0.0
+
+        response.success = True
+        response.message = (
+            "动作完成，已登记恢复导航" if should_resume else
+            "动作完成，已释放导航互锁（原导航状态保持不变）"
+        )
+        return response
+
+    def enforce_robot_action_stop(self):
+        """互锁主动暂停导航期间持续压零速度，避免 Nav2 取消竞态。"""
+        if (
+            self.robot_action_interlock_active
+            and self.robot_action_interlock_paused_navigation
+            and self.current_state == NavigationState.PAUSED
+            and self.current_pause_source == "robot_action"
+        ):
+            self.publish_zero_cmd_vel()
+
+    def try_resume_after_robot_action(self):
+        """动作结束、WS 确认回到 Walk 并释放互锁后恢复原 waypoint。"""
+        if not self.robot_action_resume_pending:
+            return
+
+        self.robot_action_resume_pending = False
+        should_resume = (
+            not self.robot_action_interlock_active
+            and self.robot_action_interlock_paused_navigation
+            and self.current_state == NavigationState.PAUSED
+            and self.current_pause_source == "robot_action"
+            and self.current_waypoint is not None
+        )
+        pause_elapsed = (
+            time.time() - self.robot_action_interlock_started_at
+            if self.robot_action_interlock_started_at > 0.0 else 0.0
+        )
+        self.robot_action_interlock_paused_navigation = False
+        self.robot_action_interlock_started_at = 0.0
+        if not should_resume:
+            self.get_logger().info("动作互锁释放后导航状态已变化，不再自动恢复")
+            return
+
+        self.current_state = NavigationState.EXECUTING
+        self.current_detailed_state = "EXECUTING"
+        self.current_pause_source = ""
+        self.current_pause_reason = ""
+        self.current_resume_mode = ""
+        event_data = {
+            "resumed_waypoint_id": self.current_waypoint.get("id", ""),
+            "resumed_waypoint_name": self.current_waypoint.get("name", ""),
+            "waypoint_index": self.current_waypoint_index,
+            "total_waypoints": self.total_waypoints,
+            "pause_duration_actual": round(pause_elapsed, 1),
+            "resume_reason": "robot_action_completed",
+            "resume_source": "robot_action",
+        }
+        self.publish_status_update("navigation_resumed", event_data)
+        self.send_acknowledgment(
+            "navigation_auto_resumed",
+            "success",
+            "机器人动作完成，已恢复原导航任务",
+            event_data,
+        )
+        waypoint = self.current_waypoint
+        self.navigate_to_waypoint(waypoint)
+        self.get_logger().info(
+            f"机器人动作完成，恢复前往路点: {waypoint.get('name', '')}"
+        )
+
     @staticmethod
     def _as_bool(value) -> bool:
         if isinstance(value, bool):
@@ -1014,6 +1170,9 @@ class NavigationStateManager(Node):
         return False
 
     def get_navigation_start_block_reason(self) -> Optional[str]:
+        if self.robot_action_interlock_active:
+            return "机器人动作互锁中，暂不启动导航"
+
         if not self.require_walk_mode_for_navigation:
             return None
 
@@ -1087,8 +1246,10 @@ class NavigationStateManager(Node):
             time.time() - self.last_robot_status_update <= self.robot_status_timeout
         )
         status_unavailable = not status_fresh
-        can_defer = status_fresh and (
-            self.robot_motion_busy or self.robot_control_state == "Menu"
+        can_defer = self.robot_action_interlock_active or (
+            status_fresh and (
+                self.robot_motion_busy or self.robot_control_state == "Menu"
+            )
         )
 
         if not (can_defer or status_unavailable):
@@ -1102,7 +1263,9 @@ class NavigationStateManager(Node):
 
         self.pending_navigation_request = json.loads(json.dumps(request_data))
         self.pending_navigation_created_at = time.time()
-        if status_unavailable:
+        if self.robot_action_interlock_active:
+            pending_message = f"{reason}。已缓存导航请求，等待动作完成并回到 Walk 后再开始导航。"
+        elif status_unavailable:
             pending_message = f"{reason}。已缓存导航请求，等待底层状态恢复并确认 Walk 后再开始导航。"
         elif self.robot_motion_busy:
             pending_message = f"{reason}。已缓存导航请求，等待动作执行完成并回到 Walk 后再开始导航。"
@@ -1249,6 +1412,9 @@ class NavigationStateManager(Node):
 
     def get_obstacle_blockage_suppression_reason(self) -> Optional[str]:
         """返回当前是否应暂停障碍物阻塞计时，以及暂停原因。"""
+        if self.robot_action_interlock_active:
+            return "机器人动作导航互锁阶段"
+
         if self.robot_motion_busy:
             motion_text = f"({self.robot_current_motion})" if self.robot_current_motion else ""
             return f"机器人动作执行阶段{motion_text}"
@@ -3564,6 +3730,9 @@ class NavigationStateManager(Node):
                 if self.pending_navigation_request is not None else 0
             ),
             "pending_navigation_reason": self.pending_navigation_reason,
+            "robot_action_interlock_active": self.robot_action_interlock_active,
+            "robot_action_interlock_paused_navigation": self.robot_action_interlock_paused_navigation,
+            "robot_action_resume_pending": self.robot_action_resume_pending,
             "failure_recoverable": self.current_state == NavigationState.RECOVERABLE_FAILED,
             "failure_context": self.last_failure_context,
             "skipped_waypoints": self.skipped_waypoints,

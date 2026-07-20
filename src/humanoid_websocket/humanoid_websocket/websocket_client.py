@@ -16,6 +16,7 @@ import threading
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
+from std_srvs.srv import SetBool
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import JointState, Joy
 import time
@@ -57,6 +58,7 @@ class HumanoidWebSocketClient(Node):
         # 机器人状态管理
         self.robot_state = RobotState.UNKNOWN  # 初始状态
         self.is_executing_motion = False       # 标记上半身是否正在做动作
+        self.motion_request_lock = threading.Lock()
         self.response_events = {}  # 用于等待命令响应：guid -> Event
         self.current_motion_event = None
         self.current_motion_name = None
@@ -64,6 +66,7 @@ class HumanoidWebSocketClient(Node):
         self.current_motion_notify_data = {}
         self.motion_completion_events = {}  # 用于等待动作完成通知
         self.motion_expected_durations = {}
+        self.available_motion_names = frozenset()
         self.gestures_yaml_path = self._get_gestures_yaml_path()
         # 发送到底层的 accid 默认走配置，连上机器人后会被实时消息自动刷新。
         self.accid = self.fallback_accid
@@ -120,6 +123,11 @@ class HumanoidWebSocketClient(Node):
 
         self.action_result_pub = self.create_publisher(
             String, '/robot/action_result', 10
+        )
+
+        # 有效动作执行前先让导航状态机完成暂停/任务保护；动作结束并回到 Walk 后再释放。
+        self.action_interlock_client = self.create_client(
+            SetBool, '/navigation/robot_action_interlock'
         )
 
         self.get_logger().info('ROS组件初始化完成')
@@ -445,28 +453,89 @@ class HumanoidWebSocketClient(Node):
 
             # 根据你《功能指令库》里的定义，动作执行指令一般叫 "execute_gesture"
             if action_type == "execute_gesture":
-                # 获取 APP 传过来的 gesture_id (即 "wave_greet_bye")
-                motion_name = params.get("gesture_id", "") 
-                
-                # 关于 loop：我们这里根本不去 get("loop")，就相当于自动忽略了
-                
-                if motion_name:
-                    self.get_logger().info(f"📥 客户端收到执行动作指令: {motion_name}")
-                    # 使用线程执行异步动作序列，防止阻塞 ROS 回调
-                    threading.Thread(
-                        target=self._run_motion_task, 
-                        args=(
-                            motion_name,
-                            cmd_data.get("client_id", ""),
-                            cmd_data.get("timestamp", time.time()),
-                        ), 
-                        daemon=True
-                    ).start()
-                else:
-                    self.get_logger().warn("⚠️ 收到动作指令，但未包含 gesture_id")
+                raw_motion_name = params.get("gesture_id") if isinstance(params, dict) else None
+                motion_name, rejection_code, rejection_message = self.validate_motion_name(
+                    raw_motion_name
+                )
+                if rejection_code:
+                    now = time.time()
+                    self.get_logger().warning(
+                        f"拒绝无效动作请求，不切换 Menu、不影响导航: {rejection_message}"
+                    )
+                    self.publish_action_result(
+                        motion_name=motion_name,
+                        status="rejected",
+                        result_code=rejection_code,
+                        message=rejection_message,
+                        started_at=now,
+                        completed_at=now,
+                        client_id=cmd_data.get("client_id", ""),
+                        command_timestamp=cmd_data.get("timestamp", now),
+                        walk_ready=(
+                            self.robot_state == RobotState.WALK
+                            and not self.is_executing_motion
+                        ),
+                    )
+                    return
+
+                self.get_logger().info(f"📥 客户端收到已验证动作指令: {motion_name}")
+                # 使用线程执行导航互锁和异步动作序列，防止阻塞 ROS 回调。
+                threading.Thread(
+                    target=self._run_motion_task,
+                    args=(
+                        motion_name,
+                        cmd_data.get("client_id", ""),
+                        cmd_data.get("timestamp", time.time()),
+                    ),
+                    daemon=True
+                ).start()
 
         except Exception as e:
             self.get_logger().error(f'❌ 解析机器人控制指令出错: {e}')
+
+    def validate_motion_name(self, raw_motion_name):
+        """按机器人 OTA 动作库校验动作名；返回 (规范名称, 错误码, 错误原因)。"""
+        if not isinstance(raw_motion_name, str):
+            return "", "missing_gesture_id", "动作指令缺少有效的 gesture_id 字符串"
+
+        motion_name = raw_motion_name.strip()
+        if not motion_name or motion_name.lower() in {"null", "none", "undefined"}:
+            return motion_name, "missing_gesture_id", "gesture_id 为空或是无效占位值"
+
+        available = self.available_motion_names
+        if not available:
+            return motion_name, "motion_catalog_unavailable", "机器人 OTA 动作库尚未加载，已拒绝执行"
+
+        if motion_name not in available:
+            return (
+                motion_name,
+                "invalid_gesture_id",
+                f"动作 '{motion_name}' 不存在于当前机器人 OTA 动作库",
+            )
+
+        return motion_name, "", ""
+
+    def set_navigation_action_interlock(self, enabled: bool, timeout_sec: float = 4.0):
+        """同步等待导航动作互锁服务，供动作工作线程调用。"""
+        if not self.action_interlock_client.wait_for_service(timeout_sec=1.0):
+            return False, "导航动作互锁服务不可用"
+
+        request = SetBool.Request()
+        request.data = enabled
+        future = self.action_interlock_client.call_async(request)
+        completed = threading.Event()
+        future.add_done_callback(lambda _: completed.set())
+        if not completed.wait(timeout=timeout_sec):
+            return False, "等待导航动作互锁响应超时"
+
+        try:
+            response = future.result()
+        except Exception as exc:
+            return False, f"导航动作互锁调用异常: {exc}"
+
+        if response is None or not response.success:
+            return False, response.message if response is not None else "导航动作互锁无响应"
+        return True, response.message
     
     def publish_action_result(
         self,
@@ -514,7 +583,12 @@ class HumanoidWebSocketClient(Node):
 
     def _run_motion_task(self, motion_name, client_id="", command_timestamp=None):
         """在 ws_loop 上执行上半身动作序列（线程安全投递）"""
-        if self.is_executing_motion:
+        with self.motion_request_lock:
+            already_executing = self.is_executing_motion
+            if not already_executing:
+                self.is_executing_motion = True
+
+        if already_executing:
             self.get_logger().warn(f"⚠️ 当前已有动作在执行，忽略新的动作请求: {motion_name}")
             now = time.time()
             self.publish_action_result(
@@ -530,21 +604,47 @@ class HumanoidWebSocketClient(Node):
             )
             return
 
-        self.is_executing_motion = True
+        interlock_acquired = False
         motion_timeout = self.get_motion_completion_timeout(motion_name)
         task_timeout = motion_timeout + 20.0
         started_at = time.time()
-        future = asyncio.run_coroutine_threadsafe(
-            self.execute_upper_body_motion(motion_name, client_id, command_timestamp),
-            self.ws_loop
-        )
+        interlock_acquired, interlock_message = self.set_navigation_action_interlock(True)
+        if not interlock_acquired:
+            self.is_executing_motion = False
+            now = time.time()
+            self.get_logger().error(f"❌ 动作执行前导航互锁失败: {interlock_message}")
+            # 服务请求可能已在导航侧生效、只是响应超时；幂等释放避免遗留暂停态。
+            rollback_ok, rollback_message = self.set_navigation_action_interlock(False)
+            if not rollback_ok:
+                self.get_logger().error(
+                    f"❌ 导航互锁失败后的回滚也未确认: {rollback_message}"
+                )
+            self.publish_action_result(
+                motion_name=motion_name,
+                status="rejected",
+                result_code="navigation_interlock_failed",
+                message=interlock_message,
+                started_at=started_at,
+                completed_at=now,
+                client_id=client_id,
+                command_timestamp=command_timestamp,
+                walk_ready=(self.robot_state == RobotState.WALK),
+            )
+            return
+
+        future = None
         try:
+            future = asyncio.run_coroutine_threadsafe(
+                self.execute_upper_body_motion(motion_name, client_id, command_timestamp),
+                self.ws_loop
+            )
             future.result(timeout=task_timeout)
         except concurrent.futures.TimeoutError:
             self.get_logger().error(
                 f"❌ 动作执行线程等待超时: {motion_name}，timeout={task_timeout:.1f}s"
             )
-            future.cancel()
+            if future is not None:
+                future.cancel()
             self.is_executing_motion = False
             now = time.time()
             self.publish_action_result(
@@ -573,6 +673,18 @@ class HumanoidWebSocketClient(Node):
                 command_timestamp=command_timestamp,
                 walk_ready=(self.robot_state == RobotState.WALK and not self.is_executing_motion),
             )
+        finally:
+            # execute_upper_body_motion 的 finally 会先切回 Walk 并清除 motion_busy。
+            # 只有确认 Walk 后才释放互锁并允许恢复导航；否则保持暂停更安全。
+            if interlock_acquired and self.robot_state == RobotState.WALK:
+                released, release_message = self.set_navigation_action_interlock(False)
+                if not released:
+                    self.get_logger().error(f"❌ 动作完成后释放导航互锁失败: {release_message}")
+            elif interlock_acquired:
+                self.get_logger().error(
+                    f"❌ 动作结束但机器人未回到 Walk（当前 {self.robot_state.value}），"
+                    "保持导航动作互锁"
+                )
 
     
     async def execute_upper_body_motion(self, motion_name: str, client_id: str = "", command_timestamp=None):
@@ -844,7 +956,7 @@ class HumanoidWebSocketClient(Node):
             return None
 
     def _load_motion_expected_durations(self):
-        """从动作库中解析动作预期时长，例如“随手比划40s”会解析为 40 秒。"""
+        """从机器人 OTA 动作库加载有效动作集合及预期时长。"""
         self.motion_expected_durations = {}
         if not self.gestures_yaml_path or not os.path.exists(self.gestures_yaml_path):
             return
@@ -854,6 +966,9 @@ class HumanoidWebSocketClient(Node):
                 config = yaml.safe_load(f) or {}
 
             actions = config.get("actions", {}) or {}
+            self.available_motion_names = frozenset(
+                str(name).strip() for name in actions.keys() if str(name).strip()
+            )
             for motion_name, entry in actions.items():
                 duration = self._extract_motion_duration(motion_name, entry)
                 if duration is not None:
@@ -863,7 +978,11 @@ class HumanoidWebSocketClient(Node):
                 self.get_logger().info(
                     f"✅ 已加载 {len(self.motion_expected_durations)} 个动作时长提示"
                 )
+            self.get_logger().info(
+                f"✅ 已加载机器人 OTA 动作库，共 {len(self.available_motion_names)} 个有效动作"
+            )
         except Exception as e:
+            self.available_motion_names = frozenset()
             self.get_logger().warn(f"⚠️ 解析动作时长失败: {e}")
 
     def _extract_motion_duration(self, motion_name, entry):

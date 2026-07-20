@@ -1242,7 +1242,7 @@ class UnifiedDataIntegrationNode(Node):
             yaml_path = os.path.join(
                 get_package_share_directory('humanoid_locomotion'),
                 'config',
-                'gestures_app.yaml'
+                'gestures.yaml'
             )
             with open(yaml_path, 'r', encoding='utf-8') as f:
                  config = yaml.safe_load(f)
