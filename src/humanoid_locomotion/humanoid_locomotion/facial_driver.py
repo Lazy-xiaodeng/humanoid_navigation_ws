@@ -8,6 +8,9 @@ import os
 from std_msgs.msg import String
 import time
 import glob  
+import termios
+
+SERIAL_RECOVERABLE_ERRORS = (serial.SerialException, OSError, termios.error)
 
 class FacialDriver(Node):
     def __init__(self):
@@ -70,19 +73,12 @@ class FacialDriver(Node):
             self.get_logger().warning("⚠️ 收到空指令，忽略")
             return
 
-        self.get_logger().info(f"🛑 收到新指令，中断当前动作: {action_name}")
+        self.get_logger().info(f"🛑 收到新表情指令: {action_name}，准备中断当前动作")
         self.is_interrupted = True
         time.sleep(0.5)  
 
         # 清空串口缓冲区，避免指令堆积
-        if self.ser and self.ser.is_open:
-            try:
-                self.ser.reset_input_buffer()
-                self.ser.reset_output_buffer()
-                self.get_logger().info("🧹 清空串口缓冲区，避免指令残留")
-            except (serial.SerialException, OSError) as e:
-                self.get_logger().error(f"❌ 清空串口缓冲区失败，将尝试重连: {e}")
-                self.close_serial()
+        self.clear_serial_buffers(log_success=True)
 
         self.is_interrupted = False
         self.current_gesture = action_name
@@ -100,7 +96,8 @@ class FacialDriver(Node):
             if "eye_stop" in self.gestures:
                 for _ in range(2):
                     for cmd in self.gestures["eye_stop"]:
-                        self.send_raw(cmd)
+                        if not self.send_raw(cmd):
+                            return
                         time.sleep(0.1) #已修改原0.3
                 self.get_logger().info("✅ 强制终止眼部循环（发送1次终止指令）")
 
@@ -108,14 +105,16 @@ class FacialDriver(Node):
             if "mouth_speak_stop" in self.gestures:
                 for _ in range(1): #已修改原2
                     for cmd in self.gestures["mouth_speak_stop"]:
-                        self.send_raw(cmd)
+                        if not self.send_raw(cmd):
+                            return
                         time.sleep(0.1) #已修改原0.3
                 self.get_logger().info("✅ 强制终止嘴部循环（发送1次终止指令）")
 
             # 眼部强制复位（眼球居中+正常睁眼）
             eye_reset_cmds = ['$DGL:1!\n'] #已删除'$DGB:1!\n'
             for cmd in eye_reset_cmds:
-                self.send_raw(cmd)
+                if not self.send_raw(cmd):
+                    return
                 time.sleep(0.1) #已修改原0.2
             self.get_logger().info("🔄 眼部强制复位（眼球居中+正常睁眼）")
 
@@ -127,13 +126,7 @@ class FacialDriver(Node):
         commands = self.gestures[name]
         self.get_logger().info(f"🎬 执行表情: {name}")
 
-        if self.ser and self.ser.is_open:
-            try:
-                self.ser.reset_input_buffer()
-                self.ser.reset_output_buffer()
-            except (serial.SerialException, OSError) as e:
-                self.get_logger().error(f"❌ 清空串口缓冲区失败，将尝试重连: {e}")
-                self.close_serial()
+        self.clear_serial_buffers()
 
         for cmd in commands:
             if self.is_interrupted:
@@ -153,10 +146,12 @@ class FacialDriver(Node):
             # 原有逻辑：处理普通指令
             if name == "idle" and '!normal_start' in cmd:
                 time.sleep(0.5)
-                self.send_raw(cmd)
+                if not self.send_raw(cmd):
+                    break
                 time.sleep(0.8)
             else:
-                self.send_raw(cmd)
+                if not self.send_raw(cmd):
+                    break
 
                 if name == "stop":
                     time.sleep(0.6)
@@ -190,34 +185,62 @@ class FacialDriver(Node):
                 pass
         self.ser = None
 
+    def clear_serial_buffers(self, log_success=False):
+        """Best-effort serial buffer cleanup that must not crash the ROS node."""
+        if not self.ser:
+            return False
+
+        try:
+            if not self.ser.is_open:
+                self.close_serial()
+                return False
+            self.ser.reset_input_buffer()
+            self.ser.reset_output_buffer()
+            if log_success:
+                self.get_logger().info("🧹 清空串口缓冲区，避免指令残留")
+            return True
+        except SERIAL_RECOVERABLE_ERRORS as e:
+            self.get_logger().error(f"❌ 清空串口缓冲区失败，将关闭串口并等待下次指令重连: {e}")
+            self.close_serial()
+            return False
+        except Exception as e:
+            self.get_logger().error(f"❌ 清空串口缓冲区异常，将关闭串口并等待下次指令重连: {e}")
+            self.close_serial()
+            return False
+
     def send_raw(self, cmd_str):
         """发送原始指令（自动补全\r\n，兼容硬件）"""
         if not cmd_str or cmd_str.strip() == "":
             self.get_logger().warning("⚠️ 空指令，忽略发送")
-            return
+            return False
 
         if not self.connect_serial():
             self.get_logger().error("❌ 串口未连接，无法发送指令")
-            return
+            return False
 
         try:
             send_cmd = cmd_str.strip() + "\r\n"
             self.ser.write(send_cmd.encode('utf-8'))
             self.get_logger().info(f"Serial Out: {send_cmd.strip()}")
-        except (serial.SerialException, OSError) as e:
+            return True
+        except SERIAL_RECOVERABLE_ERRORS as e:
             self.get_logger().error(f"❌ 串口发送失败，将关闭串口并等待下次指令重连: {e}")
             self.close_serial()
+            return False
         except Exception as e:
             self.get_logger().error(f"❌ 指令发送异常: {e}")
+            self.close_serial()
+            return False
 
-    def on_shutdown(self):
+    def on_shutdown(self, send_sleep=False):
         """优雅关闭"""
         self.get_logger().info("🛑 开始优雅关闭...")
         if self.ser and self.ser.is_open:
             try:
-                self.execute_gesture("sleeping")
-                time.sleep(1.0)
-                self.ser.close()
+                if send_sleep:
+                    self.execute_gesture("sleeping")
+                    time.sleep(1.0)
+                self.close_serial()
                 self.get_logger().info("🔌 串口已安全关闭")
             except Exception as e:
                 self.get_logger().error(f"❌ 关闭串口失败: {e}")

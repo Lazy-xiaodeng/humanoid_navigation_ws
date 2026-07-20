@@ -9,6 +9,7 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     use_sim_time = True
     voxelsize_fine = LaunchConfiguration("voxelsize_fine")
+    enable_spin_to_pose_guard = LaunchConfiguration("enable_spin_to_pose_guard")
 
     axis_adapter = Node(
         package="humanoid_open3d_adapter",
@@ -140,7 +141,7 @@ def generate_launch_description():
             "hard_reject_translation": 1.00,                # 绝对保护平移阈值，单位 m；超过后不自动接受，只进入 hold/degraded。
             "hard_reject_yaw": 0.50,                        # 绝对保护角度阈值，单位 rad；约 28.6 度。
             "large_jump_degraded_after_sec": 3.0,           # 大跳冻结持续多久后认为定位退化，单位 s；只发状态，不主动断 TF。
-            "enable_spin_to_pose_guard": True,
+            "enable_spin_to_pose_guard": ParameterValue(enable_spin_to_pose_guard, value_type=bool),
             "navigation_status_topic": "/navigation/status",
             "spin_to_pose_guard_settle_sec": 3.0,
             "spin_to_pose_guard_max_duration_sec": 8.0,
@@ -154,6 +155,11 @@ def generate_launch_description():
             "voxelsize_fine",
             default_value="0.20",
             description="Open3D fine registration voxel size in meters for bag validation.",
+        ),
+        DeclareLaunchArgument(
+            "enable_spin_to_pose_guard",
+            default_value="false",
+            description="Enable bridge spin-to-pose TF freeze guard during bag validation.",
         ),
         axis_adapter,
         TimerAction(period=2.0, actions=[open3d_loc]),

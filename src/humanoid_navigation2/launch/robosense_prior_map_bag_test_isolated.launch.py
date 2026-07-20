@@ -2,12 +2,14 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, TimerAction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
     use_sim_time = True
     jump_protection_mode = LaunchConfiguration("jump_protection_mode", default="monitor")
+    enable_spin_to_pose_guard = LaunchConfiguration("enable_spin_to_pose_guard", default="false")
     config_file = LaunchConfiguration(
         "config_file",
         default=PathJoinSubstitution([
@@ -62,7 +64,7 @@ def generate_launch_description():
             "required_consistent_frames": 5,
             "consistency_translation_tolerance": 0.25,
             "consistency_yaw_tolerance": 0.10,
-            "jump_protection_mode": jump_protection_mode,
+            "jump_protection_mode": ParameterValue(jump_protection_mode, value_type=str),
             "nav_medium_correction_translation": 0.50,
             "nav_medium_correction_yaw": 0.20,
             "nav_medium_required_frames": 5,
@@ -76,7 +78,7 @@ def generate_launch_description():
             "hard_reject_translation": 1.00,
             "hard_reject_yaw": 0.50,
             "large_jump_degraded_after_sec": 3.0,
-            "enable_spin_to_pose_guard": False,
+            "enable_spin_to_pose_guard": ParameterValue(enable_spin_to_pose_guard, value_type=bool),
             "navigation_status_topic": "/navigation/status",
             "spin_to_pose_guard_settle_sec": 3.0,
             "spin_to_pose_guard_max_duration_sec": 8.0,
@@ -90,6 +92,11 @@ def generate_launch_description():
             "jump_protection_mode",
             default_value="monitor",
             description="bag isolated bridge protection mode: off, monitor, or protect",
+        ),
+        DeclareLaunchArgument(
+            "enable_spin_to_pose_guard",
+            default_value="false",
+            description="Enable bridge spin-to-pose TF freeze guard during RO bag validation.",
         ),
         DeclareLaunchArgument(
             "config_file",

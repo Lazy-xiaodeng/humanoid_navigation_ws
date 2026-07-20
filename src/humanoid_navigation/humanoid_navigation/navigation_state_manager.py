@@ -76,11 +76,15 @@ class NavigationStateManager(Node):
             ('status_publish_rate', 2.0),
             ('default_frame_id', 'map'),
             ('obstacle_block_timeout', 4.0),  # 障碍物兜底阻塞超时时间（秒）：主判断交给 Nav2/RPP 失败接管
-            ('velocity_threshold', 0.10),  # 判断机器人是否停滞的速度阈值（m/s）
+            ('velocity_threshold', 0.10),  # 进入停滞检测的速度阈值（m/s），适用于 odom 与 pose_delta
             ('blockage_pose_delta_deadzone', 0.10),  # 速度停滞兜底阈值，降低误把短暂停顿当障碍的概率
-            ('blockage_recovery_velocity_threshold', 0.15),  # 解除阻塞需要更明确的持续运动
+            ('blockage_recovery_velocity_threshold', 0.10),  # 连续高于该速度 1 秒后清除停滞计时
             ('blockage_recovery_confirm_sec', 1.0),
             ('obstacle_wait_enable', True),
+            # 低速只能说明机器人没有按预期前进，不能单独证明前方有障碍。
+            # 默认必须由 ROI 点云或 local costmap 至少一方确认，才允许取消 Nav2 进入障碍等待。
+            ('obstacle_block_require_sensor_confirmation', True),
+            ('obstacle_block_sensor_timeout_sec', 1.0),
             ('obstacle_wait_push_interval_sec', 4.0),
             ('obstacle_clear_required_frames', 5),
             ('obstacle_clear_check_rate_hz', 5.0),
@@ -147,6 +151,10 @@ class NavigationStateManager(Node):
         self.blockage_recovery_confirm_sec = float(
             self.get_parameter('blockage_recovery_confirm_sec').value)
         self.obstacle_wait_enable = bool(self.get_parameter('obstacle_wait_enable').value)
+        self.obstacle_block_require_sensor_confirmation = bool(
+            self.get_parameter('obstacle_block_require_sensor_confirmation').value)
+        self.obstacle_block_sensor_timeout_sec = max(
+            0.1, float(self.get_parameter('obstacle_block_sensor_timeout_sec').value))
         self.obstacle_wait_push_interval_sec = float(
             self.get_parameter('obstacle_wait_push_interval_sec').value)
         self.obstacle_clear_required_frames = max(
@@ -799,8 +807,8 @@ class NavigationStateManager(Node):
         return now - self.block_recovery_candidate_start_time >= self.blockage_recovery_confirm_sec
 
     def is_stopped_for_blockage(self, total_velocity: float, velocity_source: str) -> bool:
-        if velocity_source == "pose_delta":
-            return total_velocity < self.blockage_recovery_velocity_threshold
+        # 进入停滞检测统一使用 0.10m/s。
+        # 之前 pose_delta 在这里误用了 0.15m/s，导致 0.10~0.15m/s 的正常慢走也开始阻塞计时。
         return total_velocity < self.velocity_threshold
 
     def lookup_current_map_pose(self):
@@ -1317,7 +1325,7 @@ class NavigationStateManager(Node):
         self.block_start_time = None
         self.block_reported = False
         self.clear_block_recovery_candidate()
-        if self.current_detailed_state == "BLOCKED_BY_OBSTACLE":
+        if self.current_detailed_state in ("BLOCKED_BY_OBSTACLE", "STALLED_UNCONFIRMED"):
             self.current_detailed_state = "EXECUTING"
 
     def publish_obstacle_blocked_event(self, block_duration: float, send_ack: bool = False):
@@ -1426,10 +1434,80 @@ class NavigationStateManager(Node):
         )
 
     def handle_obstacle_block_timeout(self, block_duration: float):
-        """处理障碍物阻塞超时：改为进入“暂停等待障碍消失”的恢复流程。"""
+        """处理低速超时；传感器确认前不得把低速直接当成障碍。"""
         if self.block_reported or not self.obstacle_wait_enable:
             return
+
+        obstacle_confirmed, confirmation_stats = self.get_obstacle_block_confirmation()
+        if not obstacle_confirmed:
+            self.current_detailed_state = "STALLED_UNCONFIRMED"
+            self.get_logger().warning(
+                f"机器人持续低速 {block_duration:.1f}s，但 ROI/costmap 未确认前方障碍，"
+                f"保持 Nav2 运行: {confirmation_stats}",
+                throttle_duration_sec=2.0,
+            )
+            return
+
+        self.get_logger().warning(
+            f"机器人持续低速且前方障碍已确认，进入障碍等待: {confirmation_stats}"
+        )
         self.enter_obstacle_wait_state(block_duration)
+
+    def get_obstacle_block_confirmation(
+        self, now: Optional[float] = None
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """确认低速是否确由前方障碍引起。
+
+        ROI 和 local costmap 是两条独立观测链。任一条新鲜且明确 blocked 即可确认；
+        clear、陈旧或尚未收到的数据都不能把普通低速升级成“障碍停车”。
+        """
+        now = time.time() if now is None else now
+        if not self.obstacle_block_require_sensor_confirmation:
+            return True, {
+                "required": False,
+                "decision": "legacy_speed_only",
+                "confirmed_by": ["speed_only"],
+            }
+
+        roi_stats = self.build_roi_obstacle_stats(now)
+        roi_enabled = bool(self.obstacle_resume_use_roi)
+        roi_confirmed = bool(
+            roi_enabled
+            and roi_stats["fresh"]
+            and self.latest_roi_obstacle_has_obstacle is True
+        )
+
+        costmap_age = (
+            now - self.latest_local_costmap_stamp
+            if self.latest_local_costmap_stamp > 0.0
+            else None
+        )
+        costmap_fresh = bool(
+            costmap_age is not None
+            and costmap_age <= self.obstacle_block_sensor_timeout_sec
+        )
+        costmap_confirmed = bool(costmap_fresh and self.latest_front_obstacle_blocked)
+
+        confirmed_by = []
+        if roi_confirmed:
+            confirmed_by.append("roi")
+        if costmap_confirmed:
+            confirmed_by.append("costmap")
+
+        stats = {
+            "required": True,
+            "decision": "obstacle_confirmed" if confirmed_by else "low_speed_unconfirmed",
+            "confirmed_by": confirmed_by,
+            "roi": roi_stats,
+            "costmap": {
+                "topic": self.local_costmap_topic,
+                "blocked": self.latest_front_obstacle_blocked,
+                "age_sec": round(costmap_age, 3) if costmap_age is not None else None,
+                "fresh": costmap_fresh,
+                "front_obstacle_stats": self.latest_front_obstacle_stats,
+            },
+        }
+        return bool(confirmed_by), stats
 
     def get_current_obstacle_clear_required_duration(self) -> float:
         """误恢复后自动拉长 clear 确认时间，普通场景保持较快恢复。"""
