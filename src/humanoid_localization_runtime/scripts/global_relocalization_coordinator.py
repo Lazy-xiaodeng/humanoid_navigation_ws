@@ -98,7 +98,7 @@ class GlobalRelocalizationCoordinator(Node):
         self.dry_run = self.integration_mode != "enforce"
         self.auto_apply = self.integration_mode == "enforce"
         self.attempt_timeout_sec = max(
-            1.0, float(self.declare_parameter("attempt_timeout_sec", 30.0).value)
+            1.0, float(self.declare_parameter("attempt_timeout_sec", 45.0).value)
         )
         self.apply_timeout_sec = max(
             1.0, float(self.declare_parameter("apply_timeout_sec", 5.0).value)

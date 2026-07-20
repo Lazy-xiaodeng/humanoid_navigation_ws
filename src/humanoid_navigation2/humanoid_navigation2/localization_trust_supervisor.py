@@ -92,6 +92,20 @@ class LocalizationTrustSupervisor(Node):
         self.large_jump_hold_min_updates = max(
             1, int(self.declare_parameter("large_jump_hold_min_updates", 3).value)
         )
+        self.require_global_after_ro_unhealthy = bool(
+            self.declare_parameter("require_global_after_ro_unhealthy", True).value
+        )
+        self.ro_unhealthy_min_duration_sec = max(
+            0.0,
+            float(self.declare_parameter("ro_unhealthy_min_duration_sec", 3.0).value),
+        )
+        self.ro_unhealthy_min_updates = max(
+            1, int(self.declare_parameter("ro_unhealthy_min_updates", 3).value)
+        )
+        self.ro_stale_recovery_sec = max(
+            self.robosense_status_timeout_sec,
+            float(self.declare_parameter("ro_stale_recovery_sec", 3.0).value),
+        )
         self.ro_verified_required_frames = max(
             1, int(self.declare_parameter("ro_verified_required_frames", 5).value)
         )
@@ -115,8 +129,13 @@ class LocalizationTrustSupervisor(Node):
         self.ro_verified_count = 0
         self.ro_verified_stamp = 0.0
         self.ro_verification_epoch = 0
+        self.ever_trusted = False
         self.large_jump_hold_started = 0.0
         self.large_jump_hold_updates = 0
+        self.ro_unhealthy_started = 0.0
+        self.ro_unhealthy_updates = 0
+        self.ro_unhealthy_last_stamp = 0.0
+        self.ro_unhealthy_reason = ""
         self.state = "waiting_initial_pose"
         self.reason = "waiting_for_bridge_accept"
         self.pose_trusted = False
@@ -136,6 +155,49 @@ class LocalizationTrustSupervisor(Node):
 
     def recovery_control_enabled(self) -> bool:
         return self.integration_mode == "enforce"
+
+    def clear_ro_unhealthy_observation(self):
+        self.ro_unhealthy_started = 0.0
+        self.ro_unhealthy_updates = 0
+        self.ro_unhealthy_last_stamp = 0.0
+        self.ro_unhealthy_reason = ""
+
+    def latch_online_recovery(self, trigger: str):
+        self.recovery_requires_global_relocalization = True
+        self.recovery_trigger = trigger
+        # 故障前的 RO 健康帧不能用于恢复后的重新放行。
+        self.ro_verified_count = 0
+        self.ro_verified_stamp = 0.0
+
+    def observe_ro_health(self, now: float, status: str, source: str, ro_stamp: float):
+        # 在线 LOST/LOW_ACCURACY 防抖只在曾经真正可信后启用，排除开机和候选交接期。
+        if not self.pose_initialized or not self.ever_trusted:
+            self.clear_ro_unhealthy_observation()
+            return
+        if status == "NORMAL" and source == "ro_normal_match":
+            self.clear_ro_unhealthy_observation()
+            return
+        if self._global_relocalization_active(now):
+            return
+        if self.ro_unhealthy_started <= 0.0:
+            self.ro_unhealthy_started = now
+            self.ro_unhealthy_reason = f"{status}:{source}"
+        if math.isfinite(ro_stamp):
+            if ro_stamp > self.ro_unhealthy_last_stamp + 1e-6:
+                self.ro_unhealthy_updates += 1
+                self.ro_unhealthy_last_stamp = ro_stamp
+        else:
+            self.ro_unhealthy_updates += 1
+        unhealthy_age = max(0.0, now - self.ro_unhealthy_started)
+        if (
+            self.require_global_after_ro_unhealthy
+            and unhealthy_age >= self.ro_unhealthy_min_duration_sec
+            and self.ro_unhealthy_updates >= self.ro_unhealthy_min_updates
+        ):
+            self.latch_online_recovery(
+                f"robosense_unhealthy age={unhealthy_age:.2f}s "
+                f"updates={self.ro_unhealthy_updates} reason={self.ro_unhealthy_reason}"
+            )
 
     def on_bridge_status(self, msg: String):
         now = time.time()
@@ -170,11 +232,7 @@ class LocalizationTrustSupervisor(Node):
                 )
             )
             if self.require_global_after_large_jump_hold and confirmed:
-                self.recovery_requires_global_relocalization = True
-                self.recovery_trigger = text
-                # 跳变前的 RO 健康帧不能用于恢复后的重新放行。
-                self.ro_verified_count = 0
-                self.ro_verified_stamp = 0.0
+                self.latch_online_recovery(text)
         else:
             # 短时 HOLD 自行恢复时只清除未成熟观察，不清除已确认的恢复锁存。
             self.large_jump_hold_started = 0.0
@@ -187,6 +245,7 @@ class LocalizationTrustSupervisor(Node):
                 self.startup_requires_global_relocalization = False
                 self.recovery_requires_global_relocalization = False
                 self.recovery_trigger = ""
+                self.clear_ro_unhealthy_observation()
                 self.ro_verified_count = 0
             if self.bridge_accept_kind == "initial_pose":
                 self.origin_seeded = (
@@ -220,6 +279,7 @@ class LocalizationTrustSupervisor(Node):
         }
 
         ro_stamp = _as_float(payload.get("stamp"), math.nan)
+        self.observe_ro_health(now, status, source, ro_stamp)
         if (
             status == "NORMAL"
             and source == "ro_normal_match"
@@ -236,12 +296,14 @@ class LocalizationTrustSupervisor(Node):
             self.ro_verified_count = 0
             self.ro_verified_stamp = 0.0
 
-        if self._source_is_global_or_manual(source):
+        # 人工定位是显式授权；自动全局候选只是 RO 初值，不能提前解除恢复锁。
+        if "manual" in source.lower():
             self.startup_requires_global_relocalization = False
             self.recovery_requires_global_relocalization = False
             self.recovery_trigger = ""
             self.large_jump_hold_started = 0.0
             self.large_jump_hold_updates = 0
+            self.clear_ro_unhealthy_observation()
 
         self.evaluate()
 
@@ -336,6 +398,18 @@ class LocalizationTrustSupervisor(Node):
             return
 
         if ro_age > self.robosense_status_timeout_sec:
+            if (
+                self.ever_trusted
+                and self.require_global_after_ro_unhealthy
+                and ro_age >= self.ro_stale_recovery_sec
+                and not self._global_relocalization_active(now)
+            ):
+                self.latch_online_recovery(
+                    f"robosense_status_stale age={ro_age:.2f}s"
+                )
+                self.state = "recovery_requires_global_relocalization"
+                self.reason = "robosense_status_stale_confirmed"
+                return
             self.state = "robosense_status_stale"
             self.reason = f"robosense_status_stale_{ro_age:.1f}s"
             return
@@ -343,6 +417,7 @@ class LocalizationTrustSupervisor(Node):
         if self.ro_verified_count >= self.ro_verified_required_frames:
             self.pose_trusted = True
             self.can_start_navigation = True
+            self.ever_trusted = True
             self.origin_seeded = False
             self.state = "trusted_ro"
             self.reason = f"ro_normal_match_frames={self.ro_verified_count}"
@@ -391,12 +466,23 @@ class LocalizationTrustSupervisor(Node):
                 "ro_verified_required_frames": self.ro_verified_required_frames,
                 "ro_verified_stamp": self.ro_verified_stamp,
                 "ro_verification_epoch": self.ro_verification_epoch,
+                "ever_trusted": self.ever_trusted,
                 "large_jump_hold_observed_age_sec": (
                     max(0.0, now - self.large_jump_hold_started)
                     if self.large_jump_hold_started > 0.0
                     else 0.0
                 ),
                 "large_jump_hold_updates": self.large_jump_hold_updates,
+                "ro_unhealthy_observed_age_sec": (
+                    max(0.0, now - self.ro_unhealthy_started)
+                    if self.ro_unhealthy_started > 0.0
+                    else 0.0
+                ),
+                "ro_unhealthy_updates": self.ro_unhealthy_updates,
+                "ro_unhealthy_reason": self.ro_unhealthy_reason,
+                "ro_unhealthy_min_duration_sec": self.ro_unhealthy_min_duration_sec,
+                "ro_unhealthy_min_updates": self.ro_unhealthy_min_updates,
+                "ro_stale_recovery_sec": self.ro_stale_recovery_sec,
                 "bridge_status_age_sec": (
                     now - self.last_bridge_time if self.last_bridge_time > 0.0 else None
                 ),

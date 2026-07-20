@@ -2400,14 +2400,8 @@ private:
     if (localization_.recovery_required) {
       return true;
     }
-    if (localization_.state == "recovery_requires_global_relocalization") {
-      return true;
-    }
-    if (localization_.state == "bridge_holding_last_good_tf" &&
-      localization_.text.find("large_jump") != std::string::npos)
-    {
-      return true;
-    }
+    // 状态名称和 bridge 文本只用于诊断。停车权只来自 trust supervisor
+    // 防抖确认后的显式 recovery_required，避免单帧 HOLD 造成频繁停车。
     return false;
   }
 

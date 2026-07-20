@@ -506,6 +506,13 @@ def generate_launch_description():
             # 首个 HOLD 只冻结 last-good TF；持续到 3s/DEGRADED 才要求停车恢复。
             'large_jump_hold_min_duration_sec': 3.0,
             'large_jump_hold_min_updates': 3,
+            # RO LOST/LOW_ACCURACY 连续 3s 且至少 3 个独立状态帧后才要求在线恢复。
+            # 曾经进入 trusted_ro 前不启用，避免开机点云和节点未稳定时误触发。
+            'require_global_after_ro_unhealthy': True,
+            'ro_unhealthy_min_duration_sec': 3.0,
+            'ro_unhealthy_min_updates': 3,
+            # RO 完全不再上报时无法累计帧数，连续陈旧 3s 后单独确认恢复。
+            'ro_stale_recovery_sec': 3.0,
             # 连续 5 帧 RO 正常匹配后，才把定位升级为可导航。
             'ro_verified_required_frames': 5,
             # bridge 和 RO 状态都必须保持新鲜。
@@ -540,7 +547,8 @@ def generate_launch_description():
             # 正式默认 shadow；切换 enforce 后才允许写 RO、bridge 和导航恢复链路。
             'integration_mode': global_relocalization_integration_mode,
             'auto_trigger': True,
-            'attempt_timeout_sec': 30.0,
+            # 正式精度层历史最大约 27.2s；45s 为调度和困难视角保留余量。
+            'attempt_timeout_sec': 45.0,
             'apply_timeout_sec': 5.0,
             'max_attempts': 3,
             'retry_backoff_sec': 2.0,

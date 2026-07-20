@@ -73,6 +73,26 @@ class LocalizationRecoverySmoke(Node):
         )
 
     def localization_payload(self) -> dict:
+        if self.phase == "transient_large_jump":
+            return {
+                "state": "bridge_holding_last_good_tf",
+                "reason": "HOLD large_jump age=0.10s reason=test",
+                "pose_initialized": True,
+                "pose_trusted": False,
+                "can_start_navigation": False,
+                "localization_recovery_required": False,
+                "recovery_requires_global_relocalization": False,
+            }
+        if self.phase == "transient_ro_lost":
+            return {
+                "state": "ro_verifying",
+                "reason": "robosense_unhealthy_observing LOST",
+                "pose_initialized": True,
+                "pose_trusted": False,
+                "can_start_navigation": False,
+                "localization_recovery_required": False,
+                "recovery_requires_global_relocalization": False,
+            }
         if self.phase == "startup_required":
             return {
                 "state": "startup_requires_global_relocalization",

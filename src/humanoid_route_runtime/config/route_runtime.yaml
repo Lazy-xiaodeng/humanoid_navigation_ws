@@ -123,7 +123,7 @@ navigation_state_manager_cpp:
     # 定位健康状态超时时间，单位秒。
     localization_health_timeout_sec: 3.0
 
-    # 运行中只有定位监督明确要求全局恢复时才自动暂停路线任务；普通短时状态抖动不介入。
+    # 运行中只响应定位监督防抖确认后的显式恢复字段；HOLD/LOST/stale 文本本身不停车。
     localization_auto_pause_on_recovery_required: true
 
     # 任务启动必须依赖可信定位；不再只因为存在 last good TF 就允许启动。

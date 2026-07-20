@@ -34,6 +34,13 @@ def generate_launch_description():
         default='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_robosense_localization_runtime/config/robosense_lidar_localization.yaml',
     )
     reloc_engine = LaunchConfiguration('relocalization_engine', default='ro')
+    enable_rslidar = LaunchConfiguration('enable_rslidar', default='true')
+    enable_global_relocalization = LaunchConfiguration(
+        'enable_global_relocalization', default='true'
+    )
+    global_relocalization_integration_mode = LaunchConfiguration(
+        'global_relocalization_integration_mode', default='shadow'
+    )
 
     use_ro = PythonExpression(["'", reloc_engine, "' == 'ro' or '", reloc_engine, "' == 'robosense'"])
     use_op = PythonExpression(["'", reloc_engine, "' == 'op' or '", reloc_engine, "' == 'prior'"])
@@ -53,6 +60,9 @@ def generate_launch_description():
             'use_sim_time': use_sim_time,
             'map_yaml_file': map_yaml_file,
             'robosense_config_file': robosense_config_file,
+            'enable_rslidar': enable_rslidar,
+            'enable_global_relocalization': enable_global_relocalization,
+            'global_relocalization_integration_mode': global_relocalization_integration_mode,
         }.items(),
         condition=IfCondition(use_ro),
     )
@@ -93,6 +103,14 @@ def generate_launch_description():
         DeclareLaunchArgument('prior_map_path', default_value='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall_open3d_grounded.pcd'),
         DeclareLaunchArgument('robosense_config_file', default_value='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_robosense_localization_runtime/config/robosense_lidar_localization.yaml'),
         DeclareLaunchArgument('relocalization_engine', default_value='ro'),
+        DeclareLaunchArgument('enable_rslidar', default_value='true', description='是否启动真实 RoboSense 雷达驱动'),
+        DeclareLaunchArgument('enable_global_relocalization', default_value='true', description='是否启动全局重定位节点'),
+        DeclareLaunchArgument(
+            'global_relocalization_integration_mode',
+            default_value='shadow',
+            choices=['off', 'shadow', 'enforce'],
+            description='全局重定位权限：off关闭、shadow只观测、enforce允许停车恢复和TF交接',
+        ),
         # 导航层随地图重启：先发布机器人模型/TF，再拉起定位+Nav2，最后启动路线任务运行层。
         display_layer,
         TimerAction(period=6.0, actions=[nav2_ro, nav2_op]),
