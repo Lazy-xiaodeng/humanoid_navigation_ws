@@ -92,6 +92,10 @@ void RouteTaskStateMachine::reset_route_task_state(RouteTaskRuntimeState & route
   route.resume_mode.clear();
   route.localization_auto_paused = false;
   route.localization_recovery_started_at = 0.0;
+  route.active_dispatch_waiting = false;
+  route.active_dispatch_wait_started_at = 0.0;
+  route.active_dispatch_reason.clear();
+  route.active_dispatch_block_reason.clear();
 }
 
 RouteTaskCommandResult RouteTaskStateMachine::handle_start_route_task(
@@ -275,11 +279,10 @@ RouteTaskCommandResult RouteTaskStateMachine::handle_resume_route_task(
       "resume_route_task", "route task is not paused", "route_task_not_paused");
   }
   if (!resume_localization_block_reason.empty()) {
-    (void)resume_localization_block_reason;
     return unsupported_or_deferred(
       "resume_route_task",
-      "localization recovery is active, route task resume is blocked",
-      "localization_resume_blocked");
+      "route task resume is blocked: " + resume_localization_block_reason,
+      "route_task_resume_gate_blocked");
   }
   if (!route.active_segment.has_value() && !route.awaiting_broadcast) {
     return unsupported_or_deferred(

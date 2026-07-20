@@ -16,6 +16,10 @@
 - 可以缓存点位库 revision、地图状态、定位状态、机器人底层状态、odom/costmap/ROI/BT 日志。
 - 可以解析 `/navigation/requests`，支持 `start_route_task`、`pause_route_task`、`resume_route_task`、`stop_route_task`、`jump_to_waypoint`、`broadcast_finished`。
 - 可以构建 task/transit 路线段，发布 `waypoint_passed`、`broadcast_requested`、`task_waypoint_completed`、`route_task_completed` 等事件。
+- 正式配置会等待 planner/controller/behavior/bt_navigator 全部 ACTIVE，且两种 Nav2 action 可用后才释放缓存路线，避免定位先可信而 Nav2 尚未就绪时丢失整路线。
+- `NavigateThroughPoses` 和最终对齐 `NavigateToPose` 都支持 lifecycle 激活窗口内的短暂拒绝重试；上层 stop 会立即取消待执行路线，后续就绪不会重新启动。
+- 活动路线的下一段、播报完成、定位恢复和障碍恢复共用 `Walk + 地图 + 定位 + Nav2` 派发门控；条件不足时保持零速和当前 segment，不提前发布恢复成功。
+- Nav2 readiness 运行中持续丢失 1.5 秒才暂停当前 goal，短时查询抖动不会停车；恢复后自动续发被取消的 segment。
 - 可以通过 `NavigateThroughPoses` 执行 transit 段，通过 `NavigateToPose` 执行最终 task 对齐；该能力由 `route_task.nav2_execution_enable` 控制，便于分阶段验证。
 - 可以处理 jump 重规划、goal rejected 重试、feedback 超时、暂停/恢复/停止、节点退出清理。
 - 可以在机器人状态未就绪时缓存 start 请求，等待 Walk 和定位/地图就绪后自动启动。

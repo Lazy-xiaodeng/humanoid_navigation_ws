@@ -42,6 +42,8 @@
 #include "humanoid_route_runtime/route_runtime_types.hpp"
 #include "humanoid_route_runtime/route_task_protocol.hpp"
 #include "humanoid_route_runtime/route_task_state_machine.hpp"
+#include "lifecycle_msgs/msg/state.hpp"
+#include "lifecycle_msgs/srv/get_state.hpp"
 #include "nav2_msgs/action/navigate_through_poses.hpp"
 #include "nav2_msgs/action/navigate_to_pose.hpp"
 #include "nav2_msgs/msg/behavior_tree_log.hpp"
@@ -164,6 +166,8 @@ private:
     declare_parameter<int>("localization_resume_stable_frames", config_.localization_resume_stable_frames);
     declare_parameter<std::string>(
       "localization_health_status_topic", config_.localization_health_status_topic);
+    declare_parameter<std::string>(
+      "localization_recovery_status_topic", config_.localization_recovery_status_topic);
     declare_parameter<std::string>("map_status_topic", config_.map_status_topic);
     declare_parameter<double>("localization_health_timeout_sec", config_.localization_health_timeout_sec);
     declare_parameter<bool>(
@@ -185,6 +189,13 @@ private:
     declare_parameter<double>("route_task.goal_cancel_timeout_sec", config_.route_task_goal_cancel_timeout_sec);
     declare_parameter<double>(
       "route_task.goal_reject_retry_timeout_sec", config_.route_task_goal_reject_retry_timeout_sec);
+    declare_parameter<bool>(
+      "route_task.require_nav2_lifecycle_ready", config_.route_task_require_nav2_lifecycle_ready);
+    declare_parameter<double>(
+      "route_task.nav2_readiness_loss_debounce_sec",
+      config_.route_task_nav2_readiness_loss_debounce_sec);
+    declare_parameter<std::vector<std::string>>(
+      "route_task.nav2_lifecycle_nodes", config_.route_task_nav2_lifecycle_nodes);
     declare_parameter<bool>(
       "route_task.default_interrupt_broadcast", config_.route_task_default_interrupt_broadcast);
     declare_parameter<bool>(
@@ -258,6 +269,8 @@ private:
       get_parameter("localization_resume_stable_frames").as_int();
     config_.localization_health_status_topic =
       get_parameter("localization_health_status_topic").as_string();
+    config_.localization_recovery_status_topic =
+      get_parameter("localization_recovery_status_topic").as_string();
     config_.map_status_topic = get_parameter("map_status_topic").as_string();
     config_.localization_health_timeout_sec = get_parameter("localization_health_timeout_sec").as_double();
     config_.localization_auto_pause_on_recovery_required =
@@ -278,6 +291,12 @@ private:
       get_parameter("route_task.goal_cancel_timeout_sec").as_double();
     config_.route_task_goal_reject_retry_timeout_sec =
       get_parameter("route_task.goal_reject_retry_timeout_sec").as_double();
+    config_.route_task_require_nav2_lifecycle_ready =
+      get_parameter("route_task.require_nav2_lifecycle_ready").as_bool();
+    config_.route_task_nav2_readiness_loss_debounce_sec = std::max(
+      0.0, get_parameter("route_task.nav2_readiness_loss_debounce_sec").as_double());
+    config_.route_task_nav2_lifecycle_nodes =
+      get_parameter("route_task.nav2_lifecycle_nodes").as_string_array();
     config_.route_task_default_interrupt_broadcast =
       get_parameter("route_task.default_interrupt_broadcast").as_bool();
     config_.reverse_navigation_bt_xml = get_parameter("reverse_navigation_bt_xml").as_string();
@@ -334,11 +353,15 @@ private:
     localization_status_sub_ = create_subscription<std_msgs::msg::String>(
       config_.localization_health_status_topic, rclcpp::QoS(10),
       [this](std_msgs::msg::String::ConstSharedPtr msg) { on_localization_status(msg); });
+    localization_recovery_status_sub_ = create_subscription<std_msgs::msg::String>(
+      config_.localization_recovery_status_topic, rclcpp::QoS(10),
+      [this](std_msgs::msg::String::ConstSharedPtr msg) { on_localization_recovery_status(msg); });
     map_status_sub_ = create_subscription<std_msgs::msg::String>(
       config_.map_status_topic, rclcpp::QoS(10),
       [this](std_msgs::msg::String::ConstSharedPtr msg) { on_map_status(msg); });
 
     nav2_controller_.create_clients(this);
+    setup_nav2_readiness_clients();
 
     status_timer_ = create_wall_timer(
       to_duration(1.0 / safe_rate(config_.status_publish_rate), 1s),
@@ -348,14 +371,122 @@ private:
       [this]() {
         check_localization_timeout();
         process_localization_recovery_state();
+        process_active_segment_dispatch_wait();
         check_route_task_feedback_timeout();
       });
     pending_navigation_timer_ = create_wall_timer(
       200ms,
       [this]() { check_pending_navigation_timeout(); });
+    nav2_readiness_timer_ = create_wall_timer(
+      500ms,
+      [this]() { poll_nav2_readiness(); });
     obstacle_wait_timer_ = create_wall_timer(
       to_duration(1.0 / safe_rate(config_.obstacle_clear_check_rate_hz), 200ms),
       [this]() { process_obstacle_wait_state(); });
+  }
+
+  void setup_nav2_readiness_clients()
+  {
+    nav2_lifecycle_ready_ = !config_.route_task_require_nav2_lifecycle_ready;
+    if (!config_.route_task_require_nav2_lifecycle_ready) {
+      return;
+    }
+    for (const auto & raw_name : config_.route_task_nav2_lifecycle_nodes) {
+      const std::string name = trim_copy(raw_name);
+      if (name.empty()) {
+        continue;
+      }
+      const std::string service = name.front() == '/' ?
+        name + "/get_state" : "/" + name + "/get_state";
+      nav2_lifecycle_clients_.push_back(
+        create_client<lifecycle_msgs::srv::GetState>(service));
+      nav2_lifecycle_node_names_.push_back(name);
+      nav2_lifecycle_active_.push_back(false);
+      nav2_lifecycle_request_in_flight_.push_back(false);
+    }
+  }
+
+  void update_nav2_readiness()
+  {
+    if (!config_.route_task_require_nav2_lifecycle_ready) {
+      nav2_lifecycle_ready_ = true;
+      return;
+    }
+    const bool lifecycle_active = !nav2_lifecycle_clients_.empty() && std::all_of(
+      nav2_lifecycle_active_.begin(), nav2_lifecycle_active_.end(),
+      [](const bool active) {return active;});
+    const bool actions_ready = lifecycle_active &&
+      nav2_controller_.wait_for_navigate_to_pose_server(0ns) &&
+      nav2_controller_.wait_for_navigate_through_poses_server(0ns);
+    const bool observed_ready = lifecycle_active && actions_ready;
+    const bool was_ready = nav2_lifecycle_ready_;
+    if (observed_ready) {
+      nav2_not_ready_since_ = 0.0;
+      nav2_lifecycle_ready_ = true;
+    } else if (was_ready) {
+      const double now = now_seconds();
+      if (nav2_not_ready_since_ <= 0.0) {
+        nav2_not_ready_since_ = now;
+      }
+      if (now - nav2_not_ready_since_ < config_.route_task_nav2_readiness_loss_debounce_sec) {
+        return;
+      }
+      nav2_lifecycle_ready_ = false;
+    } else {
+      nav2_lifecycle_ready_ = false;
+    }
+    if (nav2_lifecycle_ready_ && !was_ready) {
+      RCLCPP_INFO(get_logger(), "Nav2 lifecycle 与 action 已就绪，允许释放缓存路线");
+      try_execute_pending_navigation();
+    } else if (!nav2_lifecycle_ready_ && was_ready) {
+      RCLCPP_WARN(get_logger(), "Nav2 readiness 已丢失，新的路线请求将保持 pending");
+      if (route_.active && route_.current_state == NavigationState::Executing &&
+        route_.active_segment.has_value() && !route_.awaiting_broadcast &&
+        !route_.localization_auto_paused &&
+        !obstacle_wait_manager_.active())
+      {
+        defer_active_segment_dispatch(
+          "nav2_readiness_auto_resume", "Nav2 readiness 持续丢失，等待 lifecycle 与 action 恢复");
+      }
+    }
+  }
+
+  void poll_nav2_readiness()
+  {
+    if (!config_.route_task_require_nav2_lifecycle_ready) {
+      return;
+    }
+    for (std::size_t index = 0; index < nav2_lifecycle_clients_.size(); ++index) {
+      const auto & client = nav2_lifecycle_clients_[index];
+      if (!client->service_is_ready()) {
+        nav2_lifecycle_active_[index] = false;
+        nav2_lifecycle_request_in_flight_[index] = false;
+        continue;
+      }
+      if (nav2_lifecycle_request_in_flight_[index]) {
+        continue;
+      }
+      nav2_lifecycle_request_in_flight_[index] = true;
+      auto request = std::make_shared<lifecycle_msgs::srv::GetState::Request>();
+      client->async_send_request(
+        request,
+        [this, index](rclcpp::Client<lifecycle_msgs::srv::GetState>::SharedFuture future) {
+          if (index >= nav2_lifecycle_active_.size()) {
+            return;
+          }
+          nav2_lifecycle_request_in_flight_[index] = false;
+          try {
+            const auto response = future.get();
+            nav2_lifecycle_active_[index] = response &&
+              response->current_state.id == lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE;
+          } catch (const std::exception & exc) {
+            nav2_lifecycle_active_[index] = false;
+            RCLCPP_DEBUG(get_logger(), "读取 Nav2 lifecycle 状态失败: %s", exc.what());
+          }
+          update_nav2_readiness();
+        });
+    }
+    update_nav2_readiness();
   }
 
   // ===========================================================================
@@ -412,11 +543,7 @@ private:
       }
       std::string resume_localization_block_reason;
       if (command_type == "resume_route_task") {
-        const auto reason =
-          gatekeeper_.localization_start_block_reason(config_, localization_, now_seconds());
-        if (reason.has_value()) {
-          resume_localization_block_reason = reason.value();
-        }
+        resume_localization_block_reason = build_start_block_reason();
       }
       auto result = route_task_state_machine_.handle_command(
         command_type, *command_data, block_reason, resume_localization_block_reason,
@@ -755,6 +882,61 @@ private:
     process_localization_recovery_state();
   }
 
+  void on_localization_recovery_status(const std_msgs::msg::String::ConstSharedPtr msg)
+  {
+    rapidjson::Document payload;
+    payload.Parse(msg->data.c_str());
+    if (payload.HasParseError() || !payload.IsObject()) {
+      return;
+    }
+    if (read_string_member(payload, "event_type", "") != "localization_relocalize_failed" ||
+      read_string_member(payload, "result_code", "") != "attempts_exhausted")
+    {
+      return;
+    }
+    if (!route_.active && !route_.pending_navigation_active) {
+      return;
+    }
+
+    rapidjson::Document event;
+    event.SetObject();
+    auto & allocator = event.GetAllocator();
+    const std::string reason = read_string_member(payload, "reason", "global_relocalization_failed");
+    const std::string attempt_id = read_string_member(payload, "attempt_id", "");
+    const int attempt_number =
+      payload.HasMember("attempt_number") && payload["attempt_number"].IsInt() ?
+      payload["attempt_number"].GetInt() : 0;
+    std::string task_session_id = route_.task_session_id;
+    std::string route_id = route_.route_id;
+    std::string map_id = route_.map_id;
+    if (route_.pending_navigation_active && !route_.pending_navigation_request_json.empty()) {
+      rapidjson::Document pending;
+      pending.Parse(route_.pending_navigation_request_json.c_str());
+      if (!pending.HasParseError() && pending.IsObject() && pending.HasMember("command_data") &&
+        pending["command_data"].IsObject())
+      {
+        const auto & command_data = pending["command_data"];
+        task_session_id = read_string_member(command_data, "task_session_id", task_session_id);
+        route_id = read_string_member(command_data, "route_id", route_id);
+        map_id = read_string_member(command_data, "map_id", map_id);
+      }
+    }
+    event.AddMember("reason", rapidjson::Value(reason.c_str(), allocator).Move(), allocator);
+    event.AddMember("result_code", "attempts_exhausted", allocator);
+    event.AddMember("route_cached", route_.active || route_.pending_navigation_active, allocator);
+    event.AddMember("automatic_retry", true, allocator);
+    event.AddMember("attempt_number", attempt_number, allocator);
+    event.AddMember("attempt_id", rapidjson::Value(attempt_id.c_str(), allocator).Move(), allocator);
+    event.AddMember(
+      "task_session_id", rapidjson::Value(task_session_id.c_str(), allocator).Move(), allocator);
+    event.AddMember("route_id", rapidjson::Value(route_id.c_str(), allocator).Move(), allocator);
+    event.AddMember("map_id", rapidjson::Value(map_id.c_str(), allocator).Move(), allocator);
+    publish_status_update("navigation_relocalization_failed", event);
+    send_acknowledgment(
+      "navigation_relocalization_failed", "pending",
+      "本轮全局重定位已耗尽，路线继续缓存并等待低频自动重试", &event);
+  }
+
   void on_map_status(const std_msgs::msg::String::ConstSharedPtr msg)
   {
     rapidjson::Document payload;
@@ -1080,6 +1262,16 @@ private:
       "pending_navigation_reason",
       rapidjson::Value(route_.pending_navigation_reason.c_str(), allocator).Move(),
       allocator);
+    status.AddMember("nav2_ready", nav2_lifecycle_ready_, allocator);
+    status.AddMember(
+      "nav2_lifecycle_gate_required", config_.route_task_require_nav2_lifecycle_ready, allocator);
+    rapidjson::Value nav2_lifecycle_states(rapidjson::kObjectType);
+    for (std::size_t index = 0; index < nav2_lifecycle_node_names_.size(); ++index) {
+      nav2_lifecycle_states.AddMember(
+        rapidjson::Value(nav2_lifecycle_node_names_[index].c_str(), allocator).Move(),
+        nav2_lifecycle_active_[index], allocator);
+    }
+    status.AddMember("nav2_lifecycle_active", nav2_lifecycle_states, allocator);
     status.AddMember("pause_source", rapidjson::Value(route_.pause_source.c_str(), allocator).Move(), allocator);
     status.AddMember("pause_reason", rapidjson::Value(route_.pause_reason.c_str(), allocator).Move(), allocator);
     status.AddMember("resume_mode", rapidjson::Value(route_.resume_mode.c_str(), allocator).Move(), allocator);
@@ -1105,6 +1297,13 @@ private:
       obstacle_wait_manager_.active() && last_obstacle_wait_decision_.front_blocked);
     status.AddMember("localization_auto_paused", route_.localization_auto_paused, allocator);
     status.AddMember("localization_recovery_started_at", route_.localization_recovery_started_at, allocator);
+    status.AddMember("active_dispatch_waiting", route_.active_dispatch_waiting, allocator);
+    status.AddMember(
+      "active_dispatch_reason",
+      rapidjson::Value(route_.active_dispatch_reason.c_str(), allocator).Move(), allocator);
+    status.AddMember(
+      "active_dispatch_block_reason",
+      rapidjson::Value(route_.active_dispatch_block_reason.c_str(), allocator).Move(), allocator);
     status.AddMember("roi_obstacle_has_obstacle", environment_.latest_roi_has_obstacle, allocator);
     status.AddMember("roi_obstacle_age_sec",
       environment_.latest_roi_stamp > 0.0 ? now - environment_.latest_roi_stamp : -1.0, allocator);
@@ -1821,6 +2020,28 @@ private:
     return remaining;
   }
 
+  void ensure_route_goal_reject_retry_window(const std::string & goal_kind)
+  {
+    if (!route_.active_segment.has_value()) {
+      return;
+    }
+    const std::string retry_key = route_.active_segment->segment_id + ":" + goal_kind;
+    if (route_goal_reject_retry_segment_id_ == retry_key) {
+      return;
+    }
+    route_goal_reject_retry_segment_id_ = retry_key;
+    route_goal_reject_retry_deadline_ =
+      now_seconds() + std::max(0.0, config_.route_task_goal_reject_retry_timeout_sec);
+    route_goal_reject_retry_count_ = 0;
+  }
+
+  void clear_route_goal_reject_retry_window()
+  {
+    route_goal_reject_retry_deadline_ = 0.0;
+    route_goal_reject_retry_count_ = 0;
+    route_goal_reject_retry_segment_id_.clear();
+  }
+
   bool is_active_segment_transit(const std::string & waypoint_id) const
   {
     if (!route_.active_segment.has_value()) {
@@ -1828,6 +2049,117 @@ private:
     }
     const auto & transit_ids = route_.active_segment->transit_waypoint_ids;
     return std::find(transit_ids.begin(), transit_ids.end(), waypoint_id) != transit_ids.end();
+  }
+
+  void clear_active_segment_dispatch_wait()
+  {
+    route_.active_dispatch_waiting = false;
+    route_.active_dispatch_wait_started_at = 0.0;
+    route_.active_dispatch_reason.clear();
+    route_.active_dispatch_block_reason.clear();
+  }
+
+  bool defer_active_segment_dispatch(
+    const std::string & dispatch_reason,
+    const std::string & block_reason)
+  {
+    if (!route_.active || !route_.active_segment.has_value()) {
+      return false;
+    }
+    const bool first_defer = !route_.active_dispatch_waiting;
+    route_.active_dispatch_waiting = true;
+    if (route_.active_dispatch_wait_started_at <= 0.0) {
+      route_.active_dispatch_wait_started_at = now_seconds();
+    }
+    route_.active_dispatch_reason = dispatch_reason;
+    route_.active_dispatch_block_reason = block_reason;
+    cancel_active_route_goal();
+    route_.current_state = NavigationState::Paused;
+    route_.detailed_state = "ACTIVE_ROUTE_DISPATCH_WAITING";
+    if (route_.pause_source.empty()) {
+      route_.pause_source = "active_dispatch_gate";
+      route_.resume_mode = "auto";
+    }
+    route_.pause_reason = block_reason;
+    publish_zero_cmd_vel();
+
+    if (!first_defer) {
+      return true;
+    }
+    rapidjson::Document event;
+    event.SetObject();
+    auto & allocator = event.GetAllocator();
+    event.AddMember(
+      "dispatch_reason", rapidjson::Value(dispatch_reason.c_str(), allocator).Move(), allocator);
+    event.AddMember("block_reason", rapidjson::Value(block_reason.c_str(), allocator).Move(), allocator);
+    event.AddMember("resume_mode", "auto", allocator);
+    event.AddMember(
+      "task_session_id", rapidjson::Value(route_.task_session_id.c_str(), allocator).Move(), allocator);
+    event.AddMember("route_id", rapidjson::Value(route_.route_id.c_str(), allocator).Move(), allocator);
+    event.AddMember(
+      "current_target_task_id",
+      rapidjson::Value(route_.current_target_task_id.c_str(), allocator).Move(), allocator);
+    if (route_.active_segment.has_value()) {
+      event.AddMember(
+        "segment_id", rapidjson::Value(route_.active_segment->segment_id.c_str(), allocator).Move(),
+        allocator);
+    }
+    publish_status_update("navigation_resume_deferred", event);
+    send_acknowledgment(
+      "navigation_resume_deferred", "pending", "路线已保持停止，等待恢复派发条件: " + block_reason,
+      &event);
+    return true;
+  }
+
+  void process_active_segment_dispatch_wait()
+  {
+    if (!route_.active_dispatch_waiting) {
+      return;
+    }
+    if (!route_.active || !route_.active_segment.has_value()) {
+      clear_active_segment_dispatch_wait();
+      return;
+    }
+    // 这两类暂停各自负责发布准确的恢复事件；这里只处理普通下一段/播报完成等待。
+    if (route_.localization_auto_paused || obstacle_wait_manager_.active()) {
+      return;
+    }
+    const std::string block_reason = build_start_block_reason();
+    if (!block_reason.empty()) {
+      route_.active_dispatch_block_reason = block_reason;
+      route_.pause_reason = block_reason;
+      return;
+    }
+
+    const std::string dispatch_reason = route_.active_dispatch_reason;
+    const double wait_duration = route_.active_dispatch_wait_started_at > 0.0 ?
+      now_seconds() - route_.active_dispatch_wait_started_at : 0.0;
+    clear_active_segment_dispatch_wait();
+    route_.current_state = NavigationState::Executing;
+    route_.detailed_state = "ROUTE_TASK_SEGMENT_READY";
+    if (route_.pause_source == "active_dispatch_gate") {
+      route_.pause_source.clear();
+      route_.pause_reason.clear();
+      route_.resume_mode.clear();
+    }
+
+    rapidjson::Document event;
+    event.SetObject();
+    auto & allocator = event.GetAllocator();
+    event.AddMember("resume_source", "active_dispatch_gate", allocator);
+    event.AddMember(
+      "resume_reason", rapidjson::Value(dispatch_reason.c_str(), allocator).Move(), allocator);
+    event.AddMember("dispatch_wait_duration", wait_duration, allocator);
+    event.AddMember(
+      "task_session_id", rapidjson::Value(route_.task_session_id.c_str(), allocator).Move(), allocator);
+    event.AddMember("route_id", rapidjson::Value(route_.route_id.c_str(), allocator).Move(), allocator);
+    publish_status_update("navigation_resumed", event);
+    send_acknowledgment("navigation_resumed", "success", "路线派发条件已恢复，继续导航", &event);
+
+    if (!start_active_segment_navigation(dispatch_reason)) {
+      handle_route_task_navigation_failed(
+        "active segment dispatch resume failed", "active_dispatch_resume_failed");
+    }
   }
 
   bool start_active_segment_navigation(const std::string & reason)
@@ -1839,6 +2171,11 @@ private:
       handle_route_task_navigation_failed("active segment is empty", "invalid_route_waypoints");
       return false;
     }
+    const std::string dispatch_block_reason = build_start_block_reason();
+    if (!dispatch_block_reason.empty()) {
+      return defer_active_segment_dispatch(reason, dispatch_block_reason);
+    }
+    clear_active_segment_dispatch_wait();
     if (should_complete_active_segment_without_navigation()) {
       route_.active_goal_generation += 1;
       route_.current_goal_generation = route_.active_goal_generation;
@@ -1856,6 +2193,8 @@ private:
     if (!has_remaining_transit) {
       return start_active_segment_final_pose_navigation("ROUTE_TASK_FINAL_POSE_NAVIGATING");
     }
+
+    ensure_route_goal_reject_retry_window("through");
 
     if (!nav2_controller_.wait_for_navigate_through_poses_server(5s)) {
       handle_route_task_navigation_failed(
@@ -1888,13 +2227,6 @@ private:
     route_.navigation_start_time = now_seconds();
     route_task_last_feedback_time_ = now_seconds();
     route_goal_execution_waypoint_ids_ = execution_waypoint_ids;
-    if (route_goal_reject_retry_segment_id_ != route_.active_segment->segment_id) {
-      route_goal_reject_retry_segment_id_ = route_.active_segment->segment_id;
-      route_goal_reject_retry_deadline_ =
-        now_seconds() + std::max(0.0, config_.route_task_goal_reject_retry_timeout_sec);
-      route_goal_reject_retry_count_ = 0;
-    }
-
     const int64_t generation = route_.current_goal_generation;
     const int64_t version = route_.route_task_version;
     auto options = rclcpp_action::Client<NavigateThroughPoses>::SendGoalOptions();
@@ -1932,6 +2264,7 @@ private:
   void cancel_active_route_goal()
   {
     cancel_route_goal_retry_timer();
+    clear_route_goal_reject_retry_window();
     route_task_last_feedback_time_ = 0.0;
     route_.current_goal_generation = -1;
     route_goal_execution_waypoint_ids_.clear();
@@ -1949,6 +2282,7 @@ private:
   bool start_active_segment_final_pose_navigation(const std::string & detailed_state)
   {
     route_goal_execution_waypoint_ids_.clear();
+    ensure_route_goal_reject_retry_window("final_pose");
     const RouteWaypoint * target_task = find_route_waypoint_by_id(route_.current_target_task_id);
     if (target_task == nullptr) {
       handle_route_task_navigation_failed("target task missing", "target_task_missing");
@@ -2031,7 +2365,7 @@ private:
       handle_route_task_navigation_failed("NavigateThroughPoses goal rejected", "goal_rejected");
       return;
     }
-    route_goal_reject_retry_count_ = 0;
+    clear_route_goal_reject_retry_window();
     route_task_last_feedback_time_ = now_seconds();
     nav2_controller_.set_through_goal_handle(goal_handle);
   }
@@ -2315,10 +2649,59 @@ private:
       return;
     }
     if (!goal_handle) {
+      if (retry_route_task_final_pose_goal_rejected(generation, version)) {
+        return;
+      }
       handle_route_task_navigation_failed("NavigateToPose goal rejected", "final_pose_goal_rejected");
       return;
     }
+    clear_route_goal_reject_retry_window();
     nav2_controller_.set_final_pose_goal_handle(goal_handle);
+  }
+
+  bool retry_route_task_final_pose_goal_rejected(const int64_t generation, const int64_t version)
+  {
+    if (version != route_.route_task_version || generation != route_.current_goal_generation ||
+      !route_.active || !route_.active_segment.has_value())
+    {
+      return false;
+    }
+    if (now_seconds() > route_goal_reject_retry_deadline_) {
+      return false;
+    }
+
+    ++route_goal_reject_retry_count_;
+    const int retry_count = route_goal_reject_retry_count_;
+    const std::string segment_id = route_.active_segment->segment_id;
+    const std::string detailed_state = route_.detailed_state;
+    RCLCPP_WARN(
+      get_logger(),
+      "NavigateToPose goal rejected，可能是 Nav2 lifecycle 尚未 active，0.5s 后重试最终对齐: "
+      "segment_id=%s, retry=%d",
+      segment_id.c_str(), retry_count);
+
+    if (route_goal_retry_timer_) {
+      route_goal_retry_timer_->cancel();
+    }
+    route_goal_retry_timer_ = create_wall_timer(
+      500ms,
+      [this, generation, version, segment_id, detailed_state]() {
+        if (route_goal_retry_timer_) {
+          route_goal_retry_timer_->cancel();
+          route_goal_retry_timer_.reset();
+        }
+        if (version != route_.route_task_version || generation != route_.current_goal_generation ||
+          !route_.active || !route_.active_segment.has_value() ||
+          route_.active_segment->segment_id != segment_id)
+        {
+          return;
+        }
+        if (!start_active_segment_final_pose_navigation(detailed_state)) {
+          handle_route_task_navigation_failed(
+            "NavigateToPose retry start failed", "final_pose_goal_rejected_retry_start_failed");
+        }
+      });
+    return true;
   }
 
   void route_task_final_pose_result_callback(
@@ -2487,6 +2870,11 @@ private:
     if (!localization_.healthy || localization_.resume_stable_count < required_frames) {
       return;
     }
+    const std::string dispatch_block_reason = build_start_block_reason();
+    if (!dispatch_block_reason.empty()) {
+      defer_active_segment_dispatch("localization_trusted_auto_resume", dispatch_block_reason);
+      return;
+    }
     resume_from_localization_recovery_wait();
   }
 
@@ -2508,6 +2896,7 @@ private:
     route_.resume_mode.clear();
     route_.localization_auto_paused = false;
     route_.localization_recovery_started_at = 0.0;
+    clear_active_segment_dispatch_wait();
 
     rapidjson::Document event;
     event.SetObject();
@@ -2654,7 +3043,14 @@ private:
       return;
     }
 
+    const std::string dispatch_block_reason = build_start_block_reason();
+    if (!dispatch_block_reason.empty()) {
+      defer_active_segment_dispatch("obstacle_cleared_auto_resume", dispatch_block_reason);
+      return;
+    }
+
     clear_obstacle_wait_runtime();
+    clear_active_segment_dispatch_wait();
     route_.current_state = NavigationState::Executing;
     route_.detailed_state = "EXECUTING";
     route_.pause_source.clear();
@@ -2782,9 +3178,7 @@ private:
     event.AddMember("failed_at", now_seconds(), allocator);
     publish_status_update("navigation_failed", event);
     cancel_active_route_goal();
-    route_goal_reject_retry_deadline_ = 0.0;
-    route_goal_reject_retry_count_ = 0;
-    route_goal_reject_retry_segment_id_.clear();
+    clear_route_goal_reject_retry_window();
     route_task_last_feedback_time_ = 0.0;
     reset_block_detection();
     nav2_blockage_suppression_nodes_.clear();
@@ -2815,7 +3209,17 @@ private:
 
   std::string build_start_block_reason() const
   {
-    return gatekeeper_.start_block_reason(config_, robot_, localization_, map_, now_seconds());
+    const std::string reason =
+      gatekeeper_.start_block_reason(config_, robot_, localization_, map_, now_seconds());
+    if (!reason.empty()) {
+      return reason;
+    }
+    if (config_.route_task_nav2_execution_enable &&
+      config_.route_task_require_nav2_lifecycle_ready && !nav2_lifecycle_ready_)
+    {
+      return "Nav2 核心节点尚未全部 ACTIVE，等待导航运行层就绪";
+    }
+    return "";
   }
 
   void clear_obstacle_wait_runtime()
@@ -2846,7 +3250,9 @@ private:
       gatekeeper_.localization_start_block_reason(config_, localization_, now);
     const bool waiting_for_robot = robot_reason.has_value() && can_defer_for_robot_state(now);
     const bool waiting_for_localization = localization_reason.has_value();
-    if (!waiting_for_robot && !waiting_for_localization) {
+    const bool waiting_for_nav2 = config_.route_task_nav2_execution_enable &&
+      config_.route_task_require_nav2_lifecycle_ready && !nav2_lifecycle_ready_;
+    if (!waiting_for_robot && !waiting_for_localization && !waiting_for_nav2) {
       return false;
     }
 
@@ -2856,6 +3262,9 @@ private:
     if (waiting_for_localization) {
       route_.pending_navigation_reason =
         block_reason + "。已缓存导航请求，等待定位恢复可信后自动开始导航。";
+    } else if (waiting_for_nav2) {
+      route_.pending_navigation_reason =
+        block_reason + "。已缓存导航请求，等待 Nav2 lifecycle 与 action 就绪后自动开始导航。";
     } else if (robot_.last_update <= 0.0 || now - robot_.last_update > config_.robot_status_timeout) {
       route_.pending_navigation_reason =
         block_reason + "。已缓存导航请求，等待底层状态恢复并确认 Walk 后再开始导航。";
@@ -3053,6 +3462,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr robot_status_sub_;
   rclcpp::Subscription<nav2_msgs::msg::BehaviorTreeLog>::SharedPtr behavior_tree_log_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr localization_status_sub_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr localization_recovery_status_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr map_status_sub_;
 
   std::set<std::string> nav2_blockage_suppression_nodes_;
@@ -3071,9 +3481,17 @@ private:
   std::string last_route_task_failure_code_;
   rclcpp::TimerBase::SharedPtr route_goal_retry_timer_;
 
+  std::vector<rclcpp::Client<lifecycle_msgs::srv::GetState>::SharedPtr> nav2_lifecycle_clients_;
+  std::vector<std::string> nav2_lifecycle_node_names_;
+  std::vector<bool> nav2_lifecycle_active_;
+  std::vector<bool> nav2_lifecycle_request_in_flight_;
+  bool nav2_lifecycle_ready_{false};
+  double nav2_not_ready_since_{0.0};
+
   rclcpp::TimerBase::SharedPtr status_timer_;
   rclcpp::TimerBase::SharedPtr navigation_check_timer_;
   rclcpp::TimerBase::SharedPtr pending_navigation_timer_;
+  rclcpp::TimerBase::SharedPtr nav2_readiness_timer_;
   rclcpp::TimerBase::SharedPtr obstacle_wait_timer_;
 };
 

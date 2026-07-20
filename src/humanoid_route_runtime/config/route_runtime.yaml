@@ -117,6 +117,9 @@ navigation_state_manager_cpp:
     # 可信定位状态话题，由 localization_trust_supervisor 汇总 bridge/RO/全局重定位后发布。
     localization_health_status_topic: "/localization/trust_status"
 
+    # 全局重定位协调器事件；搜索周期耗尽时转发为 APP 可见的导航恢复失败事件。
+    localization_recovery_status_topic: "/localization/recovery_status"
+
     # 地图状态话题；用于确认当前地图是否 ready。
     map_status_topic: "/map/status"
 
@@ -147,8 +150,19 @@ navigation_state_manager_cpp:
     # jump/stop 时等待旧 goal 取消的时间，单位秒，避免旧回调污染新段。
     route_task.goal_cancel_timeout_sec: 2.0
 
-    # NavigateThroughPoses goal rejected 后允许重试的最长时间，单位秒。
-    route_task.goal_reject_retry_timeout_sec: 8.0
+    # Nav2 lifecycle 刚激活时 action 可能短暂拒绝目标；两种导航 action 共用该重试窗口。
+    route_task.goal_reject_retry_timeout_sec: 15.0
+
+    # 正式链路要求 Nav2 四个核心 lifecycle 节点全部 ACTIVE 后才释放缓存路线。
+    # 单元测试可关闭该门控，直接使用测试 action server。
+    route_task.require_nav2_lifecycle_ready: true
+    # 运行中 Nav2 readiness 连续丢失超过该时间才停车缓存，过滤单次服务查询抖动。
+    route_task.nav2_readiness_loss_debounce_sec: 1.5
+    route_task.nav2_lifecycle_nodes:
+      - planner_server
+      - controller_server
+      - behavior_server
+      - bt_navigator
 
     # 是否默认允许 jump 打断播报等待。
     route_task.default_interrupt_broadcast: true

@@ -140,6 +140,7 @@ struct RouteRuntimeConfig
   double obstacle_block_near_goal_distance{0.7};
   int localization_resume_stable_frames{3};
   std::string localization_health_status_topic{"/localization/trust_status"};
+  std::string localization_recovery_status_topic{"/localization/recovery_status"};
   std::string map_status_topic{"/map/status"};
   double localization_health_timeout_sec{3.0};
   bool localization_auto_pause_on_recovery_required{true};
@@ -150,7 +151,11 @@ struct RouteRuntimeConfig
   bool route_task_transit_projection_passed_enabled{true};
   double route_task_nav2_feedback_timeout_sec{3.0};
   double route_task_goal_cancel_timeout_sec{2.0};
-  double route_task_goal_reject_retry_timeout_sec{8.0};
+  double route_task_goal_reject_retry_timeout_sec{15.0};
+  bool route_task_require_nav2_lifecycle_ready{false};
+  double route_task_nav2_readiness_loss_debounce_sec{1.5};
+  std::vector<std::string> route_task_nav2_lifecycle_nodes{
+    "planner_server", "controller_server", "behavior_server", "bt_navigator"};
   bool route_task_default_interrupt_broadcast{true};
   bool route_task_nav2_execution_enable{true};
   std::string reverse_navigation_bt_xml{
@@ -290,6 +295,10 @@ struct RouteTaskRuntimeState
   std::string resume_mode;
   bool localization_auto_paused{false};
   double localization_recovery_started_at{0.0};
+  bool active_dispatch_waiting{false};
+  double active_dispatch_wait_started_at{0.0};
+  std::string active_dispatch_reason;
+  std::string active_dispatch_block_reason;
 
   // route task 专属运行态。它们只服务新路线任务，不再兼容旧单点/多点 APP 命令。
   bool active{false};

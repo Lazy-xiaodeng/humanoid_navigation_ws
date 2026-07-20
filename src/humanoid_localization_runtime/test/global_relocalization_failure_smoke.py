@@ -60,6 +60,7 @@ def main():
     coordinator.attempt_timeout_sec = 0.25
     coordinator.retry_backoff_sec = 0.05
     coordinator.max_attempts = 2
+    coordinator.exhausted_retry_cooldown_sec = 0.2
     probe = Probe()
     executor = SingleThreadedExecutor()
     executor.add_node(coordinator)
@@ -86,12 +87,20 @@ def main():
         if len(starts) != 2:
             raise RuntimeError(f"expected exactly two attempts, got {len(starts)}")
 
-        probe.publish(probe.nav_pub, {"event_type": "navigation_pending"})
+        spin_until(
+            executor,
+            lambda: any(
+                item.get("event_type") == "localization_relocalize_cycle_restarting"
+                for item in probe.events
+            ),
+            2.0,
+            "cooldown cycle restart event",
+        )
         spin_until(
             executor,
             lambda: len([item for item in probe.requests if item.get("command") == "start"]) == 3,
             2.0,
-            "new navigation attempt",
+            "automatic cooldown retry start",
         )
         probe.publish(probe.nav_pub, {"event_type": "navigation_stopped"})
         spin_until(
@@ -102,7 +111,7 @@ def main():
         )
         start_count = len([item for item in probe.requests if item.get("command") == "start"])
         probe.publish(probe.trust_pub, trust)
-        deadline = time.monotonic() + 0.5
+        deadline = time.monotonic() + 0.8
         while time.monotonic() < deadline:
             executor.spin_once(timeout_sec=0.03)
         if len([item for item in probe.requests if item.get("command") == "start"]) != start_count:

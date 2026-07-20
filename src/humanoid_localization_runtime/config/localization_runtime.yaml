@@ -77,6 +77,8 @@ global_relocalization_coordinator:
     apply_timeout_sec: 5.0
     max_attempts: 3
     retry_backoff_sec: 2.0
+    # 单轮三次失败后保持停车并低频重试；上层 stop 会禁止后续自动搜索。
+    exhausted_retry_cooldown_sec: 30.0
     candidate_stamp_tolerance_sec: 0.03
     candidate_max_receipt_age_sec: 2.0
     # RO 连续精匹配后发布的 refined map->odom；协调器只把该结果交给 bridge。

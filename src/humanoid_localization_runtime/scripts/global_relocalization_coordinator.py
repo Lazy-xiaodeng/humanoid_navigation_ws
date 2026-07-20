@@ -107,6 +107,10 @@ class GlobalRelocalizationCoordinator(Node):
         self.retry_backoff_sec = max(
             0.0, float(self.declare_parameter("retry_backoff_sec", 2.0).value)
         )
+        self.exhausted_retry_cooldown_sec = max(
+            0.0,
+            float(self.declare_parameter("exhausted_retry_cooldown_sec", 30.0).value),
+        )
         self.candidate_stamp_tolerance_sec = max(
             0.001,
             float(self.declare_parameter("candidate_stamp_tolerance_sec", 0.03).value),
@@ -165,6 +169,7 @@ class GlobalRelocalizationCoordinator(Node):
         self.attempt_started = 0.0
         self.apply_started = 0.0
         self.retry_after = 0.0
+        self.failed_at = 0.0
         self.current_map_id = ""
         self.map_ready = False
         self.latest_trust: Dict[str, Any] = {}
@@ -310,6 +315,7 @@ class GlobalRelocalizationCoordinator(Node):
             return
         if not retry:
             self.attempt_number = 0
+        self.failed_at = 0.0
         self.attempt_number += 1
         self.attempt_id = f"reloc-{uuid.uuid4().hex}"
         self.recovery_type = self.requested_recovery_type()
@@ -631,8 +637,14 @@ class GlobalRelocalizationCoordinator(Node):
             )
             return
         self.state = "failed"
+        self.failed_at = self.now_wall()
         self.publish_event(
-            "localization_relocalize_failed", reason, result_code="attempts_exhausted"
+            "localization_relocalize_failed",
+            reason,
+            result_code="attempts_exhausted",
+            route_remains_stopped=True,
+            automatic_retry=True,
+            retry_cooldown_sec=self.exhausted_retry_cooldown_sec,
         )
 
     def prune_candidates(self):
@@ -661,6 +673,23 @@ class GlobalRelocalizationCoordinator(Node):
             self.schedule_retry_or_fail(reason)
         elif self.state == "retry_wait" and now >= self.retry_after:
             self.start_attempt(retry=True)
+        elif (
+            self.state == "failed"
+            and self.exhausted_retry_cooldown_sec > 0.0
+            and self.failed_at > 0.0
+            and now - self.failed_at >= self.exhausted_retry_cooldown_sec
+            and self.automatic_trigger_enabled()
+            and not self.auto_trigger_suppressed
+            and self.recovery_required()
+        ):
+            self.publish_event(
+                "localization_relocalize_cycle_restarting",
+                "exhausted_retry_cooldown_elapsed",
+                previous_attempts=self.attempt_number,
+            )
+            self.state = "idle"
+            self.attempt_number = 0
+            self.start_attempt()
 
 
 def main(args=None):

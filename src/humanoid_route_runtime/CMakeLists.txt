@@ -15,6 +15,7 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(nav2_msgs REQUIRED)
+find_package(lifecycle_msgs REQUIRED)
 find_package(action_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -37,6 +38,7 @@ ament_target_dependencies(navigation_state_manager_cpp
   geometry_msgs
   nav_msgs
   nav2_msgs
+  lifecycle_msgs
   action_msgs
   tf2
   tf2_ros
