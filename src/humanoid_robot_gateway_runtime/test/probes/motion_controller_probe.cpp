@@ -86,6 +86,7 @@ int main()
   config.motion_max_timeout_sec = 90.0;
 
   humanoid_robot_gateway_runtime::MotionController controller(config);
+  controller.replace_available_motion_names({"long_motion", "short_motion", "very_long_motion"});
   controller.set_motion_expected_duration("long_motion", 40.0);
   controller.set_motion_expected_duration("very_long_motion", 100.0);
 
@@ -101,6 +102,12 @@ int main()
   const auto unsupported = controller.parse_robot_control_command(
     R"({"command_type":"other","parameters":{"gesture_id":"ignored"}})",
     999.0);
+  const auto null_gesture = controller.parse_robot_control_command(
+    R"({"command_type":"execute_gesture","parameters":{"gesture_id":"null"}})",
+    999.0);
+  const auto unknown_gesture = controller.parse_robot_control_command(
+    R"({"command_type":"execute_gesture","parameters":{"gesture_id":"not_in_ota"}})",
+    999.0);
 
   rapidjson::Document document;
   document.SetObject();
@@ -111,12 +118,15 @@ int main()
   add_parse(parses, allocator, "missing_timestamp", missing_timestamp);
   add_parse(parses, allocator, "missing_gesture", missing_gesture);
   add_parse(parses, allocator, "unsupported", unsupported);
+  add_parse(parses, allocator, "null_gesture", null_gesture);
   document.AddMember("parses", parses, allocator);
 
   rapidjson::Value decisions(rapidjson::kArrayType);
   add_decision(decisions, allocator, "accepted_disabled", controller.evaluate_start_request(valid, false, "WALK"));
   add_decision(decisions, allocator, "busy_rejected", controller.evaluate_start_request(valid, true, "WALK"));
   add_decision(decisions, allocator, "ignored_missing_gesture", controller.evaluate_start_request(missing_gesture, false, "WALK"));
+  add_decision(decisions, allocator, "null_rejected", controller.evaluate_start_request(null_gesture, false, "WALK"));
+  add_decision(decisions, allocator, "unknown_rejected", controller.evaluate_start_request(unknown_gesture, false, "WALK"));
   document.AddMember("decisions", decisions, allocator);
   document.AddMember("short_timeout", controller.get_motion_completion_timeout("short_motion"), allocator);
   document.AddMember("long_timeout", controller.get_motion_completion_timeout("long_motion"), allocator);

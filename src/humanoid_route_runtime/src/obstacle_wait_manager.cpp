@@ -91,6 +91,52 @@ int ObstacleWaitManager::recent_false_resume_count() const
   return recent_false_resume_count_;
 }
 
+ObstacleConfirmationDecision ObstacleWaitManager::confirm_obstacle(
+  const double now,
+  const RouteRuntimeConfig & config,
+  const EnvironmentRuntimeState & environment) const
+{
+  ObstacleConfirmationDecision confirmation;
+  if (!config.obstacle_block_require_sensor_confirmation) {
+    confirmation.confirmed = true;
+    confirmation.reason = "legacy_speed_only";
+    return confirmation;
+  }
+
+  if (config.obstacle_resume_use_roi && environment.latest_roi_stamp > 0.0 &&
+    now - environment.latest_roi_stamp <= config.obstacle_block_sensor_timeout_sec)
+  {
+    confirmation.roi_available = true;
+    confirmation.roi_blocked = environment.latest_roi_has_obstacle;
+  }
+
+  const bool costmap_fresh = environment.latest_costmap_stamp > 0.0 &&
+    now - environment.latest_costmap_stamp <= config.obstacle_block_sensor_timeout_sec;
+  const bool costmap_valid = environment.has_current_pose &&
+    environment.latest_costmap_width > 0U && environment.latest_costmap_height > 0U &&
+    environment.latest_costmap_resolution > 0.0 && !environment.latest_costmap_data.empty();
+  if (costmap_fresh && costmap_valid) {
+    confirmation.costmap_available = true;
+    ObstacleWaitDecision costmap_decision;
+    confirmation.costmap_blocked = analyze_front_window(config, environment, costmap_decision);
+    confirmation.costmap_occupied_cells = costmap_decision.occupied_cells;
+    confirmation.costmap_sample_cells = costmap_decision.sample_cells;
+    confirmation.costmap_max_cost = costmap_decision.max_cost;
+  }
+
+  confirmation.confirmed = confirmation.roi_blocked || confirmation.costmap_blocked;
+  if (confirmation.roi_blocked && confirmation.costmap_blocked) {
+    confirmation.reason = "confirmed_by_roi_and_costmap";
+  } else if (confirmation.roi_blocked) {
+    confirmation.reason = "confirmed_by_roi";
+  } else if (confirmation.costmap_blocked) {
+    confirmation.reason = "confirmed_by_costmap";
+  } else if (!confirmation.roi_available && !confirmation.costmap_available) {
+    confirmation.reason = "sensor_unavailable_or_stale";
+  }
+  return confirmation;
+}
+
 ObstacleWaitDecision ObstacleWaitManager::update(
   const double now,
   const RouteRuntimeConfig & config,

@@ -46,6 +46,7 @@ struct RobotGatewayConfig
   std::string gesture_list_updated_topic{"/system/gesture_list_updated"};
   std::string cmd_vel_topic{"/cmd_vel"};
   std::string app_robot_control_topic{"/app/robot_control"};
+  std::string navigation_action_interlock_service{"/navigation/robot_action_interlock"};
 };
 
 }  // namespace humanoid_robot_gateway_runtime

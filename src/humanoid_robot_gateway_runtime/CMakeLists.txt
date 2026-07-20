@@ -17,6 +17,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
@@ -41,6 +42,7 @@ target_link_libraries(robot_gateway_runtime_core yaml-cpp Boost::system)
 ament_target_dependencies(robot_gateway_runtime_core
   rclcpp
   std_msgs
+  std_srvs
   geometry_msgs
   sensor_msgs
   ament_index_cpp
@@ -48,7 +50,7 @@ ament_target_dependencies(robot_gateway_runtime_core
 
 add_executable(robot_gateway_node src/robot_gateway_node.cpp)
 target_link_libraries(robot_gateway_node robot_gateway_runtime_core)
-ament_target_dependencies(robot_gateway_node rclcpp std_msgs geometry_msgs sensor_msgs ament_index_cpp)
+ament_target_dependencies(robot_gateway_node rclcpp std_msgs std_srvs geometry_msgs sensor_msgs ament_index_cpp)
 
 if(BUILD_RUNTIME_PROBES)
   add_executable(robot_protocol_probe test/probes/robot_protocol_probe.cpp)

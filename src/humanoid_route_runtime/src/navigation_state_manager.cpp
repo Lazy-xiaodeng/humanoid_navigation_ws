@@ -54,6 +54,7 @@
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/string.hpp"
+#include "std_srvs/srv/set_bool.hpp"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
 
@@ -132,6 +133,11 @@ private:
     declare_parameter<double>(
       "blockage_recovery_velocity_threshold", config_.blockage_recovery_velocity_threshold);
     declare_parameter<double>("blockage_recovery_confirm_sec", config_.blockage_recovery_confirm_sec);
+    declare_parameter<bool>(
+      "obstacle_block_require_sensor_confirmation",
+      config_.obstacle_block_require_sensor_confirmation);
+    declare_parameter<double>(
+      "obstacle_block_sensor_timeout_sec", config_.obstacle_block_sensor_timeout_sec);
     declare_parameter<bool>("obstacle_wait_enable", config_.obstacle_wait_enable);
     declare_parameter<double>("obstacle_wait_push_interval_sec", config_.obstacle_wait_push_interval_sec);
     declare_parameter<int>("obstacle_clear_required_frames", config_.obstacle_clear_required_frames);
@@ -233,6 +239,10 @@ private:
     config_.blockage_recovery_velocity_threshold =
       get_parameter("blockage_recovery_velocity_threshold").as_double();
     config_.blockage_recovery_confirm_sec = get_parameter("blockage_recovery_confirm_sec").as_double();
+    config_.obstacle_block_require_sensor_confirmation =
+      get_parameter("obstacle_block_require_sensor_confirmation").as_bool();
+    config_.obstacle_block_sensor_timeout_sec =
+      get_parameter("obstacle_block_sensor_timeout_sec").as_double();
     config_.obstacle_wait_enable = get_parameter("obstacle_wait_enable").as_bool();
     config_.obstacle_wait_push_interval_sec =
       get_parameter("obstacle_wait_push_interval_sec").as_double();
@@ -359,6 +369,13 @@ private:
     map_status_sub_ = create_subscription<std_msgs::msg::String>(
       config_.map_status_topic, rclcpp::QoS(10),
       [this](std_msgs::msg::String::ConstSharedPtr msg) { on_map_status(msg); });
+    robot_action_interlock_service_ = create_service<std_srvs::srv::SetBool>(
+      "/navigation/robot_action_interlock",
+      [this](
+        const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+        std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
+        handle_robot_action_interlock(request->data, *response);
+      });
 
     nav2_controller_.create_clients(this);
     setup_nav2_readiness_clients();
@@ -371,6 +388,8 @@ private:
       [this]() {
         check_localization_timeout();
         process_localization_recovery_state();
+        process_robot_action_resume();
+        enforce_robot_action_stop();
         process_active_segment_dispatch_wait();
         check_route_task_feedback_timeout();
       });
@@ -980,6 +999,135 @@ private:
     robot_.last_update = now_seconds();
   }
 
+  void handle_robot_action_interlock(
+    const bool enabled,
+    std_srvs::srv::SetBool::Response & response)
+  {
+    if (enabled) {
+      if (robot_action_interlock_active_) {
+        response.success = true;
+        response.message = "导航动作互锁已启用";
+        return;
+      }
+      robot_action_interlock_active_ = true;
+      robot_action_interlock_started_at_ = now_seconds();
+      robot_action_resume_pending_ = false;
+      robot_action_paused_navigation_ =
+        route_.active && route_.active_segment.has_value() &&
+        (route_.current_state == NavigationState::Executing ||
+        route_.current_state == NavigationState::Planning);
+
+      if (robot_action_paused_navigation_) {
+        cancel_active_route_goal();
+        reset_block_detection();
+        route_.current_state = NavigationState::Paused;
+        route_.detailed_state = "ROBOT_ACTION_PAUSED";
+        route_.pause_time = now_seconds();
+        route_.pause_duration_limit = 0.0;
+        route_.pause_source = "robot_action";
+        route_.pause_reason = "机器人执行动作，导航已自动暂停";
+        route_.resume_mode = "auto";
+        for (int index = 0; index < 3; ++index) {
+          publish_zero_cmd_vel();
+        }
+
+        rapidjson::Document event;
+        event.SetObject();
+        auto & allocator = event.GetAllocator();
+        event.AddMember("pause_source", "robot_action", allocator);
+        event.AddMember("reason", "机器人执行动作，导航已自动暂停", allocator);
+        event.AddMember("resume_mode", "auto", allocator);
+        event.AddMember("action_interlock_active", true, allocator);
+        event.AddMember(
+          "task_session_id",
+          rapidjson::Value(route_.task_session_id.c_str(), allocator).Move(), allocator);
+        event.AddMember(
+          "route_id", rapidjson::Value(route_.route_id.c_str(), allocator).Move(), allocator);
+        event.AddMember(
+          "current_target_task_id",
+          rapidjson::Value(route_.current_target_task_id.c_str(), allocator).Move(), allocator);
+        publish_status_update("navigation_paused", event);
+        send_acknowledgment(
+          "navigation_auto_paused", "success", "收到机器人动作，已暂停导航并保存当前任务", &event);
+        response.message = "活动导航已暂停并保存，允许执行机器人动作";
+      } else {
+        response.message = "当前无可由动作互锁暂停的活动导航，允许执行机器人动作";
+      }
+      response.success = true;
+      return;
+    }
+
+    if (!robot_action_interlock_active_) {
+      response.success = true;
+      response.message = "导航动作互锁已释放";
+      return;
+    }
+    robot_action_interlock_active_ = false;
+    robot_action_resume_pending_ =
+      robot_action_paused_navigation_ && route_.active && route_.active_segment.has_value() &&
+      route_.current_state == NavigationState::Paused && route_.pause_source == "robot_action";
+    if (!robot_action_resume_pending_) {
+      robot_action_paused_navigation_ = false;
+      robot_action_interlock_started_at_ = 0.0;
+    }
+    response.success = true;
+    response.message = robot_action_resume_pending_ ?
+      "动作完成，已登记恢复导航" : "动作完成，已释放导航互锁（原导航状态保持不变）";
+  }
+
+  void enforce_robot_action_stop()
+  {
+    if (robot_action_interlock_active_ && robot_action_paused_navigation_ &&
+      route_.current_state == NavigationState::Paused && route_.pause_source == "robot_action")
+    {
+      publish_zero_cmd_vel();
+    }
+  }
+
+  void process_robot_action_resume()
+  {
+    if (!robot_action_resume_pending_) {
+      return;
+    }
+    robot_action_resume_pending_ = false;
+    const bool should_resume =
+      !robot_action_interlock_active_ && robot_action_paused_navigation_ && route_.active &&
+      route_.active_segment.has_value() && route_.current_state == NavigationState::Paused &&
+      route_.pause_source == "robot_action";
+    const double pause_duration = robot_action_interlock_started_at_ > 0.0 ?
+      now_seconds() - robot_action_interlock_started_at_ : 0.0;
+    robot_action_paused_navigation_ = false;
+    robot_action_interlock_started_at_ = 0.0;
+    if (!should_resume) {
+      return;
+    }
+
+    route_.current_state = NavigationState::Executing;
+    route_.detailed_state = "EXECUTING";
+    route_.pause_source.clear();
+    route_.pause_reason.clear();
+    route_.resume_mode.clear();
+    rapidjson::Document event;
+    event.SetObject();
+    auto & allocator = event.GetAllocator();
+    event.AddMember("resume_source", "robot_action", allocator);
+    event.AddMember("resume_reason", "robot_action_completed", allocator);
+    event.AddMember("pause_duration_actual", pause_duration, allocator);
+    event.AddMember(
+      "task_session_id", rapidjson::Value(route_.task_session_id.c_str(), allocator).Move(), allocator);
+    event.AddMember("route_id", rapidjson::Value(route_.route_id.c_str(), allocator).Move(), allocator);
+    event.AddMember(
+      "current_target_task_id",
+      rapidjson::Value(route_.current_target_task_id.c_str(), allocator).Move(), allocator);
+    publish_status_update("navigation_resumed", event);
+    send_acknowledgment(
+      "navigation_auto_resumed", "success", "机器人动作完成，已恢复原导航任务", &event);
+    if (!start_active_segment_navigation("robot_action_completed")) {
+      handle_route_task_navigation_failed(
+        "robot action auto resume failed", "robot_action_auto_resume_failed");
+    }
+  }
+
   void on_odom(const nav_msgs::msg::Odometry::ConstSharedPtr msg)
   {
     const double now = now_seconds();
@@ -1250,6 +1398,15 @@ private:
       (is_blocked_by_obstacle_ && block_start_time_ > 0.0 ? now - block_start_time_ : 0.0),
       allocator);
     status.AddMember("block_reported", block_reported_, allocator);
+    status.AddMember(
+      "obstacle_block_sensor_confirmation_required",
+      config_.obstacle_block_require_sensor_confirmation,
+      allocator);
+    status.AddMember(
+      "obstacle_block_sensor_confirmed", last_obstacle_confirmation_.confirmed, allocator);
+    status.AddMember(
+      "obstacle_block_confirmation_reason",
+      rapidjson::Value(last_obstacle_confirmation_.reason.c_str(), allocator).Move(), allocator);
     status.AddMember("obstacle_block_suppressed", !suppression_reason.empty(), allocator);
     status.AddMember(
       "obstacle_block_suppression_reason",
@@ -1262,6 +1419,9 @@ private:
       "pending_navigation_reason",
       rapidjson::Value(route_.pending_navigation_reason.c_str(), allocator).Move(),
       allocator);
+    status.AddMember("robot_action_interlock_active", robot_action_interlock_active_, allocator);
+    status.AddMember("robot_action_paused_navigation", robot_action_paused_navigation_, allocator);
+    status.AddMember("robot_action_resume_pending", robot_action_resume_pending_, allocator);
     status.AddMember("nav2_ready", nav2_lifecycle_ready_, allocator);
     status.AddMember(
       "nav2_lifecycle_gate_required", config_.route_task_require_nav2_lifecycle_ready, allocator);
@@ -1495,6 +1655,9 @@ private:
 
   std::string get_obstacle_blockage_suppression_reason() const
   {
+    if (robot_action_interlock_active_) {
+      return "机器人动作导航互锁阶段";
+    }
     if (route_.active && route_.awaiting_broadcast) {
       return "route task 等待 APP 播报完成";
     }
@@ -1586,9 +1749,7 @@ private:
 
   bool is_stopped_for_blockage(const double total_velocity, const std::string & velocity_source) const
   {
-    if (velocity_source == "pose_delta") {
-      return total_velocity < config_.blockage_recovery_velocity_threshold;
-    }
+    (void)velocity_source;
     return total_velocity < config_.velocity_threshold;
   }
 
@@ -1618,8 +1779,11 @@ private:
     is_blocked_by_obstacle_ = false;
     block_start_time_ = 0.0;
     block_reported_ = false;
+    last_obstacle_confirmation_ = ObstacleConfirmationDecision{};
     clear_block_recovery_candidate();
-    if (route_.detailed_state == "BLOCKED_BY_OBSTACLE") {
+    if (route_.detailed_state == "BLOCKED_BY_OBSTACLE" ||
+      route_.detailed_state == "STALLED_UNCONFIRMED")
+    {
       route_.detailed_state = "EXECUTING";
     }
   }
@@ -2935,6 +3099,16 @@ private:
     if (block_reported_ || !config_.obstacle_wait_enable) {
       return;
     }
+    last_obstacle_confirmation_ = obstacle_wait_manager_.confirm_obstacle(
+      now_seconds(), config_, environment_);
+    if (!last_obstacle_confirmation_.confirmed) {
+      route_.detailed_state = "STALLED_UNCONFIRMED";
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "机器人持续低速 %.1fs，但 ROI/costmap 未确认前方障碍，保持 Nav2 运行: %s",
+        block_duration, last_obstacle_confirmation_.reason.c_str());
+      return;
+    }
     block_reported_ = true;
     enter_obstacle_wait_state("检测到障碍物，前方路径被挡住", block_duration);
   }
@@ -3209,6 +3383,9 @@ private:
 
   std::string build_start_block_reason() const
   {
+    if (robot_action_interlock_active_) {
+      return "机器人动作互锁中，暂不启动导航";
+    }
     const std::string reason =
       gatekeeper_.start_block_reason(config_, robot_, localization_, map_, now_seconds());
     if (!reason.empty()) {
@@ -3230,6 +3407,9 @@ private:
 
   bool can_defer_for_robot_state(const double now) const
   {
+    if (robot_action_interlock_active_) {
+      return true;
+    }
     if (!config_.require_walk_mode_for_navigation) {
       return false;
     }
@@ -3248,7 +3428,8 @@ private:
     const auto robot_reason = gatekeeper_.robot_start_block_reason(config_, robot_, now);
     const auto localization_reason =
       gatekeeper_.localization_start_block_reason(config_, localization_, now);
-    const bool waiting_for_robot = robot_reason.has_value() && can_defer_for_robot_state(now);
+    const bool waiting_for_robot = robot_action_interlock_active_ ||
+      (robot_reason.has_value() && can_defer_for_robot_state(now));
     const bool waiting_for_localization = localization_reason.has_value();
     const bool waiting_for_nav2 = config_.route_task_nav2_execution_enable &&
       config_.route_task_require_nav2_lifecycle_ready && !nav2_lifecycle_ready_;
@@ -3259,7 +3440,10 @@ private:
     route_.pending_navigation_active = true;
     route_.pending_navigation_created_at = now;
     route_.pending_navigation_request_json = json_to_string(request);
-    if (waiting_for_localization) {
+    if (robot_action_interlock_active_) {
+      route_.pending_navigation_reason =
+        block_reason + "。已缓存导航请求，等待动作完成并回到 Walk 后自动开始导航。";
+    } else if (waiting_for_localization) {
       route_.pending_navigation_reason =
         block_reason + "。已缓存导航请求，等待定位恢复可信后自动开始导航。";
     } else if (waiting_for_nav2) {
@@ -3444,6 +3628,7 @@ private:
   RouteTaskStateMachine route_task_state_machine_;
   ObstacleWaitManager obstacle_wait_manager_;
   ObstacleWaitDecision last_obstacle_wait_decision_;
+  ObstacleConfirmationDecision last_obstacle_confirmation_;
   Nav2ActionController nav2_controller_;
 
   tf2_ros::Buffer tf_buffer_;
@@ -3464,6 +3649,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr localization_status_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr localization_recovery_status_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr map_status_sub_;
+  rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr robot_action_interlock_service_;
 
   std::set<std::string> nav2_blockage_suppression_nodes_;
   bool is_blocked_by_obstacle_{false};
@@ -3487,6 +3673,10 @@ private:
   std::vector<bool> nav2_lifecycle_request_in_flight_;
   bool nav2_lifecycle_ready_{false};
   double nav2_not_ready_since_{0.0};
+  bool robot_action_interlock_active_{false};
+  bool robot_action_paused_navigation_{false};
+  bool robot_action_resume_pending_{false};
+  double robot_action_interlock_started_at_{0.0};
 
   rclcpp::TimerBase::SharedPtr status_timer_;
   rclcpp::TimerBase::SharedPtr navigation_check_timer_;

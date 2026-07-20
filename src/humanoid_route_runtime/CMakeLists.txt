@@ -12,6 +12,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(nav2_msgs REQUIRED)
@@ -19,6 +20,8 @@ find_package(lifecycle_msgs REQUIRED)
 find_package(action_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
+
+option(BUILD_RUNTIME_PROBES "Build developer probe executables for humanoid_route_runtime" OFF)
 
 add_executable(navigation_state_manager_cpp
   src/navigation_state_manager.cpp
@@ -35,6 +38,7 @@ ament_target_dependencies(navigation_state_manager_cpp
   rclcpp
   rclcpp_action
   std_msgs
+  std_srvs
   geometry_msgs
   nav_msgs
   nav2_msgs
@@ -43,6 +47,16 @@ ament_target_dependencies(navigation_state_manager_cpp
   tf2
   tf2_ros
 )
+
+if(BUILD_RUNTIME_PROBES)
+  add_executable(
+    obstacle_confirmation_probe
+    test/probes/obstacle_confirmation_probe.cpp
+    src/obstacle_wait_manager.cpp
+  )
+  target_include_directories(obstacle_confirmation_probe PRIVATE include)
+  install(TARGETS obstacle_confirmation_probe DESTINATION lib/${PROJECT_NAME})
+endif()
 
 install(TARGETS
   navigation_state_manager_cpp

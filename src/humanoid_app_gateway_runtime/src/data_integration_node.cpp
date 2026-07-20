@@ -733,11 +733,11 @@ private:
 
   bool load_gesture_list(const bool publish_after_load)
   {
-    // 读取 gestures_app.yaml 并构造 gesture_list 数据。
+    // 读取机器人 OTA gestures.yaml 并构造 gesture_list 数据。
     // publish_after_load=true 时说明来自热重载，需要立即通知 APP 刷新动作列表。
     const std::string path = resolve_expression_config_path(
       config_.gesture_list_yaml_path,
-      "gestures_app.yaml");
+      "gestures.yaml");
     std::ifstream file(path);
     if (!file.is_open()) {
       RCLCPP_WARN(get_logger(), "无法打开动作库 YAML: %s", path.c_str());

@@ -98,7 +98,7 @@ data_integration_node:
     # 动作库更新通知输入话题。
     gesture_list_updated_topic: "/system/gesture_list_updated"
 
-    # 上半身动作库 YAML 路径；为空时自动从 humanoid_expression_runtime/config/gestures_app.yaml 查找。
+    # 上半身动作库 YAML 路径；为空时自动从机器人 OTA gestures.yaml 查找，不再加载固定五动作表。
     gesture_list_yaml_path: ""
 
     # 面部表情库 YAML 路径；为空时自动从 humanoid_expression_runtime/config/facial_gestures.yaml 查找。

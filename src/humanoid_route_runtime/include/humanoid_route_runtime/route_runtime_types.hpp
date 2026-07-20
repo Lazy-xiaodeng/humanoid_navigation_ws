@@ -113,6 +113,8 @@ struct RouteRuntimeConfig
   double blockage_pose_delta_deadzone{0.10};
   double blockage_recovery_velocity_threshold{0.15};
   double blockage_recovery_confirm_sec{1.0};
+  bool obstacle_block_require_sensor_confirmation{true};
+  double obstacle_block_sensor_timeout_sec{1.0};
   bool obstacle_wait_enable{true};
   double obstacle_wait_push_interval_sec{4.0};
   int obstacle_clear_required_frames{5};

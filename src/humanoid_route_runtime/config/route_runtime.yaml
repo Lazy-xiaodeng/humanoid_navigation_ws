@@ -41,6 +41,12 @@ navigation_state_manager_cpp:
     # 解除阻塞需要连续确认的时间，单位秒。
     blockage_recovery_confirm_sec: 1.0
 
+    # 低速只表示“停滞候选”；ROI 或前方 costmap 至少一个确认有障碍后才停车等待。
+    obstacle_block_require_sensor_confirmation: true
+
+    # 用于进入障碍等待确认的 ROI/costmap 最大年龄，单位秒。
+    obstacle_block_sensor_timeout_sec: 1.0
+
     # 是否启用障碍等待恢复状态机；false 时 Nav2 失败会直接进入失败流程。
     obstacle_wait_enable: true
 

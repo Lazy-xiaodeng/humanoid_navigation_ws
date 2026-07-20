@@ -140,6 +140,7 @@ fixed_probe_bins=(
   install/humanoid_robot_gateway_runtime/lib/humanoid_robot_gateway_runtime/gesture_sync_probe
   install/humanoid_robot_gateway_runtime/lib/humanoid_robot_gateway_runtime/motion_controller_probe
   install/humanoid_robot_gateway_runtime/lib/humanoid_robot_gateway_runtime/robot_ws_client_probe
+  install/humanoid_route_runtime/lib/humanoid_route_runtime/obstacle_confirmation_probe
 )
 for probe in "${fixed_probe_bins[@]}"; do
   run_probe "${probe}" "${WORKSPACE}/${probe}"

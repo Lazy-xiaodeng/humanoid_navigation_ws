@@ -24,9 +24,11 @@
 #include <chrono>
 #include <condition_variable>
 #include <fstream>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <regex>
+#include <set>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -48,6 +50,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joy.hpp"
 #include "std_msgs/msg/string.hpp"
+#include "std_srvs/srv/set_bool.hpp"
 #include "yaml-cpp/yaml.h"
 
 namespace humanoid_robot_gateway_runtime
@@ -189,6 +192,8 @@ public:
     joy_pub_ = create_publisher<sensor_msgs::msg::Joy>(config_.joy_raw_topic, 10);
     action_result_pub_ = create_publisher<std_msgs::msg::String>(config_.robot_action_result_topic, 10);
     gesture_update_pub_ = create_publisher<std_msgs::msg::String>(config_.gesture_list_updated_topic, 10);
+    action_interlock_client_ = create_client<std_srvs::srv::SetBool>(
+      config_.navigation_action_interlock_service);
 
     // WebSocket 客户端只负责连接和收发原始机器人协议。
     // 所有业务分发都回到 handle_robot_ws_event()，避免网络层直接发布 ROS topic。
@@ -460,10 +465,6 @@ private:
       RCLCPP_WARN(get_logger(), "机器人控制命令解析失败: %s", parsed.reason.c_str());
       return;
     }
-    if (!parsed.should_start_motion) {
-      return;
-    }
-
     std::string robot_state;
     bool executing = false;
     {
@@ -509,7 +510,41 @@ private:
     std::string result_code = "unknown";
     std::string result_message = "动作未完成";
     std::string notify_json = "{}";
-    bool walk_ready = false;
+    std::string interlock_message;
+    const bool interlock_acquired = set_navigation_action_interlock(true, &interlock_message);
+    if (!interlock_acquired) {
+      std::string rollback_message;
+      set_navigation_action_interlock(false, &rollback_message);
+      finish_motion_result(
+        decision,
+        started_at,
+        "rejected",
+        "navigation_interlock_failed",
+        interlock_message.empty() ? "导航动作互锁服务不可用" : interlock_message,
+        notify_json,
+        is_walk_state(current_robot_state()));
+      return;
+    }
+
+    auto finish_and_release =
+      [this, &decision, started_at, &notify_json, interlock_acquired](
+      const std::string & status,
+      const std::string & code,
+      const std::string & message) {
+        bool ready = ensure_walk_mode_after_motion();
+        finish_motion_result(
+          decision, started_at, status, code, message, notify_json, ready);
+        if (interlock_acquired && ready) {
+          std::string release_message;
+          if (!set_navigation_action_interlock(false, &release_message)) {
+            RCLCPP_ERROR(
+              get_logger(), "动作完成后释放导航互锁失败: %s", release_message.c_str());
+          }
+        } else if (interlock_acquired) {
+          RCLCPP_ERROR(
+            get_logger(), "动作结束但机器人未确认回到 Walk，保持导航动作互锁");
+        }
+      };
 
     try {
       std::string state = current_robot_state();
@@ -517,7 +552,7 @@ private:
         if (!config_.motion_allow_enter_menu) {
           result_code = "enter_menu_disabled";
           result_message = "动作执行需要切换 Menu，但 motion_allow_enter_menu 未开启";
-          finish_motion_result(decision, started_at, final_status, result_code, result_message, notify_json, walk_ready);
+          finish_and_release(final_status, result_code, result_message);
           return;
         }
         const auto mode_result = ws_client_->send_command(
@@ -527,13 +562,13 @@ private:
         if (!mode_result.ok || get_json_field_string(mode_result.response_json, "result") != "success") {
           result_code = mode_result.ok ? "enter_menu_failed" : mode_result.error;
           result_message = "切换动作库模式失败";
-          finish_motion_result(decision, started_at, final_status, result_code, result_message, notify_json, walk_ready);
+          finish_and_release(final_status, result_code, result_message);
           return;
         }
         if (!wait_for_robot_state("Menu", 3.0)) {
           result_code = "enter_menu_timeout";
           result_message = "未成功进入动作库模式";
-          finish_motion_result(decision, started_at, final_status, result_code, result_message, notify_json, walk_ready);
+          finish_and_release(final_status, result_code, result_message);
           return;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
@@ -555,7 +590,7 @@ private:
       if (!exec_result.ok || result != "success") {
         result_code = exec_result.ok ? (result.empty() ? "dispatch_failed" : result) : exec_result.error;
         result_message = "动作下发失败: " + result_code;
-        finish_motion_result(decision, started_at, final_status, result_code, result_message, notify_json, walk_ready);
+        finish_and_release(final_status, result_code, result_message);
         return;
       }
 
@@ -575,24 +610,62 @@ private:
         result_message = "等待动作完成通知超时";
       }
 
-      if (config_.motion_allow_return_walk && !is_walk_state(current_robot_state())) {
-        const auto walk_result = ws_client_->send_command(
-          "request_set_motion_engine",
-          motion_engine_mode_json(0),
-          config_.command_timeout_sec);
-        if (walk_result.ok && get_json_field_string(walk_result.response_json, "result") == "success") {
-          walk_ready = wait_for_robot_state("Walk", 3.0);
-        }
-      } else {
-        walk_ready = is_walk_state(current_robot_state());
-      }
     } catch (const std::exception & ex) {
       final_status = "failed";
       result_code = "motion_task_exception";
       result_message = ex.what();
     }
 
-    finish_motion_result(decision, started_at, final_status, result_code, result_message, notify_json, walk_ready);
+    finish_and_release(final_status, result_code, result_message);
+  }
+
+  bool ensure_walk_mode_after_motion()
+  {
+    if (is_walk_state(current_robot_state())) {
+      return true;
+    }
+    if (!config_.motion_allow_return_walk) {
+      return false;
+    }
+    const auto walk_result = ws_client_->send_command(
+      "request_set_motion_engine",
+      motion_engine_mode_json(0),
+      config_.command_timeout_sec);
+    if (!walk_result.ok || get_json_field_string(walk_result.response_json, "result") != "success") {
+      return false;
+    }
+    return wait_for_robot_state("Walk", 3.0);
+  }
+
+  bool set_navigation_action_interlock(const bool enabled, std::string * message)
+  {
+    if (!action_interlock_client_->wait_for_service(std::chrono::seconds(1))) {
+      if (message != nullptr) {
+        *message = "导航动作互锁服务不可用";
+      }
+      return false;
+    }
+    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+    request->data = enabled;
+    auto future = action_interlock_client_->async_send_request(request);
+    if (future.wait_for(std::chrono::seconds(4)) != std::future_status::ready) {
+      if (message != nullptr) {
+        *message = "等待导航动作互锁响应超时";
+      }
+      return false;
+    }
+    try {
+      const auto response = future.get();
+      if (message != nullptr) {
+        *message = response ? response->message : "导航动作互锁无响应";
+      }
+      return response && response->success;
+    } catch (const std::exception & ex) {
+      if (message != nullptr) {
+        *message = std::string("导航动作互锁调用异常: ") + ex.what();
+      }
+      return false;
+    }
   }
 
   void finish_motion_result(
@@ -748,6 +821,7 @@ private:
     // 动作时长是可选增强信息：用于更准确地设置等待完成超时。
     // 解析失败不会影响节点运行，只会回到默认超时参数。
     motion_controller_.clear_motion_expected_durations();
+    motion_controller_.replace_available_motion_names({});
     if (yaml_path.empty()) {
       return;
     }
@@ -758,17 +832,25 @@ private:
         return;
       }
       std::size_t loaded = 0;
+      std::set<std::string> available_motion_names;
       for (const auto & action : actions) {
         const std::string motion_name = action.first.as<std::string>();
+        if (!motion_name.empty()) {
+          available_motion_names.insert(motion_name);
+        }
         const auto duration = extract_motion_duration(motion_name, action.second);
         if (duration > 0.0) {
           motion_controller_.set_motion_expected_duration(motion_name, duration);
           ++loaded;
         }
       }
+      motion_controller_.replace_available_motion_names(available_motion_names);
       if (loaded > 0) {
         RCLCPP_INFO(get_logger(), "已加载 %zu 个动作时长提示。", loaded);
       }
+      RCLCPP_INFO(
+        get_logger(), "已加载机器人 OTA 动作库，共 %zu 个有效动作。",
+        motion_controller_.available_motion_count());
     } catch (const std::exception & ex) {
       RCLCPP_WARN(get_logger(), "解析动作库时长失败: %s", ex.what());
     }
@@ -866,6 +948,7 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::Joy>::SharedPtr joy_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr action_result_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr gesture_update_pub_;
+  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr action_interlock_client_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr app_robot_control_sub_;
   rclcpp::TimerBase::SharedPtr walk_timer_;

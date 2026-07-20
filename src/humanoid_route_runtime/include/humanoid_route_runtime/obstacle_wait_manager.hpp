@@ -38,6 +38,19 @@ struct ObstacleWaitDecision
   int max_cost{0};
 };
 
+struct ObstacleConfirmationDecision
+{
+  bool confirmed{false};
+  bool roi_available{false};
+  bool roi_blocked{false};
+  bool costmap_available{false};
+  bool costmap_blocked{false};
+  int costmap_occupied_cells{0};
+  int costmap_sample_cells{0};
+  int costmap_max_cost{0};
+  std::string reason{"low_speed_unconfirmed"};
+};
+
 class ObstacleWaitManager
 {
 public:
@@ -58,6 +71,11 @@ public:
   double current_required_clear_duration(const RouteRuntimeConfig & config) const;
 
   int recent_false_resume_count() const;
+
+  ObstacleConfirmationDecision confirm_obstacle(
+    double now,
+    const RouteRuntimeConfig & config,
+    const EnvironmentRuntimeState & environment) const;
 
 private:
   bool analyze_front_window(

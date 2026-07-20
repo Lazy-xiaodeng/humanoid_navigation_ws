@@ -79,3 +79,6 @@ robot_gateway_node:
 
     # APP 机器人控制命令输入话题。
     app_robot_control_topic: "/app/robot_control"
+
+    # 有效动作执行前暂停活动导航，动作完成且确认回到 Walk 后释放并恢复原路线。
+    navigation_action_interlock_service: "/navigation/robot_action_interlock"

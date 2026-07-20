@@ -39,6 +39,8 @@ void declare_robot_gateway_parameters(rclcpp::Node & node, const RobotGatewayCon
   node.declare_parameter<std::string>("gesture_list_updated_topic", defaults.gesture_list_updated_topic);
   node.declare_parameter<std::string>("cmd_vel_topic", defaults.cmd_vel_topic);
   node.declare_parameter<std::string>("app_robot_control_topic", defaults.app_robot_control_topic);
+  node.declare_parameter<std::string>(
+    "navigation_action_interlock_service", defaults.navigation_action_interlock_service);
 }
 
 RobotGatewayConfig load_robot_gateway_config(rclcpp::Node & node, const RobotGatewayConfig & defaults)
@@ -68,6 +70,8 @@ RobotGatewayConfig load_robot_gateway_config(rclcpp::Node & node, const RobotGat
   node.get_parameter("gesture_list_updated_topic", config.gesture_list_updated_topic);
   node.get_parameter("cmd_vel_topic", config.cmd_vel_topic);
   node.get_parameter("app_robot_control_topic", config.app_robot_control_topic);
+  node.get_parameter(
+    "navigation_action_interlock_service", config.navigation_action_interlock_service);
   return config;
 }
 

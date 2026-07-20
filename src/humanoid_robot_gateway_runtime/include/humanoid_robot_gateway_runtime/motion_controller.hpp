@@ -12,6 +12,8 @@
 #pragma once
 
 #include <map>
+#include <memory>
+#include <set>
 #include <string>
 
 #include "humanoid_robot_gateway_runtime/robot_gateway_types.hpp"
@@ -65,12 +67,15 @@ public:
 
   void set_motion_expected_duration(const std::string & motion_name, double duration_sec);
   void clear_motion_expected_durations();
+  void replace_available_motion_names(const std::set<std::string> & motion_names);
+  std::size_t available_motion_count() const;
   double get_motion_completion_timeout(const std::string & motion_name) const;
   double get_motion_task_timeout(const std::string & motion_name) const;
 
 private:
   RobotGatewayConfig config_;
   std::map<std::string, double> motion_expected_durations_;
+  std::shared_ptr<const std::set<std::string>> available_motion_names_;
 };
 
 }  // namespace humanoid_robot_gateway_runtime
