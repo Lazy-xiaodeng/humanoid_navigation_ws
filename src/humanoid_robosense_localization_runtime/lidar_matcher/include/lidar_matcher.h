@@ -83,6 +83,13 @@ public:
     matching_detail_ = set_value;
   }
 
+  void setRecoveryAnchor(const Pose &pose) {
+    recovery_anchor_pose_ = pose;
+    recovery_anchor_pose_.q.normalize();
+    recovery_anchor_active_ = recovery_pose_prior_enable_;
+  }
+  void clearRecoveryAnchor() { recovery_anchor_active_ = false; }
+
   void addCloudInfoToVec(std::vector<int> &src_cloud_id_ve,
                          PointCloudT::Ptr &tgt_cloud_info_vec, uint &insert_loc,
                          const int &src_point_id, const PointT &tgt_point,
@@ -155,7 +162,18 @@ protected:
   bool check_delta_pose_ = true;
   double max_yaw_speed_per_sec_ = 50; // deg/s
   double max_xy_speed_per_sec_ = 30;  // m/s
+  double recovery_max_yaw_speed_per_sec_{40.0};
+  double recovery_max_xy_speed_per_sec_{10.0};
   bool debug_print_{false};
+
+  bool recovery_pose_prior_enable_{false};
+  double recovery_pose_prior_duration_sec_{4.0};
+  double recovery_pose_prior_xy_weight_{10.0};
+  double recovery_pose_prior_z_weight_{100.0};
+  double recovery_pose_prior_roll_pitch_weight_{100.0};
+  double recovery_pose_prior_yaw_weight_{10.0};
+  bool recovery_anchor_active_{false};
+  Pose recovery_anchor_pose_;
 
   AlignInfo align_info_;
 
@@ -190,6 +208,8 @@ private:
   // iteration loop
   bool addResidualBlocksLoop(const std::shared_ptr<CeresSolver<7>> &solver);
   bool solve(const std::shared_ptr<CeresSolver<7>> &solver);
+  void addRecoveryPosePrior(const std::shared_ptr<CeresSolver<7>> &solver,
+                            double lidar_time);
   void updateTempResult(const std::shared_ptr<CeresSolver<7>> &solver,
                         const int &iter_times);
   void updateFinalResult(const std::shared_ptr<CeresSolver<7>> &solver,
@@ -230,6 +250,8 @@ private:
   //// Eigen optimization
   bool addResidualBlocksLoopEigen(const std::shared_ptr<EigenSolver<7>> &solver);
   bool solveEigen(const std::shared_ptr<EigenSolver<7>> &solver);
+  void addRecoveryPosePriorEigen(
+      const std::shared_ptr<EigenSolver<7>> &solver, double lidar_time);
   void updateTempResultEigen(const std::shared_ptr<EigenSolver<7>> &solver,const int &iter_times);
   void updateFinalResultEigen(const std::shared_ptr<EigenSolver<7>> &solver,const Pose &init_pose, Pose &result_pose);
 };

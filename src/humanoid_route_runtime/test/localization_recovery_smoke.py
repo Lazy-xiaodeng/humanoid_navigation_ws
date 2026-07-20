@@ -30,9 +30,10 @@ def waypoint(waypoint_id: str, role: str, x: float) -> dict:
 
 
 class LocalizationRecoverySmoke(Node):
-    def __init__(self, all_transits_passed: bool):
+    def __init__(self, all_transits_passed: bool, integration_mode: str = "enforce"):
         super().__init__("localization_recovery_smoke")
         self.all_transits_passed = all_transits_passed
+        self.integration_mode = integration_mode
         self.command_pub = self.create_publisher(String, "/navigation/requests", 10)
         self.odom_pub = self.create_publisher(Odometry, "/odom", 10)
         self.robot_pub = self.create_publisher(String, "/robot_status_raw", 10)
@@ -45,6 +46,7 @@ class LocalizationRecoverySmoke(Node):
         self.phase = "startup_required"
         self.healthy_publish_count = 0
         self.healthy_count_at_resume = 0
+        self.ro_verification_epoch = 0
         self.zero_cmd_count = 0
         self.through_goal_count = 0
         self.through_cancel_count = 0
@@ -134,7 +136,12 @@ class LocalizationRecoverySmoke(Node):
                 "control_ready_for_navigation": True,
             }
         })))
-        self.localization_pub.publish(String(data=json.dumps(self.localization_payload())))
+        localization = self.localization_payload()
+        if localization.get("pose_trusted") and localization.get("can_start_navigation"):
+            self.ro_verification_epoch += 1
+        localization["ro_verification_epoch"] = self.ro_verification_epoch
+        localization["integration_mode"] = self.integration_mode
+        self.localization_pub.publish(String(data=json.dumps(localization)))
         self.map_pub.publish(String(data=json.dumps({
             "data": {
                 "current_map_id": "hall",

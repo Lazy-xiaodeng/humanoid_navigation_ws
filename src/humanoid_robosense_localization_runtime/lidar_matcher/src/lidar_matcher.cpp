@@ -291,7 +291,23 @@ bool LidarMatcher::loadConfig(const YAML::Node &config_node) {
                    30); ////50
   yamlRead<double>(config_node, "max_xy_speed_per_sec", max_xy_speed_per_sec_,
                    6); ////30
+  yamlRead<double>(config_node, "recovery_max_yaw_speed_per_sec",
+                   recovery_max_yaw_speed_per_sec_, 40.0);
+  yamlRead<double>(config_node, "recovery_max_xy_speed_per_sec",
+                   recovery_max_xy_speed_per_sec_, 10.0);
   yamlRead<bool>(config_node, "debug_print", debug_print_, false);
+  yamlRead<bool>(config_node, "recovery_pose_prior_enable",
+                 recovery_pose_prior_enable_, false);
+  yamlRead<double>(config_node, "recovery_pose_prior_duration_sec",
+                   recovery_pose_prior_duration_sec_, 4.0);
+  yamlRead<double>(config_node, "recovery_pose_prior_xy_weight",
+                   recovery_pose_prior_xy_weight_, 10.0);
+  yamlRead<double>(config_node, "recovery_pose_prior_z_weight",
+                   recovery_pose_prior_z_weight_, 100.0);
+  yamlRead<double>(config_node, "recovery_pose_prior_roll_pitch_weight",
+                   recovery_pose_prior_roll_pitch_weight_, 100.0);
+  yamlRead<double>(config_node, "recovery_pose_prior_yaw_weight",
+                   recovery_pose_prior_yaw_weight_, 10.0);
 
   // fool proofing, check validation
   checkParamValidity(min_map_size_, NAME(min_map_size_), 0, 0, 150000);
@@ -356,6 +372,7 @@ bool LidarMatcherCeres::align(const PointCloudT::Ptr &source_cloud,
     if (!addResidualBlocksLoop(solver)) {
       return false;
     }
+    addRecoveryPosePrior(solver, lidar_time);
 
     if (!solve(solver)) {
       return false;
@@ -388,6 +405,31 @@ bool LidarMatcherCeres::align(const PointCloudT::Ptr &source_cloud,
   reset();
   result_pose.timestamp = init_pose.timestamp;
   return true;
+}
+
+void LidarMatcherCeres::addRecoveryPosePrior(
+    const std::shared_ptr<CeresSolver<7>> &solver, double lidar_time) {
+  if (!recovery_anchor_active_) {
+    return;
+  }
+  const double elapsed = lidar_time - recovery_anchor_pose_.timestamp;
+  if (elapsed < -0.2 || elapsed > recovery_pose_prior_duration_sec_) {
+    recovery_anchor_active_ = false;
+    return;
+  }
+
+  Pose current_pose = lidar_pose_;
+  Pose accumulated_delta = total_delta_pose_;
+  current_pose.updatePose(accumulated_delta);
+  const Eigen::Matrix4d target_delta =
+      recovery_anchor_pose_.transform() * current_pose.transform().inverse();
+  const Eigen::Vector3d target_w =
+      Sophus::SO3d(target_delta.block<3, 3>(0, 0)).log();
+  const Eigen::Vector3d target_t = target_delta.block<3, 1>(0, 3);
+  solver->addPosePrior(
+      target_w, target_t, recovery_pose_prior_xy_weight_,
+      recovery_pose_prior_z_weight_, recovery_pose_prior_roll_pitch_weight_,
+      recovery_pose_prior_yaw_weight_);
 }
 
 bool LidarMatcherCeres::addResidualBlocksLoop(
@@ -495,10 +537,14 @@ void LidarMatcherCeres::updateFinalResult(
   if (check_delta_pose_) {
     double total_delta_angle =
         Eigen::AngleAxisd(total_delta_pose_.q).angle() * R2D;
+    const double yaw_speed_limit = recovery_anchor_active_
+        ? recovery_max_yaw_speed_per_sec_ : max_yaw_speed_per_sec_;
+    const double xy_speed_limit = recovery_anchor_active_
+        ? recovery_max_xy_speed_per_sec_ : max_xy_speed_per_sec_;
     bool yaw_condition =
-        abs(total_delta_angle) / time_diff > max_yaw_speed_per_sec_;
+        abs(total_delta_angle) / time_diff > yaw_speed_limit;
     double total_delta_xy = total_delta_pose_.xyz.norm();
-    bool xy_condition = abs(total_delta_xy) / time_diff > max_xy_speed_per_sec_;
+    bool xy_condition = abs(total_delta_xy) / time_diff > xy_speed_limit;
 
     if (yaw_condition || xy_condition) {
       LERROR << "updateFinalResult: Large delta Lidar pose, delta yaw: "
@@ -612,6 +658,7 @@ bool LidarMatcherEigen::align(const PointCloudT::Ptr &source_cloud,
     if (!addResidualBlocksLoopEigen(solver)) {
       return false;
     }
+    addRecoveryPosePriorEigen(solver, lidar_time);
 
     if (!solveEigen(solver)) {
       return false;
@@ -644,6 +691,31 @@ bool LidarMatcherEigen::align(const PointCloudT::Ptr &source_cloud,
   reset();
   result_pose.timestamp = init_pose.timestamp;
   return true;
+}
+
+void LidarMatcherEigen::addRecoveryPosePriorEigen(
+    const std::shared_ptr<EigenSolver<7>> &solver, double lidar_time) {
+  if (!recovery_anchor_active_) {
+    return;
+  }
+  const double elapsed = lidar_time - recovery_anchor_pose_.timestamp;
+  if (elapsed < -0.2 || elapsed > recovery_pose_prior_duration_sec_) {
+    recovery_anchor_active_ = false;
+    return;
+  }
+
+  Pose current_pose = lidar_pose_;
+  Pose accumulated_delta = total_delta_pose_;
+  current_pose.updatePose(accumulated_delta);
+  const Eigen::Matrix4d target_delta =
+      recovery_anchor_pose_.transform() * current_pose.transform().inverse();
+  const Eigen::Vector3d target_w =
+      Sophus::SO3d(target_delta.block<3, 3>(0, 0)).log();
+  const Eigen::Vector3d target_t = target_delta.block<3, 1>(0, 3);
+  solver->addPosePrior(
+      target_w, target_t, recovery_pose_prior_xy_weight_,
+      recovery_pose_prior_z_weight_, recovery_pose_prior_roll_pitch_weight_,
+      recovery_pose_prior_yaw_weight_);
 }
 
 bool LidarMatcherEigen::addResidualBlocksLoopEigen(const std::shared_ptr<EigenSolver<7>> &solver) {
@@ -727,10 +799,14 @@ bool LidarMatcherEigen::solveEigen(const std::shared_ptr<EigenSolver<7>> &solver
   if (check_delta_pose_) {
     double total_delta_angle =
         Eigen::AngleAxisd(total_delta_pose_.q).angle() * R2D;
+    const double yaw_speed_limit = recovery_anchor_active_
+        ? recovery_max_yaw_speed_per_sec_ : max_yaw_speed_per_sec_;
+    const double xy_speed_limit = recovery_anchor_active_
+        ? recovery_max_xy_speed_per_sec_ : max_xy_speed_per_sec_;
     bool yaw_condition =
-        abs(total_delta_angle) / time_diff > max_yaw_speed_per_sec_;
+        abs(total_delta_angle) / time_diff > yaw_speed_limit;
     double total_delta_xy = total_delta_pose_.xyz.norm();
-    bool xy_condition = abs(total_delta_xy) / time_diff > max_xy_speed_per_sec_;
+    bool xy_condition = abs(total_delta_xy) / time_diff > xy_speed_limit;
 
     if (yaw_condition || xy_condition) {
       LERROR << "updateFinalResult: Large delta Lidar pose, delta yaw: "

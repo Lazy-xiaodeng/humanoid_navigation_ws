@@ -4,7 +4,7 @@
 # 目的：
 #   1. 优先使用 /home/ubuntu/nav_drift_test 下的真实 bag。
 #   2. 使用 /fast_lio/cloud_registered + /odom registered_world 链路。
-#   3. 使用 /robot_realpose 作为每帧参考位姿，计算真实平移/yaw 误差。
+#   3. 使用 /robot_realpose 作为旧 TF 链路参考，计算平移/yaw 差异；它不是外部独立真值。
 #   4. 对 hall.pcd 和 hall_open3d_grounded.pcd 以及 none/icp/gicp/ndt 做小规模基线 sweep。
 #
 # 注意：

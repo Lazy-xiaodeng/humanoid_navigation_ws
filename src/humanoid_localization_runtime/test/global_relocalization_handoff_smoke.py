@@ -37,6 +37,11 @@ class Probe(Node):
             String, "/localization/prior_map_odom_bridge_status", 10
         )
         self.ro_status_pub = self.create_publisher(String, "/prior_localization/robosense_status", 10)
+        self.ro_refined_pub = self.create_publisher(
+            PoseStamped,
+            "/prior_localization/global_relocalization_refined_map_to_odom",
+            10,
+        )
         self.global_status_pub = self.create_publisher(
             String, "/global_relocalization/recovery_status", latched
         )
@@ -85,6 +90,9 @@ def spin_until(executor, condition, timeout, label):
 
 
 def main():
+    # Keep the smoke test isolated from a navigation stack that may already be
+    # running on the workstation with the same node and topic names.
+    os.environ["ROS_DOMAIN_ID"] = os.environ.get("TEST_ROS_DOMAIN_ID", "221")
     source_root = pathlib.Path(__file__).parents[2]
     coordinator_class = load_class(
         pathlib.Path(__file__).parents[1] / "scripts" / "global_relocalization_coordinator.py",
@@ -103,9 +111,11 @@ def main():
     )
     rclpy.init()
     coordinator = coordinator_class()
+    coordinator.integration_mode = "enforce"
     coordinator.dry_run = False
     coordinator.auto_apply = True
     supervisor = supervisor_class()
+    supervisor.integration_mode = "enforce"
     probe = Probe()
     executor = SingleThreadedExecutor()
     for node in (coordinator, supervisor, probe):
@@ -155,6 +165,23 @@ def main():
             },
         )
         spin_until(executor, lambda: bool(probe.ro_initialposes), 3.0, "RO recovery pose")
+        refined_stamp = coordinator.get_clock().now().to_msg()
+        refined_map_odom = PoseStamped()
+        refined_map_odom.header.stamp = refined_stamp
+        refined_map_odom.header.frame_id = "map"
+        refined_map_odom.pose.position.x = 0.78
+        refined_map_odom.pose.orientation.w = 1.0
+        probe.ro_refined_pub.publish(refined_map_odom)
+        probe.publish_json(
+            probe.ro_status_pub,
+            {
+                "status": "NORMAL",
+                "source": "ro_trusted_global_anchor_commit",
+                "event": "global_relocalization_refined_commit",
+                "anchor_stamp": float(stamp.sec) + float(stamp.nanosec) * 1e-9,
+                "stamp": float(refined_stamp.sec) + float(refined_stamp.nanosec) * 1e-9,
+            },
+        )
         spin_until(
             executor,
             lambda: any(item.get("state") == "verifying" for item in probe.events),
@@ -164,10 +191,16 @@ def main():
         if any(item.get("pose_trusted") for item in probe.trust[-3:]):
             raise RuntimeError("localization trusted before fresh RO verification")
 
-        for _ in range(5):
+        base_stamp = float(refined_stamp.sec) + float(refined_stamp.nanosec) * 1e-9
+        for index in range(5):
             probe.publish_json(
                 probe.ro_status_pub,
-                {"status": "NORMAL", "source": "ro_normal_match", "event": "pose_update"},
+                {
+                    "status": "NORMAL",
+                    "source": "ro_normal_match",
+                    "event": "pose_update",
+                    "stamp": base_stamp + 0.1 * (index + 1),
+                },
             )
             executor.spin_once(timeout_sec=0.08)
         spin_until(

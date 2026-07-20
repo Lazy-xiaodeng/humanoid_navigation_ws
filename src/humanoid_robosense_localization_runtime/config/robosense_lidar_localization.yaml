@@ -118,6 +118,21 @@ status_topic: "/prior_localization/robosense_status"
 # 恢复协调器审核通过后的全局初值，与 RViz 手动初值分开审计。
 global_relocalization_pose_topic: "/prior_localization/global_relocalization_pose"
 
+# RO 对全局初值完成连续精匹配后输出的 refined map->odom。只有协调器会把它交给 bridge。
+global_relocalization_refined_map_odom_topic: "/prior_localization/global_relocalization_refined_map_to_odom"
+
+# anchor 释放后重新统计的连续 NORMAL scan-to-map 帧数。
+global_relocalization_commit_required_frames: 5
+
+# 注入后先等待强先验释放和独立收敛，再开始累计 commit 帧，单位 s。
+global_relocalization_commit_min_elapsed_sec: 2.0
+
+# 上述连续精匹配结果相对首帧允许的最大 map->odom 平移离散度，单位 m。
+global_relocalization_commit_consistency_xy_m: 0.05
+
+# 上述连续精匹配结果相对首帧允许的最大 map->odom yaw 离散度，单位 deg。
+global_relocalization_commit_consistency_yaw_deg: 3.0
+
 # true：发布 odom_cache_topic；接入 navigation2_robosense_lidar.launch.py 时必须开启。
 publish_odom_cache: true
 
@@ -190,6 +205,18 @@ lidar_vehicle_rpy: [-1.5707963268, 0.0, 1.5707963268]
 # scan-to-map 优化器参数
 # =========================
 lidar_matcher:
+  # 恢复阶段固定全局种子先验。关闭时不改变正常定位行为。
+  recovery_pose_prior_enable: true
+  recovery_pose_prior_duration_sec: 4.0
+  recovery_pose_prior_xy_weight: 10.0
+  recovery_pose_prior_z_weight: 100.0
+  recovery_pose_prior_roll_pitch_weight: 100.0
+  recovery_pose_prior_yaw_weight: 10.0
+  # 全局初值通常在对应 scan 之后到达；只在 recovery anchor 活跃期允许首帧更大的精匹配修正。
+  recovery_max_yaw_speed_per_sec: 40.0
+  recovery_max_xy_speed_per_sec: 10.0
+  # 导航第 5 帧放行后再多保留 1 帧，避免交接瞬间硬切先验。
+  recovery_pose_prior_release_normal_frames: 6
   # 地图最少点数。地图点数低于该值时不进行定位。
   min_map_size: 50000
 

@@ -22,6 +22,7 @@ Copyright 2025 RoboSense Technology Co., Ltd
 #include <limits>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string>
 
@@ -32,6 +33,7 @@ Copyright 2025 RoboSense Technology Co., Ltd
 #endif
 
 #ifdef ROS2
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -50,6 +52,8 @@ ros::Publisher lidar_pose_pub;
 rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr lidar_pose_pub;
 rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_cache_pub;
 rclcpp::Publisher<std_msgs::msg::String>::SharedPtr localization_status_pub;
+rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr
+    global_relocalization_refined_map_odom_pub;
 std::shared_ptr<tf2_ros::TransformBroadcaster> map_odom_tf_broadcaster;
 #endif
 
@@ -72,7 +76,20 @@ std::string odom_cache_topic = "/prior_localization/robosense_input_odom";
 std::string abs_pose_topic = "/prior_localization/manual_initialpose";
 std::string global_relocalization_pose_topic =
     "/prior_localization/global_relocalization_pose";
+std::string global_relocalization_refined_map_odom_topic =
+    "/prior_localization/global_relocalization_refined_map_to_odom";
 std::string status_topic = "/prior_localization/robosense_status";
+int global_relocalization_commit_required_frames = 5;
+double global_relocalization_commit_min_elapsed_sec = 2.0;
+double global_relocalization_commit_consistency_xy_m = 0.05;
+double global_relocalization_commit_consistency_yaw_deg = 3.0;
+std::mutex global_relocalization_commit_mutex;
+bool global_relocalization_anchor_active = false;
+bool global_relocalization_commit_sent = false;
+double global_relocalization_anchor_stamp = 0.0;
+double global_relocalization_last_normal_stamp = 0.0;
+int global_relocalization_normal_frames = 0;
+std::optional<Eigen::Matrix4d> global_relocalization_first_map_odom;
 Eigen::Vector3d fastlio_odom_camera_xyz = Eigen::Vector3d::Zero();
 Eigen::Quaterniond fastlio_odom_camera_q(0.5, -0.5, -0.5, 0.5);
 Eigen::Vector3d fastlio_body_base_xyz(0.004, 1.215, 0.072);
@@ -110,6 +127,14 @@ Eigen::Quaterniond loadQuatXyzw(const YAML::Node &node,
   Eigen::Quaterniond q(values[3], values[0], values[1], values[2]);
   q.normalize();
   return q;
+}
+
+double normalizedAngle(double angle) {
+  return std::atan2(std::sin(angle), std::cos(angle));
+}
+
+double yawFromTransform(const Eigen::Matrix4d &transform) {
+  return std::atan2(transform(1, 0), transform(0, 0));
 }
 
 const char *statusName(STATUS status) {
@@ -207,6 +232,26 @@ void loadNodeConfig(const YAML::Node &config_node) {
   if (config_node["global_relocalization_pose_topic"]) {
     global_relocalization_pose_topic =
         config_node["global_relocalization_pose_topic"].as<std::string>();
+  }
+  if (config_node["global_relocalization_refined_map_odom_topic"]) {
+    global_relocalization_refined_map_odom_topic =
+        config_node["global_relocalization_refined_map_odom_topic"].as<std::string>();
+  }
+  if (config_node["global_relocalization_commit_required_frames"]) {
+    global_relocalization_commit_required_frames = std::max(
+        1, config_node["global_relocalization_commit_required_frames"].as<int>());
+  }
+  if (config_node["global_relocalization_commit_min_elapsed_sec"]) {
+    global_relocalization_commit_min_elapsed_sec = std::max(
+        0.0, config_node["global_relocalization_commit_min_elapsed_sec"].as<double>());
+  }
+  if (config_node["global_relocalization_commit_consistency_xy_m"]) {
+    global_relocalization_commit_consistency_xy_m = std::max(
+        0.0, config_node["global_relocalization_commit_consistency_xy_m"].as<double>());
+  }
+  if (config_node["global_relocalization_commit_consistency_yaw_deg"]) {
+    global_relocalization_commit_consistency_yaw_deg = std::max(
+        0.0, config_node["global_relocalization_commit_consistency_yaw_deg"].as<double>());
   }
   if (config_node["status_topic"]) {
     status_topic = config_node["status_topic"].as<std::string>();
@@ -628,6 +673,129 @@ void absPoseCallback(
       abs_pose_topic.c_str(), pose.xyz.x(), pose.xyz.y(), pose.xyz.z());
 }
 
+bool computeMapToOdom(const Pose &map_base_pose, Eigen::Matrix4d &map_odom) {
+  Pose odom_base_pose;
+  if (!interpolateCachedRelPose(map_base_pose.timestamp, odom_base_pose)) {
+    return false;
+  }
+  map_odom = map_base_pose.transform() * odom_base_pose.transform().inverse();
+  return true;
+}
+
+geometry_msgs::msg::Pose matrixToPose(const Eigen::Matrix4d &transform) {
+  geometry_msgs::msg::Pose pose;
+  pose.position.x = transform(0, 3);
+  pose.position.y = transform(1, 3);
+  pose.position.z = transform(2, 3);
+  Eigen::Quaterniond q(transform.block<3, 3>(0, 0));
+  q.normalize();
+  pose.orientation.x = q.x();
+  pose.orientation.y = q.y();
+  pose.orientation.z = q.z();
+  pose.orientation.w = q.w();
+  return pose;
+}
+
+void startGlobalRelocalizationVerification(double anchor_stamp) {
+  // 全局候选仅建立本次验证锚点，不在注入时直接等价为可发布定位。
+  std::lock_guard<std::mutex> lock(global_relocalization_commit_mutex);
+  global_relocalization_anchor_active = true;
+  global_relocalization_commit_sent = false;
+  global_relocalization_anchor_stamp = anchor_stamp;
+  global_relocalization_last_normal_stamp = 0.0;
+  global_relocalization_normal_frames = 0;
+  global_relocalization_first_map_odom.reset();
+}
+
+void verifyGlobalRelocalizationFrame(const Pose &pose) {
+  // 只统计 anchor 之后、时间戳不同的 RO NORMAL scan-to-map 帧。
+  // 等待强先验释放后，连续 refined map->odom 通过平移/yaw 一致性才提交。
+  std::lock_guard<std::mutex> lock(global_relocalization_commit_mutex);
+  if (!global_relocalization_anchor_active || global_relocalization_commit_sent) {
+    return;
+  }
+  if (
+      pose.status_code != STATUS::NORMAL || pose.source != "ro_normal_match" ||
+      pose.timestamp <= global_relocalization_anchor_stamp + 1e-6 ||
+      pose.timestamp <= global_relocalization_last_normal_stamp + 1e-6)
+  {
+    if (pose.status_code != STATUS::NORMAL) {
+      global_relocalization_normal_frames = 0;
+      global_relocalization_first_map_odom.reset();
+    }
+    return;
+  }
+
+  if (
+      pose.timestamp - global_relocalization_anchor_stamp <
+      global_relocalization_commit_min_elapsed_sec)
+  {
+    global_relocalization_last_normal_stamp = pose.timestamp;
+    global_relocalization_normal_frames = 0;
+    global_relocalization_first_map_odom.reset();
+    return;
+  }
+
+  Eigen::Matrix4d refined_map_odom;
+  if (!computeMapToOdom(pose, refined_map_odom)) {
+    global_relocalization_normal_frames = 0;
+    global_relocalization_first_map_odom.reset();
+    return;
+  }
+
+  global_relocalization_last_normal_stamp = pose.timestamp;
+  if (global_relocalization_first_map_odom) {
+    const Eigen::Vector2d delta_xy =
+        refined_map_odom.block<2, 1>(0, 3) -
+        global_relocalization_first_map_odom->block<2, 1>(0, 3);
+    const double delta_yaw_deg = std::abs(normalizedAngle(
+        yawFromTransform(refined_map_odom) -
+        yawFromTransform(*global_relocalization_first_map_odom))) * 180.0 / M_PI;
+    if (
+        delta_xy.norm() > global_relocalization_commit_consistency_xy_m ||
+        delta_yaw_deg > global_relocalization_commit_consistency_yaw_deg)
+    {
+      global_relocalization_first_map_odom = refined_map_odom;
+      global_relocalization_normal_frames = 1;
+      return;
+    }
+  } else {
+    global_relocalization_first_map_odom = refined_map_odom;
+  }
+
+  ++global_relocalization_normal_frames;
+  if (global_relocalization_normal_frames < global_relocalization_commit_required_frames) {
+    return;
+  }
+
+  geometry_msgs::msg::PoseStamped refined;
+  refined.header.frame_id = map_frame_id;
+  refined.header.stamp = rclcpp::Time(static_cast<int64_t>(pose.timestamp * 1e9));
+  refined.pose = matrixToPose(refined_map_odom);
+  global_relocalization_refined_map_odom_pub->publish(refined);
+
+  std_msgs::msg::String status;
+  std::ostringstream stream;
+  stream << "{"
+         << "\"event\":\"global_relocalization_refined_commit\","
+         << "\"status\":\"NORMAL\","
+         << "\"source\":\"ro_trusted_global_anchor_commit\","
+         << "\"stamp\":" << std::fixed << std::setprecision(6) << pose.timestamp << ","
+         << "\"anchor_stamp\":" << global_relocalization_anchor_stamp << ","
+         << "\"normal_frames\":" << global_relocalization_normal_frames << ","
+         << "\"x\":" << std::setprecision(4) << pose.xyz.x() << ","
+         << "\"y\":" << pose.xyz.y() << ","
+         << "\"z\":" << pose.xyz.z() << ","
+         << "\"map_odom_x\":" << refined_map_odom(0, 3) << ","
+         << "\"map_odom_y\":" << refined_map_odom(1, 3) << ","
+         << "\"map_odom_yaw\":" << yawFromTransform(refined_map_odom)
+         << "}";
+  status.data = stream.str();
+  localization_status_pub->publish(status);
+  global_relocalization_commit_sent = true;
+  global_relocalization_anchor_active = false;
+}
+
 void globalRelocalizationPoseCallback(
     const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg) {
   if (!lidar_localization_ptr) {
@@ -644,6 +812,7 @@ void globalRelocalizationPoseCallback(
   if (pose.timestamp <= 0.0) {
     pose.timestamp = rclcpp::Clock().now().seconds();
   }
+  startGlobalRelocalizationVerification(pose.timestamp);
   pose.setStatus(STATUS::LOW_ACCURACY);
   lidar_localization_ptr->setManualPose(pose);
   publishLocalizationStatus(&pose, "global_relocalization_pose_applied");
@@ -660,8 +829,8 @@ void publishMapToOdomTf(const Pose &map_base_pose) {
     return;
   }
 
-  Pose odom_base_pose;
-  if (!interpolateCachedRelPose(map_base_pose.timestamp, odom_base_pose)) {
+  Eigen::Matrix4d t_map_odom;
+  if (!computeMapToOdom(map_base_pose, t_map_odom)) {
     static double last_warn_time = 0.0;
     if (map_base_pose.timestamp - last_warn_time > 2.0) {
       std::cout << "skip map->odom TF: no synchronized odom pose at "
@@ -671,9 +840,6 @@ void publishMapToOdomTf(const Pose &map_base_pose) {
     return;
   }
 
-  const Eigen::Matrix4d t_map_base = map_base_pose.transform();
-  const Eigen::Matrix4d t_odom_base = odom_base_pose.transform();
-  const Eigen::Matrix4d t_map_odom = t_map_base * t_odom_base.inverse();
   Eigen::Quaterniond q_map_odom(t_map_odom.block<3, 3>(0, 0));
   q_map_odom.normalize();
 
@@ -775,6 +941,9 @@ int main(int argc, char **argv) {
       nh->create_publisher<nav_msgs::msg::Odometry>(odom_cache_topic, 100);
   localization_status_pub =
       nh->create_publisher<std_msgs::msg::String>(status_topic, 10);
+  global_relocalization_refined_map_odom_pub =
+      nh->create_publisher<geometry_msgs::msg::PoseStamped>(
+          global_relocalization_refined_map_odom_topic, 10);
   map_odom_tf_broadcaster =
       std::make_shared<tf2_ros::TransformBroadcaster>(nh);
   auto pose_func = [&](const Pose &pose) {
@@ -796,6 +965,7 @@ int main(int argc, char **argv) {
     lidar_pose_pub->publish(odom);
     publishLocalizationStatus(&pose, "pose_update");
     publishMapToOdomTf(pose);
+    verifyGlobalRelocalizationFrame(pose);
   };
   lidar_localization_ptr->registerCallback(pose_func);
 
@@ -818,6 +988,7 @@ int main(int argc, char **argv) {
   map_odom_tf_broadcaster.reset();
   lidar_pose_pub.reset();
   localization_status_pub.reset();
+  global_relocalization_refined_map_odom_pub.reset();
   lidar_localization_ptr.reset();
   nh.reset();
   if (rclcpp::ok()) {

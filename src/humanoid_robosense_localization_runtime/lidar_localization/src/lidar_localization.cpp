@@ -104,6 +104,11 @@ LidarLocalization::LidarLocalization(const YAML::Node &config_node)
 #else
   lidar_matcher_ = std::make_shared<LidarMatcherEigen>(config_node_["lidar_matcher"]);
 #endif
+  yamlRead<int>(
+      config_node_["lidar_matcher"], "recovery_pose_prior_release_normal_frames",
+      recovery_pose_prior_release_normal_frames_, 6);
+  recovery_pose_prior_release_normal_frames_ =
+      std::max(1, recovery_pose_prior_release_normal_frames_);
 }
 
 // 添加相对位姿
@@ -123,6 +128,15 @@ void LidarLocalization::setManualPose(const Pose &pose) {
   last_lidar_pose_.setStatus(status_);
   init_position_ = pose.xyz;
   init_orientation_ = pose.q;
+  if (last_lidar_pose_.source == "global_relocalization") {
+    lidar_matcher_->setRecoveryAnchor(last_lidar_pose_);
+    recovery_pose_prior_tracking_ = true;
+    recovery_pose_prior_normal_frames_ = 0;
+  } else {
+    lidar_matcher_->clearRecoveryAnchor();
+    recovery_pose_prior_tracking_ = false;
+    recovery_pose_prior_normal_frames_ = 0;
+  }
 }
 
 // 添加激光雷达数据: 主流程
@@ -257,12 +271,21 @@ void LidarLocalization::addLidarData(const pcl::PointCloud<RsPointXYZIRT>::Ptr &
           result_pose.source = "ro_normal_match";
           result_pose.setStatus(status_);
           last_lidar_pose_ = result_pose;
+          if (recovery_pose_prior_tracking_) {
+            ++recovery_pose_prior_normal_frames_;
+            if (recovery_pose_prior_normal_frames_ >=
+                recovery_pose_prior_release_normal_frames_) {
+              lidar_matcher_->clearRecoveryAnchor();
+              recovery_pose_prior_tracking_ = false;
+            }
+          }
         } else {
           status_ = STATUS::LOW_ACCURACY;
           result_pose = init_pose;
           result_pose.source = "ro_low_accuracy_prediction";
           result_pose.setStatus(status_);
           last_lidar_pose_ = result_pose;
+          recovery_pose_prior_normal_frames_ = 0;
         }
       }
       break;

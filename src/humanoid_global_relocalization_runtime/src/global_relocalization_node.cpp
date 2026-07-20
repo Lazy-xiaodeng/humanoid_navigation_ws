@@ -739,6 +739,7 @@ private:
         }
         BbsCandidate candidate;
         candidate.pose = seed_pose;
+        candidate.source = "scan_context";
         candidate.score = -match.rank;
         candidate.score_ratio = std::max(0.0, 1.0 - match.distance);
         fused.push_back(candidate);
@@ -806,6 +807,7 @@ private:
       }
       BbsCandidate candidate;
       candidate.pose = entry->map_to_base * relative.pose;
+      candidate.source = "solid";
       candidate.score = -match.rank;
       candidate.score_ratio = match.similarity;
       candidate.pre_refined = true;
@@ -956,6 +958,7 @@ private:
           }
           BbsCandidate candidate;
           candidate.pose = seed_pose;
+          candidate.source = "scan_context";
           candidate.score = -match.rank;
           candidate.score_ratio = std::max(0.0, 1.0 - match.distance);
           precision_fused.push_back(candidate);

@@ -19,6 +19,7 @@
 - `src/wait_for_tf.cpp`：TF 就绪门控节点，等待指定 TF 连续稳定后退出，供 launch 继续启动 Nav2。
 - `config/localization_runtime.yaml`：定位运行层参考参数，带中文注释，当前主启动链路仍以内联 launch 参数为准。
 - `launch/localization_runtime.launch.py`：独立调试 launch，便于单独启动定位辅助节点。
+- `docs/全局重定位灰度集成修改记录.md`：`off/shadow/enforce` 权限、链路和验证记录。
 
 ## 上下游链路
 
@@ -44,6 +45,10 @@ source /opt/ros/jazzy/setup.bash
 source install/local_setup.bash
 ros2 launch humanoid_localization_runtime localization_runtime.launch.py
 ```
+
+完整导航默认以 `shadow` 模式运行全局重定位，只计算和记录结果，不写正式 RO、bridge、TF
+或路线控制链路。只有显式设置
+`global_relocalization_integration_mode:=enforce` 才允许正式接管。
 
 ## 维护说明
 

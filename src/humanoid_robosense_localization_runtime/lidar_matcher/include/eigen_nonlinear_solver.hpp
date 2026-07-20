@@ -16,6 +16,8 @@ Copyright 2025 RoboSense Technology Co., Ltd
  
 #ifndef EIGEN_NONLINEAR_SOLVER_HPP  
 #define EIGEN_NONLINEAR_SOLVER_HPP 
+#include <algorithm>
+#include <cmath>
 #include <unsupported/Eigen/NonLinearOptimization>
 #include "se3.hpp"
 
@@ -43,6 +45,8 @@ public:
   {
     return 0;
   }
+  virtual void addPosePrior(const Eigen::Vector3d&, const Eigen::Vector3d&,
+                            double, double, double, double) {}
   void setInitialValue(const std::array<double, N>& initial)
   {
     for (std::size_t i = 0; i < N; i++)
@@ -139,20 +143,38 @@ public:
 	virtual void getResidual(double& final_cost, std::vector<double>* residuals) override {  
 
 			// 将残差从 Eigen::VectorXd 转换为 std::vector<double>  
-			residuals->resize(total_residuals_.size());  
-			for (int i = 0; i < total_residuals_.size(); ++i) {  
+			residuals->resize(vec_p_.size());
+			for (int i = 0; i < static_cast<int>(vec_p_.size()); ++i) {
 					(*residuals)[i] = total_residuals_[i];  
 			}  
 
 			// 计算最终成本  
-			final_cost = total_residuals_.squaredNorm();  
+			final_cost = total_residuals_.head(vec_p_.size()).squaredNorm();
 	}
+
+  void addPosePrior(const Eigen::Vector3d& target_w,
+                    const Eigen::Vector3d& target_t, double xy_weight,
+                    double z_weight, double roll_pitch_weight,
+                    double yaw_weight) override {
+    pose_prior_enabled_ = true;
+    pose_prior_target_w_ = target_w;
+    pose_prior_target_t_ = target_t;
+    pose_prior_sqrt_weights_ <<
+        std::sqrt(std::max(0.0, xy_weight)),
+        std::sqrt(std::max(0.0, xy_weight)),
+        std::sqrt(std::max(0.0, z_weight)),
+        std::sqrt(std::max(0.0, roll_pitch_weight)),
+        std::sqrt(std::max(0.0, roll_pitch_weight)),
+        std::sqrt(std::max(0.0, yaw_weight));
+  }
 
   // 执行优化  
   virtual bool solve()  
   {  
 		// 构造残差函数  
-    Functor functor(vec_p_, vec_plane_normal_, vec_plane_center_);  
+    Functor functor(vec_p_, vec_plane_normal_, vec_plane_center_,
+                    pose_prior_enabled_, pose_prior_target_t_,
+                    pose_prior_target_w_, pose_prior_sqrt_weights_);
     Eigen::LevenbergMarquardt<Functor> lm(functor);
 
 		//// 设置优化参数  
@@ -215,18 +237,30 @@ private:
 	Eigen::VectorXd total_residuals_; //最终所有的残差
 	double para_t_[3];
   double para_w_[3];
+  bool pose_prior_enabled_{false};
+  Eigen::Vector3d pose_prior_target_t_{Eigen::Vector3d::Zero()};
+  Eigen::Vector3d pose_prior_target_w_{Eigen::Vector3d::Zero()};
+  Eigen::Matrix<double, 6, 1> pose_prior_sqrt_weights_{
+      Eigen::Matrix<double, 6, 1>::Zero()};
 
 
   // 残差函数  
   struct Functor : public GenericFunctor<double>  
   {  
   public:  
-    Functor(const std::vector<Eigen::Vector3d>& vec_p, const std::vector<Eigen::Vector3d>& vec_plane_normal,  
-            const std::vector<Eigen::Vector3d>& vec_plane_center)  
-      : GenericFunctor<double>(7, vec_p.size())  
+    Functor(const std::vector<Eigen::Vector3d>& vec_p, const std::vector<Eigen::Vector3d>& vec_plane_normal,
+            const std::vector<Eigen::Vector3d>& vec_plane_center,
+            bool pose_prior_enabled, const Eigen::Vector3d& prior_target_t,
+            const Eigen::Vector3d& prior_target_w,
+            const Eigen::Matrix<double, 6, 1>& prior_sqrt_weights)
+      : GenericFunctor<double>(6, vec_p.size() + (pose_prior_enabled ? 6 : 0))
       , vec_func_p_(vec_p)  
       , vec_func_plane_normal_(vec_plane_normal)  
       , vec_func_plane_center_(vec_plane_center)  
+      , pose_prior_enabled_(pose_prior_enabled)
+      , prior_target_t_(prior_target_t)
+      , prior_target_w_(prior_target_w)
+      , prior_sqrt_weights_(prior_sqrt_weights)
     {  
     }  
 
@@ -253,6 +287,13 @@ private:
         Eigen::Vector3d rotated_p = R * point; // 应用旋转  
         fvec[i] = (rotated_p + translation - plane_center).dot(plane_normal); // 点到平面的距离  
       }
+			if (pose_prior_enabled_) {
+				const Eigen::Index offset = vec_func_p_.size();
+				fvec.segment<3>(offset) =
+					prior_sqrt_weights_.head<3>().cwiseProduct(translation - prior_target_t_);
+				fvec.segment<3>(offset + 3) =
+					prior_sqrt_weights_.tail<3>().cwiseProduct(so_w - prior_target_w_);
+			}
 			total_func_residuals_ = fvec;  
       return 0;  
     }  
@@ -284,6 +325,13 @@ private:
 				Eigen::Matrix3d skew_p = skew_mat(R * point);  // 叉乘矩阵
         fjac.block<1, 3>(i, 3) = (skew_p * plane_normal).transpose(); // 将结果赋值到雅可比矩阵  
       }  
+			if (pose_prior_enabled_) {
+				const Eigen::Index offset = vec_func_p_.size();
+				fjac.block<3, 6>(offset, 0).setZero();
+				fjac.block<3, 3>(offset, 0) = prior_sqrt_weights_.head<3>().asDiagonal();
+				fjac.block<3, 6>(offset + 3, 0).setZero();
+				fjac.block<3, 3>(offset + 3, 3) = prior_sqrt_weights_.tail<3>().asDiagonal();
+			}
       return 0;  
     }  
 
@@ -293,6 +341,10 @@ private:
     std::vector<Eigen::Vector3d> vec_func_p_;             // 点云  
     std::vector<Eigen::Vector3d> vec_func_plane_normal_;  // 平面法向量  
     std::vector<Eigen::Vector3d> vec_func_plane_center_;  // 平面上的点
+		bool pose_prior_enabled_;
+		Eigen::Vector3d prior_target_t_;
+		Eigen::Vector3d prior_target_w_;
+		Eigen::Matrix<double, 6, 1> prior_sqrt_weights_;
 		 
   };  
 };

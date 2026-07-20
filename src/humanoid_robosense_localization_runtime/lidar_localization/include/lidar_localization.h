@@ -108,6 +108,10 @@ private:
 
   // Per-frame matcher diagnostics are useful offline, but too noisy for real launch.
   bool debug_print_{false};
+
+  bool recovery_pose_prior_tracking_{false};
+  int recovery_pose_prior_normal_frames_{0};
+  int recovery_pose_prior_release_normal_frames_{6};
 };
 
 #endif  // LIDAR_LOCALIZATION_H

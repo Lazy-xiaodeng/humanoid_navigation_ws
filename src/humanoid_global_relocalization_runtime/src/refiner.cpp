@@ -117,7 +117,8 @@ RefineOutput refine_candidates(
   const CloudPtr & map_cloud,
   const CloudPtr & scan_cloud,
   const std::vector<BbsCandidate> & candidates,
-  const RefineConfig & config)
+  const RefineConfig & config,
+  std::vector<RefineOutput> * candidate_outputs)
 {
   if (candidates.empty()) {
     return RefineOutput{};
@@ -136,10 +137,17 @@ RefineOutput refine_candidates(
   // 对 top-K 前若干候选分别 refine，然后按 fitness score 重新挑最终位姿。
   // 这一步能暴露“BBS top-1 被重复结构骗了，但 top-K 中有正确解”的情况。
   double total_refine_ms = 0.0;
+  if (candidate_outputs) {
+    candidate_outputs->clear();
+    candidate_outputs->reserve(static_cast<std::size_t>(max_candidates));
+  }
   for (int i = 0; i < max_candidates; ++i) {
     RefineOutput current =
       refine_single_candidate(map_cloud, scan_cloud, candidates[static_cast<std::size_t>(i)], i + 1, config);
     total_refine_ms += current.elapsed_ms;
+    if (candidate_outputs) {
+      candidate_outputs->push_back(current);
+    }
 
     if (config.method == RefineMethod::None) {
       best = current;

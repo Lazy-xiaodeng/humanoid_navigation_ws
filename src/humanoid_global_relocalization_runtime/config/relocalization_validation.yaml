@@ -269,7 +269,8 @@ global_relocalization_eval:
     reference_pose_xyzrpy: []
 
     # 是否优先使用 bag 中的参考位姿话题作为每帧真值。
-    # nav_drift_test bag 中有 /robot_realpose，可以用它计算每帧 translation/yaw error。
+    # nav_drift_test bag 中有 /robot_realpose，可用于计算相对旧 TF 链路的
+    # translation/yaw 差异；该话题由 map->base TF 派生，不是外部独立真值。
     # 如果 bag 没有该话题或时间戳匹配失败，则退回 reference_pose_xyzrpy；两者都没有时只统计 localized_rate。
     use_bag_reference_pose: true
 

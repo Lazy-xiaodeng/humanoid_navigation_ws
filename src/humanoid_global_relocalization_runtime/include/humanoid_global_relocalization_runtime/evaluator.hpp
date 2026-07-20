@@ -10,10 +10,12 @@
  */
 
 #include <string>
+#include <vector>
 
 #include <Eigen/Dense>
 
 #include "humanoid_global_relocalization_runtime/config.hpp"
+#include "humanoid_global_relocalization_runtime/refiner.hpp"
 #include "humanoid_global_relocalization_runtime/resource_monitor.hpp"
 #include "humanoid_global_relocalization_runtime/simple_bbs3d.hpp"
 
@@ -30,6 +32,7 @@ struct EvaluationSummary
   double stamp_sec{0.0};
   RefineMethod refine_method{RefineMethod::Gicp};
   BbsResult bbs_result;
+  std::vector<RefineOutput> candidate_refinements;
   Eigen::Matrix4d final_pose{Eigen::Matrix4d::Identity()};
   Eigen::Matrix4d reference_pose{Eigen::Matrix4d::Identity()};
   int refined_candidate_rank{0};

@@ -69,16 +69,17 @@ rviz_initialpose_adapter:
 
 global_relocalization_coordinator:
   ros__parameters:
+    # off：不搜索；shadow：搜索和记录但不写正式链路；enforce：允许 RO→bridge 正式接管。
+    integration_mode: "shadow"
     auto_trigger: true
-    # 正式运行配置：严格关联通过后同时交给 bridge 与 RO，随后仍需 RO 连续健康确认。
-    dry_run: false
-    auto_apply: true
     attempt_timeout_sec: 30.0
     apply_timeout_sec: 5.0
     max_attempts: 3
     retry_backoff_sec: 2.0
     candidate_stamp_tolerance_sec: 0.03
     candidate_max_receipt_age_sec: 2.0
+    # RO 连续精匹配后发布的 refined map->odom；协调器只把该结果交给 bridge。
+    robosense_refined_map_odom_topic: "/prior_localization/global_relocalization_refined_map_to_odom"
     navigation_status_topic: "/navigation/status"
     map_assets_json: '{}'
     map_registry_path: "/home/ubuntu/software/Todesk/Files/humanoid_ws/data/maps/map_registry.json"

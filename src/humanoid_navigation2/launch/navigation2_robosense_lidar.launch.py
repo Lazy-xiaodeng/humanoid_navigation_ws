@@ -61,6 +61,9 @@ def generate_launch_description():
     enable_global_relocalization = LaunchConfiguration(
         'enable_global_relocalization', default='true'
     )
+    global_relocalization_integration_mode = LaunchConfiguration(
+        'global_relocalization_integration_mode', default='shadow'
+    )
     global_relocalization_config_file = LaunchConfiguration(
         'global_relocalization_config_file',
         default=default_global_relocalization_config_file,
@@ -490,6 +493,8 @@ def generate_launch_description():
             'robosense_status_topic': '/prior_localization/robosense_status',
             # 全局重定位统一 JSON 状态入口。
             'global_status_topic': '/global_relocalization/recovery_status',
+            # off/shadow 只观测；enforce 才向路线层发出自动恢复控制要求。
+            'integration_mode': global_relocalization_integration_mode,
             # 给 Nav2 启动门控、路线任务层和 APP 监控使用的可信定位状态。
             'trust_status_topic': '/localization/trust_status',
             # 原点附近配置初值不直接作为可信定位。
@@ -498,6 +503,9 @@ def generate_launch_description():
             'ro_only_startup_max_map_odom_norm': 0.35,
             # 恢复期间一旦 bridge 观察到 large jump，必须等全局重定位/人工确认后再放行导航。
             'require_global_after_large_jump_hold': True,
+            # 首个 HOLD 只冻结 last-good TF；持续到 3s/DEGRADED 才要求停车恢复。
+            'large_jump_hold_min_duration_sec': 3.0,
+            'large_jump_hold_min_updates': 3,
             # 连续 5 帧 RO 正常匹配后，才把定位升级为可导航。
             'ro_verified_required_frames': 5,
             # bridge 和 RO 状态都必须保持新鲜。
@@ -529,10 +537,9 @@ def generate_launch_description():
         condition=IfCondition(enable_global_relocalization),
         parameters=[{
             'use_sim_time': use_sim_time,
+            # 正式默认 shadow；切换 enforce 后才允许写 RO、bridge 和导航恢复链路。
+            'integration_mode': global_relocalization_integration_mode,
             'auto_trigger': True,
-            # 只有完整导航入口显式允许应用；协调器程序自身仍以 dry-run 为安全默认值。
-            'dry_run': False,
-            'auto_apply': True,
             'attempt_timeout_sec': 30.0,
             'apply_timeout_sec': 5.0,
             'max_attempts': 3,
@@ -719,6 +726,12 @@ def generate_launch_description():
         DeclareLaunchArgument('enable_fastdds_shm', default_value='true', description='是否设置 FastDDS 共享内存环境变量'),
         DeclareLaunchArgument('enable_rslidar', default_value='true', description='是否启动真实 RoboSense 雷达驱动；bag 回放验证时可设为 false'),
         DeclareLaunchArgument('enable_global_relocalization', default_value='true', description='是否启动按需全局重定位闭环'),
+        DeclareLaunchArgument(
+            'global_relocalization_integration_mode',
+            default_value='shadow',
+            choices=['off', 'shadow', 'enforce'],
+            description='全局重定位集成权限：off关闭、shadow只观测、enforce允许正式接管',
+        ),
         DeclareLaunchArgument('global_relocalization_config_file', default_value=default_global_relocalization_config_file, description='全局重定位正式参数文件'),
         *fastdds_env_setup,
         rslidar_node,

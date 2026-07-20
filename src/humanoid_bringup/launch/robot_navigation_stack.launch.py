@@ -10,6 +10,10 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
+    # 一键启动链路：start_navigation.sh -> start_navigation_stack.sh
+    # -> 本 launch -> navigation2_robosense_lidar.launch.py。
+    # 全局重定位的 enable/off/shadow/enforce 权限由最内层导航 launch 统一管理；
+    # 本层只负责地图、RO 配置和路线运行层的系统级编排，避免出现两套开关来源。
     pkg_description = get_package_share_directory('humanoid_description')
     pkg_navigation2 = get_package_share_directory('humanoid_navigation2')
     pkg_route_runtime = get_package_share_directory('humanoid_route_runtime')
@@ -41,6 +45,8 @@ def generate_launch_description():
         ),
     ])
 
+    # RO 正式导航入口。被包含 launch 当前默认启动全局重定位节点，但采用 shadow：
+    # 可以搜索和记录，不允许写 RO/bridge，也不会暂停或恢复路线。
     nav2_ro = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(pkg_navigation2, 'launch', 'navigation2_robosense_lidar.launch.py')),
         launch_arguments={
@@ -61,6 +67,8 @@ def generate_launch_description():
         condition=IfCondition(use_op),
     )
 
+    # 路线层始终启动；它会读取 /localization/trust_status 中的 integration_mode，
+    # 只有 enforce 才允许定位恢复状态取消 Nav2 goal、停车和续发剩余路线。
     route_runtime = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(pkg_route_runtime, 'launch', 'route_runtime.launch.py')),
         launch_arguments={

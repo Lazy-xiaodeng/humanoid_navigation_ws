@@ -56,6 +56,7 @@ install(TARGETS
 
 install(DIRECTORY
   config
+  docs
   launch
   DESTINATION share/${PROJECT_NAME}
 )

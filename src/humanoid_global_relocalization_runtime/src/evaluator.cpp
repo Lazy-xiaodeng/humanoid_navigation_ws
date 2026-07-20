@@ -753,6 +753,7 @@ void fuse_scan_context_candidates(
       }
       BbsCandidate candidate;
       candidate.pose = seed_pose;
+      candidate.source = "scan_context";
       candidate.score = -match.rank;
       candidate.score_ratio = std::max(0.0, 1.0 - match.distance);
       fused.push_back(candidate);
@@ -826,6 +827,7 @@ void fuse_solid_candidates(
     }
     BbsCandidate candidate;
     candidate.pose = entry->map_to_base * relative.pose;
+    candidate.source = "solid";
     candidate.score = -match.rank;
     candidate.score_ratio = match.similarity;
     candidate.pre_refined = true;
@@ -926,11 +928,21 @@ EvaluationSummary evaluate_scan_with_built_map(
         bag_frame_index,
         scan_context_database,
         summary.bbs_result);
-      refined = refine_candidates(map_cloud, scan_cloud, summary.bbs_result.candidates, config.refine);
+      refined = refine_candidates(
+        map_cloud,
+        scan_cloud,
+        summary.bbs_result.candidates,
+        config.refine,
+        &summary.candidate_refinements);
       refined.elapsed_ms += primary_refine_ms;
     }
   } else {
-    refined = refine_candidates(map_cloud, scan_cloud, summary.bbs_result.candidates, config.refine);
+    refined = refine_candidates(
+      map_cloud,
+      scan_cloud,
+      summary.bbs_result.candidates,
+      config.refine,
+      &summary.candidate_refinements);
   }
   summary.final_pose = force_2d_pose_if_needed(refined.pose, config.frames);
   summary.refined_candidate_rank = refined.candidate_rank;
@@ -1079,11 +1091,28 @@ void append_candidates_csv(
   if (write_header) {
     out
       << "scenario_name,map_path,bag_path,bag_frame_index,stamp_sec,refine_method,input_mode,rank,score,score_ratio,"
-      << "candidate_x_m,candidate_y_m,candidate_z_m,candidate_yaw_deg,localized,message\n";
+      << "candidate_source,candidate_x_m,candidate_y_m,candidate_z_m,candidate_yaw_deg,"
+      << "pre_refined,refinement_fitness,refined_converged,refined_fitness,"
+      << "refined_x_m,refined_y_m,refined_z_m,refined_yaw_deg,"
+      << "refined_translation_error_m,refined_yaw_error_deg,localized,message\n";
   }
 
   for (std::size_t i = 0; i < summary.bbs_result.candidates.size(); ++i) {
     const auto & candidate = summary.bbs_result.candidates[i];
+    const RefineOutput * refined =
+      i < summary.candidate_refinements.size() ? &summary.candidate_refinements[i] : nullptr;
+    const Eigen::Matrix4d refined_pose =
+      refined && refined->converged ? force_2d_pose_if_needed(refined->pose, config.frames) :
+      Eigen::Matrix4d::Identity();
+    const double refined_translation_error =
+      refined && refined->converged && summary.has_reference_pose ?
+      std::hypot(
+        refined_pose(0, 3) - summary.reference_pose(0, 3),
+        refined_pose(1, 3) - summary.reference_pose(1, 3)) : -1.0;
+    const double refined_yaw_error =
+      refined && refined->converged && summary.has_reference_pose ?
+      std::abs(normalize_angle(
+        yaw_from_matrix(refined_pose) - yaw_from_matrix(summary.reference_pose))) * 180.0 / M_PI : -1.0;
     out << scenario.name << ","
         << '"' << summary.map_path << '"' << ","
         << '"' << summary.bag_path << '"' << ","
@@ -1094,10 +1123,21 @@ void append_candidates_csv(
         << i + 1 << ","
         << candidate.score << ","
         << std::fixed << std::setprecision(6) << candidate.score_ratio << ","
+        << candidate.source << ","
         << candidate.pose(0, 3) << ","
         << candidate.pose(1, 3) << ","
         << candidate.pose(2, 3) << ","
         << rad_to_deg(yaw_from_matrix(candidate.pose)) << ","
+        << (candidate.pre_refined ? 1 : 0) << ","
+        << candidate.refinement_fitness << ","
+        << (refined && refined->converged ? 1 : 0) << ","
+        << (refined ? refined->fitness_score : -1.0) << ","
+        << (refined && refined->converged ? refined_pose(0, 3) : -1.0) << ","
+        << (refined && refined->converged ? refined_pose(1, 3) : -1.0) << ","
+        << (refined && refined->converged ? refined_pose(2, 3) : -1.0) << ","
+        << (refined && refined->converged ? rad_to_deg(yaw_from_matrix(refined_pose)) : -1.0) << ","
+        << refined_translation_error << ","
+        << refined_yaw_error << ","
         << (summary.bbs_result.localized ? 1 : 0) << ","
         << '"' << summary.message << '"' << "\n";
   }

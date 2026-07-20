@@ -687,20 +687,43 @@ private:
         const bool pose_initialized = read_bool_member(payload, "pose_initialized", false);
         const bool pose_trusted = read_bool_member(payload, "pose_trusted", false);
         const bool can_start_navigation = read_bool_member(payload, "can_start_navigation", false);
-        const bool recovery_required = read_bool_member(payload, "localization_recovery_required", false) ||
-          read_bool_member(payload, "recovery_requires_global_relocalization", false);
+        // 路线层不从状态名称猜测控制权；只有显式 enforce 才允许自动暂停/续跑。
+        localization_.integration_mode = read_string_member(payload, "integration_mode", "off");
+        const bool recovery_required = localization_.integration_mode == "enforce" &&
+          (read_bool_member(payload, "localization_recovery_required", false) ||
+          read_bool_member(payload, "recovery_requires_global_relocalization", false));
         localization_.state = read_string_member(payload, "state", "unknown");
         localization_.text = read_string_member(payload, "reason", "");
         localization_.recovery_required = recovery_required;
         localization_.last_status_time = now;
         localization_.has_last_good_tf = pose_initialized || localization_.has_last_good_tf;
+        int64_t ro_verification_epoch = 0;
+        if (payload.HasMember("ro_verification_epoch")) {
+          const auto & value = payload["ro_verification_epoch"];
+          if (value.IsInt64()) {
+            ro_verification_epoch = value.GetInt64();
+          } else if (value.IsUint64()) {
+            ro_verification_epoch = static_cast<int64_t>(value.GetUint64());
+          } else if (value.IsInt()) {
+            ro_verification_epoch = value.GetInt();
+          }
+        }
         if (pose_trusted && can_start_navigation) {
           localization_.healthy = true;
           localization_.last_good_tf_time = now;
-          ++localization_.resume_stable_count;
+          if (localization_.integration_mode != "enforce") {
+            ++localization_.resume_stable_count;
+          } else if (ro_verification_epoch > localization_.last_ro_verification_epoch) {
+            // 重复发布同一条健康状态不能凑够恢复帧；epoch 只由新 RO 扫描推进。
+            ++localization_.resume_stable_count;
+            localization_.last_ro_verification_epoch = ro_verification_epoch;
+          }
         } else {
           localization_.healthy = false;
           localization_.resume_stable_count = 0;
+          if (ro_verification_epoch > localization_.last_ro_verification_epoch) {
+            localization_.last_ro_verification_epoch = ro_verification_epoch;
+          }
         }
         process_localization_recovery_state();
         return;
@@ -709,6 +732,7 @@ private:
 
     const std::string state = text.substr(0, text.find(' '));
     localization_.state = state.empty() ? "UNKNOWN" : state;
+    localization_.integration_mode = "off";
     localization_.text = text;
     localization_.recovery_required = false;
     localization_.last_status_time = now;
@@ -1098,8 +1122,13 @@ private:
     localization_health.AddMember(
       "state", rapidjson::Value(localization_.state.c_str(), allocator).Move(), allocator);
     localization_health.AddMember(
+      "integration_mode",
+      rapidjson::Value(localization_.integration_mode.c_str(), allocator).Move(), allocator);
+    localization_health.AddMember(
       "text", rapidjson::Value(localization_.text.c_str(), allocator).Move(), allocator);
     localization_health.AddMember("recovery_required", localization_.recovery_required, allocator);
+    localization_health.AddMember(
+      "last_ro_verification_epoch", localization_.last_ro_verification_epoch, allocator);
     localization_health.AddMember("stamp_sec", localization_.last_status_time, allocator);
     localization_health.AddMember(
       "age_sec", localization_.last_status_time > 0.0 ? now - localization_.last_status_time : -1.0, allocator);
@@ -2365,6 +2394,9 @@ private:
 
   bool localization_recovery_required() const
   {
+    if (localization_.integration_mode != "enforce") {
+      return false;
+    }
     if (localization_.recovery_required) {
       return true;
     }

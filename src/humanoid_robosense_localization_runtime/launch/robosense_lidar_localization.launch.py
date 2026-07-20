@@ -38,9 +38,17 @@ def generate_launch_description():
         # 节点输出：
         #   /prior_localization/robosense_odom        map->base_footprint 位姿候选
         #   /prior_localization/robosense_input_odom  bridge 用于同时间戳插值的 odom cache
+        #   /prior_localization/robosense_status      常规匹配与全局候选提交状态
+        #   /prior_localization/global_relocalization_refined_map_to_odom
+        #                                              RO 独立精匹配后的恢复变换
+        #
+        # 自动恢复输入：
+        #   /prior_localization/global_relocalization_pose
+        #                                              协调器审核后的全局初值
         #
         # 注意：
-        #   这里不直接发布 map->odom；完整导航链路中由 prior_map_odom_bridge 统一发布。
+        #   该节点内部虽会计算 map->odom，但自动全局恢复时只把 refined 结果交给协调器；
+        #   完整导航链路中的 map->odom TF 仍由 prior_map_odom_bridge 统一发布。
         Node(
             package='humanoid_robosense_localization_runtime',
             executable='robosense_lidar_localization_node',

@@ -37,6 +37,9 @@ def spin_until(node, condition, timeout, label):
 
 
 def main():
+    # Keep the smoke test isolated from a navigation stack that may already be
+    # running on the workstation with the same node and topic names.
+    os.environ["ROS_DOMAIN_ID"] = os.environ.get("TEST_ROS_DOMAIN_ID", "221")
     process = subprocess.Popen(
         [
             "ros2", "run", "humanoid_localization_runtime", "prior_map_odom_bridge_cpp",

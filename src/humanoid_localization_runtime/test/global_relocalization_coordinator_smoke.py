@@ -42,6 +42,14 @@ class Probe(Node):
         self.map_odom_pub = self.create_publisher(
             PoseStamped, "/global_relocalization/recovery_map_to_odom", latched
         )
+        self.ro_status_pub = self.create_publisher(
+            String, "/prior_localization/robosense_status", 10
+        )
+        self.ro_refined_pub = self.create_publisher(
+            PoseStamped,
+            "/prior_localization/global_relocalization_refined_map_to_odom",
+            10,
+        )
         self.requests = []
         self.events = []
         self.bridge_applies = []
@@ -170,15 +178,25 @@ def main():
         probe.global_status_pub.publish(accepted)
         spin_until(
             executor,
-            lambda: any(item.get("result_code") == "dry_run" for item in probe.events),
+            lambda: any(item.get("result_code") == "shadow_observed" for item in probe.events),
             2.0,
-            "dry-run acceptance",
+            "shadow acceptance",
         )
         if probe.bridge_applies or probe.ro_applies:
-            raise RuntimeError("dry-run unexpectedly published a localization application")
+            raise RuntimeError("shadow mode unexpectedly published a localization application")
 
         coordinator.state = "idle"
         coordinator.attempt_id = ""
+        coordinator.integration_mode = "off"
+        start_count = len([item for item in probe.requests if item.get("command") == "start"])
+        probe.publish_json(probe.trust_pub, coordinator.latest_trust)
+        off_deadline = time.monotonic() + 0.5
+        while time.monotonic() < off_deadline:
+            executor.spin_once(timeout_sec=0.05)
+        if len([item for item in probe.requests if item.get("command") == "start"]) != start_count:
+            raise RuntimeError("off mode unexpectedly triggered global recovery")
+
+        coordinator.integration_mode = "enforce"
         coordinator.dry_run = False
         coordinator.auto_apply = True
         probe.publish_json(probe.trust_pub, coordinator.latest_trust)
@@ -214,16 +232,36 @@ def main():
         probe.global_status_pub.publish(second_status)
         spin_until(
             executor,
-            lambda: bool(probe.bridge_applies and probe.ro_applies),
+            lambda: bool(probe.ro_applies),
             2.0,
-            "explicit pose application topics",
+            "RO pose application",
         )
-        if abs(probe.bridge_applies[-1].pose.position.x - 0.75) > 1e-6:
-            raise RuntimeError("bridge did not receive direct map->odom")
+        if probe.bridge_applies:
+            raise RuntimeError("bridge was updated before RO trusted commit")
+        refined_stamp = coordinator.get_clock().now().to_msg()
+        refined_map_odom = PoseStamped()
+        refined_map_odom.header.stamp = refined_stamp
+        refined_map_odom.header.frame_id = "map"
+        refined_map_odom.pose.position.x = 0.70
+        refined_map_odom.pose.orientation.w = 1.0
+        probe.ro_refined_pub.publish(refined_map_odom)
+        probe.publish_json(
+            probe.ro_status_pub,
+            {
+                "status": "NORMAL",
+                "source": "ro_trusted_global_anchor_commit",
+                "anchor_stamp": float(second_stamp.sec) + float(second_stamp.nanosec) * 1e-9,
+                "stamp": float(refined_stamp.sec) + float(refined_stamp.nanosec) * 1e-9,
+            },
+        )
+        spin_until(executor, lambda: bool(probe.bridge_applies), 2.0, "bridge application")
+        if abs(probe.bridge_applies[-1].pose.position.x - 0.70) > 1e-6:
+            raise RuntimeError("bridge did not receive RO-refined map->odom")
         if abs(probe.ro_applies[-1].pose.pose.position.x - 1.25) > 1e-6:
             raise RuntimeError("RO did not receive map->base recovery pose")
-        print("COORDINATOR_DRY_RUN_OK")
-        print("COORDINATOR_APPLICATION_TOPICS_OK")
+        print("COORDINATOR_SHADOW_MODE_OK")
+        print("COORDINATOR_OFF_MODE_OK")
+        print("COORDINATOR_RO_THEN_BRIDGE_OK")
         print("COORDINATOR_HEALTHY_NO_TRIGGER_OK")
         print("ATTEMPT_ID", attempt_id)
         print("EVENTS", len(probe.events))

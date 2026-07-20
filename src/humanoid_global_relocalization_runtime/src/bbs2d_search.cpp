@@ -312,6 +312,7 @@ BbsResult Bbs2dSearch::localize(
       continue;
     }
     BbsCandidate candidate;
+    candidate.source = "bbs2d";
     candidate.pose = pose;
     candidate.score = static_cast<int>(std::round(seed.score * 100000.0));
     candidate.score_ratio = seed.score;

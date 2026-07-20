@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <memory>
 #include <queue>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
@@ -36,6 +37,7 @@ class Holder;
 struct BbsCandidate
 {
   Eigen::Matrix4d pose{Eigen::Matrix4d::Identity()};
+  std::string source{"bbs3d"};
   int score{0};
   double score_ratio{0.0};
   bool pre_refined{false};

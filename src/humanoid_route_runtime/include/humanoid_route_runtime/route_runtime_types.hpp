@@ -186,8 +186,10 @@ struct LocalizationRuntimeState
   bool has_last_good_tf{false};
   bool recovery_required{false};
   int resume_stable_count{0};
+  int64_t last_ro_verification_epoch{0};
   double last_good_tf_time{0.0};
   double last_status_time{0.0};
+  std::string integration_mode{"off"};
   std::string state{"UNKNOWN"};
   std::string text;
 };

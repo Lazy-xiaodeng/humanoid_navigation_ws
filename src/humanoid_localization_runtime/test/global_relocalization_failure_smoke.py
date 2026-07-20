@@ -56,6 +56,7 @@ def spin_until(executor, condition, timeout, label):
 def main():
     rclpy.init()
     coordinator = load_coordinator()()
+    coordinator.integration_mode = "enforce"
     coordinator.attempt_timeout_sec = 0.25
     coordinator.retry_backoff_sec = 0.05
     coordinator.max_attempts = 2

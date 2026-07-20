@@ -46,6 +46,7 @@ RefineOutput refine_candidates(
   const CloudPtr & map_cloud,
   const CloudPtr & scan_cloud,
   const std::vector<BbsCandidate> & candidates,
-  const RefineConfig & config);
+  const RefineConfig & config,
+  std::vector<RefineOutput> * candidate_outputs = nullptr);
 
 }  // namespace humanoid_global_relocalization

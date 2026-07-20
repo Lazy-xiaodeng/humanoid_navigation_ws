@@ -18,6 +18,7 @@ from std_msgs.msg import String
 
 
 _KEY_VALUE_RE = re.compile(r"([A-Za-z0-9_]+)=([^ ]+)")
+_VALID_INTEGRATION_MODES = ("off", "shadow", "enforce")
 
 
 def _parse_key_values(text: str) -> Dict[str, str]:
@@ -58,6 +59,16 @@ class LocalizationTrustSupervisor(Node):
         self.trust_status_topic = self.declare_parameter(
             "trust_status_topic", "/localization/trust_status"
         ).value
+        requested_mode = str(
+            self.declare_parameter("integration_mode", "shadow").value
+        ).strip().lower()
+        self.integration_mode = (
+            requested_mode if requested_mode in _VALID_INTEGRATION_MODES else "off"
+        )
+        if self.integration_mode != requested_mode:
+            self.get_logger().error(
+                f"invalid integration_mode={requested_mode!r}; falling back to off"
+            )
 
         self.bridge_status_timeout_sec = float(
             self.declare_parameter("bridge_status_timeout_sec", 3.0).value
@@ -73,6 +84,13 @@ class LocalizationTrustSupervisor(Node):
         )
         self.require_global_after_large_jump_hold = bool(
             self.declare_parameter("require_global_after_large_jump_hold", True).value
+        )
+        self.large_jump_hold_min_duration_sec = max(
+            0.0,
+            float(self.declare_parameter("large_jump_hold_min_duration_sec", 3.0).value),
+        )
+        self.large_jump_hold_min_updates = max(
+            1, int(self.declare_parameter("large_jump_hold_min_updates", 3).value)
         )
         self.ro_verified_required_frames = max(
             1, int(self.declare_parameter("ro_verified_required_frames", 5).value)
@@ -95,6 +113,10 @@ class LocalizationTrustSupervisor(Node):
         self.recovery_trigger = ""
         self.bridge_accept_kind = ""
         self.ro_verified_count = 0
+        self.ro_verified_stamp = 0.0
+        self.ro_verification_epoch = 0
+        self.large_jump_hold_started = 0.0
+        self.large_jump_hold_updates = 0
         self.state = "waiting_initial_pose"
         self.reason = "waiting_for_bridge_accept"
         self.pose_trusted = False
@@ -109,8 +131,11 @@ class LocalizationTrustSupervisor(Node):
         self.get_logger().info(
             "localization_trust_supervisor started: "
             f"bridge={self.bridge_status_topic}, ro={self.robosense_status_topic}, "
-            f"out={self.trust_status_topic}"
+            f"out={self.trust_status_topic}, integration_mode={self.integration_mode}"
         )
+
+    def recovery_control_enabled(self) -> bool:
+        return self.integration_mode == "enforce"
 
     def on_bridge_status(self, msg: String):
         now = time.time()
@@ -128,15 +153,32 @@ class LocalizationTrustSupervisor(Node):
             "stamp_sec": now,
         }
 
-        if (
-            self.require_global_after_large_jump_hold
-            and kind in ("HOLD", "DEGRADED")
-            and "large_jump" in text
-        ):
-            self.recovery_requires_global_relocalization = True
-            self.recovery_trigger = text
-            # 跳变前的 RO 健康帧不能用于恢复后的重新放行。
-            self.ro_verified_count = 0
+        large_jump_hold = kind in ("HOLD", "DEGRADED") and "large_jump" in text
+        if large_jump_hold:
+            if self.large_jump_hold_started <= 0.0:
+                self.large_jump_hold_started = now
+                self.large_jump_hold_updates = 0
+            self.large_jump_hold_updates += 1
+            reported_age = _as_float(fields.get("age", "").rstrip("s"), -1.0)
+            observed_age = max(0.0, now - self.large_jump_hold_started)
+            hold_age = max(observed_age, reported_age)
+            confirmed = (
+                kind == "DEGRADED"
+                or (
+                    hold_age >= self.large_jump_hold_min_duration_sec
+                    and self.large_jump_hold_updates >= self.large_jump_hold_min_updates
+                )
+            )
+            if self.require_global_after_large_jump_hold and confirmed:
+                self.recovery_requires_global_relocalization = True
+                self.recovery_trigger = text
+                # 跳变前的 RO 健康帧不能用于恢复后的重新放行。
+                self.ro_verified_count = 0
+                self.ro_verified_stamp = 0.0
+        else:
+            # 短时 HOLD 自行恢复时只清除未成熟观察，不清除已确认的恢复锁存。
+            self.large_jump_hold_started = 0.0
+            self.large_jump_hold_updates = 0
 
         if kind == "ACCEPTED":
             self.pose_initialized = True
@@ -177,15 +219,29 @@ class LocalizationTrustSupervisor(Node):
             "stamp_sec": now,
         }
 
-        if status == "NORMAL" and source == "ro_normal_match":
+        ro_stamp = _as_float(payload.get("stamp"), math.nan)
+        if (
+            status == "NORMAL"
+            and source == "ro_normal_match"
+            and math.isfinite(ro_stamp)
+            and ro_stamp > self.ro_verified_stamp + 1e-6
+        ):
             self.ro_verified_count += 1
+            self.ro_verified_stamp = ro_stamp
+            self.ro_verification_epoch += 1
+        elif status == "NORMAL" and source == "ro_normal_match":
+            # 重复状态不能伪装成新的雷达验证帧。
+            pass
         else:
             self.ro_verified_count = 0
+            self.ro_verified_stamp = 0.0
 
         if self._source_is_global_or_manual(source):
             self.startup_requires_global_relocalization = False
             self.recovery_requires_global_relocalization = False
             self.recovery_trigger = ""
+            self.large_jump_hold_started = 0.0
+            self.large_jump_hold_updates = 0
 
         self.evaluate()
 
@@ -256,12 +312,12 @@ class LocalizationTrustSupervisor(Node):
             self.reason = "bridge_has_not_accepted_map_to_odom"
             return
 
-        if self._global_relocalization_active(now):
+        if self.recovery_control_enabled() and self._global_relocalization_active(now):
             self.state = "global_relocalizing"
             self.reason = "global_relocalization_active"
             return
 
-        if self.startup_requires_global_relocalization:
+        if self.recovery_control_enabled() and self.startup_requires_global_relocalization:
             self.state = "startup_requires_global_relocalization"
             self.reason = (
                 "ro_only_initial_map_odom_norm_exceeds_"
@@ -269,7 +325,7 @@ class LocalizationTrustSupervisor(Node):
             )
             return
 
-        if self.recovery_requires_global_relocalization:
+        if self.recovery_control_enabled() and self.recovery_requires_global_relocalization:
             self.state = "recovery_requires_global_relocalization"
             self.reason = "large_jump_hold_seen_without_global_confirmation"
             return
@@ -313,6 +369,8 @@ class LocalizationTrustSupervisor(Node):
         msg.data = json.dumps(
             {
                 "stamp_sec": now,
+                "integration_mode": self.integration_mode,
+                "global_relocalization_side_effects_enabled": self.recovery_control_enabled(),
                 "state": self.state,
                 "reason": self.reason,
                 "pose_initialized": self.pose_initialized,
@@ -321,13 +379,24 @@ class LocalizationTrustSupervisor(Node):
                 "origin_seeded": self.origin_seeded,
                 "startup_requires_global_relocalization": self.startup_requires_global_relocalization,
                 "recovery_requires_global_relocalization": self.recovery_requires_global_relocalization,
-                "localization_recovery_required": self.recovery_requires_global_relocalization,
+                "localization_recovery_required": (
+                    self.recovery_control_enabled()
+                    and self.recovery_requires_global_relocalization
+                ),
                 "recovery_trigger": self.recovery_trigger,
                 "ro_only_startup_max_map_odom_norm": self.ro_only_startup_max_map_odom_norm,
                 "require_global_after_large_jump_hold": self.require_global_after_large_jump_hold,
                 "bridge_accept_kind": self.bridge_accept_kind,
                 "ro_verified_count": self.ro_verified_count,
                 "ro_verified_required_frames": self.ro_verified_required_frames,
+                "ro_verified_stamp": self.ro_verified_stamp,
+                "ro_verification_epoch": self.ro_verification_epoch,
+                "large_jump_hold_observed_age_sec": (
+                    max(0.0, now - self.large_jump_hold_started)
+                    if self.large_jump_hold_started > 0.0
+                    else 0.0
+                ),
+                "large_jump_hold_updates": self.large_jump_hold_updates,
                 "bridge_status_age_sec": (
                     now - self.last_bridge_time if self.last_bridge_time > 0.0 else None
                 ),

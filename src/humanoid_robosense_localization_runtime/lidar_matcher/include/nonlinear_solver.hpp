@@ -15,6 +15,8 @@ Copyright 2025 RoboSense Technology Co., Ltd
  *****************************************************************************/
  
 #pragma once
+#include <algorithm>
+#include <cmath>
 #include <ceres/ceres.h>
 #include <ceres/local_parameterization.h>
 #include <ceres/loss_function.h>
@@ -69,6 +71,9 @@ class CeresSolver : public Solver<N> {
   }
 
   virtual int getNumResiduals() { return problem_.NumResiduals(); }
+
+  virtual void addPosePrior(const Eigen::Vector3d&, const Eigen::Vector3d&,
+                            double, double, double, double) {}
 
   virtual ceres::Solver::Summary getSummary() { return summary; }
 
@@ -183,7 +188,28 @@ class SolvePoseFromPointToPlaneCeresSophus : public CeresSolver<7> {
                        const Target& ref_target) override {
     auto* cost_func =
         new CostFunctor(measured_target.pos, ref_target.normal, ref_target.pos);
-    problem_.AddResidualBlock(cost_func, loss_function_, para_w_, para_t_);
+    point_residual_blocks_.push_back(
+        problem_.AddResidualBlock(cost_func, loss_function_, para_w_, para_t_));
+  }
+
+  void addPosePrior(const Eigen::Vector3d& target_w,
+                    const Eigen::Vector3d& target_t,
+                    double xy_weight, double z_weight,
+                    double roll_pitch_weight, double yaw_weight) override {
+    problem_.AddResidualBlock(
+        new PosePriorCost(target_w, target_t, xy_weight, z_weight,
+                          roll_pitch_weight, yaw_weight),
+        nullptr, para_w_, para_t_);
+  }
+
+  void getResidual(double final_cost, std::vector<double>* residuals) override {
+    ceres::Problem::EvaluateOptions options;
+    options.residual_blocks = point_residual_blocks_;
+    problem_.Evaluate(options, &final_cost, residuals, nullptr, nullptr);
+  }
+
+  int getNumResiduals() override {
+    return static_cast<int>(point_residual_blocks_.size());
   }
 
   virtual bool solve(
@@ -212,6 +238,58 @@ class SolvePoseFromPointToPlaneCeresSophus : public CeresSolver<7> {
  private:
   double para_t_[3];
   double para_w_[3];
+  std::vector<ceres::ResidualBlockId> point_residual_blocks_;
+
+  class PosePriorCost : public ceres::SizedCostFunction<6, 3, 3> {
+   public:
+    PosePriorCost(const Eigen::Vector3d& target_w,
+                  const Eigen::Vector3d& target_t, double xy_weight,
+                  double z_weight, double roll_pitch_weight,
+                  double yaw_weight)
+        : target_w_(target_w),
+          target_t_(target_t),
+          sqrt_xy_weight_(std::sqrt(std::max(0.0, xy_weight))),
+          sqrt_z_weight_(std::sqrt(std::max(0.0, z_weight))),
+          sqrt_roll_pitch_weight_(
+              std::sqrt(std::max(0.0, roll_pitch_weight))),
+          sqrt_yaw_weight_(std::sqrt(std::max(0.0, yaw_weight))) {}
+
+    bool Evaluate(double const* const* parameters, double* residuals,
+                  double** jacobians) const override {
+      const double* w = parameters[0];
+      const double* t = parameters[1];
+      const double weights[6] = {
+          sqrt_roll_pitch_weight_, sqrt_roll_pitch_weight_, sqrt_yaw_weight_,
+          sqrt_xy_weight_, sqrt_xy_weight_, sqrt_z_weight_};
+      for (int i = 0; i < 3; ++i) {
+        residuals[i] = weights[i] * (w[i] - target_w_[i]);
+        residuals[i + 3] = weights[i + 3] * (t[i] - target_t_[i]);
+      }
+      if (jacobians) {
+        if (jacobians[0]) {
+          std::fill(jacobians[0], jacobians[0] + 18, 0.0);
+          jacobians[0][0] = weights[0];
+          jacobians[0][4] = weights[1];
+          jacobians[0][8] = weights[2];
+        }
+        if (jacobians[1]) {
+          std::fill(jacobians[1], jacobians[1] + 18, 0.0);
+          jacobians[1][9] = weights[3];
+          jacobians[1][13] = weights[4];
+          jacobians[1][17] = weights[5];
+        }
+      }
+      return true;
+    }
+
+   private:
+    Eigen::Vector3d target_w_;
+    Eigen::Vector3d target_t_;
+    double sqrt_xy_weight_;
+    double sqrt_z_weight_;
+    double sqrt_roll_pitch_weight_;
+    double sqrt_yaw_weight_;
+  };
 
   class CostFunctor : public ceres::SizedCostFunction<1, 3, 3> {
    public:
