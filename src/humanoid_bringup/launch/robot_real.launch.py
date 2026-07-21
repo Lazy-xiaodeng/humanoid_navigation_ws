@@ -33,6 +33,10 @@ def generate_launch_description():
         'robosense_config_file',
         default='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_robosense_localization_runtime/config/robosense_lidar_localization.yaml',
     )
+    localization_runtime_config_file = LaunchConfiguration(
+        'localization_runtime_config_file',
+        default='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_localization_runtime/config/localization_runtime.yaml',
+    )
     reloc_engine = LaunchConfiguration('relocalization_engine', default='ro')
 
     control_plane = IncludeLaunchDescription(
@@ -49,6 +53,7 @@ def generate_launch_description():
             'map_yaml_file': map_yaml_file,
             'prior_map_path': prior_map_path,
             'robosense_config_file': robosense_config_file,
+            'localization_runtime_config_file': localization_runtime_config_file,
             'relocalization_engine': reloc_engine,
         }.items(),
     )
@@ -60,6 +65,7 @@ def generate_launch_description():
         DeclareLaunchArgument('map_yaml_file', default_value='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/maps/hall.yaml'),
         DeclareLaunchArgument('prior_map_path', default_value='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_navigation2/pcd/hall_open3d_grounded.pcd'),
         DeclareLaunchArgument('robosense_config_file', default_value='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_robosense_localization_runtime/config/robosense_lidar_localization.yaml'),
+        DeclareLaunchArgument('localization_runtime_config_file', default_value='/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_localization_runtime/config/localization_runtime.yaml', description='定位运行层统一参数 YAML'),
         DeclareLaunchArgument('relocalization_engine', default_value='ro'),
         control_plane,
         navigation_stack,

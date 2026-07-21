@@ -38,8 +38,8 @@ slam_toolbox:
     transform_timeout: 2.0        # ★★ TF查询超时，从1.0增加到2.0s
     transform_tolerance: 3.0      # ★★ TF时间戳容忍度，从2.0增加到3.0s
 
-    # ★ 修复2: 确保发布map->odom变换
-    publish_map_to_odom_tf: true
+    # 导航运行时 map->odom 由 prior_map_odom_bridge 独占，禁止该旧配置抢占 TF。
+    publish_map_to_odom_tf: false
 
     # ★ 修复3: 关闭回环检测（定位模式不需要，且会导致700ms+的延迟）
     do_loop_closing: false

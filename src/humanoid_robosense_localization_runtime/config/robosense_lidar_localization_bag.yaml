@@ -14,7 +14,7 @@ fastlio_odom_camera_quat_xyzw: [-0.5, -0.5, 0.5, 0.5]
 fastlio_body_base_xyz: [0.004, 1.215, 0.072]
 fastlio_body_base_quat_xyzw: [0.5, 0.5, -0.5, 0.5]
 
-publish_map_to_odom_tf: false
+# map -> odom is published exclusively by prior_map_odom_bridge.
 map_frame_id: "map"
 odom_frame_id: "odom"
 base_frame_id: "base_footprint"

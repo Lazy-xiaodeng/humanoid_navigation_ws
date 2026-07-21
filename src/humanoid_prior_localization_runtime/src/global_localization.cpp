@@ -547,19 +547,7 @@ void GloabalLocalization::CallbackBaselink2Odom(const nav_msgs::msg::Odometry::S
     odom2map.header.stamp = baselink2odom->header.stamp;
     pub_odom2map_->publish(odom2map);
 
-    /// 发布tf关系
-    geometry_msgs::msg::TransformStamped transform_odom2map;
-    transform_odom2map.header.frame_id = "map";
-    transform_odom2map.child_frame_id = "odom";
-    transform_odom2map.header.stamp = baselink2odom->header.stamp;
-    transform_odom2map.transform.translation.x = odom2map.pose.pose.position.x;
-    transform_odom2map.transform.translation.y = odom2map.pose.pose.position.y;
-    transform_odom2map.transform.translation.z = odom2map.pose.pose.position.z;
-    transform_odom2map.transform.rotation = odom2map.pose.pose.orientation;
-    if (publish_tf_)
-    {
-        br_odom2map_->sendTransform(transform_odom2map);
-    }
+    // map->odom 只作为候选话题输出，正式 TF 由 prior_map_odom_bridge 独占发布。
 
     /// 卡尔曼滤波 - 只在定位初始化完成后执行
     if (loc_initialized_)

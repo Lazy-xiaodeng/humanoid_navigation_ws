@@ -1,5 +1,5 @@
-# humanoid_localization_runtime 定位运行层参考参数。
-# 当前正式导航 launch 里仍以内联参数为准；本文件用于单独调试和后续参数收敛。
+# humanoid_localization_runtime 正式定位运行层参数。
+# launch 只负责节点编排和时间源；定位话题、门槛、超时及灰度权限统一在这里维护。
 
 prior_map_odom_bridge:
   ros__parameters:
@@ -14,14 +14,62 @@ prior_map_odom_bridge:
     # PoseWithCovarianceStamped 定位输入话题，RViz initialpose 也会转发到这里。
     prior_pose_with_covariance_topic: "/prior_localization/pose_with_covariance"
     # Odometry 定位输入话题，RoboSense 定位链路主要使用它。
-    prior_odom_topic: "/prior_localization/odom"
+    prior_odom_topic: "/prior_localization/robosense_odom"
     # 恢复协调器已经审核并计算完成的 map->odom。
     global_recovery_map_to_odom_topic: "/localization/global_recovery_map_to_odom"
     global_recovery_timeout_sec: 2.5
+    # RoboSense 当前没有单独 confidence 输出，因此关闭该门控。
+    confidence_topic: "/prior_localization/confidence"
+    require_confidence: false
+    min_confidence: 0.50
+    confidence_timeout_sec: 2.0
     # map->odom 发布频率，单位 Hz。
     publish_rate: 30.0
+    tf_lookup_timeout_sec: 0.20
+    pose_timeout_sec: 0.8
+    accept_zero_stamp: true
+    allow_initial_pose: true
+    # 原点附近初始 TF 仅作为 seed，由可信度监督层决定是否允许导航。
+    origin_seed_radius: 0.30
+    # 按定位消息时间戳查询 RoboSense 发布的 Fast-LIO odom 缓存。
+    use_odom_cache: true
+    odom_cache_topic: "/prior_localization/robosense_input_odom"
+    odom_cache_duration_sec: 5.0
+    odom_interpolation_max_gap_sec: 0.25
+    odom_lookup_tolerance_sec: 0.03
+    odom_future_wait_sec: 0.20
+    fallback_to_tf_lookup: true
+    # 普通定位输入的大小修正与连续一致性门槛。
+    max_small_correction_translation: 0.25
+    max_small_correction_yaw: 0.12
+    max_large_correction_translation: 3.0
+    max_large_correction_yaw: 1.2
+    required_consistent_frames: 5
+    consistency_translation_tolerance: 0.25
+    consistency_yaw_tolerance: 0.10
+    # bridge 是唯一 map->odom 发布者；导航中大跳只冻结 last-good TF。
+    jump_protection_mode: "protect"
+    nav_medium_correction_translation: 0.50
+    nav_medium_correction_yaw: 0.20
+    nav_medium_required_frames: 5
+    nav_large_correction_translation: 0.50
+    nav_large_correction_yaw: 0.20
+    allow_nav_large_jump: false
+    idle_large_correction_translation: 1.00
+    idle_large_correction_yaw: 0.35
+    idle_large_required_frames: 5
+    allow_idle_large_jump: true
+    hard_reject_translation: 1.00
+    hard_reject_yaw: 0.50
+    large_jump_degraded_after_sec: 3.0
+    # 当前前视雷达导航验证关闭原地旋转冻结，避免掩盖正常定位更新。
+    enable_spin_to_pose_guard: false
+    navigation_status_topic: "/navigation/status"
+    spin_to_pose_guard_settle_sec: 3.0
+    spin_to_pose_guard_max_duration_sec: 8.0
     # 是否只保留 x/y/yaw，忽略 z/roll/pitch。
     force_2d: true
+    force_z: 0.0
 
 dynamic_map_ground_publisher:
   ros__parameters:
@@ -33,6 +81,8 @@ dynamic_map_ground_publisher:
     child_frame: "map_ground"
     # 发布频率，单位 Hz。
     publish_rate: 30.0
+    z_offset: 0.0
+    tf_timeout_sec: 0.05
 
 dynamic_odom_ground_publisher:
   ros__parameters:
@@ -44,6 +94,8 @@ dynamic_odom_ground_publisher:
     child_frame: "odom_ground"
     # 发布频率，单位 Hz。
     publish_rate: 30.0
+    z_offset: 0.0
+    tf_timeout_sec: 0.05
 
 robot_realpose_publisher:
   ros__parameters:
@@ -66,15 +118,68 @@ rviz_initialpose_adapter:
     map_ground_frame: "map_ground"
     # 定位桥使用的地图坐标系。
     map_frame: "map"
+    tf_timeout_sec: 0.20
+
+wait_for_localization_tf:
+  ros__parameters:
+    target_frame: "map_ground"
+    source_frame: "base_footprint"
+    timeout_sec: 0.0
+    poll_period: 0.2
+    stable_count: 3
+
+wait_for_localization_trust:
+  ros__parameters:
+    trust_status_topic: "/localization/trust_status"
+    timeout_sec: 0.0
+    poll_log_period_sec: 3.0
+
+localization_trust_supervisor:
+  ros__parameters:
+    bridge_status_topic: "/localization/prior_map_odom_bridge_status"
+    robosense_status_topic: "/prior_localization/robosense_status"
+    global_status_topic: "/global_relocalization/recovery_status"
+    trust_status_topic: "/localization/trust_status"
+    # off/shadow 只观察；enforce 才允许定位恢复控制导航。
+    integration_mode: "shadow"
+    origin_seed_radius: 0.30
+    ro_only_startup_max_map_odom_norm: 0.35
+    require_global_after_large_jump_hold: true
+    large_jump_hold_min_duration_sec: 3.0
+    large_jump_hold_min_updates: 3
+    require_global_after_ro_unhealthy: true
+    ro_unhealthy_min_duration_sec: 3.0
+    ro_unhealthy_min_updates: 3
+    ro_stale_recovery_sec: 3.0
+    ro_verified_required_frames: 5
+    bridge_status_timeout_sec: 3.0
+    robosense_status_timeout_sec: 3.0
+    publish_rate: 2.0
 
 global_relocalization_coordinator:
   ros__parameters:
     # off：不搜索；shadow：搜索和记录但不写正式链路；enforce：允许 RO→bridge 正式接管。
     integration_mode: "shadow"
     auto_trigger: true
+    # 兼容旧参数名；实际副作用只由 integration_mode 控制。
+    dry_run: true
+    auto_apply: false
+    trust_status_topic: "/localization/trust_status"
+    map_status_topic: "/map/status"
+    global_request_topic: "/global_relocalization/request"
+    global_status_topic: "/global_relocalization/recovery_status"
+    recovery_pose_topic: "/global_relocalization/recovery_pose"
+    recovery_map_odom_topic: "/global_relocalization/recovery_map_to_odom"
+    bridge_status_topic: "/localization/prior_map_odom_bridge_status"
+    robosense_status_topic: "/prior_localization/robosense_status"
+    recovery_status_topic: "/localization/recovery_status"
+    navigation_status_topic: "/navigation/status"
+    bridge_apply_topic: "/localization/global_recovery_map_to_odom"
+    robosense_apply_topic: "/prior_localization/global_relocalization_pose"
     # 正式精度层历史 P95 约 21.4s、最大约 27.2s；预留调度余量取 45s。
     attempt_timeout_sec: 45.0
-    apply_timeout_sec: 5.0
+    # RO 最多等待 8 s 形成候选约束下的 5 帧独立一致性，再进入下一次全局尝试。
+    apply_timeout_sec: 8.0
     max_attempts: 3
     retry_backoff_sec: 2.0
     # 单轮三次失败后保持停车并低频重试；上层 stop 会禁止后续自动搜索。
@@ -83,6 +188,5 @@ global_relocalization_coordinator:
     candidate_max_receipt_age_sec: 2.0
     # RO 连续精匹配后发布的 refined map->odom；协调器只把该结果交给 bridge。
     robosense_refined_map_odom_topic: "/prior_localization/global_relocalization_refined_map_to_odom"
-    navigation_status_topic: "/navigation/status"
     map_assets_json: '{}'
     map_registry_path: "/home/ubuntu/software/Todesk/Files/humanoid_ws/data/maps/map_registry.json"

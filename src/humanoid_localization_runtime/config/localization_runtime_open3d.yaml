@@ -1,0 +1,11 @@
+# Open3D 定位链路覆盖参数。
+# 与 localization_runtime.yaml 叠加加载，只维护和 RoboSense 正式链路不同的节点参数。
+
+prior_map_odom_bridge:
+  ros__parameters:
+    localized_frame: "prior_open3d_base"
+    prior_odom_topic: "/prior_localization/odom"
+    require_confidence: true
+    odom_cache_topic: "/prior_localization/open3d_input_odom"
+    # 旧 Open3D 链路没有完整自动恢复协调器，只监控大跳，不冻结导航 TF。
+    jump_protection_mode: "monitor"

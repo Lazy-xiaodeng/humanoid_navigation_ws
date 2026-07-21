@@ -37,12 +37,17 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     pkg_nav2 = get_package_share_directory('humanoid_navigation2')
     pkg_obstacle_runtime = get_package_share_directory('humanoid_obstacle_runtime')
+    pkg_localization_runtime = get_package_share_directory('humanoid_localization_runtime')
 
     default_nav2_params_file = os.path.join(pkg_nav2, 'config', 'nav2_params.yaml')
     default_bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_xy_then_yaw.xml')
     default_through_bt_xml_file = os.path.join(pkg_nav2, 'behavior_tree', 'navigate_through_poses_no_backup.xml')
     default_prior_map_path = os.path.join(pkg_nav2, 'pcd', 'hall_open3d_grounded.pcd')
     default_roi_obstacle_params_file = os.path.join(pkg_obstacle_runtime, 'config', 'obstacle_runtime.yaml')
+    default_localization_runtime_config_file = os.path.join(
+        pkg_localization_runtime, 'config', 'localization_runtime.yaml')
+    default_open3d_localization_config_file = os.path.join(
+        pkg_localization_runtime, 'config', 'localization_runtime_open3d.yaml')
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     nav2_params_file = LaunchConfiguration('nav2_params_file', default=default_nav2_params_file)
@@ -56,14 +61,14 @@ def generate_launch_description():
         'roi_obstacle_params_file',
         default=default_roi_obstacle_params_file,
     )
-
-    prior_pose_topic = LaunchConfiguration('prior_pose_topic', default='/prior_localization/pose')
-    prior_pose_with_covariance_topic = LaunchConfiguration(
-        'prior_pose_with_covariance_topic',
-        default='/prior_localization/pose_with_covariance',
+    localization_runtime_config_file = LaunchConfiguration(
+        'localization_runtime_config_file',
+        default=default_localization_runtime_config_file,
     )
-    prior_odom_topic = LaunchConfiguration('prior_odom_topic', default='/prior_localization/odom')
-    prior_localized_frame = LaunchConfiguration('prior_localized_frame', default='prior_open3d_base')
+    open3d_localization_config_file = LaunchConfiguration(
+        'open3d_localization_config_file',
+        default=default_open3d_localization_config_file,
+    )
     prior_map_path = LaunchConfiguration('prior_map_path', default=default_prior_map_path)
     map_yaml_file = LaunchConfiguration(
         'map_yaml_file',
@@ -94,15 +99,12 @@ def generate_launch_description():
         ),
     ]
 
-    def nav2_cpp_node(executable, node_name, extra_parameters=None):
+    def localization_node(executable, node_name):
         parameters = [
-            {
-                # 是否使用仿真时间；实机 false，bag 回放 true。
-                'use_sim_time': use_sim_time,
-            }
+            localization_runtime_config_file,
+            open3d_localization_config_file,
+            {'use_sim_time': use_sim_time},
         ]
-        if extra_parameters:
-            parameters.append(extra_parameters)
         return Node(
             package='humanoid_localization_runtime',
             executable=executable,
@@ -172,22 +174,7 @@ def generate_launch_description():
         executable='dynamic_odom_ground_publisher',
         name='dynamic_map_ground_publisher',
         output='screen',
-        parameters=[
-            {
-                # 时间源。
-                'use_sim_time': use_sim_time,
-                # 父坐标系：全局定位输出的 map。
-                'parent_frame': 'map',
-                # 用 base_footprint 当前高度估算地面高度。
-                'base_frame': 'base_footprint',
-                # 输出给 Nav2 global costmap 使用的地面 map。
-                'child_frame': 'map_ground',
-                # 发布频率，单位 Hz。
-                'publish_rate': 30.0,
-                # 地面 TF 的额外高度偏移。
-                'z_offset': 0.0,
-            }
-        ],
+        parameters=[localization_runtime_config_file, {'use_sim_time': use_sim_time}],
     )
 
     tf_odom_to_ground = Node(
@@ -195,22 +182,7 @@ def generate_launch_description():
         executable='dynamic_odom_ground_publisher',
         name='dynamic_odom_ground_publisher',
         output='screen',
-        parameters=[
-            {
-                # 时间源。
-                'use_sim_time': use_sim_time,
-                # 父坐标系：Fast-LIO 局部 odom。
-                'parent_frame': 'odom',
-                # 用 base_footprint 当前高度估算局部地面高度。
-                'base_frame': 'base_footprint',
-                # 输出给 Nav2 local costmap 使用的地面 odom。
-                'child_frame': 'odom_ground',
-                # 发布频率，单位 Hz。
-                'publish_rate': 30.0,
-                # 地面 TF 的额外高度偏移。
-                'z_offset': 0.0,
-            }
-        ],
+        parameters=[localization_runtime_config_file, {'use_sim_time': use_sim_time}],
     )
 
     tf_bridge_base = Node(
@@ -282,17 +254,10 @@ def generate_launch_description():
                 executable='map_server',
                 name='map_server',
                 parameters=[
+                    nav2_params_file,
                     {
-                        # 时间源。
                         'use_sim_time': use_sim_time,
-                    },
-                    {
-                        # 2D 栅格地图 YAML，用于 Nav2 global costmap。
                         'yaml_filename': map_yaml_file,
-                    },
-                    {
-                        # 2D 地图挂在 map_ground 下，避免高度漂移影响 costmap。
-                        'frame_id': 'map_ground',
                     },
                 ],
             )
@@ -307,30 +272,16 @@ def generate_launch_description():
                 executable='lifecycle_manager',
                 name='lifecycle_manager_map',
                 parameters=[
-                    {
-                        # 时间源。
-                        'use_sim_time': use_sim_time,
-                    },
-                    {
-                        # 自动配置并激活 map_server。
-                        'autostart': True,
-                    },
-                    {
-                        # 由该 lifecycle manager 管理的节点名。
-                        'node_names': ['map_server'],
-                    },
+                    nav2_params_file,
+                    {'use_sim_time': use_sim_time},
                 ],
             )
         ],
     )
 
-    robot_realpose_publisher = nav2_cpp_node(
+    robot_realpose_publisher = localization_node(
         'robot_realpose_publisher',
         'robot_realpose_publisher',
-        {
-            # 发布 /robot_realpose 时使用的全局地面坐标系。
-            'global_frame': 'map_ground',
-        },
     )
 
     fastlio_open3d_axis_adapter_node = Node(
@@ -452,109 +403,10 @@ def generate_launch_description():
         ],
     )
 
-    prior_map_odom_bridge_node = nav2_cpp_node(
+    # 唯一 map->odom 发布者；Open3D 专属输入差异由覆盖 YAML 管理。
+    prior_map_odom_bridge_node = localization_node(
         'prior_map_odom_bridge_cpp',
         'prior_map_odom_bridge',
-        {
-            # 全局地图坐标系。
-            'map_frame': 'map',
-            # Fast-LIO 局部里程计坐标系。
-            'odom_frame': 'odom',
-            # Open3D pose 的子坐标系，当前为 prior_open3d_base。
-            'localized_frame': prior_localized_frame,
-            # 兼容 PoseStamped 输入；Open3D 当前不用。
-            'prior_pose_topic': prior_pose_topic,
-            # 兼容 PoseWithCovarianceStamped 输入；Open3D 当前不用。
-            'prior_pose_with_covariance_topic': prior_pose_with_covariance_topic,
-            # Open3D 输出的全局定位 Odometry。
-            'prior_odom_topic': prior_odom_topic,
-            # Open3D 置信度话题。
-            'confidence_topic': '/prior_localization/confidence',
-            # Open3D 必须先有足够置信度，bridge 才接受定位。
-            'require_confidence': True,
-            # 最低置信度。
-            'min_confidence': 0.50,
-            # confidence 超时时间，单位秒。
-            'confidence_timeout_sec': 2.0,
-            # map->odom TF 发布频率，单位 Hz。
-            'publish_rate': 30.0,
-            # TF 查询超时，单位秒。
-            'tf_lookup_timeout_sec': 0.20,
-            # 外部定位 pose 最大允许延迟，单位秒。
-            'pose_timeout_sec': 0.8,
-            # 允许 stamp=0 的定位消息，用于兼容部分外部节点。
-            'accept_zero_stamp': True,
-            # 启动后允许第一帧定位直接初始化 map->odom。
-            'allow_initial_pose': True,
-            # 使用适配节点发布的 odom cache，按定位时间戳插值 odom->base。
-            'use_odom_cache': True,
-            # Open3D 适配节点输出的 odom cache。
-            'odom_cache_topic': '/prior_localization/open3d_input_odom',
-            # odom cache 保存时长，单位秒。
-            'odom_cache_duration_sec': 5.0,
-            # odom 插值允许的最大相邻帧间隔，单位秒。
-            'odom_interpolation_max_gap_sec': 0.25,
-            # 查找同时间戳 odom 的容差，单位秒。
-            'odom_lookup_tolerance_sec': 0.03,
-            # 定位消息先到时，最多等待未来 odom 的时间，单位秒。
-            'odom_future_wait_sec': 0.20,
-            # odom cache 不可用时回退到 TF 查询。
-            'fallback_to_tf_lookup': True,
-            # legacy 门控：小于该平移修正直接接受，单位 m。
-            'max_small_correction_translation': 0.25,
-            # legacy 门控：小于该 yaw 修正直接接受，单位 rad。
-            'max_small_correction_yaw': 0.12,
-            # legacy 门控：大修正平移上限，单位 m。
-            'max_large_correction_translation': 3.0,
-            # legacy 门控：大修正 yaw 上限，单位 rad。
-            'max_large_correction_yaw': 1.2,
-            # 大修正需要连续稳定的帧数。
-            'required_consistent_frames': 5,
-            # 连续帧平移一致性容差，单位 m。
-            'consistency_translation_tolerance': 0.25,
-            # 连续帧 yaw 一致性容差，单位 rad。
-            'consistency_yaw_tolerance': 0.10,
-            # 新大跳保护模式；monitor 只记录 WOULD_*，不冻结 TF。
-            'jump_protection_mode': 'monitor',
-            # 导航中等平移修正阈值，单位 m。
-            'nav_medium_correction_translation': 0.50,
-            # 导航中等 yaw 修正阈值，单位 rad。
-            'nav_medium_correction_yaw': 0.20,
-            # 导航中等修正需要连续稳定帧数。
-            'nav_medium_required_frames': 5,
-            # 导航大跳平移阈值，单位 m。
-            'nav_large_correction_translation': 0.50,
-            # 导航大跳 yaw 阈值，单位 rad。
-            'nav_large_correction_yaw': 0.20,
-            # 导航中是否允许大跳经确认后接受；当前关闭。
-            'allow_nav_large_jump': False,
-            # 空闲阶段允许自动回正的平移上限，单位 m。
-            'idle_large_correction_translation': 1.00,
-            # 空闲阶段允许自动回正的 yaw 上限，单位 rad。
-            'idle_large_correction_yaw': 0.35,
-            # 空闲阶段大修正需要连续稳定帧数。
-            'idle_large_required_frames': 5,
-            # 空闲阶段是否允许较大回正。
-            'allow_idle_large_jump': True,
-            # 绝对平移拒绝阈值，单位 m。
-            'hard_reject_translation': 1.00,
-            # 绝对 yaw 拒绝阈值，单位 rad。
-            'hard_reject_yaw': 0.50,
-            # 大跳冻结超过该时间后发布 DEGRADED，单位秒。
-            'large_jump_degraded_after_sec': 3.0,
-            # SpinToPose 旋转冻结保护；Open3D 链路保持关闭。
-            'enable_spin_to_pose_guard': False,
-            # 导航状态话题，用于识别 TURNING/SpinToPose。
-            'navigation_status_topic': '/navigation/status',
-            # SpinToPose 结束后额外等待再恢复定位更新，单位秒。
-            'spin_to_pose_guard_settle_sec': 3.0,
-            # SpinToPose 保护最长持续时间，单位秒。
-            'spin_to_pose_guard_max_duration_sec': 8.0,
-            # 只把 x/y/yaw 写入 map->odom，忽略 z/roll/pitch。
-            'force_2d': True,
-            # force_2d 时固定 z 值。
-            'force_z': 0.0,
-        },
     )
 
     periodic_clearing_3d_node = TimerAction(
@@ -582,19 +434,7 @@ def generate_launch_description():
         package='humanoid_localization_runtime',
         executable='wait_for_tf',
         name='wait_for_localization_tf',
-        parameters=[{
-            # 等待 Nav2 使用的全局地面坐标系。
-            'target_frame': 'map_ground',
-            # 等待机器人底盘坐标系。
-            'source_frame': 'base_footprint',
-            # 0 表示一直等到 TF 就绪。
-            'timeout_sec': 0.0,
-            # 查询间隔，单位秒。
-            'poll_period': 0.2,
-            # 连续成功次数，避免 TF 瞬时可用就启动 Nav2。
-            'stable_count': 3,
-            'use_sim_time': use_sim_time,
-        }],
+        parameters=[localization_runtime_config_file, {'use_sim_time': use_sim_time}],
         output='screen',
     )
 
@@ -666,29 +506,7 @@ def generate_launch_description():
         executable='lifecycle_manager',
         name='lifecycle_manager_navigation',
         output='screen',
-        parameters=[
-            {
-                # 时间源。
-                'use_sim_time': use_sim_time,
-            },
-            {
-                # 自动配置并激活 Nav2 核心节点。
-                'autostart': True,
-            },
-            {
-                # 禁用 bond 超时，避免网络/负载抖动导致 lifecycle 误退出。
-                'bond_timeout': 0.0,
-            },
-            {
-                # 由该 lifecycle manager 管理的 Nav2 节点。
-                'node_names': [
-                    'planner_server',
-                    'controller_server',
-                    'behavior_server',
-                    'bt_navigator',
-                ],
-            },
-        ],
+        parameters=[nav2_params_file, {'use_sim_time': use_sim_time}],
     )
 
     start_nav2_after_localization = RegisterEventHandler(
@@ -709,10 +527,8 @@ def generate_launch_description():
         DeclareLaunchArgument('enable_periodic_clearing', default_value='true', description='是否启动周期性清障节点'),
         DeclareLaunchArgument('enable_roi_obstacle_detector', default_value='true', description='是否启动前方 ROI 点云障碍检测节点'),
         DeclareLaunchArgument('roi_obstacle_params_file', default_value=default_roi_obstacle_params_file, description='ROI 障碍检测参数文件'),
-        DeclareLaunchArgument('prior_pose_topic', default_value='/prior_localization/pose', description='兼容 PoseStamped 定位输入'),
-        DeclareLaunchArgument('prior_pose_with_covariance_topic', default_value='/prior_localization/pose_with_covariance', description='兼容 PoseWithCovarianceStamped 定位输入'),
-        DeclareLaunchArgument('prior_odom_topic', default_value='/prior_localization/odom', description='Open3D 全局定位 Odometry 输入'),
-        DeclareLaunchArgument('prior_localized_frame', default_value='prior_open3d_base', description='Open3D 定位 pose 的子坐标系'),
+        DeclareLaunchArgument('localization_runtime_config_file', default_value=default_localization_runtime_config_file, description='定位运行层通用参数 YAML'),
+        DeclareLaunchArgument('open3d_localization_config_file', default_value=default_open3d_localization_config_file, description='Open3D 定位链路覆盖参数 YAML'),
         DeclareLaunchArgument('map_yaml_file', default_value=os.path.join(pkg_nav2, 'maps', 'hall.yaml'), description='Nav2 map_server 加载的 2D 栅格地图 YAML'),
         DeclareLaunchArgument('enable_prior_map_localization', default_value='true', description='是否启动 Open3D 定位节点'),
         DeclareLaunchArgument('prior_map_path', default_value=default_prior_map_path, description='Open3D 标准轴 grounded PCD 地图路径'),

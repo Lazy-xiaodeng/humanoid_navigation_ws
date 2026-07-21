@@ -17,7 +17,7 @@
 - `src/robot_realpose_publisher.cpp`：机器人真实位姿发布节点，从 TF 查询全局位姿并发布 `/robot_realpose`。
 - `src/rviz_initialpose_adapter.cpp`：RViz 初始位姿适配节点，把 `/initialpose` 同步给定位桥和 RoboSense。
 - `src/wait_for_tf.cpp`：TF 就绪门控节点，等待指定 TF 连续稳定后退出，供 launch 继续启动 Nav2。
-- `config/localization_runtime.yaml`：定位运行层参考参数，带中文注释，当前主启动链路仍以内联 launch 参数为准。
+- `config/localization_runtime.yaml`：定位运行层正式参数，统一维护 bridge、可信度监督、恢复协调器和辅助节点配置。
 - `launch/localization_runtime.launch.py`：独立调试 launch，便于单独启动定位辅助节点。
 - `docs/全局重定位灰度集成修改记录.md`：`off/shadow/enforce` 权限、链路和验证记录。
 
@@ -46,9 +46,20 @@ source install/local_setup.bash
 ros2 launch humanoid_localization_runtime localization_runtime.launch.py
 ```
 
-完整导航默认以 `shadow` 模式运行全局重定位，只计算和记录结果，不写正式 RO、bridge、TF
-或路线控制链路。只有显式设置
-`global_relocalization_integration_mode:=enforce` 才允许正式接管。
+完整导航默认读取 `config/localization_runtime.yaml`，其中 `integration_mode: shadow`
+只计算和记录结果，不写正式 RO、bridge、TF 或路线控制链路。灰度切换时应修改或选择
+另一份定位运行层 YAML，并保证 `localization_trust_supervisor` 与
+`global_relocalization_coordinator` 的 `integration_mode` 同时设为 `enforce`。
+
+正式 launch 只保留节点启停、配置文件路径和 `use_sim_time` 等编排参数。例如：
+
+```bash
+ros2 launch humanoid_bringup robot_real.launch.py \
+  localization_runtime_config_file:=/path/to/localization_runtime.yaml
+```
+
+无论采用何种模式，`prior_map_odom_bridge` 都是唯一的 `map -> odom` 发布者；RO 和全局
+重定位节点只能提交候选，不能直接广播该 TF。
 
 ## 维护说明
 

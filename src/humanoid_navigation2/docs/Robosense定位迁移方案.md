@@ -16,7 +16,7 @@
 - 输入点云：`/fast_lio/cloud_registered`
 - 输入相对位姿：`/odom`
 - 输出定位结果：`/lidar_pose_xyz`，类型 `nav_msgs/Odometry`
-- 可选直接发布 `map -> odom` TF：`publish_map_to_odom_tf`
+- 只发布定位结果与精修候选；`map -> odom` 固定由 `prior_map_odom_bridge` 独占发布
 - 配置文件：硬编码读取 `PROJECT_DIR/config/config.yaml`
 - 地图路径：代码里用 `PROJECT_DIR + map_path` 拼接，所以 `map_path: /map/xxx.pcd` 实际指向包目录下的 `map/xxx.pcd`
 
@@ -144,7 +144,7 @@ std::string config_file = nh->get_parameter("config_file").as_string();
 配置里设置：
 
 ```yaml
-publish_map_to_odom_tf: false
+# map -> odom 由 prior_map_odom_bridge 独占发布，RoboSense 节点不提供该开关
 map_frame_id: "map"
 odom_frame_id: "odom"
 base_frame_id: "base_footprint"
@@ -167,11 +167,11 @@ RoboSense 原始输出是 `/lidar_pose_xyz`。为了和 Open3D 对比更清晰�
 - `child_frame_id = base_footprint`
 - `pose = map -> base_footprint`
 
-然后让 `prior_map_odom_bridge` 使用：
+然后在 `localization_runtime.yaml` 的 `prior_map_odom_bridge.ros__parameters` 中配置：
 
 ```text
-prior_odom_topic:=/prior_localization/robosense_odom
-prior_localized_frame:=base_footprint
+prior_odom_topic: /prior_localization/robosense_odom
+localized_frame: base_footprint
 ```
 
 如果后续发现 RoboSense 输出实际是 `map -> body` 或其他中间 frame，则不要强行用 `base_footprint`，需要新增一个虚拟 frame，例如 `robosense_localized_base`，并发布对应 `odom -> robosense_localized_base` 或调整 bridge 的 `localized_frame`。
@@ -208,15 +208,16 @@ src/humanoid_navigation2/launch/navigation2_robosense_localization.launch.py
 bridge 首次接受定位后 3.0s 启动 Nav2 lifecycle
 ```
 
-新增 launch 参数建议：
+launch 只保留启动场景参数：
 
 ```text
 use_sim_time:=false
 robosense_config_file:=<share>/robosense_lidar_localization/config/robosense_lidar_localization.yaml
 robosense_map_path:=/home/ubuntu/humanoid_ws/src/humanoid_navigation2/pcd/hall_open3d_grounded.pcd
-robosense_publish_tf:=false
-prior_odom_topic:=/prior_localization/robosense_odom
+localization_runtime_config_file:=<share>/humanoid_localization_runtime/config/localization_runtime.yaml
 ```
+
+RoboSense 节点已从代码层移除 `map->odom` 广播能力；输入话题、帧名和门控参数统一由上述 YAML 管理。
 
 ## 6. 与 Open3D 的公平对比方式
 
@@ -285,13 +286,13 @@ ros2 run tf2_ros tf2_echo odom base_footprint
 
 ### 阶段 C：接入 bridge
 
-启动 `prior_map_odom_bridge`：
+启动 `prior_map_odom_bridge`，并在定位运行层 YAML 中确认：
 
 ```text
-prior_odom_topic=/prior_localization/robosense_odom
-prior_localized_frame=base_footprint
-require_confidence=false
-force_2d=true
+prior_odom_topic: /prior_localization/robosense_odom
+localized_frame: base_footprint
+require_confidence: false
+force_2d: true
 ```
 
 第一轮建议 `jump_protection_mode=monitor`，先观察日志，不拦截真实 TF。
@@ -407,4 +408,3 @@ init_euler: [roll, pitch, yaw]
 4. 新增 `navigation2_robosense_localization.launch.py`，不要动现有 `navigation2.launch.py`。
 5. 先 rosbag/offline smoke test，再实机短距离测试。
 6. 最后再考虑是否引入 `msf_localization` 或 `/initialpose` 动态重初始化。
-

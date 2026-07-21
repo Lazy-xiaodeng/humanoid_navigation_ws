@@ -28,7 +28,7 @@ def generate_launch_description():
                 'config',
                 'localization_runtime.yaml',
             ]),
-            description='定位运行层参考参数文件。',
+            description='定位运行层统一参数文件。',
         ),
         # 发布 map -> map_ground，只负责地面坐标系辅助 TF。
         Node(
