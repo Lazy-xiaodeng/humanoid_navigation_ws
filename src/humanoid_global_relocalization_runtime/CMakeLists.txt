@@ -18,6 +18,7 @@ find_package(rosbag2_storage REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common io filters registration)
 find_package(yaml-cpp REQUIRED)
+find_package(Threads REQUIRED)
 find_package(OpenMP)
 
 set(BUILD_CUDA OFF CACHE BOOL "Disable 3D-BBS CUDA backend for the CPU runtime build" FORCE)
@@ -47,6 +48,7 @@ add_library(global_relocalization_core
   src/simple_bbs3d.cpp
   src/temporal_consistency.cpp
   src/evaluator.cpp
+  src/multi_seed_verifier.cpp
 )
 
 target_include_directories(global_relocalization_core
@@ -62,6 +64,7 @@ target_link_libraries(global_relocalization_core
   ${PCL_LIBRARIES}
   yaml-cpp
   cpu_bbs3d
+  Threads::Threads
 )
 
 if(OpenMP_CXX_FOUND)
@@ -112,8 +115,20 @@ install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(DIRECTORY docs
+  DESTINATION share/${PROJECT_NAME}
+)
+
 install(FILES README.md
   DESTINATION share/${PROJECT_NAME}
 )
+
+if(BUILD_TESTING)
+  enable_testing()
+  add_executable(test_multi_seed_verifier test/test_multi_seed_verifier.cpp)
+  target_link_libraries(test_multi_seed_verifier global_relocalization_core)
+  ament_target_dependencies(test_multi_seed_verifier ${COMMON_DEPS})
+  add_test(NAME multi_seed_verifier COMMAND test_multi_seed_verifier)
+endif()
 
 ament_package()

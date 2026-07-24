@@ -14,6 +14,7 @@
  *   - 如果所有候选精配准都不收敛，会回退到 BBS top-1，避免未初始化位姿进入后续逻辑。
  */
 
+#include <memory>
 #include <vector>
 
 #include <Eigen/Dense>
@@ -33,6 +34,29 @@ struct RefineOutput
   double selection_score{0.0};
   double elapsed_ms{0.0};
   bool converged{false};
+};
+
+// 同一批候选共享 target/source 和后端配置，每个工作线程持有一个独立会话。
+// 会话不可跨线程共享，避免 PCL 配准器内部可变状态产生数据竞争。
+class RefineSession
+{
+public:
+  RefineSession(
+    const CloudPtr & map_cloud,
+    const CloudPtr & scan_cloud,
+    const RefineConfig & config);
+  ~RefineSession();
+
+  RefineSession(RefineSession &&) noexcept;
+  RefineSession & operator=(RefineSession &&) noexcept;
+  RefineSession(const RefineSession &) = delete;
+  RefineSession & operator=(const RefineSession &) = delete;
+
+  RefineOutput refine(const BbsCandidate & candidate, int rank);
+
+private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
 };
 
 RefineOutput refine_single_candidate(

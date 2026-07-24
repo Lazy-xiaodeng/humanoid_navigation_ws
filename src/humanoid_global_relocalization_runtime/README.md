@@ -32,6 +32,10 @@
 
 正式默认层不常开 2.5D。高精度层在默认层拒绝或弱接受风险分 `precision_layer_trigger_risk_score` 达标时介入，使用 `Scan Context DB + scan0.25 + GICP top30` 做复核。Scan Context 在默认层仍关闭；只有当部署地图已经有稳定的 descriptor/keyframe 数据库时，才填写 `precision_layer_scan_context_database_path` 或全局 `scan_context_database_path`。
 
+正式源码还包含一个多初值连续跟踪兜底层，参数入口为 `enable_multi_seed_recovery`，默认关闭。开启后，它只在默认层没有发布、精度层已经实际尝试仍未发布（或精度层数据库不可用）、trajectory 也未裁决时运行。该层先把同一失败帧中已经精配的 BBS/SOLiD 候选按来源和位姿聚类，为每个候选建立独立 `map->odom` 轨迹；后续帧使用 odom 传播预测，首次执行局部 SE(2) 搜索和粗 GICP，此后执行 0.10m 细 GICP。滚动 12 帧内至少 9 帧有效，并且至少两条同来源、同初始簇轨迹的 `map->odom` 在 `0.08m/2deg` 内一致时，才发布 `accepted_multi_seed` 候选。后续仍必须经过 RO trusted commit 和 Bridge 单一 TF 发布链路。
+
+多初值计算在后台执行，最多一个批次在途。`cancel`、地图切换或新 attempt 会递增代次，旧后台结果即使晚到也会被丢弃。每个精配线程使用独立 PCL 配准器，只共享只读地图和已经预处理的当前 scan，避免阻塞 ROS 主线程或产生配准器数据竞争。
+
 ## 上下游关系
 
 上游输入分为两种模式，由 [relocalization_runtime.yaml](/home/ubuntu/software/Todesk/Files/humanoid_ws/src/humanoid_global_relocalization_runtime/config/relocalization_runtime.yaml) 参数选择：

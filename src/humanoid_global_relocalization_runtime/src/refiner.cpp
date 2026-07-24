@@ -32,12 +32,60 @@ double elapsed_ms(
 
 }  // namespace
 
-RefineOutput refine_single_candidate(
+struct RefineSession::Impl
+{
+  CloudPtr map_cloud;
+  CloudPtr scan_cloud;
+  RefineConfig config;
+  std::unique_ptr<pcl::IterativeClosestPoint<Point, Point>> icp;
+  std::unique_ptr<pcl::GeneralizedIterativeClosestPoint<Point, Point>> gicp;
+  std::unique_ptr<pcl::NormalDistributionsTransform<Point, Point>> ndt;
+
+  Impl(const CloudPtr & map, const CloudPtr & scan, const RefineConfig & refine_config)
+  : map_cloud(map), scan_cloud(scan), config(refine_config)
+  {
+    if (config.method == RefineMethod::Icp) {
+      icp = std::make_unique<pcl::IterativeClosestPoint<Point, Point>>();
+      icp->setInputTarget(map_cloud);
+      icp->setInputSource(scan_cloud);
+      icp->setMaximumIterations(config.max_iterations);
+      icp->setMaxCorrespondenceDistance(config.max_correspondence_distance);
+      icp->setTransformationEpsilon(config.transformation_epsilon);
+      icp->setEuclideanFitnessEpsilon(config.euclidean_fitness_epsilon);
+    } else if (config.method == RefineMethod::Gicp) {
+      gicp = std::make_unique<pcl::GeneralizedIterativeClosestPoint<Point, Point>>();
+      gicp->setInputTarget(map_cloud);
+      gicp->setInputSource(scan_cloud);
+      gicp->setMaximumIterations(config.max_iterations);
+      gicp->setMaxCorrespondenceDistance(config.max_correspondence_distance);
+      gicp->setTransformationEpsilon(config.transformation_epsilon);
+      gicp->setEuclideanFitnessEpsilon(config.euclidean_fitness_epsilon);
+    } else if (config.method == RefineMethod::Ndt) {
+      ndt = std::make_unique<pcl::NormalDistributionsTransform<Point, Point>>();
+      ndt->setInputTarget(map_cloud);
+      ndt->setInputSource(scan_cloud);
+      ndt->setMaximumIterations(config.max_iterations);
+      ndt->setStepSize(config.ndt_step_size);
+      ndt->setResolution(config.ndt_resolution);
+      ndt->setOulierRatio(config.ndt_outlier_ratio);
+      ndt->setTransformationEpsilon(config.transformation_epsilon);
+    }
+  }
+};
+
+RefineSession::RefineSession(
   const CloudPtr & map_cloud,
   const CloudPtr & scan_cloud,
-  const BbsCandidate & candidate,
-  int rank,
   const RefineConfig & config)
+: impl_(std::make_unique<Impl>(map_cloud, scan_cloud, config))
+{
+}
+
+RefineSession::~RefineSession() = default;
+RefineSession::RefineSession(RefineSession &&) noexcept = default;
+RefineSession & RefineSession::operator=(RefineSession &&) noexcept = default;
+
+RefineOutput RefineSession::refine(const BbsCandidate & candidate, int rank)
 {
   RefineOutput output;
   output.pose = candidate.pose;
@@ -49,8 +97,7 @@ RefineOutput refine_single_candidate(
     output.converged = std::isfinite(candidate.refinement_fitness);
     return output;
   }
-
-  if (config.method == RefineMethod::None) {
+  if (impl_->config.method == RefineMethod::None) {
     output.fitness_score = 0.0;
     output.selection_score = 0.0;
     output.converged = true;
@@ -60,57 +107,45 @@ RefineOutput refine_single_candidate(
   const auto start = std::chrono::steady_clock::now();
   const Eigen::Matrix4f initial_pose = candidate.pose.cast<float>();
   Cloud aligned;
-
-  // PCL 三种精配准后端都使用同一个输入/目标定义：
-  // source=当前 scan，target=预建地图，initial guess=3D-BBS 给出的 map->base 粗位姿。
-  if (config.method == RefineMethod::Icp) {
-    pcl::IterativeClosestPoint<Point, Point> icp;
-    icp.setInputTarget(map_cloud);
-    icp.setInputSource(scan_cloud);
-    icp.setMaximumIterations(config.max_iterations);
-    icp.setMaxCorrespondenceDistance(config.max_correspondence_distance);
-    icp.setTransformationEpsilon(config.transformation_epsilon);
-    icp.setEuclideanFitnessEpsilon(config.euclidean_fitness_epsilon);
-    icp.align(aligned, initial_pose);
-    output.converged = icp.hasConverged();
+  if (impl_->icp) {
+    impl_->icp->align(aligned, initial_pose);
+    output.converged = impl_->icp->hasConverged();
     output.fitness_score = output.converged ?
-      icp.getFitnessScore(config.max_correspondence_distance) :
+      impl_->icp->getFitnessScore(impl_->config.max_correspondence_distance) :
       std::numeric_limits<double>::infinity();
-    output.pose = output.converged ? icp.getFinalTransformation().cast<double>() : candidate.pose;
-  } else if (config.method == RefineMethod::Gicp) {
-    pcl::GeneralizedIterativeClosestPoint<Point, Point> gicp;
-    gicp.setInputTarget(map_cloud);
-    gicp.setInputSource(scan_cloud);
-    gicp.setMaximumIterations(config.max_iterations);
-    gicp.setMaxCorrespondenceDistance(config.max_correspondence_distance);
-    gicp.setTransformationEpsilon(config.transformation_epsilon);
-    gicp.setEuclideanFitnessEpsilon(config.euclidean_fitness_epsilon);
-    gicp.align(aligned, initial_pose);
-    output.converged = gicp.hasConverged();
+    output.pose = output.converged ?
+      impl_->icp->getFinalTransformation().cast<double>() : candidate.pose;
+  } else if (impl_->gicp) {
+    impl_->gicp->align(aligned, initial_pose);
+    output.converged = impl_->gicp->hasConverged();
     output.fitness_score = output.converged ?
-      gicp.getFitnessScore(config.max_correspondence_distance) :
+      impl_->gicp->getFitnessScore(impl_->config.max_correspondence_distance) :
       std::numeric_limits<double>::infinity();
-    output.pose = output.converged ? gicp.getFinalTransformation().cast<double>() : candidate.pose;
-  } else if (config.method == RefineMethod::Ndt) {
-    pcl::NormalDistributionsTransform<Point, Point> ndt;
-    ndt.setInputTarget(map_cloud);
-    ndt.setInputSource(scan_cloud);
-    ndt.setMaximumIterations(config.max_iterations);
-    ndt.setStepSize(config.ndt_step_size);
-    ndt.setResolution(config.ndt_resolution);
-    ndt.setOulierRatio(config.ndt_outlier_ratio);
-    ndt.setTransformationEpsilon(config.transformation_epsilon);
-    ndt.align(aligned, initial_pose);
-    output.converged = ndt.hasConverged();
+    output.pose = output.converged ?
+      impl_->gicp->getFinalTransformation().cast<double>() : candidate.pose;
+  } else if (impl_->ndt) {
+    impl_->ndt->align(aligned, initial_pose);
+    output.converged = impl_->ndt->hasConverged();
     output.fitness_score = output.converged ?
-      ndt.getFitnessScore(config.max_correspondence_distance) :
+      impl_->ndt->getFitnessScore(impl_->config.max_correspondence_distance) :
       std::numeric_limits<double>::infinity();
-    output.pose = output.converged ? ndt.getFinalTransformation().cast<double>() : candidate.pose;
+    output.pose = output.converged ?
+      impl_->ndt->getFinalTransformation().cast<double>() : candidate.pose;
   }
-
   output.elapsed_ms = elapsed_ms(start, std::chrono::steady_clock::now());
   output.selection_score = output.fitness_score;
   return output;
+}
+
+RefineOutput refine_single_candidate(
+  const CloudPtr & map_cloud,
+  const CloudPtr & scan_cloud,
+  const BbsCandidate & candidate,
+  int rank,
+  const RefineConfig & config)
+{
+  RefineSession session(map_cloud, scan_cloud, config);
+  return session.refine(candidate, rank);
 }
 
 RefineOutput refine_candidates(

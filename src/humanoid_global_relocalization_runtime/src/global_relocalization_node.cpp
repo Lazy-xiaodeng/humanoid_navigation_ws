@@ -25,7 +25,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <deque>
+#include <future>
 #include <iomanip>
 #include <limits>
 #include <memory>
@@ -49,6 +51,7 @@
 
 #include "humanoid_global_relocalization_runtime/bbs2d_search.hpp"
 #include "humanoid_global_relocalization_runtime/config.hpp"
+#include "humanoid_global_relocalization_runtime/multi_seed_verifier.hpp"
 #include "humanoid_global_relocalization_runtime/point_cloud_adapter.hpp"
 #include "humanoid_global_relocalization_runtime/refiner.hpp"
 #include "humanoid_global_relocalization_runtime/scan_context.hpp"
@@ -409,6 +412,11 @@ public:
       cloud_topic,
       rclcpp::SensorDataQoS(),
       [this](sensor_msgs::msg::PointCloud2::SharedPtr msg) { handle_cloud(std::move(msg)); });
+    if (config_.multi_seed_recovery.enable) {
+      // 多初值精配在后台执行；定时器只在 ROS 主线程领取结果和发布候选。
+      multi_seed_poll_timer_ = create_wall_timer(
+        std::chrono::milliseconds(50), [this]() {poll_multi_seed_jobs();});
+    }
 
     RCLCPP_INFO(
       get_logger(),
@@ -424,10 +432,44 @@ public:
   }
 
 private:
+  struct MultiSeedJobContext
+  {
+    std::uint64_t generation{0};
+    std::string attempt_id;
+    std::string map_id;
+    sensor_msgs::msg::PointCloud2 source_msg;
+    nav_msgs::msg::Odometry synced_odom;
+    CloudPtr scan_cloud;
+  };
+
+  enum class MultiSeedJobKind {Initialize, Track};
+
+  struct MultiSeedBackgroundResult
+  {
+    MultiSeedJobKind kind{MultiSeedJobKind::Initialize};
+    MultiSeedInitializationOutput initialization;
+    MultiSeedTrackingOutput tracking;
+  };
+
+  struct PendingMultiSeedJob
+  {
+    MultiSeedJobKind kind{MultiSeedJobKind::Initialize};
+    std::shared_ptr<MultiSeedJobContext> context;
+    std::future<MultiSeedBackgroundResult> future;
+  };
+
   void reset_attempt_state()
   {
+    ++attempt_generation_;
+    if (pending_multi_seed_job_) {
+      // PCL align 不能可靠地中途取消；保留 future 到后台自然结束，并通过 generation 丢弃旧结果。
+      stale_multi_seed_jobs_.push_back(std::move(pending_multi_seed_job_));
+    }
     temporal_window_.clear();
     scan_window_.clear();
+    multi_seed_tracks_.clear();
+    multi_seed_tracking_active_ = false;
+    multi_seed_message_counter_ = 0;
     default_reject_streak_ = 0;
     precision_attempts_remaining_ = 0;
     last_search_time_ = rclcpp::Time(0, 0, get_clock()->get_clock_type());
@@ -575,6 +617,13 @@ private:
       // 运行态与评估工具使用同一套地图预处理和 3D-BBS 参数，保证参数语义一致。
       CloudPtr raw_map = load_pcd_xyz(config_.input.map_path);
       map_cloud_ = preprocess_map_cloud(raw_map, config_.preprocess);
+      if (config_.multi_seed_recovery.enable) {
+        PreprocessConfig fine_preprocess = config_.preprocess;
+        fine_preprocess.map_leaf_size = config_.multi_seed_recovery.fine_map_leaf_size;
+        multi_seed_map_cloud_ = preprocess_map_cloud(raw_map, fine_preprocess);
+      } else {
+        multi_seed_map_cloud_.reset();
+      }
       const auto map_points = cloud_to_eigen_points(map_cloud_);
       bbs_ = std::make_unique<SimpleBbs3d>(config_.bbs);
       bbs2d_ = std::make_unique<Bbs2dSearch>(config_.bbs2d);
@@ -602,14 +651,16 @@ private:
 
       RCLCPP_INFO(
         get_logger(),
-        "built global relocalization map index: map_points=%zu occupancy_voxels=%zu scan_context_entries=%zu solid_entries=%zu precision_scan_context_entries=%zu bbs2d=%s precision_layer=%s build_ms=%.3f",
+        "built global relocalization map index: map_points=%zu multi_seed_map_points=%zu occupancy_voxels=%zu scan_context_entries=%zu solid_entries=%zu precision_scan_context_entries=%zu bbs2d=%s precision_layer=%s multi_seed=%s build_ms=%.3f",
         map_cloud_->size(),
+        multi_seed_map_cloud_ ? multi_seed_map_cloud_->size() : 0U,
         map_occupancy_.size(),
         scan_context_database_.size(),
         solid_database_.size(),
         precision_scan_context_database_.size(),
         config_.bbs2d.enable ? "enabled" : "disabled",
         config_.precision_recovery.enable ? "enabled" : "disabled",
+        config_.multi_seed_recovery.enable ? "enabled" : "disabled",
         build_ms);
       return true;
     } catch (const std::exception & exc) {
@@ -1031,15 +1082,20 @@ private:
       return;
     }
 
-    // 实时搜索默认节流，避免每帧都做全图 BBS 搜索把 CPU 打满。
     const auto now = this->now();
-    if (last_search_time_.nanoseconds() != 0) {
+    if (!multi_seed_tracking_active_ && pending_multi_seed_job_ &&
+      pending_multi_seed_job_->kind == MultiSeedJobKind::Initialize)
+    {
+      return;
+    }
+
+    // 全局搜索默认节流；多初值连续跟踪使用自己的消息 stride，不沿用全图搜索周期。
+    if (!multi_seed_tracking_active_ && last_search_time_.nanoseconds() != 0) {
       const double dt = (now - last_search_time_).seconds();
       if (dt < config_.output.relocalization_min_period_sec) {
         return;
       }
     }
-    last_search_time_ = now;
 
     CloudPtr base_scan;
     std::optional<nav_msgs::msg::Odometry> synced_odom;
@@ -1060,8 +1116,34 @@ private:
       synced_odom = nearest_odom(stamp_to_sec(msg->header.stamp));
       base_scan = convert_raw_body_to_base_cloud(pointcloud2_to_xyz_cloud(*msg), config_.frames);
     }
+    if (!synced_odom) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000, "skip cloud because synced odom was not found");
+      return;
+    }
 
+    if (multi_seed_tracking_active_) {
+      ++multi_seed_message_counter_;
+      if (multi_seed_message_counter_ % std::max(1, config_.multi_seed_recovery.tracking_stride_messages) != 0 ||
+        multi_seed_background_busy())
+      {
+        return;
+      }
+      PreprocessConfig fine_preprocess = config_.preprocess;
+      fine_preprocess.scan_leaf_size = config_.multi_seed_recovery.fine_scan_leaf_size;
+      CloudPtr fine_scan = preprocess_scan_cloud(base_scan, fine_preprocess);
+      schedule_multi_seed_tracking(*msg, *synced_odom, fine_scan);
+      return;
+    }
+
+    last_search_time_ = now;
     CloudPtr scan_cloud = preprocess_scan_cloud(base_scan, config_.preprocess);
+    CloudPtr multi_seed_scan;
+    if (config_.multi_seed_recovery.enable) {
+      PreprocessConfig fine_preprocess = config_.preprocess;
+      fine_preprocess.scan_leaf_size = config_.multi_seed_recovery.fine_scan_leaf_size;
+      multi_seed_scan = preprocess_scan_cloud(base_scan, fine_preprocess);
+    }
     const auto scan_points = cloud_to_eigen_points(scan_cloud);
     auto result = bbs_->localize(scan_points);
     fuse_solid_candidates_for_online(base_scan, result);
@@ -1074,7 +1156,8 @@ private:
 
     publish_runtime_outputs(*msg, *scan_cloud, result);
     const bool recovery_published =
-      update_temporal_verifier(*msg, *scan_cloud, result, synced_odom, precision_layer_used);
+      update_temporal_verifier(
+      *msg, *scan_cloud, multi_seed_scan, result, synced_odom, precision_layer_used);
     update_precision_layer_state(recovery_published, precision_layer_used);
     RCLCPP_INFO(
       get_logger(),
@@ -1185,9 +1268,258 @@ private:
            risk_score >= std::max(1, config_.precision_recovery.trigger_risk_score);
   }
 
+  bool multi_seed_background_busy() const
+  {
+    return pending_multi_seed_job_ || !stale_multi_seed_jobs_.empty();
+  }
+
+  bool try_schedule_multi_seed_recovery(
+    const sensor_msgs::msg::PointCloud2 & source_msg,
+    const CloudPtr & scan_cloud,
+    const BbsResult & result,
+    const nav_msgs::msg::Odometry & synced_odom,
+    bool precision_layer_used)
+  {
+    if (!config_.multi_seed_recovery.enable || multi_seed_background_busy() ||
+      multi_seed_tracking_active_ || !multi_seed_map_cloud_ || !scan_cloud)
+    {
+      return false;
+    }
+    // 有精度层时必须等它至少实际运行一次；SC 数据库不可用时才允许默认层拒绝后直接兜底。
+    if (precision_layer_available() && !precision_layer_used) {
+      return false;
+    }
+    const auto now = this->now();
+    if (last_multi_seed_finish_time_.nanoseconds() != 0 &&
+      (now - last_multi_seed_finish_time_).seconds() <
+      std::max(0.0, config_.multi_seed_recovery.cooldown_sec))
+    {
+      return false;
+    }
+
+    auto context = std::make_shared<MultiSeedJobContext>();
+    context->generation = attempt_generation_;
+    context->attempt_id = active_attempt_id_;
+    context->map_id = active_map_id_;
+    context->source_msg = source_msg;
+    context->synced_odom = synced_odom;
+    context->scan_cloud = scan_cloud;
+
+    MultiSeedInitializationInput input;
+    input.map_cloud = multi_seed_map_cloud_;
+    input.scan_cloud = scan_cloud;
+    input.odom_to_base =
+      raw_odom_pose_to_base_axis_pose(pose_to_matrix(synced_odom.pose.pose));
+    input.candidates = result.candidates;
+    input.refine = config_.refine;
+    const MultiSeedRecoveryConfig multi_seed_config = config_.multi_seed_recovery;
+
+    auto job = std::make_unique<PendingMultiSeedJob>();
+    job->kind = MultiSeedJobKind::Initialize;
+    job->context = context;
+    job->future = std::async(
+      std::launch::async,
+      [input = std::move(input), multi_seed_config]() {
+        MultiSeedBackgroundResult result;
+        result.kind = MultiSeedJobKind::Initialize;
+        result.initialization = initialize_multi_seed_tracks(input, multi_seed_config);
+        return result;
+      });
+    pending_multi_seed_job_ = std::move(job);
+    RCLCPP_INFO(
+      get_logger(),
+      "multi-seed tracker initialization scheduled: attempt=%s candidates=%zu workers=%d precision_layer_used=%s",
+      active_attempt_id_.c_str(),
+      result.candidates.size(),
+      std::max(1, multi_seed_config.worker_threads),
+      precision_layer_used ? "true" : "false");
+    return true;
+  }
+
+  void schedule_multi_seed_tracking(
+    const sensor_msgs::msg::PointCloud2 & source_msg,
+    const nav_msgs::msg::Odometry & synced_odom,
+    const CloudPtr & scan_cloud)
+  {
+    auto context = std::make_shared<MultiSeedJobContext>();
+    context->generation = attempt_generation_;
+    context->attempt_id = active_attempt_id_;
+    context->map_id = active_map_id_;
+    context->source_msg = source_msg;
+    context->synced_odom = synced_odom;
+    context->scan_cloud = scan_cloud;
+
+    MultiSeedTrackingInput input;
+    input.map_cloud = multi_seed_map_cloud_;
+    input.scan_cloud = scan_cloud;
+    input.odom_to_base =
+      raw_odom_pose_to_base_axis_pose(pose_to_matrix(synced_odom.pose.pose));
+    input.tracks = multi_seed_tracks_;
+    const MultiSeedRecoveryConfig multi_seed_config = config_.multi_seed_recovery;
+    auto job = std::make_unique<PendingMultiSeedJob>();
+    job->kind = MultiSeedJobKind::Track;
+    job->context = context;
+    job->future = std::async(
+      std::launch::async,
+      [input = std::move(input), multi_seed_config]() {
+        MultiSeedBackgroundResult result;
+        result.kind = MultiSeedJobKind::Track;
+        result.tracking = update_multi_seed_tracks(input, multi_seed_config);
+        return result;
+      });
+    pending_multi_seed_job_ = std::move(job);
+  }
+
+  void poll_multi_seed_jobs()
+  {
+    for (auto item = stale_multi_seed_jobs_.begin(); item != stale_multi_seed_jobs_.end();) {
+      if ((*item)->future.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+        ++item;
+        continue;
+      }
+      try {
+        (void)(*item)->future.get();
+      } catch (const std::exception & exc) {
+        RCLCPP_WARN(get_logger(), "discarded stale multi-seed job failed: %s", exc.what());
+      }
+      item = stale_multi_seed_jobs_.erase(item);
+    }
+    if (!pending_multi_seed_job_ ||
+      pending_multi_seed_job_->future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+    {
+      return;
+    }
+
+    auto job = std::move(pending_multi_seed_job_);
+    MultiSeedBackgroundResult background;
+    try {
+      background = job->future.get();
+    } catch (const std::exception & exc) {
+      RCLCPP_ERROR(get_logger(), "multi-seed background job failed: %s", exc.what());
+      multi_seed_tracks_.clear();
+      multi_seed_tracking_active_ = false;
+      return;
+    }
+    last_multi_seed_finish_time_ = this->now();
+    const auto & context = *job->context;
+    if (context.generation != attempt_generation_ ||
+      context.attempt_id != active_attempt_id_ ||
+      context.map_id != active_map_id_ ||
+      !search_active_)
+    {
+      RCLCPP_INFO(get_logger(), "discarded stale multi-seed result for attempt=%s", context.attempt_id.c_str());
+      return;
+    }
+
+    if (background.kind == MultiSeedJobKind::Initialize) {
+      const auto & initialization = background.initialization;
+      if (initialization.tracks.size() < 2U) {
+        publish_recovery_status(
+          context.source_msg.header.stamp,
+          "reject_multi_seed_" + initialization.reason,
+          0, 0, 0, 0, 0.0, 0.0, 0.0, false, 0.0);
+        RCLCPP_INFO(
+          get_logger(),
+          "multi-seed tracker initialization rejected: reason=%s refined=%d clusters=%d elapsed_ms=%.3f",
+          initialization.reason.c_str(),
+          initialization.refined_candidates,
+          initialization.retained_clusters,
+          initialization.elapsed_ms);
+        return;
+      }
+      multi_seed_tracks_ = initialization.tracks;
+      multi_seed_tracking_active_ = true;
+      multi_seed_message_counter_ = 0;
+      publish_recovery_status(
+        context.source_msg.header.stamp,
+        "reject_multi_seed_tracking_initialized",
+        0, 0, 0, 0, 0.0, 0.0, 0.0, false, 0.0);
+      RCLCPP_INFO(
+        get_logger(),
+        "multi-seed tracker initialized: tracks=%zu clusters=%d refined=%d elapsed_ms=%.3f",
+        multi_seed_tracks_.size(),
+        initialization.retained_clusters,
+        initialization.refined_candidates,
+        initialization.elapsed_ms);
+      return;
+    }
+
+    const auto & tracking = background.tracking;
+    if (tracking.timed_out) {
+      multi_seed_tracks_.clear();
+      multi_seed_tracking_active_ = false;
+      publish_recovery_status(
+        context.source_msg.header.stamp,
+        "reject_multi_seed_timeout",
+        0, 0, 0, 0, 0.0, 0.0, 0.0, false, 0.0);
+      return;
+    }
+    multi_seed_tracks_ = tracking.tracks;
+    const Eigen::Matrix4d current_odom_to_base =
+      raw_odom_pose_to_base_axis_pose(pose_to_matrix(context.synced_odom.pose.pose));
+    MultiSeedEvaluationOutput output = evaluate_multi_seed_tracks(
+      multi_seed_tracks_, current_odom_to_base, config_.multi_seed_recovery);
+    output.elapsed_ms = tracking.elapsed_ms;
+    if (output.accepted) {
+      RefineOutput refined;
+      refined.pose = output.pose;
+      refined.candidate_rank = output.candidate_rank;
+      refined.fitness_score = output.fitness_score;
+      refined.selection_score = output.fitness_score;
+      refined.elapsed_ms = output.elapsed_ms;
+      refined.converged = true;
+      publish_recovery_outputs(
+        context.source_msg,
+        context.synced_odom,
+        "accepted_multi_seed",
+        output.candidate_rank,
+        output.qualified_tracks,
+        output.candidate_rank,
+        output.valid_frames,
+        output.pose,
+        refined,
+        &output);
+      RCLCPP_INFO(
+        get_logger(),
+        "multi-seed tracker accepted: cluster=%d rank=%d agreeing_tracks=%d valid_frames=%d fitness=%.6f rmse=%.6f spread=%.6f elapsed_ms=%.3f",
+        output.cluster_id,
+        output.candidate_rank,
+        output.qualified_tracks,
+        output.valid_frames,
+        output.fitness_score,
+        output.rmse_m,
+        output.map_odom_spread_m,
+        output.elapsed_ms);
+      return;
+    }
+
+    publish_recovery_status(
+      context.source_msg.header.stamp,
+      "reject_multi_seed_" + output.reason,
+      output.candidate_rank,
+      output.qualified_tracks,
+      output.candidate_rank,
+      output.valid_frames,
+      0.0,
+      0.0,
+      0.0,
+      false,
+      output.fitness_score,
+      nullptr,
+      &output);
+    RCLCPP_INFO(
+      get_logger(),
+      "multi-seed tracker collecting: reason=%s tracks=%zu completed=%d elapsed_ms=%.3f",
+      output.reason.c_str(),
+      multi_seed_tracks_.size(),
+      tracking.completed_tracks,
+      output.elapsed_ms);
+  }
+
   bool update_temporal_verifier(
     const sensor_msgs::msg::PointCloud2 & source_msg,
     const Cloud & scan_cloud,
+    const CloudPtr & multi_seed_scan,
     const BbsResult & result,
     const std::optional<nav_msgs::msg::Odometry> & synced_odom,
     bool precision_layer_used)
@@ -1242,6 +1574,24 @@ private:
       if (single_frame_published) {
         return true;
       }
+      if (try_schedule_multi_seed_recovery(
+          source_msg, multi_seed_scan, result, *synced_odom, precision_layer_used))
+      {
+        publish_recovery_status(
+          source_msg.header.stamp,
+          "reject_multi_seed_running",
+          current->best_seed_rank,
+          current->best_support_frames,
+          current->selected_rank,
+          current->selected_support_frames,
+          0.0,
+          0.0,
+          0.0,
+          false,
+          0.0,
+          &trajectory_attempt);
+        return false;
+      }
       publish_recovery_status(
         source_msg.header.stamp,
         trajectory_attempt.attempted ? trajectory_attempt.reject_state : "reject_selected_support_below_threshold",
@@ -1291,6 +1641,24 @@ private:
         try_publish_trajectory_recovery(source_msg, result, *synced_odom, refined);
       if (trajectory_attempt.published) {
         return true;
+      }
+      if (try_schedule_multi_seed_recovery(
+          source_msg, multi_seed_scan, result, *synced_odom, precision_layer_used))
+      {
+        publish_recovery_status(
+          source_msg.header.stamp,
+          "reject_multi_seed_running",
+          current->best_seed_rank,
+          current->best_support_frames,
+          current->selected_rank,
+          current->selected_support_frames,
+          0.0,
+          0.0,
+          0.0,
+          refined.converged,
+          refined.fitness_score,
+          &trajectory_attempt);
+        return false;
       }
       publish_recovery_status(
         source_msg.header.stamp,
@@ -1811,7 +2179,8 @@ private:
     int selected_rank,
     int selected_support,
     const Eigen::Matrix4d & map_to_base_pose,
-    const RefineOutput & refined)
+    const RefineOutput & refined,
+    const MultiSeedEvaluationOutput * multi_seed_output = nullptr)
   {
     const Eigen::Matrix4d publish_pose = constrain_to_2d_if_needed(map_to_base_pose, config_.frames);
     const Eigen::Matrix4d odom_to_base =
@@ -1842,7 +2211,9 @@ private:
       map_to_odom(1, 3),
       yaw_from_matrix(map_to_odom) * 180.0 / M_PI,
       refined.converged,
-      refined.fitness_score);
+      refined.fitness_score,
+      nullptr,
+      multi_seed_output);
   }
 
   void publish_recovery_status(
@@ -1857,7 +2228,8 @@ private:
     double map_odom_yaw_deg,
     bool refined_converged,
     double refined_fitness,
-    const TrajectoryRecoveryAttempt * trajectory_attempt = nullptr)
+    const TrajectoryRecoveryAttempt * trajectory_attempt = nullptr,
+    const MultiSeedEvaluationOutput * multi_seed_output = nullptr)
   {
     // 所有恢复状态使用同一 JSON 契约；位姿应用仍由上层恢复协调器负责。
     std_msgs::msg::String status;
@@ -1898,6 +2270,19 @@ private:
            << ",\"trajectory_single_fitness\":" << json_number(trajectory_attempt->single_refine_fitness);
     } else {
       text << ",\"trajectory_attempted\":false,\"recovery_hint\":\"none\"";
+    }
+    if (multi_seed_output) {
+      text << ",\"multi_seed_attempted\":true"
+           << ",\"multi_seed_reason\":\"" << json_escape(multi_seed_output->reason) << "\""
+           << ",\"multi_seed_cluster\":" << multi_seed_output->cluster_id
+           << ",\"multi_seed_qualified_tracks\":" << multi_seed_output->qualified_tracks
+           << ",\"multi_seed_valid_frames\":" << multi_seed_output->valid_frames
+           << ",\"multi_seed_rmse_m\":" << json_number(multi_seed_output->rmse_m)
+           << ",\"multi_seed_map_odom_spread_m\":"
+           << json_number(multi_seed_output->map_odom_spread_m)
+           << ",\"multi_seed_elapsed_ms\":" << json_number(multi_seed_output->elapsed_ms);
+    } else {
+      text << ",\"multi_seed_attempted\":false";
     }
     text << "}";
     status.data = text.str();
@@ -1977,6 +2362,7 @@ private:
   std::string config_file_;
   RuntimeConfig config_;
   CloudPtr map_cloud_;
+  CloudPtr multi_seed_map_cloud_;
   OccupancySet map_occupancy_;
   std::vector<ScanContextEntry> scan_context_database_;
   std::vector<SolidEntry> solid_database_;
@@ -2003,6 +2389,14 @@ private:
   std::deque<nav_msgs::msg::Odometry> odom_buffer_;
   std::deque<TemporalFrameInput> temporal_window_;
   std::deque<CloudPtr> scan_window_;
+  std::uint64_t attempt_generation_{0};
+  rclcpp::Time last_multi_seed_finish_time_{0, 0, RCL_ROS_TIME};
+  std::vector<MultiSeedTrack> multi_seed_tracks_;
+  bool multi_seed_tracking_active_{false};
+  int multi_seed_message_counter_{0};
+  std::unique_ptr<PendingMultiSeedJob> pending_multi_seed_job_;
+  std::vector<std::unique_ptr<PendingMultiSeedJob>> stale_multi_seed_jobs_;
+  rclcpp::TimerBase::SharedPtr multi_seed_poll_timer_;
 };
 
 }  // namespace humanoid_global_relocalization

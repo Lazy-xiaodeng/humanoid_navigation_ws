@@ -635,6 +635,95 @@ RuntimeConfig load_config_file(const std::string & path)
     config.precision_recovery.scan_context_database_path = config.scan_context.database_path;
   }
 
+  config.multi_seed_recovery.enable =
+    read_value<bool>(p, "enable_multi_seed_recovery", config.multi_seed_recovery.enable);
+  config.multi_seed_recovery.worker_threads =
+    read_value<int>(p, "multi_seed_worker_threads", config.multi_seed_recovery.worker_threads);
+  config.multi_seed_recovery.candidate_pool_size =
+    read_value<int>(p, "multi_seed_candidate_pool_size", config.multi_seed_recovery.candidate_pool_size);
+  config.multi_seed_recovery.max_active_clusters =
+    read_value<int>(p, "multi_seed_max_active_clusters", config.multi_seed_recovery.max_active_clusters);
+  config.multi_seed_recovery.max_seeds_per_cluster =
+    read_value<int>(p, "multi_seed_max_seeds_per_cluster", config.multi_seed_recovery.max_seeds_per_cluster);
+  config.multi_seed_recovery.initial_cluster_xy_m = read_value<double>(
+    p, "multi_seed_initial_cluster_xy_m", config.multi_seed_recovery.initial_cluster_xy_m);
+  config.multi_seed_recovery.initial_cluster_yaw_deg = read_value<double>(
+    p, "multi_seed_initial_cluster_yaw_deg", config.multi_seed_recovery.initial_cluster_yaw_deg);
+  config.multi_seed_recovery.tracking_stride_messages = read_value<int>(
+    p, "multi_seed_tracking_stride_messages", config.multi_seed_recovery.tracking_stride_messages);
+  config.multi_seed_recovery.tracking_window_frames = read_value<int>(
+    p, "multi_seed_tracking_window_frames", config.multi_seed_recovery.tracking_window_frames);
+  config.multi_seed_recovery.tracking_min_valid_frames = read_value<int>(
+    p, "multi_seed_tracking_min_valid_frames", config.multi_seed_recovery.tracking_min_valid_frames);
+  config.multi_seed_recovery.fine_map_leaf_size = read_value<double>(
+    p, "multi_seed_fine_map_leaf_size", config.multi_seed_recovery.fine_map_leaf_size);
+  config.multi_seed_recovery.fine_scan_leaf_size = read_value<double>(
+    p, "multi_seed_fine_scan_leaf_size", config.multi_seed_recovery.fine_scan_leaf_size);
+  config.multi_seed_recovery.local_search_scan_leaf_size = read_value<double>(
+    p, "multi_seed_local_search_scan_leaf_size", config.multi_seed_recovery.local_search_scan_leaf_size);
+  config.multi_seed_recovery.local_search_refine_scan_leaf_size = read_value<double>(
+    p,
+    "multi_seed_local_search_refine_scan_leaf_size",
+    config.multi_seed_recovery.local_search_refine_scan_leaf_size);
+  config.multi_seed_recovery.local_search_xy_radius_m = read_value<double>(
+    p, "multi_seed_local_search_xy_radius_m", config.multi_seed_recovery.local_search_xy_radius_m);
+  config.multi_seed_recovery.local_search_xy_step_m = read_value<double>(
+    p, "multi_seed_local_search_xy_step_m", config.multi_seed_recovery.local_search_xy_step_m);
+  config.multi_seed_recovery.local_search_yaw_radius_deg = read_value<double>(
+    p, "multi_seed_local_search_yaw_radius_deg", config.multi_seed_recovery.local_search_yaw_radius_deg);
+  config.multi_seed_recovery.local_search_yaw_step_deg = read_value<double>(
+    p, "multi_seed_local_search_yaw_step_deg", config.multi_seed_recovery.local_search_yaw_step_deg);
+  config.multi_seed_recovery.local_search_score_distance_m = read_value<double>(
+    p,
+    "multi_seed_local_search_score_distance_m",
+    config.multi_seed_recovery.local_search_score_distance_m);
+  config.multi_seed_recovery.local_search_nms_xy_m = read_value<double>(
+    p, "multi_seed_local_search_nms_xy_m", config.multi_seed_recovery.local_search_nms_xy_m);
+  config.multi_seed_recovery.local_search_nms_yaw_deg = read_value<double>(
+    p, "multi_seed_local_search_nms_yaw_deg", config.multi_seed_recovery.local_search_nms_yaw_deg);
+  config.multi_seed_recovery.local_search_refine_top_k = read_value<int>(
+    p, "multi_seed_local_search_refine_top_k", config.multi_seed_recovery.local_search_refine_top_k);
+  config.multi_seed_recovery.local_search_refine_distance_m = read_value<double>(
+    p,
+    "multi_seed_local_search_refine_distance_m",
+    config.multi_seed_recovery.local_search_refine_distance_m);
+  config.multi_seed_recovery.local_search_refine_iterations = read_value<int>(
+    p,
+    "multi_seed_local_search_refine_iterations",
+    config.multi_seed_recovery.local_search_refine_iterations);
+  config.multi_seed_recovery.fine_max_correspondence_distance = read_value<double>(
+    p,
+    "multi_seed_fine_max_correspondence_distance",
+    config.multi_seed_recovery.fine_max_correspondence_distance);
+  config.multi_seed_recovery.fine_max_iterations = read_value<int>(
+    p, "multi_seed_fine_max_iterations", config.multi_seed_recovery.fine_max_iterations);
+  config.multi_seed_recovery.sample_min_fitness = read_value<double>(
+    p, "multi_seed_sample_min_fitness", config.multi_seed_recovery.sample_min_fitness);
+  config.multi_seed_recovery.sample_max_rmse_m = read_value<double>(
+    p, "multi_seed_sample_max_rmse_m", config.multi_seed_recovery.sample_max_rmse_m);
+  config.multi_seed_recovery.update_min_fitness = read_value<double>(
+    p, "multi_seed_update_min_fitness", config.multi_seed_recovery.update_min_fitness);
+  config.multi_seed_recovery.update_max_rmse_m = read_value<double>(
+    p, "multi_seed_update_max_rmse_m", config.multi_seed_recovery.update_max_rmse_m);
+  config.multi_seed_recovery.max_correction_median_m = read_value<double>(
+    p, "multi_seed_max_correction_median_m", config.multi_seed_recovery.max_correction_median_m);
+  config.multi_seed_recovery.max_correction_m = read_value<double>(
+    p, "multi_seed_max_correction_m", config.multi_seed_recovery.max_correction_m);
+  config.multi_seed_recovery.min_fitness_median = read_value<double>(
+    p, "multi_seed_min_fitness_median", config.multi_seed_recovery.min_fitness_median);
+  config.multi_seed_recovery.max_rmse_median_m = read_value<double>(
+    p, "multi_seed_max_rmse_median_m", config.multi_seed_recovery.max_rmse_median_m);
+  config.multi_seed_recovery.max_map_odom_spread_m = read_value<double>(
+    p, "multi_seed_max_map_odom_spread_m", config.multi_seed_recovery.max_map_odom_spread_m);
+  config.multi_seed_recovery.track_agreement_xy_m = read_value<double>(
+    p, "multi_seed_track_agreement_xy_m", config.multi_seed_recovery.track_agreement_xy_m);
+  config.multi_seed_recovery.track_agreement_yaw_deg = read_value<double>(
+    p, "multi_seed_track_agreement_yaw_deg", config.multi_seed_recovery.track_agreement_yaw_deg);
+  config.multi_seed_recovery.batch_timeout_sec =
+    read_value<double>(p, "multi_seed_batch_timeout_sec", config.multi_seed_recovery.batch_timeout_sec);
+  config.multi_seed_recovery.cooldown_sec =
+    read_value<double>(p, "multi_seed_cooldown_sec", config.multi_seed_recovery.cooldown_sec);
+
   if (p["simulated_relocalization_cases"]) {
     config.scenarios.clear();
     const auto cases = p["simulated_relocalization_cases"];

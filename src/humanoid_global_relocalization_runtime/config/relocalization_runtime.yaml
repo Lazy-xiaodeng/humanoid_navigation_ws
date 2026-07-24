@@ -510,6 +510,79 @@ global_relocalization_node:
     precision_layer_risk_bad_seed_disagreement_yaw_deg: 6.0
 
     # =========================
+    # 多初值跨帧兜底
+    # =========================
+
+    # 多初值层已集成到正式源码，但默认关闭。
+    # 仅当默认层拒绝，并且精度层已经尝试后仍未发布（或精度层数据库不可用）时才允许启动。
+    enable_multi_seed_recovery: true
+
+    # 后台精配线程上限。每个线程持有独立 PCL 配准器，共享只读地图和当前扫描。
+    multi_seed_worker_threads: 2
+
+    # 初始化帧最多纳入聚类的候选数；不能简单缩成 top3，否则会丢失排名靠后的正确解。
+    multi_seed_candidate_pool_size: 30
+
+    # 同一失败帧的精配候选先按来源和位姿聚类，每簇至少两个候选才建立独立轨迹。
+    multi_seed_max_active_clusters: 3
+    multi_seed_max_seeds_per_cluster: 3
+    multi_seed_initial_cluster_xy_m: 0.35
+    multi_seed_initial_cluster_yaw_deg: 10.0
+
+    # 连续跟踪沿用实验中的 stride2 和 rolling12；12帧内至少9帧匹配有效。
+    multi_seed_tracking_stride_messages: 2
+    multi_seed_tracking_window_frames: 12
+    multi_seed_tracking_min_valid_frames: 9
+
+    # 多轨迹跟踪使用0.10m细地图/scan、0.30m对应距离和50次GICP迭代。
+    multi_seed_fine_map_leaf_size: 0.10
+    multi_seed_fine_scan_leaf_size: 0.10
+
+    # 每条轨迹首次更新先在odom预测附近做完整SE(2)局部搜索，再对NMS后的top4做粗GICP。
+    multi_seed_local_search_scan_leaf_size: 0.40
+    multi_seed_local_search_refine_scan_leaf_size: 0.20
+    multi_seed_local_search_xy_radius_m: 0.50
+    multi_seed_local_search_xy_step_m: 0.25
+    multi_seed_local_search_yaw_radius_deg: 20.0
+    multi_seed_local_search_yaw_step_deg: 2.5
+    multi_seed_local_search_score_distance_m: 0.50
+    # NMS 平移与航向距离，用于去掉局部搜索中的近重复假设。
+    multi_seed_local_search_nms_xy_m: 0.40
+    multi_seed_local_search_nms_yaw_deg: 10.0
+    # NMS 后进入粗 GICP 的候选数量。
+    multi_seed_local_search_refine_top_k: 4
+    # 粗 GICP 的最大对应距离，单位 m。
+    multi_seed_local_search_refine_distance_m: 1.0
+    # 粗 GICP 的最大迭代次数。
+    multi_seed_local_search_refine_iterations: 40
+
+    # 连续细 GICP 的最大对应距离，单位 m。
+    multi_seed_fine_max_correspondence_distance: 0.30
+    # 连续细 GICP 的最大迭代次数。
+    multi_seed_fine_max_iterations: 50
+
+    # 单帧有效和允许更新轨迹map->odom的质量门槛。
+    multi_seed_sample_min_fitness: 0.85
+    multi_seed_sample_max_rmse_m: 0.20
+    multi_seed_update_min_fitness: 0.85
+    multi_seed_update_max_rmse_m: 0.09
+
+    # rolling12单轨迹质量门槛，数值与历史完整算法验证保持一致。
+    multi_seed_max_correction_median_m: 0.08
+    multi_seed_max_correction_m: 0.24
+    multi_seed_min_fitness_median: 0.90
+    multi_seed_max_rmse_median_m: 0.09
+    multi_seed_max_map_odom_spread_m: 0.15
+
+    # 至少两条同来源、同初始簇轨迹的map->odom必须相互一致。
+    multi_seed_track_agreement_xy_m: 0.08
+    multi_seed_track_agreement_yaw_deg: 2.0
+
+    # 单批时间预算和两批之间的冷却时间。超时只拒绝，不降级接受。
+    multi_seed_batch_timeout_sec: 12.0
+    multi_seed_cooldown_sec: 1.0
+
+    # =========================
     # 运行态输出
     # =========================
 

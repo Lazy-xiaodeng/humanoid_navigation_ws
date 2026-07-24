@@ -265,6 +265,50 @@ struct PrecisionRecoveryConfig
   double bad_seed_disagreement_yaw_deg{6.0};
 };
 
+struct MultiSeedRecoveryConfig
+{
+  // 多初值层只作为默认层和精度层均未发布后的最后兜底，正式配置默认关闭。
+  bool enable{false};
+  int worker_threads{2};
+  int candidate_pool_size{30};
+  int max_active_clusters{3};
+  int max_seeds_per_cluster{3};
+  double initial_cluster_xy_m{0.35};
+  double initial_cluster_yaw_deg{10.0};
+  int tracking_stride_messages{2};
+  int tracking_window_frames{12};
+  int tracking_min_valid_frames{9};
+  double fine_map_leaf_size{0.10};
+  double fine_scan_leaf_size{0.10};
+  double local_search_scan_leaf_size{0.40};
+  double local_search_refine_scan_leaf_size{0.20};
+  double local_search_xy_radius_m{0.50};
+  double local_search_xy_step_m{0.25};
+  double local_search_yaw_radius_deg{20.0};
+  double local_search_yaw_step_deg{2.5};
+  double local_search_score_distance_m{0.50};
+  double local_search_nms_xy_m{0.40};
+  double local_search_nms_yaw_deg{10.0};
+  int local_search_refine_top_k{4};
+  double local_search_refine_distance_m{1.0};
+  int local_search_refine_iterations{40};
+  double fine_max_correspondence_distance{0.30};
+  int fine_max_iterations{50};
+  double sample_min_fitness{0.85};
+  double sample_max_rmse_m{0.20};
+  double update_min_fitness{0.85};
+  double update_max_rmse_m{0.09};
+  double max_correction_median_m{0.08};
+  double max_correction_m{0.24};
+  double min_fitness_median{0.90};
+  double max_rmse_median_m{0.09};
+  double max_map_odom_spread_m{0.15};
+  double track_agreement_xy_m{0.08};
+  double track_agreement_yaw_deg{2.0};
+  double batch_timeout_sec{12.0};
+  double cooldown_sec{1.0};
+};
+
 struct EvaluationScenario
 {
   std::string name{"arbitrary_start_no_prior"};
@@ -299,6 +343,7 @@ struct RuntimeConfig
   ScanContextConfig scan_context;
   SolidConfig solid;
   PrecisionRecoveryConfig precision_recovery;
+  MultiSeedRecoveryConfig multi_seed_recovery;
   std::vector<EvaluationScenario> scenarios;
   RuntimeOutputConfig output;
 };
