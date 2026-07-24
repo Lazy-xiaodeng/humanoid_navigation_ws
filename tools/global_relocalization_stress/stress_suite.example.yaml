@@ -1,0 +1,60 @@
+version: 1
+
+# 留空时根据本目录自动寻找 humanoid_ws 根目录。
+workspace: ""
+output_root: output
+
+# 每条命令执行前加载 ROS 2 和当前工作空间环境。
+setup_command: source /opt/ros/humble/setup.bash && source install/setup.bash
+
+random_stress:
+  enabled: true
+  count_per_round: 100
+  seeds: [4601, 4602, 4603]
+  mode: body
+  bags:
+    - name: bag44
+      path: /data/nav_drift_test44
+    - name: bag45
+      path: /data/nav_drift_test45
+    - name: bag46
+      path: /data/nav_drift_test46
+
+waypoint_stress:
+  enabled: true
+  mode: body
+  waypoints: data/dynamic_waypoints.json
+  max_distance_m: 1.0
+  allow_duplicate_cloud_indices: true
+  bags:
+    - name: bag44
+      path: /data/nav_drift_test44
+      cloud_topic: /cloud_registered_body
+    - name: bag45
+      path: /data/nav_drift_test45
+      cloud_topic: /cloud_registered_body
+    - name: bag46
+      path: /data/nav_drift_test46
+      cloud_topic: /cloud_registered_body
+
+# 这些用例验证协调器、Bridge 接管、防抖和路线暂停恢复合同。
+integration_smoke:
+  enabled: true
+  scripts:
+    - src/humanoid_global_relocalization_runtime/test/global_relocalization_handoff_smoke.py
+    - src/humanoid_global_relocalization_runtime/test/global_relocalization_fault_debounce_smoke.py
+    - src/humanoid_route_runtime/test/localization_shadow_no_pause_smoke.py
+    - src/humanoid_route_runtime/test/localization_fault_debounce_no_pause_smoke.py
+
+# 历史验证门禁依赖已有离线产物；新机器没有产物时应先关闭。
+validation_gates:
+  enabled: false
+  artifacts_root: .codex_tmp
+
+# 最终成功率必须以该 CSV 中的完整链路字段为准。
+final_chain:
+  enabled: false
+  inputs:
+    - /data/results/final_chain_results.csv
+  max_translation_error_m: 0.20
+  stable_tf_frames: 20

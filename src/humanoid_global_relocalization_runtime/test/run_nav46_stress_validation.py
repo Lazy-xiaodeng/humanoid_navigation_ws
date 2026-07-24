@@ -373,6 +373,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run larger nav46 stress validation for both input modes.")
     parser.add_argument("--workspace", type=Path, default=repo_root_from_script(), help="humanoid_ws 工作空间")
     parser.add_argument("--bag", type=Path, default=Path("/home/ubuntu/nav_drift_test/nav_drift_test46"), help="验证 bag 路径")
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path(".codex_tmp/nav46_stress_validation"),
+        help="输出目录；相对路径按工作空间解析，批量验证时建议每轮单独指定",
+    )
     parser.add_argument("--template", type=Path, default=None, help="参数模板 YAML，默认使用 config/relocalization_validation.yaml")
     parser.add_argument("--frames", type=int, default=60, help="每路输入从 bag46 抽样多少帧")
     parser.add_argument("--stride", type=int, default=600, help="抽样帧间隔；600 约等于每 60 秒取一帧")
@@ -416,7 +422,11 @@ def main() -> int:
     template = load_yaml(template_path)
     modes = ["body", "registered_world"] if args.mode == "both" else [args.mode]
 
-    output_root = workspace / ".codex_tmp/nav46_stress_validation"
+    output_root = (
+        (workspace / args.output_root).resolve()
+        if not args.output_root.is_absolute()
+        else args.output_root.resolve()
+    )
     config_root = output_root / "configs"
     summaries: list[dict[str, str]] = []
     problems: list[dict[str, str]] = []
